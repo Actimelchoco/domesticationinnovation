@@ -3,8 +3,11 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -17,14 +20,29 @@ import java.util.Map;
 import java.util.UUID;
 
 public class TamePortalStabilizeEvents {
-    private static final int STABILIZE_DELAY_TICKS = 60;
-    private static final Map<UUID, Long> PENDING_STABILIZE = new HashMap<>();
+    private static final int STABILIZE_INITIAL_DELAY_TICKS = 20;
+    private static final int STABILIZE_RETRY_INTERVAL_TICKS = 20;
+    private static final int STABILIZE_RETRIES = 20;
+    private static final Map<UUID, StabilizeState> PENDING_STABILIZE = new HashMap<>();
     private static long serverTick = 0L;
+
+    private static final class StabilizeState {
+        private long dueTick;
+        private int retriesLeft;
+
+        private StabilizeState(long dueTick, int retriesLeft) {
+            this.dueTick = dueTick;
+            this.retriesLeft = retriesLeft;
+        }
+    }
 
     @SubscribeEvent
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        PENDING_STABILIZE.put(player.getUUID(), serverTick + STABILIZE_DELAY_TICKS);
+        PENDING_STABILIZE.put(player.getUUID(), new StabilizeState(
+                serverTick + STABILIZE_INITIAL_DELAY_TICKS,
+                STABILIZE_RETRIES
+        ));
     }
 
     @SubscribeEvent
@@ -33,16 +51,27 @@ public class TamePortalStabilizeEvents {
         serverTick++;
         if (PENDING_STABILIZE.isEmpty()) return;
 
-        Iterator<Map.Entry<UUID, Long>> it = PENDING_STABILIZE.entrySet().iterator();
+        Iterator<Map.Entry<UUID, StabilizeState>> it = PENDING_STABILIZE.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<UUID, Long> entry = it.next();
-            if (entry.getValue() > serverTick) continue;
+            Map.Entry<UUID, StabilizeState> entry = it.next();
+            StabilizeState state = entry.getValue();
+            if (state == null || state.retriesLeft <= 0) {
+                it.remove();
+                continue;
+            }
+            if (state.dueTick > serverTick) continue;
 
             ServerPlayer player = event.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
                 stabilizeOwnerTamesInCurrentDimension(player);
+                reconcileOwnedTeleportersAcrossDimensions(player);
             }
-            it.remove();
+            state.retriesLeft--;
+            if (state.retriesLeft <= 0) {
+                it.remove();
+            } else {
+                state.dueTick = serverTick + STABILIZE_RETRY_INTERVAL_TICKS;
+            }
         }
     }
 
@@ -78,6 +107,32 @@ public class TamePortalStabilizeEvents {
             return tame;
         }
         return null;
+    }
+
+    private static void reconcileOwnedTeleportersAcrossDimensions(ServerPlayer owner) {
+        if (owner == null || owner.server == null) return;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null) continue;
+            if (!owner.getUUID().equals(data.ownerUUID)) continue;
+
+            TamableAnimal tame = findLoadedOwnedTame(owner, data.uuid);
+            if (tame == null || !tame.isAlive()) continue;
+            if (tame.level().dimension().equals(owner.level().dimension())) continue;
+            Mob mob = tame;
+            if (!TameableUtils.isValidTeleporter(owner, mob)) continue;
+
+            TameTransferService.TransferResult result = TameTransferService.transferToPlayer(tame, owner, data);
+            if (result.success() && result.entity() != null) {
+                TamableAnimal moved = result.entity();
+                if (moved.isNoAi()) moved.setNoAi(false);
+                moved.setTarget(null);
+                moved.setDeltaMovement(Vec3.ZERO);
+                moved.getNavigation().stop();
+                if (!moved.isOrderedToSit()) {
+                    moved.getNavigation().moveTo(owner, 1.0D);
+                }
+            }
+        }
     }
 }
 

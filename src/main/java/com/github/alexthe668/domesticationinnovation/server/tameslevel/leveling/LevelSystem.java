@@ -1062,6 +1062,47 @@ public class LevelSystem {
         instance.setBaseValue(instance.getBaseValue() + amount);
     }
 
+    public static boolean reapplyTypeBasePlusBonuses(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+        Entity spawned = tame.getType().create(serverLevel);
+        if (!(spawned instanceof TamableAnimal template)) {
+            return false;
+        }
+        template.setTame(true);
+        if (tame.getOwnerUUID() != null) {
+            template.setOwnerUUID(tame.getOwnerUUID());
+        } else if (data.ownerUUID != null) {
+            template.setOwnerUUID(data.ownerUUID);
+        }
+
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
+        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
+        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
+        setAttributeBaseValue(tame, Attributes.ARMOR, readBaseOrDefault(template, Attributes.ARMOR) + data.bonusArmor);
+        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, readBaseOrDefault(template, Attributes.ARMOR_TOUGHNESS) + data.bonusArmorToughness);
+        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback);
+        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist);
+
+        updateTameName(tame, data);
+        tame.setHealth(tame.getMaxHealth());
+        return true;
+    }
+
+    private static double readBaseOrDefault(TamableAnimal tame, Attribute attribute) {
+        if (tame == null || attribute == null) return 0.0D;
+        AttributeInstance instance = tame.getAttribute(attribute);
+        if (instance == null) return attribute.getDefaultValue();
+        return instance.getBaseValue();
+    }
+
+    private static void setAttributeBaseValue(TamableAnimal tame, Attribute attribute, double value) {
+        AttributeInstance instance = tame.getAttribute(attribute);
+        if (instance == null) return;
+        instance.setBaseValue(value);
+    }
+
     private static void trackBonus(TameData data, BaseStatReward reward) {
         switch (reward) {
             case HP -> data.bonusHealth += reward.amount;

@@ -25,6 +25,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.brigadier.Command;
@@ -285,6 +286,35 @@ public class CommonProxy {
                     continue;
                 }
 
+                Vec3 toPos = player.position();
+                EntityDimensions dimensions = entity.getDimensions(entity.getPose());
+                AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
+                while (!endpointWorld.noCollision(entity, suffocationBox.move(toPos.x, toPos.y, toPos.z)) && toPos.y < 300) {
+                    toPos = toPos.add(0, 1, 0);
+                }
+
+                if (entity instanceof TamableAnimal tame) {
+                    TameData data = TameRegistry.get(tame.getUUID());
+                    TameTransferService.TransferResult transfer = TameTransferService.transferToLocation(
+                            tame,
+                            endpointWorld,
+                            toPos.x, toPos.y, toPos.z,
+                            entity.getYRot(), entity.getXRot(),
+                            data
+                    );
+                    if (!transfer.success() || transfer.entity() == null) {
+                        remaining.add(pending);
+                        continue;
+                    }
+                    TamableAnimal moved = transfer.entity();
+                    moved.setOrderedToSit(false);
+                    moved.setTarget(null);
+                    moved.setDeltaMovement(Vec3.ZERO);
+                    moved.getNavigation().stop();
+                    moved.getNavigation().moveTo(livingOwner, 1.0D);
+                    continue;
+                }
+
                 entity.unRide();
                 Entity teleportedEntity = entity.getType().create(endpointWorld);
                 if (teleportedEntity == null) {
@@ -292,12 +322,6 @@ public class CommonProxy {
                     continue;
                 }
                 teleportedEntity.restoreFrom(entity);
-                Vec3 toPos = player.position();
-                EntityDimensions dimensions = entity.getDimensions(entity.getPose());
-                AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
-                while (!endpointWorld.noCollision(entity, suffocationBox.move(toPos.x, toPos.y, toPos.z)) && toPos.y < 300) {
-                    toPos = toPos.add(0, 1, 0);
-                }
                 teleportedEntity.moveTo(toPos.x, toPos.y, toPos.z, entity.getYRot(), entity.getXRot());
                 teleportedEntity.setYHeadRot(entity.getYHeadRot());
                 teleportedEntity.fallDistance = 0.0F;
@@ -308,9 +332,6 @@ public class CommonProxy {
                     mob.getNavigation().stop();
                     mob.getNavigation().moveTo(livingOwner, 1.0D);
                 }
-                if (teleportedEntity instanceof TamableAnimal tame) {
-                    tame.setOrderedToSit(false);
-                }
                 boolean spawned = endpointWorld.addFreshEntity(teleportedEntity);
                 if (!spawned) {
                     remaining.add(pending);
@@ -319,7 +340,6 @@ public class CommonProxy {
                 if (entity instanceof LivingEntity living) {
                     living.getPersistentData().putBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
                 }
-                // Source-side instance can now be removed after a confirmed destination spawn.
                 entity.remove(Entity.RemovalReason.DISCARDED);
             }
             teleportingPets.clear();

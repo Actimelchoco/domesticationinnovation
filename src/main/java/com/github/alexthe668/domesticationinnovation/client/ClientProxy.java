@@ -136,8 +136,7 @@ public class ClientProxy extends CommonProxy {
 
     @SubscribeEvent
     public void renderNametagEvent(RenderNameTagEvent event) {
-        // Sneak inspect is server-driven (/tame stat shortcut) to remain compatible with unextended clients.
-        // Do not render collar-enchantment overlays here.
+        renderNametagEnchantments(event.getEntity(), event.getContent(), event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight());
     }
 
     @SubscribeEvent
@@ -162,9 +161,9 @@ public class ClientProxy extends CommonProxy {
     }
 
     private void renderNametagEnchantments(Entity entity, Component nameTag, PoseStack pose, MultiBufferSource buffer, int lightIn) {
-        if (Minecraft.getInstance().player.isShiftKeyDown() && TameableUtils.isTamed(entity) && TameableUtils.hasAnyEnchants((LivingEntity) entity)) {
+        if (Minecraft.getInstance().player.isShiftKeyDown() && TameableUtils.isTamed(entity) && TameableUtils.hasAnyAbilityOrAttributeProgress((LivingEntity) entity)) {
             LivingEntity living = (LivingEntity) entity;
-            List<Component> list = TameableUtils.getEnchantDescriptions(living);
+            List<Component> list = TameableUtils.getAbilityAttributeDescriptions(living);
             double d0 = Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity);
             if (net.minecraftforge.client.ForgeHooksClient.isNameplateInRenderDistance(entity, d0)) {
                 if (nameTag instanceof MutableComponent) {

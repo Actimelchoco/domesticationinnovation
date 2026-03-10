@@ -32,16 +32,17 @@ public class TameSpawnEvents {
         // Always ensure goals are present for loaded tames, even if already registered.
         TameGoalInstaller.installIfMissing(tame);
 
-        TamableAnimal existing = findOtherLoadedByUuid(tame);
-        if (existing != null) {
-            // If a copy with the same UUID is already active, discard this duplicate join.
-            tame.discard();
-            return;
-        }
-
         // Normal dimension travel can temporarily expose the same UUID during transfer;
         // if already tracked, never discard the newly joined entity here.
         if (TameRegistry.get(tame.getUUID()) != null) return;
+
+        TamableAnimal existing = findOtherLoadedByUuid(tame);
+        if (existing != null) {
+            // If a copy with the same UUID is already active and this UUID is not yet tracked,
+            // treat this join as a duplicate materialization and discard it.
+            tame.discard();
+            return;
+        }
 
         ParsedName parsed = parseName(tame);
         TamableAnimal clone = findLoadedCloneByIdentity(tame, parsed);

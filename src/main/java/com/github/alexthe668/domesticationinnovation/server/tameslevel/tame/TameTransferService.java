@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -69,9 +70,6 @@ public final class TameTransferService {
                 if (moved.isNoAi()) {
                     moved.setNoAi(false);
                 }
-                if (moved instanceof IComandableMob commandableMob) {
-                    commandableMob.setCommand(0);
-                }
                 TameGoalInstaller.installIfMissing(moved);
 
                 if (!targetLevel.addFreshEntity(moved)) {
@@ -80,6 +78,9 @@ public final class TameTransferService {
                 tame.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
                 tame.discard();
                 moved.getNavigation().moveTo(player, 1.0D);
+                if (data != null) {
+                    LevelSystem.reapplyTypeBasePlusBonuses(moved, data);
+                }
                 refreshLastKnown(data, moved, targetLevel);
                 return new TransferResult(moved, true, "");
             } catch (Throwable ignored) {
@@ -149,9 +150,6 @@ public final class TameTransferService {
                 if (moved.isNoAi()) {
                     moved.setNoAi(false);
                 }
-                if (moved instanceof IComandableMob commandableMob) {
-                    commandableMob.setCommand(0);
-                }
                 TameGoalInstaller.installIfMissing(moved);
 
                 if (!targetLevel.addFreshEntity(moved)) {
@@ -164,6 +162,9 @@ public final class TameTransferService {
                     if (nearest != null) {
                         moved.getNavigation().moveTo(nearest, 1.0D);
                     }
+                }
+                if (data != null) {
+                    LevelSystem.reapplyTypeBasePlusBonuses(moved, data);
                 }
                 refreshLastKnown(data, moved, targetLevel);
                 return new TransferResult(moved, true, "");

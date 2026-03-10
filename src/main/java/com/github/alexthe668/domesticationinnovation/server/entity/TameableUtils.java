@@ -333,6 +333,72 @@ public class TameableUtils {
         return listtag != null && !listtag.isEmpty();
     }
 
+    public static boolean hasAnyAbilityOrAttributeProgress(LivingEntity entity) {
+        if (entity == null) return false;
+        TameData data = TameRegistry.get(entity.getUUID());
+        if (data == null) return false;
+        if (data.attributeLevels != null) {
+            for (int value : data.attributeLevels.values()) {
+                if (value > 0) return true;
+            }
+        }
+        if (data.abilityLevels != null) {
+            for (int value : data.abilityLevels.values()) {
+                if (value > 0) return true;
+            }
+        }
+        return false;
+    }
+
+    public static List<Component> getAbilityAttributeDescriptions(LivingEntity entity) {
+        List<Component> list = new ArrayList<>();
+        if (entity == null) return list;
+        TameData data = TameRegistry.get(entity.getUUID());
+        if (data == null) return list;
+
+        list.add(Component.literal("   ").append(Component.literal("Attributes").withStyle(ChatFormatting.GOLD)));
+        List<String> attrs = new ArrayList<>();
+        if (data.attributeLevels != null) {
+            for (Map.Entry<String, Integer> entry : data.attributeLevels.entrySet()) {
+                if (entry.getValue() <= 0) continue;
+                attrs.add(entry.getKey() + " " + entry.getValue());
+            }
+        }
+        attrs.sort(String::compareToIgnoreCase);
+        if (attrs.isEmpty()) {
+            list.add(Component.literal("- none").withStyle(ChatFormatting.DARK_GRAY));
+        } else {
+            for (String attr : attrs) {
+                list.add(Component.literal("- ").append(Component.literal(attr).withStyle(ChatFormatting.AQUA)));
+            }
+        }
+
+        list.add(Component.literal("   ").append(Component.literal("Abilities").withStyle(ChatFormatting.GOLD)));
+        List<String> abilities = new ArrayList<>();
+        if (data.abilityLevels != null) {
+            for (Map.Entry<String, Integer> entry : data.abilityLevels.entrySet()) {
+                if (entry.getValue() <= 0) continue;
+                abilities.add(entry.getKey() + " " + entry.getValue());
+            }
+        }
+        abilities.sort(String::compareToIgnoreCase);
+        if (abilities.isEmpty()) {
+            list.add(Component.literal("- none").withStyle(ChatFormatting.DARK_GRAY));
+        } else {
+            for (String ability : abilities) {
+                list.add(Component.literal("- ").append(Component.literal(ability).withStyle(ChatFormatting.LIGHT_PURPLE)));
+            }
+        }
+
+        // Keep output compact if some tames roll very large sets.
+        int maxLines = 20;
+        if (list.size() > maxLines) {
+            list = new ArrayList<>(list.subList(0, maxLines));
+            list.add(Component.literal("...").withStyle(ChatFormatting.GRAY));
+        }
+        return list;
+    }
+
     public static void addEnchant(LivingEntity entity, EnchantmentInstance enchantment) {
         ListTag listtag = getEnchantmentList(entity);
         addEnchant(entity, enchantment, listtag);
