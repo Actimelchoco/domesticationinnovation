@@ -11,13 +11,43 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
 public class TameBehaviorEvents {
+
+    @SubscribeEvent
+    public static void onTameTick(LivingEvent.LivingTickEvent event) {
+        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
+        if (tame.level().isClientSide) return;
+        if (!tame.isAlive()) return;
+        if (tame.isOrderedToSit()) return;
+        if (tame.tickCount % 20 != 0) return;
+
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) return;
+        if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
+
+        TameMode mode = TameMode.byId(data.mode);
+        if (mode == TameMode.MONSTER_HUNTER) {
+            LivingEntity nearest = findNearestMonster(tame, 10.0D);
+            if (nearest != null) {
+                tame.setTarget(nearest);
+            }
+            return;
+        }
+        if (mode == TameMode.AGGRESSIVE) {
+            LivingEntity nearest = findNearestAggressiveTarget(tame, 10.0D);
+            if (nearest != null) {
+                tame.setTarget(nearest);
+            }
+        }
+    }
 
     @SubscribeEvent
     public static void onTameMount(EntityMountEvent event) {
@@ -130,5 +160,39 @@ public class TameBehaviorEvents {
             return p;
         }
         return null;
+    }
+
+    private static LivingEntity findNearestMonster(TamableAnimal tame, double radius) {
+        LivingEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        AABB box = tame.getBoundingBox().inflate(radius);
+        for (Monster monster : tame.level().getEntitiesOfClass(Monster.class, box)) {
+            if (!monster.isAlive()) continue;
+            double d2 = monster.distanceToSqr(tame);
+            if (d2 < bestDist) {
+                bestDist = d2;
+                best = monster;
+            }
+        }
+        return best;
+    }
+
+    private static LivingEntity findNearestAggressiveTarget(TamableAnimal tame, double radius) {
+        LivingEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        AABB box = tame.getBoundingBox().inflate(radius);
+        for (LivingEntity entity : tame.level().getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!entity.isAlive()) continue;
+            if (entity == tame) continue;
+            if (entity instanceof Player) continue;
+            if (entity instanceof TamableAnimal otherTame && otherTame.isTame()) continue;
+            if (entity instanceof TamableAnimal otherTame && otherTame.getOwnerUUID() != null && otherTame.getOwnerUUID().equals(tame.getOwnerUUID())) continue;
+            double d2 = entity.distanceToSqr(tame);
+            if (d2 < bestDist) {
+                bestDist = d2;
+                best = entity;
+            }
+        }
+        return best;
     }
 }

@@ -16,10 +16,13 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePortalStabilizeEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProtectionEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameRenameEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameWorldLoadEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
@@ -48,6 +51,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionResult;
@@ -73,6 +77,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.EnchantmentInstance;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.loot.BuiltInLootTables;
@@ -95,7 +100,6 @@ import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
-import org.antlr.v4.runtime.misc.Triple;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -110,8 +114,22 @@ public class CommonProxy {
     private static final Pattern NUMERIC_SUFFIX = Pattern.compile("^(.*?)(?:\\s+(\\d+))?$");
     private static final UUID FROST_FANG_SLOW = UUID.fromString("1eaf83ff-7207-4596-b37a-d7a07b3ec4cf");
     private static final TargetingConditions ZOMBIE_TARGET = TargetingConditions.forCombat().range(32.0D);
-    //list of pets to be teleported across dimensions, cleared after every tick
-    public static List<Triple<Entity, ServerLevel, UUID>> teleportingPets = new ArrayList<>();
+    // Pets queued for cross-dimension transfer. Entries stay queued until owner is in target dimension.
+    public static List<PendingPetTeleport> teleportingPets = new ArrayList<>();
+
+    public static final class PendingPetTeleport {
+        public final Entity entity;
+        public final ServerLevel endpointWorld;
+        public final UUID ownerUUID;
+        public final long queuedGameTime;
+
+        public PendingPetTeleport(Entity entity, ServerLevel endpointWorld, UUID ownerUUID, long queuedGameTime) {
+            this.entity = entity;
+            this.endpointWorld = endpointWorld;
+            this.ownerUUID = ownerUUID;
+            this.queuedGameTime = queuedGameTime;
+        }
+    }
 
     private static final Map<Level, CollarTickTracker> COLLAR_TICK_TRACKER_MAP = new HashMap<>();
     private static long tlMigrationLastScanned = 0L;
@@ -142,6 +160,7 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameWorldLoadEvents.class);
         MinecraftForge.EVENT_BUS.register(TameCommands.class);
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
+        MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
     }
 
     public void serverInit() {
@@ -249,34 +268,62 @@ public class CommonProxy {
             CollarTickTracker tracker = COLLAR_TICK_TRACKER_MAP.get(tick.level);
             tracker.tick();
         }
-        if (!tick.level.isClientSide && tick.level instanceof ServerLevel) {
-            for (final var triple : teleportingPets) {
-                Entity entity = triple.a;
-                ServerLevel endpointWorld = triple.b;
-                UUID ownerUUID = triple.c;
-                entity.unRide();
-                entity.setLevel(endpointWorld);
-                Entity player = endpointWorld.getPlayerByUUID(ownerUUID);
-                if (player != null) {
-                    Entity teleportedEntity = entity.getType().create(endpointWorld);
-                    if (teleportedEntity != null) {
-                        teleportedEntity.restoreFrom(entity);
-                        Vec3 toPos = player.position();
-                        EntityDimensions dimensions = entity.getDimensions(entity.getPose());
-                        AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
-                        while (!endpointWorld.noCollision(entity, suffocationBox.move(toPos.x, toPos.y, toPos.z)) && toPos.y < 300) {
-                            toPos = toPos.add(0, 1, 0);
-                        }
-                        teleportedEntity.moveTo(toPos.x, toPos.y, toPos.z, entity.getYRot(), entity.getXRot());
-                        teleportedEntity.setYHeadRot(entity.getYHeadRot());
-                        teleportedEntity.fallDistance = 0.0F;
-                        teleportedEntity.setPortalCooldown();
-                        endpointWorld.addFreshEntity(teleportedEntity);
-                    }
-                    entity.remove(Entity.RemovalReason.DISCARDED);
+        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel && serverLevel.dimension() == Level.OVERWORLD) {
+            List<PendingPetTeleport> remaining = new ArrayList<>();
+            for (PendingPetTeleport pending : teleportingPets) {
+                if (pending == null || pending.entity == null || pending.endpointWorld == null || pending.ownerUUID == null) {
+                    continue;
                 }
+                Entity entity = pending.entity;
+                if (entity.isRemoved()) {
+                    continue;
+                }
+                ServerLevel endpointWorld = pending.endpointWorld;
+                Entity player = endpointWorld.getPlayerByUUID(pending.ownerUUID);
+                if (!(player instanceof LivingEntity livingOwner)) {
+                    remaining.add(pending);
+                    continue;
+                }
+
+                entity.unRide();
+                Entity teleportedEntity = entity.getType().create(endpointWorld);
+                if (teleportedEntity == null) {
+                    remaining.add(pending);
+                    continue;
+                }
+                teleportedEntity.restoreFrom(entity);
+                Vec3 toPos = player.position();
+                EntityDimensions dimensions = entity.getDimensions(entity.getPose());
+                AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
+                while (!endpointWorld.noCollision(entity, suffocationBox.move(toPos.x, toPos.y, toPos.z)) && toPos.y < 300) {
+                    toPos = toPos.add(0, 1, 0);
+                }
+                teleportedEntity.moveTo(toPos.x, toPos.y, toPos.z, entity.getYRot(), entity.getXRot());
+                teleportedEntity.setYHeadRot(entity.getYHeadRot());
+                teleportedEntity.fallDistance = 0.0F;
+                teleportedEntity.setPortalCooldown();
+                if (teleportedEntity instanceof Mob mob) {
+                    mob.setNoAi(false);
+                    mob.setTarget(null);
+                    mob.getNavigation().stop();
+                    mob.getNavigation().moveTo(livingOwner, 1.0D);
+                }
+                if (teleportedEntity instanceof TamableAnimal tame) {
+                    tame.setOrderedToSit(false);
+                }
+                boolean spawned = endpointWorld.addFreshEntity(teleportedEntity);
+                if (!spawned) {
+                    remaining.add(pending);
+                    continue;
+                }
+                if (entity instanceof LivingEntity living) {
+                    living.getPersistentData().putBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
+                }
+                // Source-side instance can now be removed after a confirmed destination spawn.
+                entity.remove(Entity.RemovalReason.DISCARDED);
             }
             teleportingPets.clear();
+            teleportingPets.addAll(remaining);
         }
     }
 
@@ -300,7 +347,7 @@ public class CommonProxy {
                         return;
                     }
                 }
-                if (TameableUtils.hasEnchant((LivingEntity) hit, DIEnchantmentRegistry.DEFLECTION)) {
+                if (getAbilityOrEnchantLevel((LivingEntity) hit, "deflection") > 0) {
                     event.setCanceled(true);
                     float xRot = event.getProjectile().getXRot();
                     float yRot = event.getProjectile().yRotO;
@@ -310,6 +357,7 @@ public class CommonProxy {
                     event.getProjectile().setDeltaMovement(event.getProjectile().getDeltaMovement().scale(-0.2D));
                     event.getProjectile().setYRot(yRot + 180);
                     event.getProjectile().setXRot(xRot + 180);
+                    debugDiAbilityUse((LivingEntity) hit, "deflection");
                 }
             }
         }
@@ -331,7 +379,7 @@ public class CommonProxy {
     public void onLivingUpdate(LivingEvent.LivingTickEvent event) {
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
-            if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.IMMUNITY_FRAME) && !event.getEntity().level().isClientSide) {
+            if (getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame") > 0 && !event.getEntity().level().isClientSide) {
                 int i = TameableUtils.getImmuneTime(event.getEntity());
                 if (i > 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), i - 1);
@@ -376,7 +424,7 @@ public class CommonProxy {
                     sucking.setDeltaMovement(sucking.getDeltaMovement().add(move.normalize().scale(mob.onGround() ? 0.15D : 0.05D)));
                 }
             }
-            int shadowHandsLevel = TameableUtils.getEnchantLevel(event.getEntity(), DIEnchantmentRegistry.SHADOW_HANDS);
+            int shadowHandsLevel = getAbilityOrEnchantLevel(event.getEntity(), "shadow_hands");
             if (shadowHandsLevel > 0 && event.getEntity() instanceof Mob mob) {
                 DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), TameableUtils.getShadowPunchTimes(mob));
                 if (!mob.level().isClientSide) {
@@ -412,6 +460,7 @@ public class CommonProxy {
                                         punchProgress[i] = punchProgress[i] + 1;
                                     } else {
                                         punching.hurt(punching.damageSources().mobAttack(mob), Mth.clamp(shadowHandsLevel, 2, 4));
+                                        debugDiAbilityUse(mob, "shadow_hands");
                                         striking[i] = 0;
                                     }
                                 }
@@ -482,8 +531,9 @@ public class CommonProxy {
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.BLIGHT_CURSE)) {
                 TameableUtils.destroyRandomPlants(event.getEntity());
             }
-            if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.REJUVENATION)) {
-                TameableUtils.absorbExpOrbs(event.getEntity());
+            int rejuvenationLevel = TameableUtils.getEnchantLevel(event.getEntity(), DIEnchantmentRegistry.REJUVENATION);
+            if (rejuvenationLevel > 0) {
+                TameableUtils.absorbExpOrbs(event.getEntity(), rejuvenationLevel);
             }
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.VOID_CLOUD) && !event.getEntity().isInWaterOrBubble() && event.getEntity().fallDistance > 3.0F && !event.getEntity().onGround()) {
                 Entity owner = TameableUtils.getOwnerOf(event.getEntity());
@@ -523,7 +573,7 @@ public class CommonProxy {
                     mob.getNavigation().moveTo(mob.getTarget(), 1.0D);
                 }
             }
-            int psychicWallLevel = TameableUtils.getEnchantLevel(event.getEntity(), DIEnchantmentRegistry.PSYCHIC_WALL);
+            int psychicWallLevel = getAbilityOrEnchantLevel(event.getEntity(), "psychic_wall");
             if (psychicWallLevel > 0 && event.getEntity() instanceof Mob mob && !event.getEntity().level().isClientSide) {
                 int cooldown = TameableUtils.getPsychicWallCooldown(mob);
                 if (cooldown > 0) {
@@ -561,6 +611,7 @@ public class CommonProxy {
                         wall.setWallDirection(dir);
                         mob.level().addFreshEntity(wall);
                         TameableUtils.setPsychicWallCooldown(mob, psychicWallLevel * 200 + 40);
+                        debugDiAbilityUse(mob, "psychic_wall");
                     }
                 }
             }
@@ -577,14 +628,20 @@ public class CommonProxy {
                     TameableUtils.setBlazingProtectionCooldown(event.getEntity(), cooldown);
                 }
             }
-            if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.HEALING_AURA) && !event.getEntity().level().isClientSide) {
+            int healingAuraLevel = getAbilityOrEnchantLevel(event.getEntity(), "healing_aura");
+            if (healingAuraLevel > 0 && !event.getEntity().level().isClientSide) {
                 int time = TameableUtils.getHealingAuraTime(event.getEntity());
                 if (time > 0) {
                     List<LivingEntity> hurtNearby = TameableUtils.getAuraHealables(event.getEntity());
+                    boolean applied = false;
                     for (LivingEntity needsHealing : hurtNearby) {
                         if (!needsHealing.hasEffect(MobEffects.REGENERATION)) {
-                            needsHealing.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, TameableUtils.getEnchantLevel(event.getEntity(), DIEnchantmentRegistry.HEALING_AURA) - 1));
+                            needsHealing.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, Math.max(0, healingAuraLevel - 1)));
+                            applied = true;
                         }
+                    }
+                    if (applied) {
+                        debugDiAbilityUse(event.getEntity(), "healing_aura");
                     }
                     time--;
                     if (time == 0) {
@@ -627,13 +684,24 @@ public class CommonProxy {
     public void onLivingHurt(LivingAttackEvent event) {
         if (TameableUtils.isTamed(event.getEntity()) && !event.getSource().is(DIDamageTypes.SIPHON)) {
             boolean flag = false;
-            if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.IMMUNITY_FRAME)) {
-                int level = TameableUtils.getEnchantLevel(event.getEntity(), DIEnchantmentRegistry.IMMUNITY_FRAME);
+            int thornsLevel = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.THORNS);
+            if (thornsLevel > 0 && event.getSource().getEntity() instanceof LivingEntity attacker && !TameableUtils.hasSameOwnerAs(attacker, event.getEntity())) {
+                float chance = Math.min(1.0F, 0.15F * thornsLevel);
+                if (event.getEntity().getRandom().nextFloat() < chance) {
+                    float reflect = thornsLevel > 10 ? (float) (thornsLevel - 10) : (1.0F + event.getEntity().getRandom().nextInt(4));
+                    attacker.hurt(event.getEntity().damageSources().thorns(event.getEntity()), reflect);
+                }
+            }
+            int immunityFrameLevel = getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame");
+            if (immunityFrameLevel > 0) {
+                int level = immunityFrameLevel;
                 if (TameableUtils.getImmuneTime(event.getEntity()) <= 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), 20 + level * 20);
+                    debugDiAbilityUse(event.getEntity(), "immunity_frame");
                 } else {
                     flag = true;
                     event.setCanceled(true);
+                    debugDiAbilityUse(event.getEntity(), "immunity_frame");
                 }
             }
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.BLAZING_PROTECTION)) {
@@ -783,6 +851,43 @@ public class CommonProxy {
                 event.setAmount((float) Math.ceil(event.getAmount() * 0.7F));
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onCollarProtectionDamageReduction(LivingHurtEvent event) {
+        if (!TameableUtils.isTamed(event.getEntity())) {
+            return;
+        }
+        if (event.getAmount() <= 0.0F) {
+            return;
+        }
+
+        int allProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION);
+        int fireProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.FIRE_PROTECTION);
+        int blastProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.BLAST_PROTECTION);
+        int projectileProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.PROJECTILE_PROTECTION);
+        int featherFalling = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.FALL_PROTECTION);
+
+        int epf = allProt;
+        if (event.getSource().is(DamageTypeTags.IS_FIRE)) {
+            epf += fireProt * 2;
+        }
+        if (event.getSource().is(DamageTypeTags.IS_EXPLOSION)) {
+            epf += blastProt * 2;
+        }
+        if (event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
+            epf += projectileProt * 2;
+        }
+        if (event.getSource().is(DamageTypeTags.IS_FALL)) {
+            epf += featherFalling * 3;
+        }
+        epf = Mth.clamp(epf, 0, 20);
+        if (epf <= 0) {
+            return;
+        }
+
+        float reduced = event.getAmount() * (1.0F - (epf / 25.0F));
+        event.setAmount(Math.max(0.0F, reduced));
     }
 
     @SubscribeEvent
@@ -1084,16 +1189,42 @@ public class CommonProxy {
         Vec3 center = event.getExplosion().getPosition();
         Vec3 bottom = center.add(-dist, -dist, -dist);
         Vec3 top = center.add(dist, dist, dist);
-        Predicate<Entity> defusal = (animal) -> TameableUtils.isTamed(animal) && TameableUtils.hasEnchant((LivingEntity) animal, DIEnchantmentRegistry.DEFUSAL);
-        boolean flag = false;
-        for (LivingEntity defuser : event.getLevel().getEntitiesOfClass(LivingEntity.class, new AABB(bottom, top), EntitySelector.NO_SPECTATORS.and(defusal))) {
-            float level = 10 * TameableUtils.getEnchantLevel(defuser, DIEnchantmentRegistry.DEFUSAL);
-            if (defuser.distanceToSqr(center) <= level * level) {
-                flag = true;
+        Predicate<Entity> defusal = (animal) -> {
+            if (!(animal instanceof TamableAnimal tame) || !tame.isTame()) {
+                return false;
+            }
+            TameData data = TameRegistry.get(tame.getUUID());
+            return data != null && LevelSystem.hasAbility(data, "defusal");
+        };
+
+        TamableAnimal defuserHit = null;
+        TameData defuserData = null;
+        int defusalLevel = 0;
+        long now = event.getLevel().getGameTime();
+        for (LivingEntity entity : event.getLevel().getEntitiesOfClass(LivingEntity.class, new AABB(bottom, top), EntitySelector.NO_SPECTATORS.and(defusal))) {
+            if (!(entity instanceof TamableAnimal tame)) {
+                continue;
+            }
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) {
+                continue;
+            }
+            int level = Math.max(1, LevelSystem.getAbilityLevel(data, "defusal"));
+            long readyAt = data.cooldowns.getOrDefault("defusal_tick", 0L);
+            if (now < readyAt) {
+                continue;
+            }
+
+            double range = 10.0D + (level / 3) * 10.0D; // every 3rd level increases range
+            if (entity.distanceToSqr(center) <= range * range) {
+                defuserHit = tame;
+                defuserData = data;
+                defusalLevel = level;
                 break;
             }
         }
-        if (flag) {
+
+        if (defuserHit != null && defuserData != null) {
             event.setCanceled(true);
             float pitch = 1.5F + new Random().nextFloat();
             event.getLevel().playSound(null, center.x, center.y, center.z, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 1, pitch);
@@ -1102,6 +1233,10 @@ public class CommonProxy {
                     serverLevel.sendParticles(ParticleTypes.CLOUD, center.x, center.y + 1.0F, center.z, 5, 0, 0F, 0, 0.2F);
                 }
             }
+            int cooldownSeconds = Math.max(1, 5 - Math.max(0, defusalLevel - 1));
+            defuserData.cooldowns.put("defusal_tick", now + cooldownSeconds * 20L);
+            TameRegistry.markDirty();
+            debugDiAbilityUse(defuserHit, "defusal");
         }
     }
 
@@ -1127,7 +1262,18 @@ public class CommonProxy {
         }
         for (Mob entity : teleportCandidates) {
             if (removeAndReadd) {
-                teleportingPets.add(new Triple(entity, toLevel, owner.getUUID()));
+                boolean alreadyQueued = false;
+                UUID candidateId = entity.getUUID();
+                for (PendingPetTeleport pending : teleportingPets) {
+                    if (pending != null && pending.entity != null && candidateId.equals(pending.entity.getUUID())) {
+                        alreadyQueued = true;
+                        break;
+                    }
+                }
+                if (!alreadyQueued && toLevel instanceof ServerLevel targetServerLevel) {
+                    long queuedGameTime = owner.level() instanceof ServerLevel ownerLevel ? ownerLevel.getGameTime() : 0L;
+                    teleportingPets.add(new PendingPetTeleport(entity, targetServerLevel, owner.getUUID(), queuedGameTime));
+                }
             } else {
                 EntityDimensions dimensions = entity.getDimensions(entity.getPose());
                 AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
@@ -1163,55 +1309,61 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onUpdateAnvil(AnvilUpdateEvent event) {
-        if(event.getLeft().is(DIItemRegistry.COLLAR_TAG.get()) && !event.getLeft().getAllEnchantments().isEmpty() && event.getRight().is(DIItemRegistry.COLLAR_TAG.get()) && !event.getRight().getAllEnchantments().isEmpty()){
+        if (event.getLeft().is(DIItemRegistry.COLLAR_TAG.get())) {
+            Map<Enchantment, Integer> base = EnchantmentHelper.getEnchantments(event.getLeft());
+            Map<Enchantment, Integer> incoming = EnchantmentHelper.getEnchantments(event.getRight());
+            if (incoming.isEmpty()) {
+                return;
+            }
 
-            Map<Enchantment, Integer> map = EnchantmentHelper.getEnchantments(event.getLeft());
-            Map<Enchantment, Integer> map1 = EnchantmentHelper.getEnchantments(event.getRight());
-            map.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
-            map1.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
-            boolean canCombine = true;
-            int i = 0;
-            for(Enchantment enchantment1 : map1.keySet()) {
-                if (enchantment1 != null) {
-                    int i2 = map.getOrDefault(enchantment1, 0);
-                    int j2 = map1.get(enchantment1);
-                    j2 = i2 == j2 ? j2 + 1 : Math.max(j2, i2);
+            base.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
+            incoming.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
+            if (incoming.isEmpty()) {
+                return;
+            }
 
-                    for(Enchantment enchantment : map.keySet()) {
-                        if (enchantment != enchantment1 && !enchantment1.isCompatibleWith(enchantment)) {
-                            canCombine = false;
-                            ++i;
-                        }
-                    }
+            int totalCost = 0;
+            boolean changed = false;
+            for (Map.Entry<Enchantment, Integer> entry : incoming.entrySet()) {
+                Enchantment enchantment = entry.getKey();
+                int incomingLevel = entry.getValue();
+                int currentLevel = base.getOrDefault(enchantment, 0);
+                int targetLevel = currentLevel == incomingLevel ? incomingLevel + 1 : Math.max(incomingLevel, currentLevel);
+                targetLevel = Math.min(targetLevel, enchantment.getMaxLevel());
+                if (targetLevel <= currentLevel) {
+                    continue;
+                }
 
-                    if (canCombine) {
-                        if (j2 > enchantment1.getMaxLevel()) {
-                            j2 = enchantment1.getMaxLevel();
-                        }
-
-                        map.put(enchantment1, j2);
-                        int k3 = 0;
-                        switch (enchantment1.getRarity()) {
-                            case COMMON:
-                                k3 = 1;
-                                break;
-                            case UNCOMMON:
-                                k3 = 2;
-                                break;
-                            case RARE:
-                                k3 = 4;
-                                break;
-                            case VERY_RARE:
-                                k3 = 8;
-                        }
-                        i += k3 * j2;
+                boolean compatible = true;
+                for (Enchantment existing : base.keySet()) {
+                    if (existing != enchantment && !enchantment.isCompatibleWith(existing)) {
+                        compatible = false;
+                        break;
                     }
                 }
+                if (!compatible) {
+                    continue;
+                }
+
+                base.put(enchantment, targetLevel);
+                changed = true;
+                int rarityCost = switch (enchantment.getRarity()) {
+                    case COMMON -> 1;
+                    case UNCOMMON -> 2;
+                    case RARE -> 4;
+                    case VERY_RARE -> 8;
+                };
+                totalCost += rarityCost * targetLevel;
             }
-            event.setCost(i);
+
+            if (!changed) {
+                return;
+            }
+
             ItemStack copy = event.getLeft().copy();
-            EnchantmentHelper.setEnchantments(map, copy);
+            EnchantmentHelper.setEnchantments(base, copy);
             event.setOutput(copy);
+            event.setCost(Math.max(1, totalCost));
         }
     }
 
@@ -1492,6 +1644,7 @@ public class CommonProxy {
                     missingPayload++;
                     continue;
                 }
+                payload = normalizeDIMigrationPayload(payload);
                 matchedPayload++;
                 CompoundTag current = TameableUtils.getDIProgressData(living);
                 if (current == null || current.isEmpty()) {
@@ -1560,6 +1713,45 @@ public class CommonProxy {
             return payload.getLong("exportedAtGameTime");
         }
         return Long.MIN_VALUE;
+    }
+
+    private static CompoundTag normalizeDIMigrationPayload(CompoundTag payload) {
+        if (payload == null || payload.isEmpty()) {
+            return payload;
+        }
+        CompoundTag normalized = payload.copy();
+
+        // One-time migration for HP bonus scale change (legacy +1 HP bonus -> new +2 HP bonus).
+        if (!normalized.getBoolean("diMigrationNormalizedV2")) {
+            if (normalized.contains("bonusHealth", Tag.TAG_DOUBLE)) {
+                normalized.putDouble("bonusHealth", normalized.getDouble("bonusHealth") * 2.0D);
+            }
+            if (normalized.contains("savedBonusHealth", Tag.TAG_DOUBLE)) {
+                normalized.putDouble("savedBonusHealth", normalized.getDouble("savedBonusHealth") * 2.0D);
+            }
+            normalized.putBoolean("diMigrationNormalizedV2", true);
+        }
+
+        int level = Math.max(1, normalized.getInt("level"));
+        ensureGuaranteedMilestoneAttributes(normalized, "attributeLevels", level);
+
+        int savedLevel = Math.max(1, normalized.getInt("savedLevel"));
+        ensureGuaranteedMilestoneAttributes(normalized, "savedAttributeLevels", savedLevel);
+        return normalized;
+    }
+
+    private static void ensureGuaranteedMilestoneAttributes(CompoundTag payload, String tagKey, int level) {
+        if (payload == null || tagKey == null || tagKey.isBlank()) return;
+        CompoundTag attributes = payload.contains(tagKey, Tag.TAG_COMPOUND)
+                ? payload.getCompound(tagKey).copy()
+                : new CompoundTag();
+        if (level >= 10) {
+            attributes.putInt("tethered_teleport", Math.max(1, attributes.getInt("tethered_teleport")));
+        }
+        if (level >= 30) {
+            attributes.putInt("gluttonous", Math.max(1, attributes.getInt("gluttonous")));
+        }
+        payload.put(tagKey, attributes);
     }
 
     private static void ensureDiProgressEntryForTame(LivingEntity tame, UUID forcedOwnerUuid) {
@@ -1776,6 +1968,63 @@ public class CommonProxy {
                         + ", deaths=" + deaths
         ), false);
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static void debugDiAbilityUse(LivingEntity entity, String abilityId) {
+        if (entity == null || abilityId == null || abilityId.isBlank()) {
+            return;
+        }
+        if (!(entity.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        UUID ownerId = TameableUtils.getOwnerUUIDOf(entity);
+        if (ownerId == null || !PlayerDebugSettings.abilityUsed(ownerId)) {
+            return;
+        }
+        ServerPlayer owner = serverLevel.getServer().getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return;
+        }
+        String tameName = entity.hasCustomName() && entity.getCustomName() != null
+                ? entity.getCustomName().getString()
+                : entity.getName().getString();
+        owner.sendSystemMessage(Component.literal(tameName + ": " + abilityId));
+    }
+
+    private static int getAbilityOrEnchantLevel(LivingEntity entity, String abilityId) {
+        if (entity == null || abilityId == null || abilityId.isBlank()) {
+            return 0;
+        }
+        int abilityLevel = 0;
+        if (entity instanceof TamableAnimal tame && tame.isTame()) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null) {
+                abilityLevel = Math.max(0, LevelSystem.getAbilityLevel(data, abilityId));
+            }
+        }
+
+        if ("psychic_wall".equals(abilityId)) {
+            abilityLevel = psychicAbilityToEnchantScale(abilityLevel);
+        }
+
+        int enchantLevel = switch (abilityId) {
+            case "immunity_frame" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.IMMUNITY_FRAME);
+            case "deflection" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFLECTION);
+            case "shadow_hands" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.SHADOW_HANDS);
+            case "psychic_wall" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.PSYCHIC_WALL);
+            case "healing_aura" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.HEALING_AURA);
+            case "defusal" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFUSAL);
+            default -> 0;
+        };
+        return Math.max(abilityLevel, enchantLevel);
+    }
+
+    private static int psychicAbilityToEnchantScale(int abilityLevel) {
+        if (abilityLevel <= 0) {
+            return 0;
+        }
+        // 5 ability levels should match enchantment level 3 strength.
+        return Math.max(1, (int) Math.ceil(abilityLevel * 3.0D / 5.0D));
     }
 }
 

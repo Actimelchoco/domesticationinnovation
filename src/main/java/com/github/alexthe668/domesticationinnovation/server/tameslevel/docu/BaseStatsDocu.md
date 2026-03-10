@@ -2,7 +2,7 @@
 
 ## Base Stats (Level-Up Reward Category)
 When the reward category roll lands on base stats, one of these is increased:
-- `HP` (`MAX_HEALTH`) `+1.0`
+- `HP` (`MAX_HEALTH`) `+2.0`
 - `Damage` (`ATTACK_DAMAGE`) `+1.0`
 - `Speed` (`MOVEMENT_SPEED`) `+0.01`
 - `Armor` (`ARMOR`) `+1.0`

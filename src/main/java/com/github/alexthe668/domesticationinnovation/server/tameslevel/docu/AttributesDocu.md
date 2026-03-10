@@ -13,8 +13,13 @@
 - `fire_resistance`: applies Fire Resistance, amplifier `level - 1`.
   - DI migration note: sourced from `fireproof`.
   - DI class weight: same as `poison_resistance`.
+  - Numeric example:
+    - L1: Fire Resistance I
+    - L3: Fire Resistance III
 - `poison_resistance`: removes Poison effects from the tame.
   - DI class weight: mid chance for `TANKER`.
+  - Numeric example:
+    - L1+: poison cleanse active (binary effect).
 - `jump_boost`: applies Jump Boost, amplifier `level - 1`.
 
 ## Combat Attributes
@@ -77,6 +82,11 @@
   - Activation chance: periodic while damaged and off cooldown.
   - Level scaling: heal per tick cycle = `0.6 * level`.
 
+- `rejuvenation`
+  - Effect: absorbs nearby XP orbs for the tame (same gameplay behavior as DI rejuvenation enchant).
+  - Leveling: infinite.
+  - DI class weight: high chance for `ASSASSIN`, mid chance for `MAGE`.
+
 - `ability_power`
   - Effect: ability power multiplier `1.0 + 0.12 * level`.
 
@@ -110,6 +120,10 @@
   - Source: `chain_lightning` enchantment becomes this attribute.
   - DI class weight: high chance for `ASSASSIN`, mid chance for `DPS` and `MAGE`.
   - Leveling: infinite.
+  - Numeric example:
+    - L1: up to `6` chains (`3 + 3 * 1`)
+    - L3: up to `12` chains (`3 + 3 * 3`)
+    - L5: up to `18` chains (`3 + 3 * 5`)
 
 - `frost_fang`
   - Source: `frost_fang` enchantment becomes this attribute.
@@ -117,23 +131,37 @@
   - Scaling: each level increases slowness strength and/or activation chance.
   - Scaling: lower enemy HP increases activation chance.
   - Leveling: infinite.
+  - Numeric example (target balancing):
+    - L1: Slowness I, base proc chance `15%`
+    - L3: Slowness II, base proc chance `30%`
+    - L5: Slowness III, base proc chance `45%`
 
 - `magnetic`
   - Source: `magnetic` enchantment becomes this attribute.
   - DI class weight: high chance for `ASSASSIN`.
   - Scaling: level `1-2` low pull, level `3` standard DI pull, level `5+` strong pull.
   - Leveling: infinite.
+  - Numeric example (pull strength multiplier):
+    - L1: `0.60x`
+    - L3: `1.00x`
+    - L5: `1.40x`
 
 - `linked_inventory`
   - Source: `linked_inventory` enchantment becomes this attribute.
   - DI class weight: mid chance for `SUPPORTER`.
   - Leveling: cannot level.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `health_siphon`
   - Source: `health_siphon` enchantment becomes this attribute.
   - DI class weight: mid chance for `TANKER`.
   - Scaling: as level increases, owner receives less damage.
   - Leveling: infinite.
+  - Numeric example (target balancing, owner damage taken):
+    - L1: owner takes `85%` of incoming damage
+    - L3: owner takes `65%`
+    - L5: owner takes `45%`
 
 - `bubbling`
   - Source: `bubbling` enchantment becomes this attribute.
@@ -141,37 +169,50 @@
   - Base rule: does not work on 50+ HP mobs.
   - Scaling: level increases activation chance and allowed target HP cap.
   - Leveling: infinite.
+  - Numeric example (target balancing):
+    - L1: max target HP `50`, proc chance `15%`
+    - L3: max target HP `70`, proc chance `30%`
+    - L5: max target HP `90`, proc chance `45%`
 
 - `herding`
   - Source: `herding` enchantment becomes this attribute.
   - DI class weight: mid chance for `SUPPORTER`.
   - Scaling: range increases per level.
   - Leveling: infinite.
+  - Numeric example:
+    - L1: range `8`
+    - L3: range `12`
+    - L5: range `16`
 
 - `amphibious`
   - Source: `amphibious` enchantment becomes this attribute.
   - DI class weight: high chance for `ASSASSIN`.
   - Leveling: cannot level.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `void_cloud`
   - Source: `void_cloud` enchantment becomes this attribute.
   - DI class weight: mid chance for `ASSASSIN`.
   - Leveling: cannot level.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `charisma`
   - Source: `charisma` enchantment becomes this attribute.
   - DI class weight: mid chance for `SUPPORTER`.
   - Scaling: higher levels reduce prices further.
   - Leveling: infinite.
+  - Numeric example (price multiplier):
+    - L1: `0.95x`
+    - L3: `0.85x`
+    - L5: `0.75x`
 
 - `disc_jockey`
   - Source: `disc_jockey` enchantment becomes this attribute.
   - Leveling: cannot level.
-
-- `defusal`
-  - Source: `defusal` enchantment becomes this attribute.
-  - DI class weight: high chance for `TANKER`, mid chance for `SUPPORTER`.
-  - Leveling: infinite.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `warping_bite`
   - Source: `warping_bite` enchantment becomes this attribute.
@@ -179,28 +220,46 @@
   - Base rule: does not work on 50+ HP mobs.
   - Scaling: level increases activation chance and allowed target HP cap.
   - Leveling: infinite.
+  - Numeric example (target balancing):
+    - L1: max target HP `50`, proc chance `15%`
+    - L3: max target HP `70`, proc chance `30%`
+    - L5: max target HP `90`, proc chance `45%`
 
 - `ore_scenting`
   - Source: `ore_scenting` enchantment becomes this attribute.
   - DI class weight: mid chance for `SUPPORTER`.
   - Leveling: cannot level.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `gluttonous`
   - Source: `gluttonous` enchantment becomes this attribute.
   - Guaranteed milestone: guaranteed attribute after level 30.
-  - Leveling: infinite.
+  - Leveling: cannot level.
+  - Roll behavior: guaranteed-only (not in random attribute rolls).
+  - Numeric example:
+    - Unlock milestone: first guaranteed roll at tame level `30`.
 
 - `tethered_teleport`
   - Source: `tethered_teleport` enchantment becomes this attribute.
-  - Guaranteed milestone: guaranteed attribute after level 40.
-  - Leveling: infinite.
+  - Guaranteed milestone: guaranteed attribute after level 10.
+  - Leveling: cannot level.
+  - Roll behavior: guaranteed-only (not in random attribute rolls).
+  - Numeric example:
+    - Unlock milestone: first guaranteed roll at tame level `10`.
 
 - `muffled`
   - Source: `muffled` enchantment becomes this attribute.
   - DI class weight: mid chance for `ASSASSIN`.
   - Leveling: cannot level.
+  - Numeric example:
+    - L1: enabled (binary effect, no scaling).
 
 - `blazing_protection`
   - Source: `blazing_protection` enchantment becomes this attribute.
   - DI class weight: `TANKER`.
   - Leveling: infinite.
+  - Numeric example:
+    - L1: max bars `2`
+    - L3: max bars `6`
+    - L5: max bars `10`

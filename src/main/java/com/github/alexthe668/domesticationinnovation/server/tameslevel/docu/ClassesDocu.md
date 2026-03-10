@@ -72,17 +72,21 @@ Additional class-specific weighting on top of base stat roll weights:
 - `guaranteed after level N` = forced milestone reward (not random weight based).
 
 ## DI Migrated Attribute Weights by Class
-- `TANKER`: `fire_resistance x2.5`, `poison_resistance x2.5`, `health_siphon x2.5`, `defusal x4.0`, `blazing_protection x4.0`
+- `TANKER`: `fire_resistance x2.5`, `poison_resistance x2.5`, `health_siphon x2.5`, `blazing_protection x4.0`
 - `DPS`: `chain_lightning x2.5`
-- `ASSASSIN`: `chain_lightning x4.0`, `frost_fang x2.6` (same as `firefang`), `magnetic x4.0`, `bubbling x2.5`, `amphibious x4.0`, `void_cloud x2.5`, `warping_bite x4.0`, `muffled x2.5`
-- `PROTECTOR` (`SUPPORTER`): `linked_inventory x2.5`, `herding x2.5`, `charisma x2.5`, `defusal x2.5`, `ore_scenting x2.5`
+- `ASSASSIN`: `chain_lightning x4.0`, `frost_fang x2.6` (same as `firefang`), `magnetic x4.0`, `bubbling x2.5`, `amphibious x4.0`, `void_cloud x2.5`, `warping_bite x4.0`, `muffled x1.5`
+- `PROTECTOR` (`SUPPORTER`): `linked_inventory x2.5`, `herding x2.5`, `charisma x2.5`, `ore_scenting x2.5`
 - `MAGE`: `chain_lightning x2.5`
+
+Rejuvenation:
+- `ASSASSIN`: `rejuvenation x4.0` (high chance)
+- `MAGE`: `rejuvenation x2.5` (mid chance)
 
 DI milestone attributes:
 - `gluttonous`: guaranteed attribute after level `30`.
-- `tethered_teleport`: guaranteed attribute after level `40`.
+- `tethered_teleport`: guaranteed attribute after level `10`.
 
 ## DI Migrated Ability Weights by Class
-- `TANKER`: `immunity_frame x4.0`, `deflection x4.0`
+- `TANKER`: `immunity_frame x7.0`, `deflection x4.0`, `defusal x7.0`
 - `MAGE`: `shadow_hands x4.0`
-- `PROTECTOR`: `psychic_wall x4.0`, `healing_aura x4.0`
+- `PROTECTOR`: `psychic_wall x4.0`, `healing_aura x10.0`, `defusal x4.0`

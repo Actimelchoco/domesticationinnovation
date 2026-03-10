@@ -25,6 +25,9 @@ Shows the exact ability section from `AbilitiesDocu.md`.
 /tames info attribute <attributeId>
 Shows the exact attribute section from `AttributesDocu.md`.
 
+/tame info
+Same as `/tames info`.
+
 ----Leaderboards----
 /tames leaderboard
 /tames leaderboard <kills|deaths|assists|lvl|days>
@@ -34,20 +37,37 @@ Shows the exact attribute section from `AttributesDocu.md`.
 ----Behavior----
 /tames follow
 /tames sit
+/tames wander
 /tames follow <name>
 /tames sit <name>
+/tames wander <name>
+/tames follow all
+/tames sit all
+/tames wander all
 /tames follow group <groupName>
 /tames sit group <groupName>
+/tames wander group <groupName>
+/tames follow type <typeName>
+/tames sit type <typeName>
+/tames wander type <typeName>
+/tames follow state <follow|wander|sit>
+/tames sit state <follow|wander|sit>
+/tames wander state <follow|wander|sit>
 
 ----Teleport----
 /tames tp <name>
 /tames tp all
+/tames tp unloaded
 /tames tp follow
 /tames tp sit
+/tames tp wander
+/tames tp state <follow|wander|sit>
 /tames tp group <groupName>
+/tames tp type <typeName>
+/tames tp dim <dimension>
+/tames tp all dim <dimension>
 
-/tames recover <name>
-Recovers an unloaded tame by spawning an exact saved copy (same UUID), costs 25% of invested tame XP.
+Cross-dimension unloaded tp is blocked.
 
 ----Groups----
 /tames group <groupName>
@@ -59,7 +79,10 @@ Recovers an unloaded tame by spawning an exact saved copy (same UUID), costs 25%
 
 ----Modes----
 /tames mode <pet> <mode>
+/tames mode all <mode>
 /tames mode group <groupName> <mode>
+/tames mode type <typeName> <mode>
+/tames mode state <follow|wander|sit> <mode>
 
 ----Targets----
 /tames removeTarget
@@ -70,6 +93,15 @@ Removes target from one loaded tame.
 
 /tames removeTarget group <groupName>
 Removes targets from loaded tames in that group.
+
+/tames removeTarget type <typeName>
+/tames removeTarget state <follow|wander|sit>
+
+----Respawn----
+/tames respawn <name> [toMe]
+/tames respawn group <groupName> [toMe]
+/tames respawn type <typeName> [toMe]
+/tames respawn all [toMe]
 
 ----Emergency----
 /tames berserk
@@ -92,13 +124,6 @@ Sets nearby owned tames to passive and clears their targets.
 /tames attribute clear <pet>
 /tames attribute list <pet>
 
-----Reincarnate----
-/tames reincarnate <name>
-Shows all saved death entries for that tame name.
-
-/tames reincarnate <name> choose <index>
-Restores the named loaded tame to the selected death snapshot if you have enough player XP.
-
 ----Auto Follow----
 When an owner changes dimension, loaded owned tames that are following (not sitting)
 are teleported to the owner after ~1 second automatically.
@@ -120,3 +145,8 @@ Rebuilds loaded tame combat stats as: base stats of tame type + stored bonuses.
 
 /tames admin normalizeBonuses <pet>
 Same normalization for one loaded tame.
+
+/tames admin xp add|remove <pet> <amount>
+/tames admin ability add|remove|clear|list ...
+/tames admin attribute add|remove|clear|list ...
+/tames admin removeTarget [<name>|group <name>|type <name>|state <follow|wander|sit>]

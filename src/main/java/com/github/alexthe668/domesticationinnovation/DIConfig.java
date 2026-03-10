@@ -80,7 +80,11 @@ public class DIConfig {
     }
 
     public boolean isEnchantEnabled(Enchantment enchantment){
-        return enchantment instanceof PetEnchantment && isEnchantEnabled(((PetEnchantment)enchantment).getName());
+        if (enchantment instanceof PetEnchantment petEnchantment) {
+            return isEnchantEnabled(petEnchantment.getName());
+        }
+        // Vanilla/non-DI enchantments (e.g. Protection on collar tags) are not config-gated here.
+        return true;
     }
 
     public boolean isEnchantEnabled(String enchantment){

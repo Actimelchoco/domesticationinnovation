@@ -26,8 +26,12 @@ public class AgeableMobMixin extends PathfinderMob {
             cancellable = true
     )
     private void di_isBaby(CallbackInfoReturnable<Boolean> cir){
-        if(TameableUtils.isTamed(this) && TameableUtils.hasEnchant(this, DIEnchantmentRegistry.IMMATURITY_CURSE)){
-            cir.setReturnValue(true);
+        try {
+            if (TameableUtils.isTamed(this) && TameableUtils.hasEnchant(this, DIEnchantmentRegistry.IMMATURITY_CURSE)) {
+                cir.setReturnValue(true);
+            }
+        } catch (Throwable ignored) {
+            // Defensive guard: avoid hard-crashing entity construction if helper class linkage fails.
         }
     }
 }

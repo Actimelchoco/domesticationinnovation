@@ -38,7 +38,7 @@ public class LevelSystem {
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
 
     private enum BaseStatReward {
-        HP("HP", Attributes.MAX_HEALTH, 1.0D),
+        HP("HP", Attributes.MAX_HEALTH, 2.0D),
         DAMAGE("Damage", Attributes.ATTACK_DAMAGE, 1.0D),
         SPEED("Speed", Attributes.MOVEMENT_SPEED, 0.01D),
         ARMOR("Armor", Attributes.ARMOR, 1.0D),
@@ -66,6 +66,7 @@ public class LevelSystem {
         ABILITY_POWER("ability_power", Integer.MAX_VALUE),
         LIFESTEAL("lifesteal", Integer.MAX_VALUE),
         REGENERATION("regeneration", Integer.MAX_VALUE),
+        REJUVENATION("rejuvenation", Integer.MAX_VALUE),
         FIREFANG("firefang", Integer.MAX_VALUE),
         POISON_FANG("poison_fang", Integer.MAX_VALUE),
         WITHERFANG("witherfang", Integer.MAX_VALUE),
@@ -83,7 +84,24 @@ public class LevelSystem {
         BANE_OF_ARTHROPODS("bane_of_arthropods", Integer.MAX_VALUE),
         POSITIVE_EFFECT_STEAL("positive_effect_steal", Integer.MAX_VALUE),
         NEGATIVE_EFFECT_TRANSFER("negative_effect_transfer", Integer.MAX_VALUE),
-        SWEEPING_EDGE("sweeping_edge", Integer.MAX_VALUE);
+        SWEEPING_EDGE("sweeping_edge", Integer.MAX_VALUE),
+        CHAIN_LIGHTNING("chain_lightning", Integer.MAX_VALUE),
+        FROST_FANG("frost_fang", Integer.MAX_VALUE),
+        MAGNETIC("magnetic", Integer.MAX_VALUE),
+        LINKED_INVENTORY("linked_inventory", 1),
+        HEALTH_SIPHON("health_siphon", Integer.MAX_VALUE),
+        BUBBLING("bubbling", Integer.MAX_VALUE),
+        HERDING("herding", Integer.MAX_VALUE),
+        AMPHIBIOUS("amphibious", 1),
+        VOID_CLOUD("void_cloud", 1),
+        CHARISMA("charisma", Integer.MAX_VALUE),
+        DISC_JOCKEY("disc_jockey", 1),
+        WARPING_BITE("warping_bite", Integer.MAX_VALUE),
+        ORE_SCENTING("ore_scenting", 1),
+        GLUTTONOUS("gluttonous", 1),
+        TETHERED_TELEPORT("tethered_teleport", 1),
+        MUFFLED("muffled", 1),
+        BLAZING_PROTECTION("blazing_protection", Integer.MAX_VALUE);
 
         private final String id;
         private final int maxLevel;
@@ -119,6 +137,13 @@ public class LevelSystem {
         FISHING("fishing", true, Integer.MAX_VALUE),
         DASH("dash", true, Integer.MAX_VALUE),
         RETALIATION_SLOW("retaliation_slow", true, Integer.MAX_VALUE),
+        IMMUNITY_FRAME("immunity_frame", true, Integer.MAX_VALUE),
+        DEFLECTION("deflection", false, 1),
+        DEFUSAL("defusal", true, Integer.MAX_VALUE),
+        SHADOW_HANDS("shadow_hands", true, Integer.MAX_VALUE),
+        PSYCHIC_WALL("psychic_wall", true, Integer.MAX_VALUE),
+        HEALING_AURA("healing_aura", true, Integer.MAX_VALUE),
+        HEALING_BOTTLE("healing_bottle", true, Integer.MAX_VALUE),
         DAMAGE_INTERCEPT("damage_intercept", true, Integer.MAX_VALUE),
         GUARDIAN_REPULSE("guardian_repulse", true, Integer.MAX_VALUE),
         LAST_STAND_FURY("last_stand_fury", true, Integer.MAX_VALUE),
@@ -408,11 +433,19 @@ public class LevelSystem {
 
     public static String applyLevelReward(TamableAnimal tame, TameData data) {
         RewardCategory category = rollCategory(data);
-        return switch (category) {
+        String primary = switch (category) {
             case BASE_STAT -> applyBaseStatReward(tame, data);
-            case ATTRIBUTE -> applyAttributeReward(tame, data);
-            case ABILITY -> applyAbilityReward(tame, data);
+            case ATTRIBUTE -> applyAttributeReward(tame, data, true);
+            case ABILITY -> applyAbilityReward(tame, data, true);
         };
+        List<String> guaranteed = grantGuaranteedAttributesForLevel(data);
+        if (guaranteed.isEmpty()) {
+            return primary;
+        }
+        if (primary == null || primary.isBlank()) {
+            return String.join(" + ", guaranteed);
+        }
+        return primary + " + " + String.join(" + ", guaranteed);
     }
 
     private static RewardCategory rollCategory(TameData data) {
@@ -511,7 +544,7 @@ public class LevelSystem {
         return reward.display + " +" + formatDouble(reward.amount);
     }
 
-    private static String applyAttributeReward(TamableAnimal tame, TameData data) {
+    private static String applyAttributeReward(TamableAnimal tame, TameData data, boolean allowAbilityFallback) {
         AttributeReward upgraded = tryUpgradeExistingAttribute(data);
         if (upgraded != null) {
             int newLevel = data.attributeLevels.get(upgraded.id);
@@ -520,6 +553,9 @@ public class LevelSystem {
 
         List<WeightedOption<AttributeReward>> options = new ArrayList<>();
         for (AttributeReward reward : AttributeReward.values()) {
+            if (isGuaranteedOnlyAttribute(reward.id)) {
+                continue;
+            }
             int current = data.attributeLevels.getOrDefault(reward.id, 0);
             if (current >= reward.maxLevel) {
                 continue;
@@ -528,6 +564,9 @@ public class LevelSystem {
             options.add(new WeightedOption<>(reward, weight));
         }
         if (options.isEmpty()) {
+            if (allowAbilityFallback) {
+                return applyAbilityReward(tame, data, false);
+            }
             return applyBaseStatReward(tame, data);
         }
 
@@ -538,7 +577,7 @@ public class LevelSystem {
         return rolled.id + " " + roman(current + 1);
     }
 
-    private static String applyAbilityReward(TamableAnimal tame, TameData data) {
+    private static String applyAbilityReward(TamableAnimal tame, TameData data, boolean allowAttributeFallback) {
         AbilityReward upgraded = tryUpgradeExistingAbility(data);
         if (upgraded != null) {
             int newLevel = data.abilityLevels.get(upgraded.id);
@@ -555,6 +594,9 @@ public class LevelSystem {
             options.add(new WeightedOption<>(reward, weight));
         }
         if (options.isEmpty()) {
+            if (allowAttributeFallback) {
+                return applyAttributeReward(tame, data, false);
+            }
             return applyBaseStatReward(tame, data);
         }
 
@@ -621,6 +663,9 @@ public class LevelSystem {
         List<AttributeReward> pool = new ArrayList<>();
         List<WeightedOption<AttributeReward>> weighted = new ArrayList<>();
         for (AttributeReward reward : AttributeReward.values()) {
+            if (isGuaranteedOnlyAttribute(reward.id)) {
+                continue;
+            }
             int current = data.attributeLevels.getOrDefault(reward.id, 0);
             if (current > 0 && current < reward.maxLevel) {
                 pool.add(reward);
@@ -729,6 +774,8 @@ public class LevelSystem {
                 case POISON_RESISTANCE -> base * 3.8D;
                 case TOTEM -> base * 3.6D;
                 case PACIFIST -> base * 2.8D;
+                case HEALTH_SIPHON -> base * 2.5D;
+                case BLAZING_PROTECTION -> base * 4.0D;
                 default -> base;
             };
             case ASSASSIN -> switch (reward) {
@@ -736,9 +783,18 @@ public class LevelSystem {
                 case STRENGTH -> base * 3.4D;
                 case KILLER -> base * 4.0D;
                 case LIFESTEAL -> base * 3.0D;
+                case REJUVENATION -> base * 4.0D;
                 case FIREFANG -> base * 2.6D;
                 case WITHERFANG -> base * 3.0D;
                 case LIGHTNINGFANG -> base * 1.6D;
+                case CHAIN_LIGHTNING -> base * 4.0D;
+                case FROST_FANG -> base * 2.6D;
+                case MAGNETIC -> base * 4.0D;
+                case BUBBLING -> base * 2.5D;
+                case AMPHIBIOUS -> base * 4.0D;
+                case VOID_CLOUD -> base * 2.5D;
+                case WARPING_BITE -> base * 4.0D;
+                case MUFFLED -> base * 1.5D;
                 default -> base;
             };
             case DPS -> switch (reward) {
@@ -749,6 +805,7 @@ public class LevelSystem {
                 case FIREFANG -> base * 3.0D;
                 case LIGHTNINGFANG -> base * 1.6D;
                 case SWEEPING_EDGE -> base * 4.0D;
+                case CHAIN_LIGHTNING -> base * 2.5D;
                 default -> base;
             };
             case PROTECTOR -> switch (reward) {
@@ -759,15 +816,21 @@ public class LevelSystem {
                 case TOTEM -> base * 4.2D;
                 case PACIFIST -> base * 3.2D;
                 case POSITIVE_EFFECT_STEAL -> base * 2.8D;
+                case LINKED_INVENTORY -> base * 2.5D;
+                case HERDING -> base * 2.5D;
+                case CHARISMA -> base * 2.5D;
+                case ORE_SCENTING -> base * 2.5D;
                 default -> base;
             };
             case MAGE -> switch (reward) {
                 case ABILITY_POWER -> base * 4.2D;
+                case REJUVENATION -> base * 2.5D;
                 case LIGHTNINGFANG -> base * 3.2D;
                 case WITHERFANG -> base * 3.2D;
                 case FIREFANG -> base * 3.0D;
                 case NEGATIVE_EFFECT_TRANSFER -> base * 3.2D;
                 case POSITIVE_EFFECT_STEAL -> base * 2.6D;
+                case CHAIN_LIGHTNING -> base * 2.5D;
                 default -> base;
             };
             case SHOOTER -> switch (reward) {
@@ -792,6 +855,9 @@ public class LevelSystem {
             case TANKER -> switch (reward) {
                 case DEFENSIVE_AURA -> base * 4.8D;
                 case BERSERKER -> base * 3.7D;
+                case IMMUNITY_FRAME -> base * 7.0D;
+                case DEFLECTION -> base * 4.0D;
+                case DEFUSAL -> base * 7.0D;
                 case DAMAGE_INTERCEPT -> base * 5.0D;
                 case GUARDIAN_REPULSE -> base * 4.8D;
                 case LAST_STAND_FURY -> base * 2.8D;
@@ -813,6 +879,10 @@ public class LevelSystem {
             case PROTECTOR -> switch (reward) {
                 case DEFENSIVE_AURA -> base * 4.6D;
                 case BATTLE_STRENGTH -> base * 3.2D;
+                case DEFUSAL -> base * 4.0D;
+                case PSYCHIC_WALL -> base * 4.0D;
+                case HEALING_AURA -> base * 10.0D;
+                case HEALING_BOTTLE -> base * 8.0D;
                 case DAMAGE_INTERCEPT -> base * 2.8D;
                 case GUARDIAN_REPULSE -> base * 4.8D;
                 case LAST_STAND_FURY -> base * 4.8D;
@@ -834,8 +904,10 @@ public class LevelSystem {
                 case DRAGON_FIREBALL -> base * 4.6D;
                 case GUARDIAN_BEAM -> base * 4.4D;
                 case ELDER_GUARDIAN_BEAM -> base * 4.2D;
+                case SHADOW_HANDS -> base * 4.0D;
                 case WITHER_SKULL -> base * 4.0D;
                 case EVOKER_FANGS -> base * 3.6D;
+                case HEALING_BOTTLE -> base * 2.2D;
                 case LIGHTNING_STRIKE -> base * 3.6D;
                 case GHAST_FIREBALL -> base * 3.2D;
                 case SHULKER_BULLET -> base * 4.0D;
@@ -885,6 +957,27 @@ public class LevelSystem {
         }
         String normalized = id.trim().toLowerCase(java.util.Locale.ROOT);
         return ABILITY_ALIASES.getOrDefault(normalized, normalized);
+    }
+
+    private static boolean isGuaranteedOnlyAttribute(String attributeId) {
+        if (attributeId == null) {
+            return false;
+        }
+        return "gluttonous".equals(attributeId) || "tethered_teleport".equals(attributeId);
+    }
+
+    private static List<String> grantGuaranteedAttributesForLevel(TameData data) {
+        List<String> granted = new ArrayList<>();
+        if (data == null) {
+            return granted;
+        }
+        if (data.level >= 10 && getAttributeLevel(data, "tethered_teleport") <= 0 && addAttribute(data, "tethered_teleport", 1)) {
+            granted.add("Unlocked tethered_teleport I");
+        }
+        if (data.level >= 30 && getAttributeLevel(data, "gluttonous") <= 0 && addAttribute(data, "gluttonous", 1)) {
+            granted.add("Unlocked gluttonous I");
+        }
+        return granted;
     }
 
     private static int resolveAbilityLevel(TameData data, String canonicalId) {

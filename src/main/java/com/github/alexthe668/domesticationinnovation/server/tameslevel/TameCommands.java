@@ -497,6 +497,8 @@ public class TameCommands {
 
                         .then(Commands.literal("follow")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.FOLLOW))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> setMovementStateAllLoaded(ctx.getSource(), MovementOrder.FOLLOW)))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> setPetMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW)))
@@ -507,10 +509,20 @@ public class TameCommands {
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW)))))
+                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW))))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> stateMovementState(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name"),
+                                                        MovementOrder.FOLLOW
+                                                )))))
 
                         .then(Commands.literal("sit")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.SIT))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> setMovementStateAllLoaded(ctx.getSource(), MovementOrder.SIT)))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> setPetMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
@@ -521,10 +533,20 @@ public class TameCommands {
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))))
+                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT))))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> stateMovementState(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name"),
+                                                        MovementOrder.SIT
+                                                )))))
 
                         .then(Commands.literal("wander")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.WANDER))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> setMovementStateAllLoaded(ctx.getSource(), MovementOrder.WANDER)))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> setPetMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))
@@ -535,7 +557,15 @@ public class TameCommands {
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))))
+                                                .executes(ctx -> typeMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER))))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> stateMovementState(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name"),
+                                                        MovementOrder.WANDER
+                                                )))))
 
                         .then(Commands.literal("tp")
                                 .then(Commands.literal("all")
@@ -560,6 +590,13 @@ public class TameCommands {
                                         .executes(ctx -> teleportByMovementState(ctx.getSource(), MovementOrder.SIT)))
                                 .then(Commands.literal("wander")
                                         .executes(ctx -> teleportByMovementState(ctx.getSource(), MovementOrder.WANDER)))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> teleportByState(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name")
+                                                ))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -571,10 +608,6 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("recover")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedUnloadedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> recoverPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("respawn")
                                 .then(Commands.literal("all")
                                         .executes(ctx -> respawnAll(ctx.getSource(), false))
@@ -658,10 +691,16 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> suggestModes(b))
                                                         .executes(ctx -> typeMode(ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "name"),
+                                                                StringArgumentType.getString(ctx, "mode"))))))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .then(Commands.argument("mode", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestModes(b))
+                                                        .executes(ctx -> stateMode(ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "name"),
                                                                 StringArgumentType.getString(ctx, "mode")))))))
 
-                        .then(Commands.literal("reincarnate")
-                                .executes(ctx -> notImplemented(ctx.getSource(), "Reincarnation is disabled. Use DI respawn.")))
                         .then(Commands.literal("debug")
                                 .executes(ctx -> debugStatus(ctx.getSource()))
                                 .then(Commands.literal("enemyKilled")
@@ -890,7 +929,11 @@ public class TameCommands {
                                         .then(Commands.literal("type")
                                                 .then(Commands.argument("name", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                        .executes(ctx -> removeTargetType(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))))
+                                                        .executes(ctx -> removeTargetType(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.literal("state")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestMovementStates(b))
+                                                        .executes(ctx -> removeTargetState(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))))
 
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
@@ -1171,19 +1214,19 @@ public class TameCommands {
 
     private static int infoOverview(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
+        p.sendSystemMessage(Component.literal("/tame is an alias for /tames"));
         p.sendSystemMessage(Component.literal("/tames, /tames strongest, /tames <name>"));
         p.sendSystemMessage(Component.literal("/tames loaded"));
         p.sendSystemMessage(Component.literal("/tames deaths <number>"));
         p.sendSystemMessage(Component.literal("/tames leaderboard [mix|kills|deaths|assists|lvl|days] [all]"));
-        p.sendSystemMessage(Component.literal("/tames follow|sit|wander [<name>|group <name>]"));
-        p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|group <name>>"));
-        p.sendSystemMessage(Component.literal("/tames recover <name>"));
+        p.sendSystemMessage(Component.literal("/tames follow|sit|wander [<name>|all|group <name>|type <name>|state <follow|wander|sit>]"));
+        p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <name>|type <name>>"));
+        p.sendSystemMessage(Component.literal("/tames respawn <name|all|group <name>|type <name>> [toMe]"));
         p.sendSystemMessage(Component.literal("/tames group <name>|add|remove|removefromallgroups"));
-        p.sendSystemMessage(Component.literal("/tames mode <name> <mode>, /tames mode group <group> <mode>"));
-        p.sendSystemMessage(Component.literal("/tames reincarnate (disabled, use DI respawn)"));
+        p.sendSystemMessage(Component.literal("/tames mode <name> <mode>, /tames mode <all|group|type|state> ... <mode>"));
         p.sendSystemMessage(Component.literal("/tames info attribute [name] | ability [name] | class"));
         p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed <true|false>"));
-        p.sendSystemMessage(Component.literal("/tames admin normalizeBonuses <all|pet>, /tames admin approve item"));
+        p.sendSystemMessage(Component.literal("/tames admin normalizeBonuses <all|pet>, /tames admin approve item, /tames admin xp|ability|attribute|removeTarget ..."));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
     }
@@ -1195,15 +1238,14 @@ public class TameCommands {
         else if (key.equals("deaths")) p.sendSystemMessage(Component.literal("/tames deaths <number>"));
         else if (key.equals("loaded")) p.sendSystemMessage(Component.literal("/tames loaded"));
         else if (key.equals("group")) p.sendSystemMessage(Component.literal("/tames group <name> | add <pet> <group> | remove <pet> <group> | removefromallgroups <pet>"));
-        else if (key.equals("mode")) p.sendSystemMessage(Component.literal("/tames mode <pet> <mode>, /tames mode group <group> <mode>"));
-        else if (key.equals("follow") || key.equals("sit") || key.equals("wander")) p.sendSystemMessage(Component.literal("/tames " + key + " [<name>|group <group>]"));
-        else if (key.equals("tp")) p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|group <group>>"));
-        else if (key.equals("reincarnate")) p.sendSystemMessage(Component.literal("/tames reincarnate (disabled, use DI respawn)"));
+        else if (key.equals("mode")) p.sendSystemMessage(Component.literal("/tames mode <pet> <mode>, /tames mode <all|group|type|state> ... <mode>"));
+        else if (key.equals("follow") || key.equals("sit") || key.equals("wander")) p.sendSystemMessage(Component.literal("/tames " + key + " [<name>|all|group <group>|type <type>|state <follow|wander|sit>]"));
+        else if (key.equals("tp")) p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>"));
         else if (key.equals("debug")) p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed <true|false>"));
         else if (key.equals("attribute")) {
             p.sendSystemMessage(Component.literal("Attribute docs (General):").withStyle(ChatFormatting.GOLD));
             sendDocLines(p, readDocSectionByHeading(
-                    Path.of("src", "main", "java", "com", "kurthagoras", "tameslevel", "docu", "AttributesDocu.md"),
+                    Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AttributesDocu.md"),
                     "## General",
                     "## "
             ));
@@ -1212,7 +1254,7 @@ public class TameCommands {
         else if (key.equals("ability")) {
             p.sendSystemMessage(Component.literal("Ability docs (General):").withStyle(ChatFormatting.GOLD));
             sendDocLines(p, readDocSectionByHeading(
-                    Path.of("src", "main", "java", "com", "kurthagoras", "tameslevel", "docu", "AbilitiesDocu.md"),
+                    Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AbilitiesDocu.md"),
                     "## General",
                     "## "
             ));
@@ -1237,7 +1279,7 @@ public class TameCommands {
         if (!LevelSystem.knownAbilityIds().contains(id)) return error(p, "Unknown ability: " + id);
 
         List<String> block = readDocSectionByHeading(
-                Path.of("src", "main", "java", "com", "kurthagoras", "tameslevel", "docu", "AbilitiesDocu.md"),
+                Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AbilitiesDocu.md"),
                 "### `" + id + "`",
                 "### `"
         );
@@ -1257,7 +1299,7 @@ public class TameCommands {
         if (!LevelSystem.knownAttributeIds().contains(id)) return error(p, "Unknown attribute: " + id);
 
         List<String> block = readDocBulletBlock(
-                Path.of("src", "main", "java", "com", "kurthagoras", "tameslevel", "docu", "AttributesDocu.md"),
+                Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AttributesDocu.md"),
                 "- `" + id + "`"
         );
         if (block.isEmpty()) {
@@ -1330,7 +1372,6 @@ public class TameCommands {
         if (end <= 0) return List.of();
         return new ArrayList<>(lines.subList(0, end));
     }
-//ttsfesssefseffasf
     private static List<String> readDocFile(Path path) {
         if (path == null) return List.of();
         try {
@@ -1747,6 +1788,28 @@ public class TameCommands {
         return 1;
     }
 
+    private static int stateMode(CommandSourceStack source, String stateName, String modeName) {
+        ServerPlayer p = source.getPlayer();
+        MovementOrder selectedState = parseMovementOrder(stateName);
+        if (selectedState == null) return error(p, "Invalid state. Use follow, wander, or sit.");
+        TameMode mode = TameMode.tryByName(modeName);
+        if (mode == null) return error(p, "Invalid mode.");
+
+        int count = 0;
+        for (TamableAnimal tame : loadedOwnedStateTames(source, p.getUUID(), selectedState)) {
+            TameData d = TameRegistry.get(tame.getUUID());
+            if (d == null) continue;
+            d.mode = mode.id();
+            if (mode != TameMode.PASSIVE) {
+                applySitFollowOverride(tame, false);
+            }
+            count++;
+        }
+        TameRegistry.markDirty();
+        p.sendSystemMessage(Component.literal("Set mode " + mode.key() + " for " + count + " loaded " + movementLabel(selectedState) + " tames."));
+        return 1;
+    }
+
     private static int setZone(CommandSourceStack source, String pet, int radius) {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
@@ -1958,6 +2021,18 @@ public class TameCommands {
         return 1;
     }
 
+    private static int stateMovementState(CommandSourceStack source, String stateName, MovementOrder targetOrder) {
+        ServerPlayer p = source.getPlayer();
+        MovementOrder selectedState = parseMovementOrder(stateName);
+        if (selectedState == null) return error(p, "Invalid state. Use follow, wander, or sit.");
+        List<TamableAnimal> selected = loadedOwnedStateTames(source, p.getUUID(), selectedState);
+        for (TamableAnimal tame : selected) {
+            applyMovementOverride(tame, targetOrder);
+        }
+        p.sendSystemMessage(Component.literal("Set " + selected.size() + " loaded " + movementLabel(selectedState) + " tames to " + movementLabel(targetOrder) + "."));
+        return 1;
+    }
+
     private static int setPetMovementState(CommandSourceStack source, String pet, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
@@ -1978,6 +2053,18 @@ public class TameCommands {
             count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames to " + movementLabel(order) + "."));
+        return 1;
+    }
+
+    private static int setMovementStateAllLoaded(CommandSourceStack source, MovementOrder order) {
+        ServerPlayer p = source.getPlayer();
+        int count = 0;
+        for (TamableAnimal tame : loadedOwnedAllTames(source, p.getUUID())) {
+            if (!tame.isTame()) continue;
+            applyMovementOverride(tame, order);
+            count++;
+        }
+        p.sendSystemMessage(Component.literal("Set " + count + " loaded tames to " + movementLabel(order) + "."));
         return 1;
     }
 
@@ -2598,6 +2685,13 @@ public class TameCommands {
         return 1;
     }
 
+    private static int teleportByState(CommandSourceStack source, String stateName) {
+        ServerPlayer p = source.getPlayer();
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) return error(p, "Invalid state. Use follow, wander, or sit.");
+        return teleportByMovementState(source, order);
+    }
+
     private static boolean payTeleportXp(ServerPlayer player, int cost) {
         cost = Math.max(0, cost);
         if (cost <= 0) return true;
@@ -2792,7 +2886,7 @@ public class TameCommands {
                     .append(Component.literal("K" + r.kills + " A" + r.assists + " D" + r.deaths + " ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("Class " + (r.tameClass == null || r.tameClass.isBlank() ? "-" : r.tameClass) + " ").withStyle(ChatFormatting.GREEN))
                     .append(Component.literal("Cost " + r.reviveXpCost + " XP points ").withStyle(ChatFormatting.LIGHT_PURPLE))
-                    .append(Component.literal("-> /tames reincarnate " + name + " choose " + (i + 1)).withStyle(ChatFormatting.DARK_AQUA)));
+                    .append(Component.literal("-> /tames admin respawn \"" + name + "\" " + (i + 1)).withStyle(ChatFormatting.DARK_AQUA)));
         }
         return 1;
     }
@@ -3079,6 +3173,19 @@ public class TameCommands {
             count++;
         }
         p.sendSystemMessage(Component.literal("Removed targets from " + count + " loaded tames of type '" + typeFilter + "'."));
+        return 1;
+    }
+
+    private static int removeTargetState(CommandSourceStack source, String stateName) {
+        ServerPlayer p = source.getPlayer();
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) return error(p, "Invalid state. Use follow, wander, or sit.");
+        int count = 0;
+        for (TamableAnimal tame : loadedOwnedStateTames(source, p.getUUID(), order)) {
+            tame.setTarget(null);
+            count++;
+        }
+        p.sendSystemMessage(Component.literal("Removed targets from " + count + " loaded " + movementLabel(order) + " tames."));
         return 1;
     }
 
@@ -3937,6 +4044,7 @@ public class TameCommands {
                     missingPayload++;
                     continue;
                 }
+                payload = normalizeDIMigrationPayload(payload);
                 matchedPayload++;
                 CompoundTag current = TameableUtils.getDIProgressData(living);
                 if (current == null || current.isEmpty()) {
@@ -4013,7 +4121,46 @@ public class TameCommands {
         payload.putInt("schemaVersion", 1);
         payload.putLong("exportedAtGameTime", exportedAtGameTime);
         payload.putLong("exportedAtEpochMillis", System.currentTimeMillis());
-        return payload;
+        return normalizeDIMigrationPayload(payload);
+    }
+
+    private static CompoundTag normalizeDIMigrationPayload(CompoundTag payload) {
+        if (payload == null || payload.isEmpty()) {
+            return payload;
+        }
+        CompoundTag normalized = payload.copy();
+
+        // One-time migration for HP bonus scale change (legacy +1 HP bonus -> new +2 HP bonus).
+        if (!normalized.getBoolean("diMigrationNormalizedV2")) {
+            if (normalized.contains("bonusHealth", Tag.TAG_DOUBLE)) {
+                normalized.putDouble("bonusHealth", normalized.getDouble("bonusHealth") * 2.0D);
+            }
+            if (normalized.contains("savedBonusHealth", Tag.TAG_DOUBLE)) {
+                normalized.putDouble("savedBonusHealth", normalized.getDouble("savedBonusHealth") * 2.0D);
+            }
+            normalized.putBoolean("diMigrationNormalizedV2", true);
+        }
+
+        int level = Math.max(1, normalized.getInt("level"));
+        ensureGuaranteedMilestoneAttributes(normalized, "attributeLevels", level);
+
+        int savedLevel = Math.max(1, normalized.getInt("savedLevel"));
+        ensureGuaranteedMilestoneAttributes(normalized, "savedAttributeLevels", savedLevel);
+        return normalized;
+    }
+
+    private static void ensureGuaranteedMilestoneAttributes(CompoundTag payload, String tagKey, int level) {
+        if (payload == null || tagKey == null || tagKey.isBlank()) return;
+        CompoundTag attributes = payload.contains(tagKey, Tag.TAG_COMPOUND)
+                ? payload.getCompound(tagKey).copy()
+                : new CompoundTag();
+        if (level >= 10) {
+            attributes.putInt("tethered_teleport", Math.max(1, attributes.getInt("tethered_teleport")));
+        }
+        if (level >= 30) {
+            attributes.putInt("gluttonous", Math.max(1, attributes.getInt("gluttonous")));
+        }
+        payload.put(tagKey, attributes);
     }
 
     private static void resetProgressData(TameData data, boolean clearClass) {
@@ -4204,6 +4351,17 @@ public class TameCommands {
         };
     }
 
+    private static MovementOrder parseMovementOrder(String raw) {
+        if (raw == null) return null;
+        String key = raw.trim().toLowerCase(Locale.ROOT);
+        return switch (key) {
+            case "follow" -> MovementOrder.FOLLOW;
+            case "sit" -> MovementOrder.SIT;
+            case "wander" -> MovementOrder.WANDER;
+            default -> null;
+        };
+    }
+
     private static boolean matchesMovementOrder(TamableAnimal tame, MovementOrder order) {
         if (tame instanceof IComandableMob commandable) {
             int command = commandable.getCommand();
@@ -4218,6 +4376,17 @@ public class TameCommands {
             case SIT -> tame.isOrderedToSit();
             case WANDER -> false;
         };
+    }
+
+    private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
+        List<TamableAnimal> list = new ArrayList<>();
+        for (TameData data : ownedTames(owner)) {
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+            if (tame == null || !tame.isAlive()) continue;
+            if (!matchesMovementOrder(tame, order)) continue;
+            list.add(tame);
+        }
+        return list;
     }
 
     private static void applySitFollowOverride(TamableAnimal tame, boolean sit) {
@@ -4827,7 +4996,7 @@ public class TameCommands {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (isDeadEntry(d.uuid)) continue;
-            b.suggest(d.name);
+            suggestCommandString(b, d.name);
         }
         return b.buildFuture();
     }
@@ -4837,7 +5006,7 @@ public class TameCommands {
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
-            b.suggest(d.name);
+            suggestCommandString(b, d.name);
         }
         return b.buildFuture();
     }
@@ -4849,7 +5018,7 @@ public class TameCommands {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (isDeadEntry(d.uuid)) continue;
             if (isEffectivelyLoaded(source, p, d)) continue;
-            b.suggest(d.name);
+            suggestCommandString(b, d.name);
         }
         return b.buildFuture();
     }
@@ -4861,7 +5030,7 @@ public class TameCommands {
             if (d == null || d.name == null || d.name.isBlank()) continue;
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (!isDeadEntry(d.uuid)) continue;
-            b.suggest(d.name);
+            suggestCommandString(b, d.name);
         }
         return b.buildFuture();
     }
@@ -4921,13 +5090,20 @@ public class TameCommands {
         Set<String> seen = new HashSet<>();
         for (TameDeathRecord r : TameRegistry.DEATH_HISTORY) {
             if (!p.getUUID().equals(r.ownerUUID) || r.name == null || r.name.isBlank()) continue;
-            if (seen.add(r.name)) b.suggest(r.name);
+            if (seen.add(r.name)) suggestCommandString(b, r.name);
         }
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestModes(SuggestionsBuilder b) {
         for (TameMode mode : TameMode.values()) b.suggest(mode.key());
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestMovementStates(SuggestionsBuilder b) {
+        b.suggest("follow");
+        b.suggest("wander");
+        b.suggest("sit");
         return b.buildFuture();
     }
 
@@ -4959,7 +5135,7 @@ public class TameCommands {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (isDeadEntry(d.uuid)) continue;
             if (d.name == null || d.name.isBlank()) continue;
-            if (seen.add(d.name)) b.suggest(d.name);
+            if (seen.add(d.name)) suggestCommandString(b, d.name);
         }
         return b.buildFuture();
     }
@@ -4968,13 +5144,20 @@ public class TameCommands {
         Set<String> seen = new HashSet<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (d.name == null || d.name.isBlank()) continue;
-            if (seen.add(d.name)) b.suggest(d.name);
+            if (seen.add(d.name)) suggestCommandString(b, d.name);
         }
         for (TameDeathRecord r : TameRegistry.LAST_DEATHS.values()) {
             if (r == null || r.name == null || r.name.isBlank()) continue;
-            if (seen.add(r.name)) b.suggest(r.name);
+            if (seen.add(r.name)) suggestCommandString(b, r.name);
         }
         return b.buildFuture();
+    }
+
+    private static void suggestCommandString(SuggestionsBuilder b, String value) {
+        if (b == null || value == null || value.isBlank()) {
+            return;
+        }
+        b.suggest(StringArgumentType.escapeIfRequired(value));
     }
 
     private static List<String> classNames() {

@@ -8,19 +8,20 @@ public final class TameGoalInstaller {
     }
 
     public static void installIfMissing(TamableAnimal tame) {
-        addIfMissing(tame, PassiveModeGoal.class, 3, new PassiveModeGoal(tame));
-        addIfMissing(tame, DefaultPlusModeGoal.class, 3, new DefaultPlusModeGoal(tame));
-        addIfMissing(tame, BossModeGoal.class, 3, new BossModeGoal(tame));
-        addIfMissing(tame, BodyguardModeGoal.class, 3, new BodyguardModeGoal(tame));
-        addIfMissing(tame, MonsterHunterModeGoal.class, 3, new MonsterHunterModeGoal(tame));
-        addIfMissing(tame, AggressiveModeGoal.class, 3, new AggressiveModeGoal(tame));
+        addTargetIfMissing(tame, PassiveModeGoal.class, 3, new PassiveModeGoal(tame));
+        addTargetIfMissing(tame, DefaultPlusModeGoal.class, 3, new DefaultPlusModeGoal(tame));
+        addTargetIfMissing(tame, BossModeGoal.class, 3, new BossModeGoal(tame));
+        addTargetIfMissing(tame, BodyguardModeGoal.class, 3, new BodyguardModeGoal(tame));
+        addTargetIfMissing(tame, MonsterHunterModeGoal.class, 3, new MonsterHunterModeGoal(tame));
+        addTargetIfMissing(tame, AggressiveModeGoal.class, 3, new AggressiveModeGoal(tame));
     }
 
-    private static void addIfMissing(TamableAnimal tame, Class<? extends Goal> goalType, int priority, Goal goal) {
-        boolean alreadyPresent = tame.goalSelector.getAvailableGoals().stream()
+    private static void addTargetIfMissing(TamableAnimal tame, Class<? extends Goal> goalType, int priority, Goal goal) {
+        boolean alreadyPresent = tame.targetSelector.getAvailableGoals().stream()
                 .anyMatch(wrapped -> goalType.isInstance(wrapped.getGoal()));
         if (!alreadyPresent) {
-            tame.goalSelector.addGoal(priority, goal);
+            tame.targetSelector.addGoal(priority, goal);
         }
     }
+
 }

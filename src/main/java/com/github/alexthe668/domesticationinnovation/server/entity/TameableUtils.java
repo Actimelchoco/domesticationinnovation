@@ -8,6 +8,8 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -74,6 +76,7 @@ public class TameableUtils {
     private static final String COLLAR_SWAP_COOLDOWN = "CollarSwapCooldown";
     private static final UUID HEALTH_BOOST_UUID = UUID.fromString("556E1665-8B10-40C8-8F9D-CF9B166EEEEE");
     private static final UUID SPEED_BOOST_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31744");
+    private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
 
     private static final UUID SPEED_BOOST_AQUATIC_LAND_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31745");
 
@@ -200,9 +203,11 @@ public class TameableUtils {
     private static void onUpdateEnchants(@Nullable Map<ResourceLocation, Integer> prevEnchants, LivingEntity enchanted) {
         int healthExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.HEALTH_BOOST);
         int speedExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.SPEEDSTER);
+        int collarArmor = hasCollar(enchanted) ? 2 : 0;
         boolean amphib = hasEnchant(enchanted, DIEnchantmentRegistry.AMPHIBIOUS) && !enchanted.isInWaterOrBubble() && isWaterCreature(enchanted);
         AttributeInstance health = enchanted.getAttribute(Attributes.MAX_HEALTH);
         AttributeInstance speed = enchanted.getAttribute(Attributes.MOVEMENT_SPEED);
+        AttributeInstance armor = enchanted.getAttribute(Attributes.ARMOR);
         if (hasEnchant(enchanted, DIEnchantmentRegistry.IMMATURITY_CURSE) || prevEnchants != null && prevEnchants.keySet().contains(ForgeRegistries.ENCHANTMENTS.getKey(DIEnchantmentRegistry.IMMATURITY_CURSE))) {
             //change pose to update client
             enchanted.setPose(Pose.FALL_FLYING);
@@ -243,6 +248,19 @@ public class TameableUtils {
                 }
             } else {
                 speed.removePermanentModifier(SPEED_BOOST_AQUATIC_LAND_UUID);
+            }
+        }
+        if (armor != null) {
+            if (collarArmor > 0) {
+                AttributeModifier armorModifier = new AttributeModifier(COLLAR_ARMOR_UUID, "collar tag armor bonus", collarArmor, AttributeModifier.Operation.ADDITION);
+                if (armor.hasModifier(armorModifier)) {
+                    armor.removeModifier(armorModifier);
+                    armor.addPermanentModifier(armorModifier);
+                } else {
+                    armor.addPermanentModifier(armorModifier);
+                }
+            } else {
+                armor.removePermanentModifier(COLLAR_ARMOR_UUID);
             }
         }
     }
@@ -349,8 +367,10 @@ public class TameableUtils {
 
     public static void setHasCollar(LivingEntity enchanted, boolean collar) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        Map<ResourceLocation, Integer> prevEnchants = getEnchants(enchanted);
         tag.putBoolean(COLLAR_TAG, collar);
         sync(enchanted, tag);
+        onUpdateEnchants(prevEnchants, enchanted);
     }
 
     public static boolean hasCollar(LivingEntity enchanted) {
@@ -817,7 +837,12 @@ public class TameableUtils {
     }
 
     public static boolean isValidTeleporter(LivingEntity owner, Mob animal) {
-        if (hasEnchant(animal, DIEnchantmentRegistry.TETHERED_TELEPORT)) {
+        boolean hasTeleportFlag = hasEnchant(animal, DIEnchantmentRegistry.TETHERED_TELEPORT);
+        if (!hasTeleportFlag) {
+            TameData data = TameRegistry.get(animal.getUUID());
+            hasTeleportFlag = data != null && data.attributeLevels.getOrDefault("tethered_teleport", 0) > 0;
+        }
+        if (hasTeleportFlag) {
             if (animal instanceof IComandableMob commandableMob) {
                 return commandableMob.getCommand() == 2;
             } else if (animal instanceof TamableAnimal tame) {
@@ -828,27 +853,43 @@ public class TameableUtils {
     }
 
     public static void absorbExpOrbs(LivingEntity living) {
-        if (living.getHealth() < living.getMaxHealth() && !living.level().isClientSide) {
-            for (ExperienceOrb experienceorb : living.level().getEntitiesOfClass(ExperienceOrb.class, living.getBoundingBox().inflate(3D))) {
-                if (living.getHealth() >= living.getMaxHealth()) {
-                    break;
-                }
-                Vec3 vec3 = new Vec3(living.getX() - experienceorb.getX(), living.getY() + (double) living.getEyeHeight() / 2.0D - experienceorb.getY(), living.getZ() - experienceorb.getZ());
-                double d0 = vec3.lengthSqr();
-                if (d0 < 2.0D) {
-                    float h = living.getHealth() + experienceorb.value;
-                    living.setHealth(h);
-                    if (h - living.getMaxHealth() > 0) {
-                        experienceorb.value = (int) Math.floor(h - living.getMaxHealth());
-                        break;
-                    } else {
-                        experienceorb.discard();
+        absorbExpOrbs(living, 1);
+    }
+
+    public static void absorbExpOrbs(LivingEntity living, int healPerXpPoint) {
+        if (healPerXpPoint <= 0 || living.level().isClientSide || living.getHealth() >= living.getMaxHealth()) {
+            return;
+        }
+        for (ExperienceOrb experienceorb : living.level().getEntitiesOfClass(ExperienceOrb.class, living.getBoundingBox().inflate(3D))) {
+            if (living.getHealth() >= living.getMaxHealth()) {
+                break;
+            }
+            Vec3 vec3 = new Vec3(living.getX() - experienceorb.getX(), living.getY() + (double) living.getEyeHeight() / 2.0D - experienceorb.getY(), living.getZ() - experienceorb.getZ());
+            double d0 = vec3.lengthSqr();
+            if (d0 < 2.0D) {
+                int xpValue = Math.max(0, experienceorb.value);
+                if (xpValue > 0) {
+                    float missingHealth = Math.max(0.0F, living.getMaxHealth() - living.getHealth());
+                    if (missingHealth > 0.0F) {
+                        float fullOrbHealing = xpValue * (float) healPerXpPoint;
+                        if (fullOrbHealing <= missingHealth) {
+                            living.heal(fullOrbHealing);
+                            experienceorb.discard();
+                        } else {
+                            int xpUsed = Math.max(1, (int) Math.ceil(missingHealth / (double) healPerXpPoint));
+                            xpUsed = Math.min(xpValue, xpUsed);
+                            living.heal(xpUsed * (float) healPerXpPoint);
+                            experienceorb.value = xpValue - xpUsed;
+                            if (experienceorb.value <= 0) {
+                                experienceorb.discard();
+                            }
+                        }
                     }
                 }
-                if (d0 < 64.0D) {
-                    double d1 = 1.0D - Math.sqrt(d0) / 8.0D;
-                    experienceorb.setDeltaMovement(experienceorb.getDeltaMovement().add(vec3.normalize().scale(d1 * d1 * 0.5D)));
-                }
+            }
+            if (d0 < 64.0D) {
+                double d1 = 1.0D - Math.sqrt(d0) / 8.0D;
+                experienceorb.setDeltaMovement(experienceorb.getDeltaMovement().add(vec3.normalize().scale(d1 * d1 * 0.5D)));
             }
         }
     }

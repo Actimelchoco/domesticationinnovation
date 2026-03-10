@@ -122,7 +122,7 @@ public class LayerPetOverlays extends RenderLayer {
             LivingEntity living = (LivingEntity) entity;
             float f = Mth.rotLerp(partialTicks, living.yBodyRotO, living.yBodyRot);
             float realAge = living.tickCount + partialTicks;
-            if (TameableUtils.hasEnchant(living, DIEnchantmentRegistry.IMMUNITY_FRAME) && TameableUtils.getImmuneTime((LivingEntity) entity) > 0) {
+            if (TameableUtils.getImmuneTime((LivingEntity) entity) > 0) {
                 VertexConsumer ivertexbuilder = bufferIn.getBuffer(DIRenderTypes.IFRAME_GLINT);
                 float alpha = 0.5F;
                 matrixStackIn.pushPose();
@@ -208,6 +208,10 @@ public class LayerPetOverlays extends RenderLayer {
                 matrixStackIn.popPose();
             }
             int shadowHandCount = TameableUtils.getEnchantLevel(living, DIEnchantmentRegistry.SHADOW_HANDS);
+            shadowHandCount = Math.max(shadowHandCount, TameableUtils.getShadowPunchTimes(living).length);
+            if (ClientProxy.shadowPunchRenderData.containsKey(living)) {
+                shadowHandCount = Math.max(shadowHandCount, ClientProxy.shadowPunchRenderData.get(living).length);
+            }
             if (shadowHandCount > 0) {
                 Entity punching = TameableUtils.getPetAttackTarget(living);
                 double d0 = 0;
@@ -275,9 +279,8 @@ public class LayerPetOverlays extends RenderLayer {
                 }
                 matrixStackIn.popPose();
             }
-            if (TameableUtils.hasEnchant(living, DIEnchantmentRegistry.HEALING_AURA)) {
-                int t = TameableUtils.getHealingAuraTime(living);
-                if (t > 0) {
+            int t = TameableUtils.getHealingAuraTime(living);
+            if (t > 0) {
                     float time = t > 20 ? 200 - Math.max(180, t + partialTicks) : t - partialTicks;
                     float pulse = 0.9F + (float) (Math.sin(realAge * 0.08F) * 0.1F + 0.1F);
                     float healscale = (Math.min(time, 20) / 20F) * 2.2F * pulse;
@@ -296,7 +299,6 @@ public class LayerPetOverlays extends RenderLayer {
                     vertex(vertexconsumer, matrix4f, matrix3f, 240, 1.0F, 1, 1, 0, 1);
                     vertex(vertexconsumer, matrix4f, matrix3f, 240, 0.0F, 1, 0, 0, 1);
                     matrixStackIn.popPose();
-                }
             }
         }
     }

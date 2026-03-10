@@ -32,9 +32,14 @@ public class TameRenameEvents {
         if (tame.getOwnerUUID() == null || !tame.getOwnerUUID().equals(player.getUUID())) return false;
 
         ItemStack stack = event.getItemStack();
-        // Server-safe inspect shortcut: shift + empty hand shows tame stats in chat.
-        // This replaces client-only sneak enchant overlays.
-        if (!stack.isEmpty()) return false;
+        // Server-safe inspect shortcut: shift + interact shows tame stats in chat.
+        // Keep name-tag/collar-tag interactions untouched so rename still works.
+        if (!stack.isEmpty()) {
+            String id = stack.getItem().builtInRegistryHolder().key().location().toString();
+            if ("minecraft:name_tag".equals(id) || "domesticationinnovation:collar_tag".equals(id)) {
+                return false;
+            }
+        }
 
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null || data.name == null || data.name.isBlank()) return false;
