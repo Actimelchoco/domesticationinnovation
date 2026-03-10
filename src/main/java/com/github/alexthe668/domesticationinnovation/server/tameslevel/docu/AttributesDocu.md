@@ -1,0 +1,206 @@
+# Attributes Documentation
+
+## General
+- Attributes are uncapped unless explicitly marked as `cannot level`.
+- Legacy hard cap: `totem` (max level `5`).
+- Already-owned attributes are weighted higher when rolling.
+- No rarity tiers are used.
+
+## Always-On Effect Attributes
+- `speed`: applies Speed, amplifier `level - 1`.
+- `strength`: applies Strength, amplifier `level - 1`.
+- `resistance`: applies Resistance, amplifier `level - 1`.
+- `fire_resistance`: applies Fire Resistance, amplifier `level - 1`.
+  - DI migration note: sourced from `fireproof`.
+  - DI class weight: same as `poison_resistance`.
+- `poison_resistance`: removes Poison effects from the tame.
+  - DI class weight: mid chance for `TANKER`.
+- `jump_boost`: applies Jump Boost, amplifier `level - 1`.
+
+## Combat Attributes
+- `lifesteal`
+  - Activation chance: `100%` on hit.
+  - Level scaling: heal = `damage * (0.05 + 0.02 * level)`.
+
+- `firefang`
+  - Activation chance: `100%` on hit.
+  - Level scaling: burn duration = `2 + level` seconds.
+
+- `witherfang`
+  - Activation chance: `100%` on hit.
+  - Level scaling: Wither duration `60 + 20 * level` ticks, stronger amplifier at high levels.
+
+- `lightningfang`
+  - Activation chance: `20%` on hit.
+  - Level scaling: bonus lightning damage = `((2 + level) + 0.35 * baseDamage) * abilityPowerMultiplier * 5.0`.
+  - Lightning is visual-only (no fire spread).
+
+- `killer`
+  - Activation chance: `100%` on hit.
+  - Level scaling: more damage vs low-HP targets.
+  - Formula: damage multiplier `1 + missingHealthPercent * level`.
+
+- `pacifist`
+  - Activation chance: `100%` on hit.
+  - Level scaling: more damage vs high-HP targets.
+  - Formula: damage multiplier `1 + targetHealthPercent * level`.
+
+- `bosskiller`
+  - Activation chance: `100%` on hit.
+  - Level scaling: threshold starts at `100` target max HP and decreases by `10` per level (min `10`).
+  - Per threshold stack, tame gets short Strength + Resistance + Speed buffs.
+
+- `sweeping_edge`
+  - Activation chance: `100%` on hit.
+  - Level scaling: splash radius and splash damage multiplier both increase with level.
+
+- `smite`
+  - Activation chance: `100%` on hit vs undead.
+  - Level scaling: extra damage multiplier `+ (0.20 + 0.08 * level)` against undead.
+
+- `bane_of_arthropods`
+  - Activation chance: `100%` on hit vs arthropods.
+  - Level scaling: extra damage multiplier `+ (0.20 + 0.08 * level)` against arthropods.
+  - Applies short Slowness on arthropod hit.
+
+- `positive_effect_steal`
+  - Activation chance: `10% * level`, capped at `80%`.
+  - On trigger: steals one random beneficial effect from target.
+
+- `negative_effect_transfer`
+  - Activation chance: `100%` on hit.
+  - On trigger: transfers tame's harmful effects to target.
+  - Level scaling: transferred duration is increased by `20` ticks per level.
+
+## Utility/Survival Attributes
+- `regeneration`
+  - Activation chance: periodic while damaged and off cooldown.
+  - Level scaling: heal per tick cycle = `0.6 * level`.
+
+- `ability_power`
+  - Effect: ability power multiplier `1.0 + 0.12 * level`.
+
+- `emergency_cooldown_reduction`
+  - Condition: HP <= `30%`.
+  - Activation chance: `12% * level`, capped at `60%`.
+  - On trigger: current cooldown forced to `1s`.
+
+- `totem` (max `5`)
+  - Trigger: lethal hit.
+  - Cooldown: base `10m`, reduced by `1m` per level.
+  - Levels `1-2`: weak totem save (partial heal + short regen/absorption).
+  - Levels `3-5`: normal totem-style save (`1 HP`, regen, absorption, fire resistance).
+
+- `killexploder`
+  - Trigger: kill or assist.
+  - Level scaling: explosion damage and radius increase with level.
+  - No-grief direct AoE damage (visual explosion only).
+  - Friendly fire: **enabled** (can hit players and allied tames in range).
+
+- `feather_falling`
+  - Trigger: when the tame takes fall damage.
+  - Level scaling: reduces fall damage by `12% * level`, capped at `90%`.
+
+- `explosion_resistance`
+  - Trigger: when the tame takes explosion damage.
+  - Level scaling: reduces explosion damage by `10% * level`, capped at `80%`.
+
+## DI Migrated Attributes
+- `chain_lightning`
+  - Source: `chain_lightning` enchantment becomes this attribute.
+  - DI class weight: high chance for `ASSASSIN`, mid chance for `DPS` and `MAGE`.
+  - Leveling: infinite.
+
+- `frost_fang`
+  - Source: `frost_fang` enchantment becomes this attribute.
+  - DI class weight: same as `firefang`.
+  - Scaling: each level increases slowness strength and/or activation chance.
+  - Scaling: lower enemy HP increases activation chance.
+  - Leveling: infinite.
+
+- `magnetic`
+  - Source: `magnetic` enchantment becomes this attribute.
+  - DI class weight: high chance for `ASSASSIN`.
+  - Scaling: level `1-2` low pull, level `3` standard DI pull, level `5+` strong pull.
+  - Leveling: infinite.
+
+- `linked_inventory`
+  - Source: `linked_inventory` enchantment becomes this attribute.
+  - DI class weight: mid chance for `SUPPORTER`.
+  - Leveling: cannot level.
+
+- `health_siphon`
+  - Source: `health_siphon` enchantment becomes this attribute.
+  - DI class weight: mid chance for `TANKER`.
+  - Scaling: as level increases, owner receives less damage.
+  - Leveling: infinite.
+
+- `bubbling`
+  - Source: `bubbling` enchantment becomes this attribute.
+  - DI class weight: mid chance for `ASSASSIN`.
+  - Base rule: does not work on 50+ HP mobs.
+  - Scaling: level increases activation chance and allowed target HP cap.
+  - Leveling: infinite.
+
+- `herding`
+  - Source: `herding` enchantment becomes this attribute.
+  - DI class weight: mid chance for `SUPPORTER`.
+  - Scaling: range increases per level.
+  - Leveling: infinite.
+
+- `amphibious`
+  - Source: `amphibious` enchantment becomes this attribute.
+  - DI class weight: high chance for `ASSASSIN`.
+  - Leveling: cannot level.
+
+- `void_cloud`
+  - Source: `void_cloud` enchantment becomes this attribute.
+  - DI class weight: mid chance for `ASSASSIN`.
+  - Leveling: cannot level.
+
+- `charisma`
+  - Source: `charisma` enchantment becomes this attribute.
+  - DI class weight: mid chance for `SUPPORTER`.
+  - Scaling: higher levels reduce prices further.
+  - Leveling: infinite.
+
+- `disc_jockey`
+  - Source: `disc_jockey` enchantment becomes this attribute.
+  - Leveling: cannot level.
+
+- `defusal`
+  - Source: `defusal` enchantment becomes this attribute.
+  - DI class weight: high chance for `TANKER`, mid chance for `SUPPORTER`.
+  - Leveling: infinite.
+
+- `warping_bite`
+  - Source: `warping_bite` enchantment becomes this attribute.
+  - DI class weight: high chance for `ASSASSIN`.
+  - Base rule: does not work on 50+ HP mobs.
+  - Scaling: level increases activation chance and allowed target HP cap.
+  - Leveling: infinite.
+
+- `ore_scenting`
+  - Source: `ore_scenting` enchantment becomes this attribute.
+  - DI class weight: mid chance for `SUPPORTER`.
+  - Leveling: cannot level.
+
+- `gluttonous`
+  - Source: `gluttonous` enchantment becomes this attribute.
+  - Guaranteed milestone: guaranteed attribute after level 30.
+  - Leveling: infinite.
+
+- `tethered_teleport`
+  - Source: `tethered_teleport` enchantment becomes this attribute.
+  - Guaranteed milestone: guaranteed attribute after level 40.
+  - Leveling: infinite.
+
+- `muffled`
+  - Source: `muffled` enchantment becomes this attribute.
+  - DI class weight: mid chance for `ASSASSIN`.
+  - Leveling: cannot level.
+
+- `blazing_protection`
+  - Source: `blazing_protection` enchantment becomes this attribute.
+  - DI class weight: `TANKER`.
+  - Leveling: infinite.

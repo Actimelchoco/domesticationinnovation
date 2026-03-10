@@ -1,0 +1,135 @@
+package com.github.alexthe668.domesticationinnovation.server.misc;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
+import net.minecraftforge.registries.ForgeRegistries;
+
+import java.util.UUID;
+
+public class LanternRequest {
+    public static final String MODE_LANTERN = "LANTERN";
+    public static final String MODE_PLAYER_TP = "PLAYER_TP";
+
+    private String entityType;
+    private long timestamp;
+    private String nametag;
+    private String mode;
+
+    private UUID petUUID;
+    private UUID ownerUUID;
+
+    private BlockPos chunkPosition;
+    private String targetDimension;
+    private double targetX;
+    private double targetY;
+    private double targetZ;
+    private float targetYaw;
+    private float targetPitch;
+
+    public LanternRequest(UUID petUUID, String entityType, UUID ownerUUID, BlockPos chunkPosition, long timestamp, String nametag) {
+        this(petUUID, entityType, ownerUUID, chunkPosition, timestamp, nametag, MODE_LANTERN, "", 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
+    }
+
+    public LanternRequest(
+            UUID petUUID,
+            String entityType,
+            UUID ownerUUID,
+            BlockPos chunkPosition,
+            long timestamp,
+            String nametag,
+            String mode,
+            String targetDimension,
+            double targetX,
+            double targetY,
+            double targetZ,
+            float targetYaw,
+            float targetPitch
+    ) {
+        this.petUUID = petUUID;
+        this.entityType = entityType;
+        this.chunkPosition = chunkPosition;
+        this.ownerUUID = ownerUUID;
+        this.timestamp = timestamp;
+        this.nametag = nametag;
+        this.mode = mode == null || mode.isBlank() ? MODE_LANTERN : mode;
+        this.targetDimension = targetDimension == null ? "" : targetDimension;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.targetZ = targetZ;
+        this.targetYaw = targetYaw;
+        this.targetPitch = targetPitch;
+    }
+
+    public UUID getPetUUID() {
+        return petUUID;
+    }
+
+    public String getEntityTypeLoc() {
+        return this.entityType;
+    }
+
+    public EntityType getEntityType() {
+        return ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation(this.entityType));
+    }
+
+    public UUID getOwnerUUID() {
+        return ownerUUID;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public String getNametag() {
+        return this.nametag;
+    }
+
+    public BlockPos getChunkPosition() {
+        return chunkPosition;
+    }
+
+    public String getMode() {
+        return mode == null || mode.isBlank() ? MODE_LANTERN : mode;
+    }
+
+    public boolean isLanternMode() {
+        return MODE_LANTERN.equalsIgnoreCase(getMode());
+    }
+
+    public boolean isPlayerTeleportMode() {
+        return MODE_PLAYER_TP.equalsIgnoreCase(getMode());
+    }
+
+    public String getTargetDimension() {
+        return targetDimension == null ? "" : targetDimension;
+    }
+
+    public double getTargetX() {
+        return targetX;
+    }
+
+    public double getTargetY() {
+        return targetY;
+    }
+
+    public double getTargetZ() {
+        return targetZ;
+    }
+
+    public float getTargetYaw() {
+        return targetYaw;
+    }
+
+    public float getTargetPitch() {
+        return targetPitch;
+    }
+
+    public String toString(){
+        if(getNametag() == null || getNametag().isEmpty()){
+            return this.entityType;
+        }else{
+            return getNametag() + "|" + this.entityType;
+        }
+    }
+}

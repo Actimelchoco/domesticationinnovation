@@ -1,0 +1,42 @@
+{
+  "required": true,
+  "package": "com.github.alexthe668.domesticationinnovation.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "target": "@env(DEFAULT)",
+  "refmap": "domesticationinnovation.refmap.json",
+  "mixins": [
+    "AbstractHorseMixin",
+    "AgeableMobMixin",
+    "AnimalMixin",
+    "AxolotlAiMixin",
+    "AxolotlAttackablesSensorMixin",
+    "AxolotlMixin",
+    "CatMixin",
+    "EntityMixin",
+    "FishingHookMixin",
+    "FloatGoalMixin",
+    "FollowOwnerGoalMixin",
+    "FollowParentGoalMixin",
+    "FoxMixin",
+    "FrogAiMixin",
+    "FrogAttackablesSensorMixin",
+    "FrogMixin",
+    "LivingEntityMixin",
+    "MobMixin",
+    "PanicGoalMixin",
+    "ParrotMixin",
+    "PlayerMixin",
+    "RabbitMixin",
+    "SculkSensorBlockMixin",
+    "ShootTongueMixin",
+    "TameableAnimalMixin",
+    "VillagerMixin",
+    "WolfMixin"
+  ],
+  "client": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}
