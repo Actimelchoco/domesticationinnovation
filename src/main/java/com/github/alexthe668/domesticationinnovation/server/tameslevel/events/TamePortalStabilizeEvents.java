@@ -22,7 +22,7 @@ import java.util.UUID;
 public class TamePortalStabilizeEvents {
     private static final int STABILIZE_INITIAL_DELAY_TICKS = 20;
     private static final int STABILIZE_RETRY_INTERVAL_TICKS = 20;
-    private static final int STABILIZE_RETRIES = 20;
+    private static final int STABILIZE_RETRIES = 10;
     private static final Map<UUID, StabilizeState> PENDING_STABILIZE = new HashMap<>();
     private static long serverTick = 0L;
 
@@ -78,7 +78,7 @@ public class TamePortalStabilizeEvents {
     private static void stabilizeOwnerTamesInCurrentDimension(ServerPlayer owner) {
         if (owner == null || owner.server == null) return;
         UUID ownerId = owner.getUUID();
-        for (TameData data : TameRegistry.TAMES.values()) {
+        for (TameData data : TameRegistry.getOwned(ownerId)) {
             if (data == null || data.uuid == null) continue;
             if (!ownerId.equals(data.ownerUUID)) continue;
 
@@ -111,7 +111,7 @@ public class TamePortalStabilizeEvents {
 
     private static void reconcileOwnedTeleportersAcrossDimensions(ServerPlayer owner) {
         if (owner == null || owner.server == null) return;
-        for (TameData data : TameRegistry.TAMES.values()) {
+        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
             if (data == null || data.uuid == null) continue;
             if (!owner.getUUID().equals(data.ownerUUID)) continue;
 

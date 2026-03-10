@@ -113,7 +113,7 @@ public class TameAutoFollowEvents {
         if (owner == null || owner.server == null) return;
         UUID ownerId = owner.getUUID();
 
-        for (TameData data : TameRegistry.TAMES.values()) {
+        for (TameData data : TameRegistry.getOwned(ownerId)) {
             if (data == null || data.uuid == null) continue;
             if (!ownerId.equals(data.ownerUUID)) continue;
 

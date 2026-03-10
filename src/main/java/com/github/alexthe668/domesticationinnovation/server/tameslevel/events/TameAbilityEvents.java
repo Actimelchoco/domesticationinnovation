@@ -7,6 +7,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -57,7 +58,7 @@ import java.util.Set;
 public class TameAbilityEvents {
 
     private static final int ABILITY_TICK_RATE = 5;
-    private static final int HEAVY_ABILITY_STAGGER_TICKS = 10;
+    private static final int HEAVY_ABILITY_STAGGER_TICKS = 20;
     private static final float LIGHTNING_DAMAGE_MULTIPLIER = 5.0F;
     private static final double LIGHTNING_PROC_CHANCE = 0.20D; // 5x less frequent
     private static final int MAX_WARDEN_BEAM_PARTICLES = 64;
@@ -67,6 +68,7 @@ public class TameAbilityEvents {
     private static final float ELDER_DPS_ABOVE_GUARDIAN = 1.125F; // Slightly higher DPS than guardian.
     private static final float SINGLE_TARGET_DAMAGE_MULTIPLIER = 0.70F;
     private static final float AOE_DAMAGE_MULTIPLIER = 0.50F;
+    private static final int MAX_WARDEN_BEAM_TARGETS = 12;
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
         @Override
         public void debugAbilityUse(TamableAnimal tame, String ability) {
@@ -111,6 +113,9 @@ public class TameAbilityEvents {
                 handlePassiveHeal(tame, data, now);
                 handleAttributeRegeneration(tame, data, now);
                 handleRejuvenation(tame, data);
+                if (heavyPass) {
+                    handleGuardianRepulse(level, tame, data, now);
+                }
                 if (allowOffensive && heavyPass) {
                     handleCreeperExplosion(level, tame, data, target, now);
                 }
@@ -120,7 +125,7 @@ public class TameAbilityEvents {
                     handleDash(level, tame, data, target, now);
                 }
                 if (allowOffensive && heavyPass) {
-                    handleHealingBottle(level, tame, data, target, now);
+                    handleHealingBottle(level, tame, data, now);
                     handleGhastFireball(level, tame, data, target, now);
                     handleWitherSkull(level, tame, data, target, now);
                     handleBlazeAttack(level, tame, data, target, now);
@@ -137,6 +142,7 @@ public class TameAbilityEvents {
                 if (allowOffensive) {
                     handleSnowballShot(level, tame, data, target, now);
                     handleEnderPearlJump(tame, data, target, now);
+                    handleSkyLaunchOnOffense(level, tame, data, target, now);
                 }
                 if (allowOffensive && heavyPass) {
                     handleLightningStrike(level, tame, data, target, now);
@@ -178,6 +184,7 @@ public class TameAbilityEvents {
             handleDefensiveAura(targetTame, targetData, event);
             OwnerProtectionAbilityModule.onTameHurt(targetTame, targetData, event, OWNER_PROTECTION_HOOKS);
             handleDefensiveAttributeMitigation(targetTame, targetData, event);
+            handleSkyLaunchOnDefend(targetTame, targetData, event);
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
@@ -738,6 +745,9 @@ public class TameAbilityEvents {
                         && !isFriendly(tame, living)
         );
         for (LivingEntity victim : beamTargets) {
+            if (hitIds.size() >= MAX_WARDEN_BEAM_TARGETS) {
+                break;
+            }
             Vec3 center = victim.getBoundingBox().getCenter();
             if (distancePointToSegmentSqr(center, start, end) > beamHitRadius * beamHitRadius) continue;
             if (!hitIds.add(victim.getId())) continue;
@@ -762,6 +772,30 @@ public class TameAbilityEvents {
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 0.8F, 0.9F);
         setAbilityCooldown(tame, data, "warden_scream_tick", now, 120);
         debugAbilityUse(tame, "warden_scream");
+    }
+
+    private static void handleGuardianRepulse(ServerLevel level, TamableAnimal tame, TameData data, long now) {
+        if (!LevelSystem.hasAbility(data, "guardian_repulse")) return;
+        if (!isReady(data, "guardian_repulse_tick", now)) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "guardian_repulse"));
+        double radius = 6.0D + levelValue * 0.6D;
+        double chance = Math.min(0.90D, 0.12D + levelValue * 0.04D);
+        int affected = 0;
+
+        for (Monster monster : level.getEntitiesOfClass(Monster.class, tame.getBoundingBox().inflate(radius))) {
+            if (monster == null || !monster.isAlive()) continue;
+            if (tame.getRandom().nextDouble() > chance) continue;
+            monster.setTarget(tame);
+            affected++;
+        }
+        if (affected > 0) {
+            applySupportActivationVisual(tame, "guardian_repulse");
+            level.sendParticles(ParticleTypes.ANGRY_VILLAGER, tame.getX(), tame.getY(0.9D), tame.getZ(), capParticles(tame, 6 + affected), 0.3D, 0.4D, 0.3D, 0.01D);
+            level.playSound(null, tame.blockPosition(), SoundEvents.IRON_GOLEM_HURT, SoundSource.NEUTRAL, 0.7F, 1.0F);
+            debugAbilityUse(tame, "guardian_repulse");
+        }
+        setAbilityCooldown(tame, data, "guardian_repulse_tick", now, 60L);
     }
 
     private static void spawnEvokerFangLine(ServerLevel level, TamableAnimal tame, LivingEntity target) {
@@ -819,18 +853,10 @@ public class TameAbilityEvents {
         TameableUtils.absorbExpOrbs(tame, rejuvenationLevel);
     }
 
-    private static void handleHealingBottle(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
+    private static void handleHealingBottle(ServerLevel level, TamableAnimal tame, TameData data, long now) {
         if (!LevelSystem.hasAbility(data, "healing_bottle")) return;
-        if (target == null || !target.isAlive()) return;
         if (!isReady(data, "healing_bottle_tick", now)) return;
-
-        List<LivingEntity> healTargets = level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(6.0D), living ->
-                living != null
-                        && living.isAlive()
-                        && isFriendly(tame, living)
-                        && living.getHealth() < living.getMaxHealth()
-        );
-        if (healTargets.isEmpty()) return;
+        if (tame.getHealth() >= tame.getMaxHealth()) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "healing_bottle"));
         ItemStack potion = new ItemStack(Items.SPLASH_POTION);
@@ -839,18 +865,10 @@ public class TameAbilityEvents {
         int regenerationAmplifier = Math.min(4, Math.max(0, (levelValue - 1) / 3));
         PotionUtils.setCustomEffects(potion, List.of(new MobEffectInstance(MobEffects.REGENERATION, regenerationDuration, regenerationAmplifier)));
 
-        Vec3 center = Vec3.ZERO;
-        for (LivingEntity healTarget : healTargets) {
-            center = center.add(healTarget.position());
-        }
-        center = center.scale(1.0D / healTargets.size());
-        Vec3 toCenter = center.subtract(tame.position());
-        Vec3 horizontal = toCenter.horizontalDistanceSqr() > 1.0E-4D ? new Vec3(toCenter.x, 0.0D, toCenter.z).normalize().scale(0.18D) : Vec3.ZERO;
-
         ThrownPotion thrownPotion = new ThrownPotion(level, tame);
         thrownPotion.setItem(potion);
         thrownPotion.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
-        thrownPotion.setDeltaMovement(horizontal.x, 0.62D + (Math.min(6, levelValue) * 0.03D), horizontal.z);
+        thrownPotion.setDeltaMovement(0.0D, 0.65D + (Math.min(6, levelValue) * 0.03D), 0.0D);
         level.addFreshEntity(thrownPotion);
 
         level.playSound(null, tame.blockPosition(), SoundEvents.SPLASH_POTION_THROW, SoundSource.NEUTRAL, 0.7F, 1.0F);
@@ -858,6 +876,47 @@ public class TameAbilityEvents {
         setAbilityCooldown(tame, data, "healing_bottle_tick", now, cooldown);
         applySupportActivationVisual(tame, "healing_bottle");
         debugAbilityUse(tame, "healing_bottle");
+    }
+
+    private static void handleSkyLaunchOnOffense(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
+        trySkyLaunch(level, tame, data, target, now, 0.10D);
+    }
+
+    private static void handleSkyLaunchOnDefend(TamableAnimal tame, TameData data, LivingHurtEvent event) {
+        if (!(tame.level() instanceof ServerLevel level)) return;
+        if (event.getAmount() <= 0.0F) return;
+        LivingEntity attacker = null;
+        if (event.getSource().getEntity() instanceof LivingEntity living) {
+            attacker = living;
+        } else if (event.getSource().getDirectEntity() instanceof LivingEntity living) {
+            attacker = living;
+        }
+        if (attacker == null || !attacker.isAlive()) return;
+        trySkyLaunch(level, tame, data, attacker, level.getGameTime(), 0.16D);
+    }
+
+    private static void trySkyLaunch(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now, double baseChance) {
+        if (!LevelSystem.hasAbility(data, "sky_launch")) return;
+        if (target == null || !target.isAlive()) return;
+        if (isFriendly(tame, target)) return;
+        if (!isReady(data, "sky_launch_tick", now)) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "sky_launch"));
+        double chance = Math.min(0.90D, baseChance + levelValue * 0.04D);
+        if (tame.getRandom().nextDouble() > chance) return;
+
+        float damage = singleTargetDamage(((1.5F + levelValue * 0.8F) + tameBaseDamage(tame) * 0.45F) * abilityPowerMultiplier(data));
+        LevelSystem.trackDamage(target, tame);
+        applyInternalBonusDamage(target, tame, damage);
+        Vec3 motion = target.getDeltaMovement();
+        double launchY = Math.min(2.1D, 0.55D + levelValue * 0.12D);
+        target.setDeltaMovement(motion.x * 0.6D, launchY, motion.z * 0.6D);
+        target.fallDistance = 0.0F;
+        target.hurtMarked = true;
+        level.sendParticles(ParticleTypes.CLOUD, target.getX(), target.getY(0.2D), target.getZ(), capParticles(tame, 10), 0.25D, 0.1D, 0.25D, 0.03D);
+        level.playSound(null, target.blockPosition(), SoundEvents.PHANTOM_FLAP, SoundSource.HOSTILE, 0.7F, 1.2F);
+        setAbilityCooldown(tame, data, "sky_launch_tick", now, 70L);
+        debugAbilityUse(tame, "sky_launch");
     }
 
     private static void applyAttributeDamageBonuses(TamableAnimal tame, TameData data, LivingHurtEvent event) {
@@ -1393,10 +1452,17 @@ public class TameAbilityEvents {
 
     private static Set<TamableAnimal> collectLoadedRegistryTames(ServerLevel level) {
         Set<TamableAnimal> result = new HashSet<>();
-        for (Entity entity : level.getAllEntities()) {
-            if (!(entity instanceof TamableAnimal tame)) continue;
-            if (!tame.isTame()) continue;
-            if (TameRegistry.get(tame.getUUID()) == null) continue;
+        ResourceLocation levelId = level.dimension().location();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || data.dead) continue;
+            if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
+                ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+                if (lastKnown != null && !lastKnown.equals(levelId)) {
+                    continue;
+                }
+            }
+            Entity entity = level.getEntity(data.uuid);
+            if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) continue;
             result.add(tame);
         }
         return result;

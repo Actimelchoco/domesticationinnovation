@@ -41,7 +41,6 @@ public final class OwnerProtectionAbilityModule {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
 
-            handleDamageIntercept(owner, tame, data, event, hooks);
             handleGuardianRepulse(owner, tame, data, now, hooks);
             handleSkyLaunch(owner, tame, data, now, hooks);
         }
@@ -67,25 +66,6 @@ public final class OwnerProtectionAbilityModule {
 
     public static void onTameHurt(TamableAnimal tame, TameData data, LivingHurtEvent event, Hooks hooks) {
         handleShieldBlock(tame, data, event, hooks);
-    }
-
-    private static void handleDamageIntercept(ServerPlayer owner, TamableAnimal tame, TameData data, LivingHurtEvent event, Hooks hooks) {
-        if (!LevelSystem.hasAbility(data, "damage_intercept")) return;
-        if (!tame.isAlive() || tame.distanceToSqr(owner) > 9.0D) return;
-        if (event.getAmount() <= 0.0F) return;
-
-        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "damage_intercept"));
-        double chance = Math.min(0.95D, 0.10D + Math.max(0, levelValue - 1) * 0.03D);
-        if (tame.getRandom().nextDouble() > chance) return;
-
-        float redirected = event.getAmount();
-        event.setAmount(0.0F);
-        if (event.isCancelable()) {
-            event.setCanceled(true);
-        }
-        tame.hurt(event.getSource(), redirected);
-        hooks.applySupportActivationVisual(tame, "damage_intercept");
-        hooks.debugAbilityUse(tame, "damage_intercept");
     }
 
     private static void handleGuardianRepulse(ServerPlayer owner, TamableAnimal tame, TameData data, long now, Hooks hooks) {

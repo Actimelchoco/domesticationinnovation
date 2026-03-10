@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -190,12 +191,19 @@ public final class TameDuelManager {
         Set<UUID> allTames = new HashSet<>();
         allTames.addAll(battle.teamA);
         allTames.addAll(battle.teamB);
+        int resetCount = 0;
         for (UUID tameId : allTames) {
             BATTLE_ID_BY_TAME.remove(tameId);
             TEAM_A_BY_TAME.remove(tameId);
             clearTargetForTame(server, tameId);
+            if (TameCommands.resetDuelCombatState(server, tameId)) {
+                resetCount++;
+            }
         }
         String message = "Group duel ended" + (reason == null || reason.isBlank() ? "." : ": " + reason);
+        if (resetCount > 0) {
+            message += " Reset " + resetCount + " tame(s): respawn/heal/effects/cooldowns.";
+        }
         notifyOwner(server, battle.ownerA, message);
         if (!battle.ownerA.equals(battle.ownerB)) {
             notifyOwner(server, battle.ownerB, message);

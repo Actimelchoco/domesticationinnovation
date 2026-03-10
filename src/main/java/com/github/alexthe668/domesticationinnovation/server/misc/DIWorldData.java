@@ -193,8 +193,14 @@ public class DIWorldData extends SavedData {
     }
 
     public void removeMatchingLanternRequests(UUID reloaded){
-        this.lanternRequestList.removeIf(request -> request.getPetUUID().equals(reloaded));
-        this.setDirty();
+        if (reloaded == null) {
+            return;
+        }
+        int before = this.lanternRequestList.size();
+        this.lanternRequestList.removeIf(request -> request != null && reloaded.equals(request.getPetUUID()));
+        if (before != this.lanternRequestList.size()) {
+            this.setDirty();
+        }
     }
 
     public List<LanternRequest> getLanternRequestsFor(UUID uuid){
@@ -209,5 +215,57 @@ public class DIWorldData extends SavedData {
 
     public List<LanternRequest> getLanternRequestsSnapshot() {
         return new ArrayList<>(this.lanternRequestList);
+    }
+
+    public int removeLanternRequestsForPets(Set<UUID> petUuids) {
+        if (petUuids == null || petUuids.isEmpty()) {
+            return 0;
+        }
+        int before = this.lanternRequestList.size();
+        this.lanternRequestList.removeIf(request ->
+                request != null
+                        && request.getPetUUID() != null
+                        && petUuids.contains(request.getPetUUID()));
+        int removed = before - this.lanternRequestList.size();
+        if (removed > 0) {
+            this.setDirty();
+        }
+        return removed;
+    }
+
+    public int removeRespawnRequestsForPets(Set<UUID> petUuids) {
+        if (petUuids == null || petUuids.isEmpty()) {
+            return 0;
+        }
+        int before = this.respawnRequestList.size();
+        this.respawnRequestList.removeIf(request ->
+                request != null
+                        && matchesAnyPetUuid(request, petUuids));
+        int removed = before - this.respawnRequestList.size();
+        if (removed > 0) {
+            this.setDirty();
+        }
+        return removed;
+    }
+
+    private static boolean matchesAnyPetUuid(RespawnRequest request, Set<UUID> petUuids) {
+        if (petUuids == null || petUuids.isEmpty()) {
+            return false;
+        }
+        CompoundTag entityData = request.getEntityData();
+        if (entityData == null) {
+            return false;
+        }
+        if (entityData.hasUUID("TLRegistryUUID")) {
+            UUID id = entityData.getUUID("TLRegistryUUID");
+            if (petUuids.contains(id)) {
+                return true;
+            }
+        }
+        if (entityData.contains("UUID", Tag.TAG_INT_ARRAY) && entityData.hasUUID("UUID")) {
+            UUID id = entityData.getUUID("UUID");
+            return petUuids.contains(id);
+        }
+        return false;
     }
 }

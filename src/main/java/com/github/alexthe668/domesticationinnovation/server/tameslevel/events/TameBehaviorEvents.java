@@ -77,7 +77,7 @@ public class TameBehaviorEvents {
         if (!(sourceEntity instanceof LivingEntity attacker)) return;
         if (attacker instanceof TamableAnimal ta && ta.isTame()) return;
 
-        for (TameData data : TameRegistry.TAMES.values()) {
+        for (TameData data : TameRegistry.getOwned(victim.getUUID())) {
             if (!victim.getUUID().equals(data.ownerUUID)) continue;
             Entity raw = victim.serverLevel().getEntity(data.uuid);
             if (!(raw instanceof TamableAnimal tame) || !tame.isTame()) continue;
@@ -94,7 +94,7 @@ public class TameBehaviorEvents {
         if (owner == null) return;
         if (victim instanceof TamableAnimal ta && ta.isTame()) return;
 
-        for (TameData data : TameRegistry.TAMES.values()) {
+        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
             if (!owner.getUUID().equals(data.ownerUUID)) continue;
             Entity raw = owner.serverLevel().getEntity(data.uuid);
             if (!(raw instanceof TamableAnimal tame) || !tame.isTame()) continue;

@@ -217,10 +217,6 @@ public class CommonProxy {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
             } else
             if (!living.level().isClientSide && living.isAlive() && TameableUtils.isTamed(living) && TameableUtils.shouldUnloadToLantern(living)) {
-                TameData zoneData = TameRegistry.get(living.getUUID());
-                if (zoneData != null && zoneData.hasProtectionZone && zoneData.protectionDimension != null && !zoneData.protectionDimension.isBlank()) {
-                    return;
-                }
                 UUID ownerUUID = TameableUtils.getOwnerUUIDOf(event.getEntity());
                 String saveName = event.getEntity().hasCustomName() ? event.getEntity().getCustomName().getString() : "";
                 DIWorldData data = DIWorldData.get(living.level());
@@ -994,6 +990,7 @@ public class CommonProxy {
                     if (entity.getUUID().equals(fromItem)) {
                         player.getCooldowns().addCooldown(stack.getItem(), 5);
                         TameableUtils.setOwnerUUIDOf(entity, player.getUUID());
+                        TameRegistry.transferOwnership(entity.getUUID(), player.getUUID());
                         player.displayClientMessage(Component.translatable("message.domesticationinnovation.set_owner", player.getName(), entity.getName()), true);
                         if (currentOwner instanceof Player && !currentOwner.equals(player)) {
                             ((Player) currentOwner).displayClientMessage(Component.translatable("message.domesticationinnovation.set_owner", player.getName(), entity.getName()), true);
@@ -1265,13 +1262,23 @@ public class CommonProxy {
         Predicate<Entity> enchantedPet = (animal) -> animal instanceof Mob && TameableUtils.isPetOf(owner, animal) && TameableUtils.isValidTeleporter(owner, (Mob) animal);
         List<Mob> teleportCandidates = new ArrayList<>();
         if (fromLevel instanceof ServerLevel serverLevel) {
-            for (Entity candidate : serverLevel.getAllEntities()) {
+            // Fast path: use owner-indexed tame registry instead of scanning all entities.
+            for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
+                if (data == null || data.uuid == null) continue;
+                Entity candidate = serverLevel.getEntity(data.uuid);
                 if (!(candidate instanceof Mob mob)) continue;
                 if (mob.isRemoved()) continue;
                 if (!EntitySelector.NO_SPECTATORS.test(mob)) continue;
                 if (!enchantedPet.test(mob)) continue;
                 teleportCandidates.add(mob);
             }
+            // Fallback to nearby query so non-registry tamed mobs are still supported.
+            double dist = 24;
+            teleportCandidates.addAll(fromLevel.getEntitiesOfClass(
+                    Mob.class,
+                    new AABB(fromPos.x - dist, fromPos.y - dist, fromPos.z - dist, fromPos.x + dist, fromPos.y + dist, fromPos.z + dist),
+                    EntitySelector.NO_SPECTATORS.and(enchantedPet)
+            ));
         } else {
             double dist = 20;
             teleportCandidates.addAll(fromLevel.getEntitiesOfClass(
@@ -1280,7 +1287,9 @@ public class CommonProxy {
                     EntitySelector.NO_SPECTATORS.and(enchantedPet)
             ));
         }
+        Set<UUID> seenTeleport = new HashSet<>();
         for (Mob entity : teleportCandidates) {
+            if (entity == null || !seenTeleport.add(entity.getUUID())) continue;
             if (removeAndReadd) {
                 boolean alreadyQueued = false;
                 UUID candidateId = entity.getUUID();

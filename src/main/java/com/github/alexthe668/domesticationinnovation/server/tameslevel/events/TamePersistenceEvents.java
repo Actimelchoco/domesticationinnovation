@@ -1,21 +1,29 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import java.util.Objects;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
 public class TamePersistenceEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
             java.util.regex.Pattern.compile("^\\[lvl\\s*\\d+\\]\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final long LOCATION_SAVE_INTERVAL_TICKS = 200L; // 10 seconds
+    private static final long FULL_SNAPSHOT_INTERVAL_TICKS = 600L; // 30 seconds
+    private static final long QUEUE_SCRUB_INTERVAL_TICKS = 100L; // 5 seconds
+    private static final long BACKFILL_SCAN_INTERVAL_TICKS = 600L; // 30 seconds
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
@@ -33,84 +41,53 @@ public class TamePersistenceEvents {
         if (!(event.level instanceof ServerLevel level)) return;
         if (level.getGameTime() % 40 != 0) return;
         boolean saveLocationTick = (level.getGameTime() % LOCATION_SAVE_INTERVAL_TICKS) == 0L;
+        boolean saveSnapshotTick = (level.getGameTime() % FULL_SNAPSHOT_INTERVAL_TICKS) == 0L;
+        boolean queueScrubTick = (level.getGameTime() % QUEUE_SCRUB_INTERVAL_TICKS) == 0L;
+        boolean backfillScanTick = (level.getGameTime() % BACKFILL_SCAN_INTERVAL_TICKS) == 0L;
         if (level.getServer() != null && level == level.getServer().overworld()) {
             TameDuelManager.tick(level.getServer());
         }
 
         boolean changed = false;
-        for (net.minecraft.world.entity.Entity entity : level.getAllEntities()) {
+        Set<UUID> seenRegistryLoaded = new HashSet<>();
+        Set<UUID> loadedAliveTameIds = queueScrubTick ? new HashSet<>() : Set.of();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null) continue;
+            Entity entity = level.getEntity(data.uuid);
             if (!(entity instanceof TamableAnimal tame)) continue;
-            if (!tame.isTame()) continue;
-            if (!tame.isAlive()) continue;
+            if (!tame.isTame() || !tame.isAlive()) continue;
+            seenRegistryLoaded.add(data.uuid);
+            if (queueScrubTick) loadedAliveTameIds.add(data.uuid);
+            if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
+                changed = true;
+            }
+        }
 
-            TameData data = TameRegistry.get(tame.getUUID());
-            if (data == null) {
-                data = TameSpawnEvents.registerOrRestoreTame(tame, false);
+        if (backfillScanTick) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame)) continue;
+                if (!tame.isTame() || !tame.isAlive()) continue;
+                UUID tameId = tame.getUUID();
+                if (seenRegistryLoaded.contains(tameId)) continue;
+                if (queueScrubTick) loadedAliveTameIds.add(tameId);
+
+                TameData data = TameRegistry.get(tameId);
                 if (data == null) {
-                    continue;
+                    data = TameSpawnEvents.registerOrRestoreTame(tame, false);
+                    if (data == null) continue;
+                    changed = true;
                 }
-                changed = true;
-            }
-            if (data.dead) {
-                data.dead = false;
-                data.deadGameTime = 0L;
-                data.deadUnixMillis = 0L;
-                data.deathDimension = "";
-                data.deathX = 0;
-                data.deathY = 0;
-                data.deathZ = 0;
-                changed = true;
-            }
-            if (!Objects.equals(data.ownerUUID, tame.getOwnerUUID())) {
-                java.util.UUID previousOwner = data.ownerUUID;
-                java.util.UUID newOwner = tame.getOwnerUUID();
-                data.ownerUUID = newOwner;
-                if (newOwner != null && data.uuid != null) {
-                    migrateDeathOwnership(data.uuid, previousOwner, newOwner);
-                }
-                changed = true;
-            }
-            if (data.bornDayTime <= 0L) {
-                data.bornDayTime = level.getDayTime();
-                changed = true;
-            }
-            if (TameBedRegistrySync.syncFromEntity(tame, data)) {
-                changed = true;
-            }
-
-            if (tame.hasCustomName() && tame.getCustomName() != null) {
-                String currentName = tame.getCustomName().getString();
-                String normalized = stripLevelPrefix(currentName);
-                if (!normalized.isBlank() && !normalized.equals(data.name)) {
-                    data.name = normalized;
+                if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
                     changed = true;
                 }
             }
+        }
 
-            net.minecraft.nbt.CompoundTag snapshot = new net.minecraft.nbt.CompoundTag();
-            tame.save(snapshot);
-            if (saveLocationTick) {
-                String dim = level.dimension().location().toString();
-                int x = tame.blockPosition().getX();
-                int y = tame.blockPosition().getY();
-                int z = tame.blockPosition().getZ();
-                if (!dim.equals(data.lastKnownDimension)
-                        || x != data.lastKnownX
-                        || y != data.lastKnownY
-                        || z != data.lastKnownZ
-                        || data.lastKnownGameTime != level.getGameTime()
-                        || !snapshot.equals(data.entitySnapshot)) {
-                    data.lastKnownDimension = dim;
-                    data.lastKnownX = x;
-                    data.lastKnownY = y;
-                    data.lastKnownZ = z;
-                    data.lastKnownGameTime = level.getGameTime();
-                    data.entitySnapshot = snapshot;
-                    changed = true;
-                }
-            } else if (!snapshot.equals(data.entitySnapshot)) {
-                data.entitySnapshot = snapshot;
-                changed = true;
+        if (queueScrubTick && !loadedAliveTameIds.isEmpty()) {
+            DIWorldData worldData = DIWorldData.get(level);
+            if (worldData != null) {
+                worldData.removeLanternRequestsForPets(loadedAliveTameIds);
+                worldData.removeRespawnRequestsForPets(loadedAliveTameIds);
             }
         }
 
@@ -119,36 +96,66 @@ public class TamePersistenceEvents {
         }
     }
 
+    private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean saveLocationTick, boolean saveSnapshotTick) {
+        boolean changed = false;
+        if (data.dead) {
+            data.dead = false;
+            data.deadGameTime = 0L;
+            data.deadUnixMillis = 0L;
+            data.deathDimension = "";
+            data.deathX = 0;
+            data.deathY = 0;
+            data.deathZ = 0;
+            changed = true;
+        }
+        if (data.bornDayTime <= 0L) {
+            data.bornDayTime = level.getDayTime();
+            changed = true;
+        }
+        if (TameBedRegistrySync.syncFromEntity(tame, data)) {
+            changed = true;
+        }
+        if (tame.hasCustomName() && tame.getCustomName() != null) {
+            String currentName = tame.getCustomName().getString();
+            String normalized = stripLevelPrefix(currentName);
+            if (!normalized.isBlank() && !normalized.equals(data.name)) {
+                data.name = normalized;
+                changed = true;
+            }
+        }
+        if (saveLocationTick) {
+            String dim = level.dimension().location().toString();
+            int x = tame.blockPosition().getX();
+            int y = tame.blockPosition().getY();
+            int z = tame.blockPosition().getZ();
+            if (!dim.equals(data.lastKnownDimension)
+                    || x != data.lastKnownX
+                    || y != data.lastKnownY
+                    || z != data.lastKnownZ
+                    || data.lastKnownGameTime != level.getGameTime()) {
+                data.lastKnownDimension = dim;
+                data.lastKnownX = x;
+                data.lastKnownY = y;
+                data.lastKnownZ = z;
+                data.lastKnownGameTime = level.getGameTime();
+                changed = true;
+            }
+        }
+        if (saveSnapshotTick || data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
+            net.minecraft.nbt.CompoundTag snapshot = new net.minecraft.nbt.CompoundTag();
+            tame.save(snapshot);
+            if (!snapshot.equals(data.entitySnapshot)) {
+                data.entitySnapshot = snapshot;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     private static String stripLevelPrefix(String name) {
         if (name == null) {
             return "";
         }
         return LEVEL_PREFIX.matcher(name).replaceFirst("");
-    }
-
-    private static void migrateDeathOwnership(java.util.UUID tameUuid, java.util.UUID oldOwner, java.util.UUID newOwner) {
-        if (tameUuid == null || newOwner == null) {
-            return;
-        }
-
-        for (var record : TameRegistry.DEATH_HISTORY) {
-            if (record == null || record.uuid == null) continue;
-            if (!tameUuid.equals(record.uuid)) continue;
-            if (oldOwner != null && !Objects.equals(oldOwner, record.ownerUUID)) continue;
-            record.ownerUUID = newOwner;
-            if (record.snapshot != null && !record.snapshot.isEmpty()) {
-                record.snapshot.putUUID("ownerUUID", newOwner);
-            }
-        }
-
-        var last = TameRegistry.LAST_DEATHS.get(tameUuid);
-        if (last != null) {
-            if (oldOwner == null || Objects.equals(oldOwner, last.ownerUUID)) {
-                last.ownerUUID = newOwner;
-                if (last.snapshot != null && !last.snapshot.isEmpty()) {
-                    last.snapshot.putUUID("ownerUUID", newOwner);
-                }
-            }
-        }
     }
 }

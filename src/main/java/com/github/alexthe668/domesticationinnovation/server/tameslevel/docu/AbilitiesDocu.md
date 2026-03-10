@@ -214,12 +214,6 @@
 - DPS example:
   - L1/L3/L5: not defined by custom direct damage formula
 
-### `damage_intercept`
-- Trigger: when owner is hurt and tame is within `3` blocks of owner.
-- Proc chance: `10% + 3% * (level - 1)` (capped at `95%`).
-- Effect: owner's incoming hit is fully redirected to the tame.
-- Damage: no bonus damage; defensive transfer ability.
-
 ### `guardian_repulse`
 - Trigger: when owner is hurt and tame is within `3` blocks of owner.
 - Effect: knocks nearby hostile mobs away from owner.

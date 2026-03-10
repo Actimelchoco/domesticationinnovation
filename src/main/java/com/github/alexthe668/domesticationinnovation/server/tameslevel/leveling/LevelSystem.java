@@ -144,7 +144,6 @@ public class LevelSystem {
         PSYCHIC_WALL("psychic_wall", true, Integer.MAX_VALUE),
         HEALING_AURA("healing_aura", true, Integer.MAX_VALUE),
         HEALING_BOTTLE("healing_bottle", true, Integer.MAX_VALUE),
-        DAMAGE_INTERCEPT("damage_intercept", true, Integer.MAX_VALUE),
         GUARDIAN_REPULSE("guardian_repulse", true, Integer.MAX_VALUE),
         LAST_STAND_FURY("last_stand_fury", true, Integer.MAX_VALUE),
         SHIELD_BLOCK("shield_block", true, Integer.MAX_VALUE),
@@ -858,7 +857,6 @@ public class LevelSystem {
                 case IMMUNITY_FRAME -> base * 7.0D;
                 case DEFLECTION -> base * 4.0D;
                 case DEFUSAL -> base * 7.0D;
-                case DAMAGE_INTERCEPT -> base * 5.0D;
                 case GUARDIAN_REPULSE -> base * 4.8D;
                 case LAST_STAND_FURY -> base * 2.8D;
                 case SHIELD_BLOCK -> base * 4.6D;
@@ -883,7 +881,6 @@ public class LevelSystem {
                 case PSYCHIC_WALL -> base * 4.0D;
                 case HEALING_AURA -> base * 10.0D;
                 case HEALING_BOTTLE -> base * 8.0D;
-                case DAMAGE_INTERCEPT -> base * 2.8D;
                 case GUARDIAN_REPULSE -> base * 4.8D;
                 case LAST_STAND_FURY -> base * 4.8D;
                 case SHIELD_BLOCK -> base * 4.6D;

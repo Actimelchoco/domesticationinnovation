@@ -7,10 +7,8 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DITagRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -51,18 +49,9 @@ public class PetBedBlock extends BaseEntityBlock {
     public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
         if(TameableUtils.isTamed(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
            if((entity.tickCount + entity.getId()) % 10 == 0 && random.nextInt(6) == 0){
-               BlockPos previousBed = TameableUtils.getPetBedPos((LivingEntity) entity);
-               String previousDimension = TameableUtils.getPetBedDimension((LivingEntity) entity);
                String currentDimension = level.dimension().toString();
-               boolean changed = previousBed == null || !previousBed.equals(pos) || !currentDimension.equals(previousDimension);
                TameableUtils.setPetBedPos((LivingEntity) entity, pos);
                TameableUtils.setPetBedDimension((LivingEntity) entity, currentDimension);
-               if (changed) {
-                   Entity owner = TameableUtils.getOwnerOf(entity);
-                   if (owner instanceof Player player) {
-                       player.displayClientMessage(Component.translatable("message.domesticationinnovation.set_respawn", entity.getName()), false);
-                   }
-               }
                Vec3 look = new Vec3(0, 0, -entity.getBbWidth()).yRot((float)Math.toRadians(180f - entity.getYHeadRot()));
                Vec3 vec3 = entity.getEyePosition().add(look);
                Vec3 vec32 = look.scale(0.5F);
