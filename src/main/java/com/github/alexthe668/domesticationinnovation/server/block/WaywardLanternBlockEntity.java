@@ -4,13 +4,17 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.misc.LanternRequest;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -61,8 +65,13 @@ public class WaywardLanternBlockEntity extends BlockEntity {
                     if (request == null) {
                         continue;
                     }
+                    UUID requestIdentity = request.getTlId() != null ? request.getTlId() : request.getPetUUID();
+                    if (isPetAlreadyLoadedAnywhere(serverLevel.getServer(), request.getPetUUID(), request.getTlId())) {
+                        te.finishedRequests.add(requestIdentity);
+                        continue;
+                    }
                     if (!request.isLanternMode()) {
-                        te.finishedRequests.add(request.getPetUUID());
+                        te.finishedRequests.add(requestIdentity);
                         continue;
                     }
                     loadChunksAround(serverLevel, request.getPetUUID(), request.getChunkPosition(), true);
@@ -78,7 +87,7 @@ public class WaywardLanternBlockEntity extends BlockEntity {
                             if(owner instanceof Player){
                                 ((Player)owner).displayClientMessage(Component.translatable("message.domesticationinnovation.wayward_lantern_return", entityFromChunk.getName()), false);
                             }
-                            te.finishedRequests.add(request.getPetUUID());
+                            te.finishedRequests.add(requestIdentity);
                         }
                         loadChunksAround(serverLevel, request.getPetUUID(), request.getChunkPosition(), false);
                     }
@@ -135,5 +144,30 @@ public class WaywardLanternBlockEntity extends BlockEntity {
             }
         }
         return lanternPos.above();
+    }
+
+    private static boolean isPetAlreadyLoadedAnywhere(MinecraftServer server, UUID petUuid, UUID tlId) {
+        if (server == null || (petUuid == null && tlId == null)) {
+            return false;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (petUuid != null) {
+                Entity e = level.getEntity(petUuid);
+                if (e instanceof LivingEntity living && living.isAlive()) {
+                    return true;
+                }
+            }
+            if (tlId != null) {
+                for (Entity e : level.getAllEntities()) {
+                    if (!(e instanceof LivingEntity living) || !living.isAlive()) {
+                        continue;
+                    }
+                    if (e instanceof TamableAnimal tame && tlId.equals(TameData.getTlId(tame))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }

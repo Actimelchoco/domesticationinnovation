@@ -74,9 +74,12 @@ public class TameableUtils {
     private static final String SAFE_PET_HEALTH = "SafePetHealth";
     private static final String LEGACY_TL_MIGRATION_TAG = "TamesLevelMigrationData";
     private static final String COLLAR_SWAP_COOLDOWN = "CollarSwapCooldown";
+    private static final String TL_ATTRIBUTE_LEVELS_SYNC = "TLAttributeLevelsSync";
+    private static final String TL_ABILITY_LEVELS_SYNC = "TLAbilityLevelsSync";
     private static final UUID HEALTH_BOOST_UUID = UUID.fromString("556E1665-8B10-40C8-8F9D-CF9B166EEEEE");
     private static final UUID SPEED_BOOST_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31744");
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
+    private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
 
     private static final UUID SPEED_BOOST_AQUATIC_LAND_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31745");
 
@@ -203,11 +206,19 @@ public class TameableUtils {
     private static void onUpdateEnchants(@Nullable Map<ResourceLocation, Integer> prevEnchants, LivingEntity enchanted) {
         int healthExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.HEALTH_BOOST);
         int speedExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.SPEEDSTER);
-        int collarArmor = hasCollar(enchanted) ? 2 : 0;
+        int protectionLevel = hasCollar(enchanted) ? getEnchantLevel(enchanted, net.minecraft.world.item.enchantment.Enchantments.ALL_DAMAGE_PROTECTION) : 0;
+        float collarArmor = 0.0F;
+        float collarArmorToughness = 0.0F;
+        if (hasCollar(enchanted)) {
+            float[] mapped = mapProtectionToArmorStats(protectionLevel);
+            collarArmor = mapped[0];
+            collarArmorToughness = mapped[1];
+        }
         boolean amphib = hasEnchant(enchanted, DIEnchantmentRegistry.AMPHIBIOUS) && !enchanted.isInWaterOrBubble() && isWaterCreature(enchanted);
         AttributeInstance health = enchanted.getAttribute(Attributes.MAX_HEALTH);
         AttributeInstance speed = enchanted.getAttribute(Attributes.MOVEMENT_SPEED);
         AttributeInstance armor = enchanted.getAttribute(Attributes.ARMOR);
+        AttributeInstance armorToughness = enchanted.getAttribute(Attributes.ARMOR_TOUGHNESS);
         if (hasEnchant(enchanted, DIEnchantmentRegistry.IMMATURITY_CURSE) || prevEnchants != null && prevEnchants.keySet().contains(ForgeRegistries.ENCHANTMENTS.getKey(DIEnchantmentRegistry.IMMATURITY_CURSE))) {
             //change pose to update client
             enchanted.setPose(Pose.FALL_FLYING);
@@ -251,7 +262,7 @@ public class TameableUtils {
             }
         }
         if (armor != null) {
-            if (collarArmor > 0) {
+            if (collarArmor > 0.0F) {
                 AttributeModifier armorModifier = new AttributeModifier(COLLAR_ARMOR_UUID, "collar tag armor bonus", collarArmor, AttributeModifier.Operation.ADDITION);
                 if (armor.hasModifier(armorModifier)) {
                     armor.removeModifier(armorModifier);
@@ -263,6 +274,41 @@ public class TameableUtils {
                 armor.removePermanentModifier(COLLAR_ARMOR_UUID);
             }
         }
+        if (armorToughness != null) {
+            if (collarArmorToughness > 0.0F) {
+                AttributeModifier toughnessModifier = new AttributeModifier(COLLAR_ARMOR_TOUGHNESS_UUID, "collar tag armor toughness bonus", collarArmorToughness, AttributeModifier.Operation.ADDITION);
+                if (armorToughness.hasModifier(toughnessModifier)) {
+                    armorToughness.removeModifier(toughnessModifier);
+                    armorToughness.addPermanentModifier(toughnessModifier);
+                } else {
+                    armorToughness.addPermanentModifier(toughnessModifier);
+                }
+            } else {
+                armorToughness.removePermanentModifier(COLLAR_ARMOR_TOUGHNESS_UUID);
+            }
+        }
+    }
+
+    private static float[] mapProtectionToArmorStats(int protectionLevel) {
+        if (protectionLevel <= 0) {
+            // Leather-equivalent baseline for wearing any collar tag.
+            return new float[]{7.0F, 0.0F};
+        }
+        if (protectionLevel == 1) {
+            // Chainmail-equivalent.
+            return new float[]{12.0F, 0.0F};
+        }
+        if (protectionLevel == 2) {
+            // Iron-equivalent.
+            return new float[]{15.0F, 0.0F};
+        }
+        if (protectionLevel == 3) {
+            // Diamond-equivalent.
+            return new float[]{20.0F, 2.0F};
+        }
+        // Protection IV and above starts at netherite-equivalent and scales further.
+        float extra = protectionLevel - 4.0F;
+        return new float[]{20.0F + extra, 3.0F + (extra * 0.5F)};
     }
 
     private static boolean isWaterCreature(LivingEntity enchanted) {
@@ -336,33 +382,39 @@ public class TameableUtils {
     public static boolean hasAnyAbilityOrAttributeProgress(LivingEntity entity) {
         if (entity == null) return false;
         TameData data = TameRegistry.get(entity.getUUID());
-        if (data == null) return false;
-        if (data.attributeLevels != null) {
-            for (int value : data.attributeLevels.values()) {
-                if (value > 0) return true;
-            }
+        if (data != null) {
+            if (hasAnyPositiveLevels(data.attributeLevels)) return true;
+            return hasAnyPositiveLevels(data.abilityLevels);
         }
-        if (data.abilityLevels != null) {
-            for (int value : data.abilityLevels.values()) {
-                if (value > 0) return true;
-            }
-        }
-        return false;
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        return hasAnyPositiveLevels(levelMapFromTag(tag.getCompound(TL_ATTRIBUTE_LEVELS_SYNC)))
+                || hasAnyPositiveLevels(levelMapFromTag(tag.getCompound(TL_ABILITY_LEVELS_SYNC)));
     }
 
     public static List<Component> getAbilityAttributeDescriptions(LivingEntity entity) {
         List<Component> list = new ArrayList<>();
         if (entity == null) return list;
         TameData data = TameRegistry.get(entity.getUUID());
-        if (data == null) return list;
+
+        Map<String, Integer> attributeLevels;
+        Map<String, Integer> abilityLevels;
+        if (data != null) {
+            attributeLevels = data.attributeLevels == null ? Map.of() : data.attributeLevels;
+            abilityLevels = data.abilityLevels == null ? Map.of() : data.abilityLevels;
+        } else {
+            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+            attributeLevels = levelMapFromTag(tag.getCompound(TL_ATTRIBUTE_LEVELS_SYNC));
+            abilityLevels = levelMapFromTag(tag.getCompound(TL_ABILITY_LEVELS_SYNC));
+            if (attributeLevels.isEmpty() && abilityLevels.isEmpty()) {
+                return list;
+            }
+        }
 
         list.add(Component.literal("   ").append(Component.literal("Attributes").withStyle(ChatFormatting.GOLD)));
         List<String> attrs = new ArrayList<>();
-        if (data.attributeLevels != null) {
-            for (Map.Entry<String, Integer> entry : data.attributeLevels.entrySet()) {
-                if (entry.getValue() <= 0) continue;
-                attrs.add(entry.getKey() + " " + entry.getValue());
-            }
+        for (Map.Entry<String, Integer> entry : attributeLevels.entrySet()) {
+            if (entry.getValue() <= 0) continue;
+            attrs.add(entry.getKey() + " " + entry.getValue());
         }
         attrs.sort(String::compareToIgnoreCase);
         if (attrs.isEmpty()) {
@@ -375,11 +427,9 @@ public class TameableUtils {
 
         list.add(Component.literal("   ").append(Component.literal("Abilities").withStyle(ChatFormatting.GOLD)));
         List<String> abilities = new ArrayList<>();
-        if (data.abilityLevels != null) {
-            for (Map.Entry<String, Integer> entry : data.abilityLevels.entrySet()) {
-                if (entry.getValue() <= 0) continue;
-                abilities.add(entry.getKey() + " " + entry.getValue());
-            }
+        for (Map.Entry<String, Integer> entry : abilityLevels.entrySet()) {
+            if (entry.getValue() <= 0) continue;
+            abilities.add(entry.getKey() + " " + entry.getValue());
         }
         abilities.sort(String::compareToIgnoreCase);
         if (abilities.isEmpty()) {
@@ -397,6 +447,23 @@ public class TameableUtils {
             list.add(Component.literal("...").withStyle(ChatFormatting.GRAY));
         }
         return list;
+    }
+
+    public static void syncAbilityAttributeProgressPreview(LivingEntity entity, TameData data) {
+        if (entity == null || data == null || entity.level().isClientSide) {
+            return;
+        }
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        CompoundTag attr = levelTagFromMap(data.attributeLevels);
+        CompoundTag abil = levelTagFromMap(data.abilityLevels);
+        CompoundTag prevAttr = tag.contains(TL_ATTRIBUTE_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ATTRIBUTE_LEVELS_SYNC) : new CompoundTag();
+        CompoundTag prevAbil = tag.contains(TL_ABILITY_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ABILITY_LEVELS_SYNC) : new CompoundTag();
+        if (attr.equals(prevAttr) && abil.equals(prevAbil)) {
+            return;
+        }
+        tag.put(TL_ATTRIBUTE_LEVELS_SYNC, attr);
+        tag.put(TL_ABILITY_LEVELS_SYNC, abil);
+        sync(entity, tag);
     }
 
     public static void addEnchant(LivingEntity entity, EnchantmentInstance enchantment) {
@@ -671,6 +738,41 @@ public class TameableUtils {
         } else {
             Citadel.sendMSGToServer(new PropertiesMessage("CitadelTagUpdate", tag, enchanted.getId()));
         }
+    }
+
+    private static boolean hasAnyPositiveLevels(Map<String, Integer> levels) {
+        if (levels == null || levels.isEmpty()) return false;
+        for (int value : levels.values()) {
+            if (value > 0) return true;
+        }
+        return false;
+    }
+
+    private static CompoundTag levelTagFromMap(Map<String, Integer> levels) {
+        CompoundTag out = new CompoundTag();
+        if (levels == null || levels.isEmpty()) {
+            return out;
+        }
+        for (Map.Entry<String, Integer> entry : levels.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()) continue;
+            if (entry.getValue() <= 0) continue;
+            out.putInt(entry.getKey(), entry.getValue());
+        }
+        return out;
+    }
+
+    private static Map<String, Integer> levelMapFromTag(CompoundTag tag) {
+        Map<String, Integer> out = new HashMap<>();
+        if (tag == null || tag.isEmpty()) {
+            return out;
+        }
+        for (String key : tag.getAllKeys()) {
+            int value = Math.max(0, tag.getInt(key));
+            if (value > 0) {
+                out.put(key, value);
+            }
+        }
+        return out;
     }
 
     @Nullable

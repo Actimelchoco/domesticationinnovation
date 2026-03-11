@@ -1,6 +1,5 @@
 package com.github.alexthe668.domesticationinnovation.server.item;
 
-import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -13,24 +12,21 @@ public class CollarTagItem extends Item {
 
     @Override
     public boolean isEnchantable(ItemStack stack) {
-        return true;
+        return false;
     }
 
     @Override
     public int getEnchantmentValue() {
-        return 1;
+        return 0;
     }
 
     @Override
     public boolean canApplyAtEnchantingTable(ItemStack stack, Enchantment enchantment) {
-        return DIEnchantmentRegistry.isAllowedCollarTagEnchantment(enchantment);
+        return false;
     }
 
     @Override
     public boolean isBookEnchantable(ItemStack stack, ItemStack book) {
-        if (book == null || !book.isEnchanted()) {
-            return false;
-        }
-        return book.getAllEnchantments().keySet().stream().allMatch(DIEnchantmentRegistry::isAllowedCollarTagEnchantment);
+        return false;
     }
 }

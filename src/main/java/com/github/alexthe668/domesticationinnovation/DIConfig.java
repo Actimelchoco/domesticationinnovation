@@ -70,7 +70,7 @@ public class DIConfig {
                 if (obj instanceof PetEnchantment) {
                     String registryName = ((PetEnchantment) obj).getName();
                     String name = registryName + "_enabled";
-                    enabledEnchantments.put(registryName, builder.comment("true if " + registryName.replace("_", " ") + " enchant is enabled, false if disabled").translation(name).define(name, true));
+                    enabledEnchantments.put(registryName, builder.comment("true if " + registryName.replace("_", " ") + " enchant is enabled, false if disabled").translation(name).define(name, false));
                 }
             }
         } catch (IllegalAccessException e) {

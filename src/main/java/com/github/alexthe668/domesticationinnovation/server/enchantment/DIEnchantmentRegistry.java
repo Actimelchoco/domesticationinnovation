@@ -71,12 +71,8 @@ public class DIEnchantmentRegistry {
     }
 
     public static boolean isAllowedCollarTagEnchantment(Enchantment enchantment) {
-        return enchantment == Enchantments.ALL_DAMAGE_PROTECTION
-                || enchantment == Enchantments.FIRE_PROTECTION
-                || enchantment == Enchantments.BLAST_PROTECTION
-                || enchantment == Enchantments.PROJECTILE_PROTECTION
-                || enchantment == Enchantments.FALL_PROTECTION
-                || enchantment == Enchantments.THORNS;
+        // Temporary compatibility mode: only vanilla Protection is allowed on collar tags.
+        return enchantment == Enchantments.ALL_DAMAGE_PROTECTION;
     }
 
     public static boolean areCompatible(PetEnchantment e1, Enchantment e2) {

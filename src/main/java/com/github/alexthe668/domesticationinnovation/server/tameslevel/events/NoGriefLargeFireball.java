@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
@@ -48,6 +49,9 @@ public class NoGriefLargeFireball extends LargeFireball {
     }
 
     private static boolean isFriendly(TamableAnimal tame, Entity entity) {
+        if (!TLAdminRuntimeSettings.friendlyFireEnabled() && (entity instanceof Player || entity instanceof TamableAnimal)) {
+            return true;
+        }
         if (entity == tame) return true;
         if (entity instanceof Player player) {
             return tame.getOwnerUUID() != null && tame.getOwnerUUID().equals(player.getUUID());

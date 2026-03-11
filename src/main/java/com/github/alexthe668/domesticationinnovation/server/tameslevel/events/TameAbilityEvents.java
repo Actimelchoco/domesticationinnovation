@@ -7,11 +7,13 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.tags.DamageTypeTags;
@@ -66,8 +68,8 @@ public class TameAbilityEvents {
     private static final ThreadLocal<Boolean> INTERNAL_BONUS_DAMAGE = ThreadLocal.withInitial(() -> false);
     private static final float ARROW_TO_GUARDIAN_DPS_RATIO = 0.40F;
     private static final float ELDER_DPS_ABOVE_GUARDIAN = 1.125F; // Slightly higher DPS than guardian.
-    private static final float SINGLE_TARGET_DAMAGE_MULTIPLIER = 0.70F;
-    private static final float AOE_DAMAGE_MULTIPLIER = 0.50F;
+    private static final float SINGLE_TARGET_DAMAGE_MULTIPLIER = 0.40F;
+    private static final float AOE_DAMAGE_MULTIPLIER = 0.20F;
     private static final int MAX_WARDEN_BEAM_TARGETS = 12;
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
         @Override
@@ -454,19 +456,20 @@ public class TameAbilityEvents {
         Vec3 end = start.add(dir.scale(dashDistance));
 
         AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
-        float damage = aoeDamage(((3.0F + levelValue * 1.2F) + tameBaseDamage(tame) * 0.80F) * abilityPowerMultiplier(data));
-        int hits = 0;
-        Set<java.util.UUID> hitIds = new HashSet<>();
+        // Dash is intentionally weak: it is a mobility chip-damage ability, not a burst finisher.
+        float effectiveLevel = 1.0F + (float) Math.min(4, levelValue - 1);
+        if (levelValue > 5) {
+            effectiveLevel += (float) (Math.sqrt(levelValue - 5) * 0.5D);
+        }
+        float damage = singleTargetDamage(((1.10F + effectiveLevel * 0.35F) + tameBaseDamage(tame) * 0.44F) * abilityPowerMultiplier(data));
+
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, sweep)) {
             if (!nearby.isAlive()) continue;
             if (nearby == tame) continue;
             if (nearby instanceof Player || nearby instanceof TamableAnimal) continue;
             if (isFriendly(tame, nearby)) continue;
-            if (!hitIds.add(nearby.getUUID())) continue;
             LevelSystem.trackDamage(nearby, tame);
             applyInternalBonusDamage(nearby, tame, damage);
-            hits++;
-            if (hits >= 8) break;
         }
 
         tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
@@ -570,11 +573,15 @@ public class TameAbilityEvents {
         ShulkerBullet bullet = new ShulkerBullet(level, tame, target, axis);
         bullet.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
         level.addFreshEntity(bullet);
-        if (target.getHealth() <= 50.0F) {
+        // Only levitate targets up to 50 max HP.
+        if (target.getMaxHealth() <= 50.0F) {
             target.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 60 + levelValue * 20, Math.max(0, levelValue / 3)));
         }
         level.sendParticles(ParticleTypes.END_ROD, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 16), 0.4D, 0.5D, 0.4D, 0.01D);
-        setAbilityCooldown(tame, data, "shulker_bullet_tick", now, 100);
+        // Reduce cooldown by 10% per level (min 20 ticks).
+        double cooldownMultiplier = Math.max(0.20D, 1.0D - 0.10D * (levelValue - 1));
+        long cooldown = Math.max(20L, Math.round(100.0D * cooldownMultiplier));
+        setAbilityCooldown(tame, data, "shulker_bullet_tick", now, cooldown);
         debugAbilityUse(tame, "shulker_bullet");
     }
 
@@ -963,6 +970,16 @@ public class TameAbilityEvents {
             debugAbilityUse(tame, "lifesteal");
         }
 
+        int pierceLevel = attributeLevel(data, "pierce");
+        if (pierceLevel > 0 && !event.getSource().is(DamageTypeTags.BYPASSES_ARMOR)) {
+            float pierced = applyArmorPierce(event.getAmount(), target, pierceLevel);
+            if (pierced > event.getAmount()) {
+                event.setAmount(pierced);
+                damage = event.getAmount();
+                debugAbilityUse(tame, "pierce");
+            }
+        }
+
         int firefangLevel = attributeLevel(data, "firefang");
         if (firefangLevel > 0) {
             event.getEntity().setSecondsOnFire(2 + firefangLevel);
@@ -1283,6 +1300,15 @@ public class TameAbilityEvents {
             level.playSound(null, dead.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.NEUTRAL, 0.8F, 1.1F);
             debugAbilityUse(tame, "killexploder");
         }
+
+        int victimSiphonLevel = attributeLevel(data, "victim_siphon");
+        if (victimSiphonLevel > 0 && wasKiller) {
+            float heal = (float) (dead.getMaxHealth() * Math.min(0.50D, 0.05D * victimSiphonLevel));
+            if (heal > 0.0F) {
+                tame.heal(heal);
+                debugAbilityUse(tame, "victim_siphon");
+            }
+        }
     }
 
     private static int attributeLevel(TameData data, String id) {
@@ -1313,8 +1339,47 @@ public class TameAbilityEvents {
         return (float) tame.getAttributeValue(Attributes.ATTACK_DAMAGE);
     }
 
+    private static float applyArmorPierce(float rawDamage, LivingEntity target, int level) {
+        if (rawDamage <= 0.0F || target == null || level <= 0) {
+            return rawDamage;
+        }
+        float armor = target.getArmorValue();
+        if (armor <= 0.0F) {
+            return rawDamage;
+        }
+        float toughness = target.getAttribute(Attributes.ARMOR_TOUGHNESS) == null
+                ? 0.0F
+                : (float) target.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+        float pierceFraction = (float) Math.min(1.0D, 0.50D + 0.125D * Math.max(0, level - 1));
+        float effectiveArmor = armor * (1.0F - pierceFraction);
+        float desiredFinal = CombatRules.getDamageAfterAbsorb(rawDamage, effectiveArmor, toughness);
+        return solvePreArmorDamageForFinal(desiredFinal, armor, toughness);
+    }
+
+    private static float solvePreArmorDamageForFinal(float desiredFinal, float armor, float toughness) {
+        if (desiredFinal <= 0.0F) {
+            return 0.0F;
+        }
+        float low = desiredFinal;
+        float high = Math.max(desiredFinal, desiredFinal * 4.0F + armor * 2.0F + toughness);
+        while (CombatRules.getDamageAfterAbsorb(high, armor, toughness) < desiredFinal && high < 1000000.0F) {
+            high *= 2.0F;
+        }
+        for (int i = 0; i < 20; i++) {
+            float mid = (low + high) * 0.5F;
+            float mitigated = CombatRules.getDamageAfterAbsorb(mid, armor, toughness);
+            if (mitigated < desiredFinal) {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+        return high;
+    }
+
     private static void setAbilityCooldown(TamableAnimal tame, TameData data, String key, long now, long baseTicks) {
         long ticks = Math.max(1L, baseTicks);
+        ticks = Math.max(1L, Math.round(ticks * abilityCooldownMultiplier(data)));
 
         int emergency = attributeLevel(data, "emergency_cooldown_reduction");
         if (emergency > 0) {
@@ -1328,6 +1393,27 @@ public class TameAbilityEvents {
             }
         }
         setCooldown(data, key, now + ticks);
+    }
+
+    private static double abilityCooldownMultiplier(TameData data) {
+        int abilityCount = countOwnedAbilities(data);
+        if (abilityCount <= 1) {
+            return 1.0D;
+        }
+        return 1.0D + 0.5D * (Math.log(abilityCount) / Math.log(2.0D));
+    }
+
+    private static int countOwnedAbilities(TameData data) {
+        if (data == null || data.abilityLevels.isEmpty()) {
+            return data == null ? 0 : data.abilities.size();
+        }
+        int count = 0;
+        for (int level : data.abilityLevels.values()) {
+            if (level > 0) {
+                count++;
+            }
+        }
+        return Math.max(count, data.abilities.size());
     }
 
     private static void spawnLightningVisual(ServerLevel level, double x, double y, double z, TamableAnimal tame) {
@@ -1370,6 +1456,9 @@ public class TameAbilityEvents {
             return true;
         }
         if (entity instanceof TamableAnimal otherTame && otherTame.isTame()) {
+            if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+                return true;
+            }
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), otherTame.getUUID())) {
                 return false;
             }
@@ -1453,8 +1542,9 @@ public class TameAbilityEvents {
     private static Set<TamableAnimal> collectLoadedRegistryTames(ServerLevel level) {
         Set<TamableAnimal> result = new HashSet<>();
         ResourceLocation levelId = level.dimension().location();
+        boolean revivedDeadEntry = false;
         for (TameData data : TameRegistry.TAMES.values()) {
-            if (data == null || data.uuid == null || data.dead) continue;
+            if (data == null || data.uuid == null) continue;
             if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
                 ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
                 if (lastKnown != null && !lastKnown.equals(levelId)) {
@@ -1463,7 +1553,20 @@ public class TameAbilityEvents {
             }
             Entity entity = level.getEntity(data.uuid);
             if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) continue;
+            if (data.dead) {
+                data.dead = false;
+                data.deadGameTime = 0L;
+                data.deadUnixMillis = 0L;
+                data.deathDimension = "";
+                data.deathX = 0;
+                data.deathY = 0;
+                data.deathZ = 0;
+                revivedDeadEntry = true;
+            }
             result.add(tame);
+        }
+        if (revivedDeadEntry) {
+            TameRegistry.markDirty();
         }
         return result;
     }

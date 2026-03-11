@@ -59,6 +59,7 @@ public class DIWorldData extends SavedData {
                 float targetPitch = innerTag.contains("TargetPitch", Tag.TAG_FLOAT) ? innerTag.getFloat("TargetPitch") : 0.0F;
                 data.lanternRequestList.add(new LanternRequest(
                         innerTag.getUUID("PetUUID"),
+                        innerTag.hasUUID("TLID") ? innerTag.getUUID("TLID") : null,
                         innerTag.getString("EntityType"),
                         innerTag.getUUID("OwnerUUID"),
                         new BlockPos(innerTag.getInt("X"), innerTag.getInt("Y"), innerTag.getInt("Z")),
@@ -100,6 +101,9 @@ public class DIWorldData extends SavedData {
             for(LanternRequest request : lanternRequestList){
                 CompoundTag tag = new CompoundTag();
                 tag.putUUID("PetUUID", request.getPetUUID());
+                if (request.getTlId() != null) {
+                    tag.putUUID("TLID", request.getTlId());
+                }
                 tag.putString("EntityType", request.getEntityTypeLoc());
                 tag.putUUID("OwnerUUID", request.getOwnerUUID());
                 tag.putLong("Timestamp", request.getTimestamp());
@@ -174,6 +178,9 @@ public class DIWorldData extends SavedData {
         if (entityData == null) {
             return false;
         }
+        if (entityData.hasUUID("TLID") && petUuid.equals(entityData.getUUID("TLID"))) {
+            return true;
+        }
         if (entityData.hasUUID("TLRegistryUUID") && petUuid.equals(entityData.getUUID("TLRegistryUUID"))) {
             return true;
         }
@@ -197,7 +204,8 @@ public class DIWorldData extends SavedData {
             return;
         }
         int before = this.lanternRequestList.size();
-        this.lanternRequestList.removeIf(request -> request != null && reloaded.equals(request.getPetUUID()));
+        this.lanternRequestList.removeIf(request ->
+                request != null && (reloaded.equals(request.getPetUUID()) || reloaded.equals(request.getTlId())));
         if (before != this.lanternRequestList.size()) {
             this.setDirty();
         }
@@ -224,8 +232,21 @@ public class DIWorldData extends SavedData {
         int before = this.lanternRequestList.size();
         this.lanternRequestList.removeIf(request ->
                 request != null
-                        && request.getPetUUID() != null
-                        && petUuids.contains(request.getPetUUID()));
+                        && ((request.getPetUUID() != null && petUuids.contains(request.getPetUUID()))
+                        || (request.getTlId() != null && petUuids.contains(request.getTlId()))));
+        int removed = before - this.lanternRequestList.size();
+        if (removed > 0) {
+            this.setDirty();
+        }
+        return removed;
+    }
+
+    public int clearLanternRequestsByMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return 0;
+        }
+        int before = this.lanternRequestList.size();
+        this.lanternRequestList.removeIf(request -> request != null && mode.equalsIgnoreCase(request.getMode()));
         int removed = before - this.lanternRequestList.size();
         if (removed > 0) {
             this.setDirty();
@@ -255,6 +276,12 @@ public class DIWorldData extends SavedData {
         CompoundTag entityData = request.getEntityData();
         if (entityData == null) {
             return false;
+        }
+        if (entityData.hasUUID("TLID")) {
+            UUID id = entityData.getUUID("TLID");
+            if (petUuids.contains(id)) {
+                return true;
+            }
         }
         if (entityData.hasUUID("TLRegistryUUID")) {
             UUID id = entityData.getUUID("TLRegistryUUID");

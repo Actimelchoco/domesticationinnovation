@@ -17,6 +17,7 @@ public class LanternRequest {
     private String mode;
 
     private UUID petUUID;
+    private UUID tlId;
     private UUID ownerUUID;
 
     private BlockPos chunkPosition;
@@ -28,11 +29,16 @@ public class LanternRequest {
     private float targetPitch;
 
     public LanternRequest(UUID petUUID, String entityType, UUID ownerUUID, BlockPos chunkPosition, long timestamp, String nametag) {
-        this(petUUID, entityType, ownerUUID, chunkPosition, timestamp, nametag, MODE_LANTERN, "", 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
+        this(petUUID, null, entityType, ownerUUID, chunkPosition, timestamp, nametag, MODE_LANTERN, "", 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
+    }
+
+    public LanternRequest(UUID petUUID, UUID tlId, String entityType, UUID ownerUUID, BlockPos chunkPosition, long timestamp, String nametag) {
+        this(petUUID, tlId, entityType, ownerUUID, chunkPosition, timestamp, nametag, MODE_LANTERN, "", 0.0D, 0.0D, 0.0D, 0.0F, 0.0F);
     }
 
     public LanternRequest(
             UUID petUUID,
+            UUID tlId,
             String entityType,
             UUID ownerUUID,
             BlockPos chunkPosition,
@@ -47,6 +53,7 @@ public class LanternRequest {
             float targetPitch
     ) {
         this.petUUID = petUUID;
+        this.tlId = tlId;
         this.entityType = entityType;
         this.chunkPosition = chunkPosition;
         this.ownerUUID = ownerUUID;
@@ -63,6 +70,10 @@ public class LanternRequest {
 
     public UUID getPetUUID() {
         return petUUID;
+    }
+
+    public UUID getTlId() {
+        return tlId;
     }
 
     public String getEntityTypeLoc() {

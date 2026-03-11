@@ -17,8 +17,10 @@ import java.util.Set;
 import java.util.UUID;
 
 public class TameData {
+    public static final String TL_ID_TAG = "tl_id";
 
     public UUID uuid;
+    public UUID tlId;
     public UUID ownerUUID;
 
     public String name;
@@ -105,6 +107,7 @@ public class TameData {
     public TameData(TamableAnimal tame) {
 
         this.uuid = tame.getUUID();
+        this.tlId = readOrCreateTlId(tame);
         this.ownerUUID = tame.getOwnerUUID();
 
         this.type = tame.getType().toString();
@@ -122,6 +125,7 @@ public class TameData {
         this.homeZ = tame.blockPosition().getZ();
         this.hasPetBed = false;
         this.petBedDimension = "";
+        syncTlIdToEntity(tame, this.tlId);
         tame.save(entitySnapshot);
 
         if (tame.getAttribute(Attributes.MOVEMENT_SPEED) != null) {
@@ -132,6 +136,9 @@ public class TameData {
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("uuid", uuid);
+        if (tlId != null) {
+            tag.putUUID(TL_ID_TAG, tlId);
+        }
         if (ownerUUID != null) {
             tag.putUUID("ownerUUID", ownerUUID);
         }
@@ -250,6 +257,7 @@ public class TameData {
     public static TameData fromTag(CompoundTag tag) {
         TameData data = new TameData();
         data.uuid = tag.hasUUID("uuid") ? tag.getUUID("uuid") : UUID.randomUUID();
+        data.tlId = tag.hasUUID(TL_ID_TAG) ? tag.getUUID(TL_ID_TAG) : UUID.randomUUID();
         if (tag.hasUUID("ownerUUID")) {
             data.ownerUUID = tag.getUUID("ownerUUID");
         }
@@ -394,6 +402,41 @@ public class TameData {
         }
 
         return data;
+    }
+
+    public UUID ensureTlId() {
+        if (tlId == null) {
+            tlId = UUID.randomUUID();
+        }
+        return tlId;
+    }
+
+    public static UUID getTlId(TamableAnimal tame) {
+        if (tame == null) {
+            return null;
+        }
+        CompoundTag data = tame.getPersistentData();
+        return data.hasUUID(TL_ID_TAG) ? data.getUUID(TL_ID_TAG) : null;
+    }
+
+    public static UUID readOrCreateTlId(TamableAnimal tame) {
+        if (tame == null) {
+            return UUID.randomUUID();
+        }
+        CompoundTag data = tame.getPersistentData();
+        if (data.hasUUID(TL_ID_TAG)) {
+            return data.getUUID(TL_ID_TAG);
+        }
+        UUID created = UUID.randomUUID();
+        data.putUUID(TL_ID_TAG, created);
+        return created;
+    }
+
+    public static void syncTlIdToEntity(TamableAnimal tame, UUID tlId) {
+        if (tame == null || tlId == null) {
+            return;
+        }
+        tame.getPersistentData().putUUID(TL_ID_TAG, tlId);
     }
 
     private TameData() {

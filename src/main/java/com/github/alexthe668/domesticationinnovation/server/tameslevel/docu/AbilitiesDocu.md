@@ -208,7 +208,7 @@
 - Damage: no direct damage instance
 
 ### `shulker_bullet`
-- Cooldown: `5.0s`
+- Cooldown: `10.0s`
 - Trigger gate: extra levitation application only if target HP `<= 50`
 - Damage: vanilla shulker-bullet projectile behavior (custom code does not override hit damage directly)
 - DPS example:

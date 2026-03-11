@@ -189,12 +189,14 @@ public class TameAutoFollowEvents {
 
             TameData data = TameRegistry.get(movedTame.getUUID());
             if (data != null) {
+                TameRegistry.bindEntityToData(movedTame, data);
                 data.lastKnownDimension = destinationLevel.dimension().location().toString();
                 data.lastKnownX = movedTame.blockPosition().getX();
                 data.lastKnownY = movedTame.blockPosition().getY();
                 data.lastKnownZ = movedTame.blockPosition().getZ();
                 data.lastKnownGameTime = destinationLevel.getGameTime();
                 CompoundTag refreshedSnapshot = new CompoundTag();
+                TameRegistry.bindEntityToData(movedTame, data);
                 movedTame.save(refreshedSnapshot);
                 data.entitySnapshot = refreshedSnapshot;
                 TameRegistry.markDirty();

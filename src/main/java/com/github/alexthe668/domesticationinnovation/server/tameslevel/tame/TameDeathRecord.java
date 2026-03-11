@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public class TameDeathRecord {
     public UUID uuid;
+    public UUID tlId;
     public UUID ownerUUID;
     public String name = "";
     public String type = "";
@@ -31,6 +32,7 @@ public class TameDeathRecord {
     public static TameDeathRecord fromTame(TameData data, TamableAnimal tame, long gameTime) {
         TameDeathRecord record = new TameDeathRecord();
         record.uuid = data.uuid;
+        record.tlId = data.ensureTlId();
         record.ownerUUID = data.ownerUUID;
         record.name = data.name;
         record.type = data.type;
@@ -55,6 +57,7 @@ public class TameDeathRecord {
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
         if (uuid != null) tag.putUUID("uuid", uuid);
+        if (tlId != null) tag.putUUID(TameData.TL_ID_TAG, tlId);
         if (ownerUUID != null) tag.putUUID("ownerUUID", ownerUUID);
         tag.putString("name", name == null ? "" : name);
         tag.putString("type", type == null ? "" : type);
@@ -79,6 +82,7 @@ public class TameDeathRecord {
     public static TameDeathRecord fromTag(CompoundTag tag) {
         TameDeathRecord record = new TameDeathRecord();
         if (tag.hasUUID("uuid")) record.uuid = tag.getUUID("uuid");
+        if (tag.hasUUID(TameData.TL_ID_TAG)) record.tlId = tag.getUUID(TameData.TL_ID_TAG);
         if (tag.hasUUID("ownerUUID")) record.ownerUUID = tag.getUUID("ownerUUID");
         if (tag.contains("name", Tag.TAG_STRING)) record.name = tag.getString("name");
         if (tag.contains("type", Tag.TAG_STRING)) record.type = tag.getString("type");

@@ -161,7 +161,12 @@ public class ClientProxy extends CommonProxy {
     }
 
     private void renderNametagEnchantments(Entity entity, Component nameTag, PoseStack pose, MultiBufferSource buffer, int lightIn) {
-        if (Minecraft.getInstance().player.isShiftKeyDown() && TameableUtils.isTamed(entity) && TameableUtils.hasAnyAbilityOrAttributeProgress((LivingEntity) entity)) {
+        Player clientPlayer = Minecraft.getInstance().player;
+        if (clientPlayer != null
+                && clientPlayer.isShiftKeyDown()
+                && clientPlayer.getMainHandItem().isEmpty()
+                && TameableUtils.isTamed(entity)
+                && TameableUtils.hasAnyAbilityOrAttributeProgress((LivingEntity) entity)) {
             LivingEntity living = (LivingEntity) entity;
             List<Component> list = TameableUtils.getAbilityAttributeDescriptions(living);
             double d0 = Minecraft.getInstance().getEntityRenderDispatcher().distanceToSqr(entity);

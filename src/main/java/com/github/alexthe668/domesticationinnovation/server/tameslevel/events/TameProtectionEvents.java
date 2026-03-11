@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
@@ -25,6 +26,17 @@ public class TameProtectionEvents {
         TamableAnimal tameAttacker = resolveTameAttacker(attacker, direct);
         if (tameAttacker == null || !tameAttacker.isTame()) {
             return;
+        }
+
+        if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+            if (victim instanceof Player) {
+                event.setCanceled(true);
+                return;
+            }
+            if (victim instanceof TamableAnimal targetTame && targetTame.isTame()) {
+                event.setCanceled(true);
+                return;
+            }
         }
 
         if (TameDuelManager.isTameInDuel(tameAttacker.getUUID())) {
@@ -57,6 +69,16 @@ public class TameProtectionEvents {
         net.minecraft.world.entity.LivingEntity target = tame.getTarget();
         if (target == null) {
             return;
+        }
+        if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+            if (target instanceof Player) {
+                tame.setTarget(null);
+                return;
+            }
+            if (target instanceof TamableAnimal targetTame && targetTame.isTame()) {
+                tame.setTarget(null);
+                return;
+            }
         }
         if (TameDuelManager.isTameInDuel(tame.getUUID())) {
             if (target instanceof TamableAnimal targetTame && targetTame.isTame()

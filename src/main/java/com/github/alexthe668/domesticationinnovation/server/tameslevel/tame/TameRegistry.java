@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.TamableAnimal;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 public class TameRegistry {
 
     public static final Map<UUID, TameData> TAMES = new HashMap<>();
+    private static final Map<UUID, TameData> TL_IDS = new HashMap<>();
     private static final Map<UUID, Set<UUID>> OWNER_TO_TAMES = new HashMap<>();
     public static final Map<UUID, TameDeathRecord> LAST_DEATHS = new HashMap<>();
     public static final List<TameDeathRecord> DEATH_HISTORY = new ArrayList<>();
@@ -34,6 +36,17 @@ public class TameRegistry {
 
         TAMES.clear();
         TAMES.putAll(savedData.getTames());
+        boolean changed = false;
+        for (TameData data : TAMES.values()) {
+            if (data == null) {
+                continue;
+            }
+            UUID before = data.tlId;
+            data.ensureTlId();
+            if (!Objects.equals(before, data.tlId)) {
+                changed = true;
+            }
+        }
         rebuildIndexes();
         LAST_DEATHS.clear();
         LAST_DEATHS.putAll(savedData.getLastDeaths());
@@ -43,6 +56,9 @@ public class TameRegistry {
         APPROVED_REINCARNATE_ITEMS.addAll(savedData.getApprovedReincarnateItems());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
+            changed = true;
+        }
+        if (changed) {
             markDirty();
         }
     }
@@ -51,6 +67,7 @@ public class TameRegistry {
         if (data == null || data.uuid == null) {
             return;
         }
+        data.ensureTlId();
         TameData previous = TAMES.put(data.uuid, data);
         if (previous != null) {
             removeFromIndexes(previous);
@@ -61,6 +78,13 @@ public class TameRegistry {
 
     public static TameData get(UUID id) {
         return TAMES.get(id);
+    }
+
+    public static TameData getByTlId(UUID tlId) {
+        if (tlId == null) {
+            return null;
+        }
+        return TL_IDS.get(tlId);
     }
 
     public static void remove(UUID id) {
@@ -127,6 +151,12 @@ public class TameRegistry {
         if (record == null || record.uuid == null) {
             return;
         }
+        if (record.tlId == null) {
+            TameData data = get(record.uuid);
+            if (data != null) {
+                record.tlId = data.ensureTlId();
+            }
+        }
         LAST_DEATHS.put(record.uuid, record);
         DEATH_HISTORY.add(record);
         markDirty();
@@ -151,7 +181,94 @@ public class TameRegistry {
         return savedData != null;
     }
 
+    public static void bindEntityToData(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return;
+        }
+        data.ensureTlId();
+        TameData.syncTlIdToEntity(tame, data.tlId);
+    }
+
+    public static void rebindEntityUuid(TameData data, UUID newUuid) {
+        if (data == null || newUuid == null) {
+            return;
+        }
+        UUID oldUuid = data.uuid;
+        if (Objects.equals(oldUuid, newUuid)) {
+            return;
+        }
+        if (oldUuid != null) {
+            TameData previous = TAMES.remove(oldUuid);
+            if (previous != null) {
+                removeFromIndexes(previous);
+            }
+        }
+        data.uuid = newUuid;
+        TAMES.put(newUuid, data);
+        addToIndexes(data);
+    }
+
+    public static TameDeathRecord getLastDeath(TameData data) {
+        if (data == null) {
+            return null;
+        }
+        TameDeathRecord byUuid = data.uuid == null ? null : LAST_DEATHS.get(data.uuid);
+        if (byUuid != null) {
+            return byUuid;
+        }
+        UUID tlId = data.tlId;
+        if (tlId == null) {
+            return null;
+        }
+        for (TameDeathRecord record : LAST_DEATHS.values()) {
+            if (record != null && tlId.equals(record.tlId)) {
+                return record;
+            }
+        }
+        return null;
+    }
+
+    public static boolean removeLastDeath(TameDeathRecord target) {
+        if (target == null) {
+            return false;
+        }
+        boolean removed = false;
+        if (target.uuid != null) {
+            TameDeathRecord mapped = LAST_DEATHS.get(target.uuid);
+            if (mapped == target) {
+                LAST_DEATHS.remove(target.uuid);
+                removed = true;
+            }
+        }
+        if (!removed && target.tlId != null) {
+            int before = LAST_DEATHS.size();
+            LAST_DEATHS.entrySet().removeIf(e -> {
+                TameDeathRecord record = e.getValue();
+                return record == target || (record != null && target.tlId.equals(record.tlId));
+            });
+            removed = before != LAST_DEATHS.size();
+        }
+        return removed;
+    }
+
+    public static int removeDeathsForIdentity(UUID uuid, UUID tlId) {
+        int removed = 0;
+        if (uuid != null && LAST_DEATHS.remove(uuid) != null) {
+            removed++;
+        }
+        if (tlId != null) {
+            int before = LAST_DEATHS.size();
+            LAST_DEATHS.entrySet().removeIf(e -> {
+                TameDeathRecord record = e.getValue();
+                return record != null && tlId.equals(record.tlId);
+            });
+            removed += Math.max(0, before - LAST_DEATHS.size());
+        }
+        return removed;
+    }
+
     private static void rebuildIndexes() {
+        TL_IDS.clear();
         OWNER_TO_TAMES.clear();
         for (TameData data : TAMES.values()) {
             addToIndexes(data);
@@ -162,6 +279,12 @@ public class TameRegistry {
         if (data == null || data.uuid == null) {
             return;
         }
+        data.ensureTlId();
+        TameData conflictingTlId = TL_IDS.get(data.tlId);
+        if (conflictingTlId != null && conflictingTlId != data) {
+            data.tlId = UUID.randomUUID();
+        }
+        TL_IDS.put(data.tlId, data);
         if (data.ownerUUID != null) {
             OWNER_TO_TAMES.computeIfAbsent(data.ownerUUID, k -> new HashSet<>()).add(data.uuid);
         }
@@ -170,6 +293,12 @@ public class TameRegistry {
     private static void removeFromIndexes(TameData data) {
         if (data == null || data.uuid == null) {
             return;
+        }
+        if (data.tlId != null) {
+            TameData current = TL_IDS.get(data.tlId);
+            if (current == data) {
+                TL_IDS.remove(data.tlId);
+            }
         }
         if (data.ownerUUID == null) {
             return;

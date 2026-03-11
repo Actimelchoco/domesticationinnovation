@@ -4,6 +4,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
@@ -87,6 +88,7 @@ public class TameCombatEvents {
 
     @SubscribeEvent
     public static void onTameDeath(LivingDeathEvent event) {
+        if (event.isCanceled()) return;
 
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
@@ -97,6 +99,8 @@ public class TameCombatEvents {
         TameData data = TameRegistry.get(tame.getUUID());
         if (data != null) {
             String deathMessage = event.getSource().getLocalizedDeathMessage(tame).getString();
+            TameDeathRecord deathRecord = TameDeathRecord.fromTame(data, tame, tame.level().getGameTime());
+            TameRegistry.archiveDeath(deathRecord);
             // Reincarnation is disabled; keep the live registry row so DI respawn
             // can continue with the same tame progress and bonuses.
             if (data.entitySnapshot != null) {

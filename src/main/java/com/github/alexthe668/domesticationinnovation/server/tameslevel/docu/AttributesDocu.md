@@ -55,6 +55,26 @@
   - Level scaling: threshold starts at `100` target max HP and decreases by `10` per level (min `10`).
   - Per threshold stack, tame gets short Strength + Resistance + Speed buffs.
 
+- `victim_siphon`
+  - Trigger: on kill.
+  - Level scaling: heal = `5% * level` of the victim's max HP, capped at `50%`.
+  - Class weight: high chance for `ASSASSIN`.
+  - Numeric example:
+    - L1: heal `5%` of victim max HP
+    - L5: heal `25%`
+    - L10+: heal `50%` cap
+
+- `pierce`
+  - Activation chance: `100%` on hit.
+  - Effect: ignores part of the target's armor.
+  - Class weight: mid chance for `ASSASSIN`, high chance for `DPS`.
+  - Level scaling:
+    - L1: `50%` armor pierce
+    - L2: `62.5%`
+    - L3: `75%`
+    - L4: `87.5%`
+    - L5+: `100%`
+
 - `sweeping_edge`
   - Activation chance: `100%` on hit.
   - Level scaling: splash radius and splash damage multiplier both increase with level.

@@ -32,9 +32,24 @@ public class TameSpawnEvents {
         // Always ensure goals are present for loaded tames, even if already registered.
         TameGoalInstaller.installIfMissing(tame);
 
+        UUID entityTlId = TameData.readOrCreateTlId(tame);
+
         // Normal dimension travel can temporarily expose the same UUID during transfer;
-        // if already tracked, never discard the newly joined entity here.
-        if (TameRegistry.get(tame.getUUID()) != null) return;
+        // if already tracked, bind identity tags and never discard the newly joined entity here.
+        TameData existingByUuid = TameRegistry.get(tame.getUUID());
+        if (existingByUuid != null) {
+            TameRegistry.bindEntityToData(tame, existingByUuid);
+            return;
+        }
+
+        TameData existingByTlId = TameRegistry.getByTlId(entityTlId);
+        if (existingByTlId != null) {
+            TamableAnimal loadedByTlId = findOtherLoadedByTlId(tame, entityTlId);
+            if (loadedByTlId != null) {
+                tame.discard();
+                return;
+            }
+        }
 
         TamableAnimal existing = findOtherLoadedByUuid(tame);
         if (existing != null) {
@@ -59,9 +74,14 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onTamed(AnimalTameEvent event) {
         if (!(event.getAnimal() instanceof TamableAnimal tame)) return;
+        if (event.getTamer() != null && tame.getOwnerUUID() == null) {
+            // Ensure owner is available before registry dead-entry matching.
+            tame.setOwnerUUID(event.getTamer().getUUID());
+        }
 
-        // Fresh taming must not reuse dead registry entries by name/type.
-        TameData data = registerOrRestoreTame(tame, true, false);
+        // Allow dead-entry identity sync so reincarnation can consume dead rows
+        // instead of creating a second live entry with the same base identity.
+        TameData data = registerOrRestoreTame(tame, true, true);
         if (data == null) return;
         boolean changed = false;
         if (event.getTamer() != null) {
@@ -95,6 +115,7 @@ public class TameSpawnEvents {
 
     public static TameData registerOrRestoreTame(TamableAnimal tame, boolean notifyClassIfNew, boolean allowDeadIdentitySync) {
         if (tame == null || !tame.isTame()) return null;
+        UUID entityTlId = TameData.readOrCreateTlId(tame);
         TameData existing = TameRegistry.get(tame.getUUID());
         if (existing != null) {
             boolean changed = false;
@@ -114,7 +135,35 @@ public class TameSpawnEvents {
             if (changed) {
                 TameRegistry.markDirty();
             }
+            // Keep entity attributes in sync with registry bonuses whenever a tracked tame loads.
+            TameRegistry.bindEntityToData(tame, existing);
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, existing);
             return existing;
+        }
+
+        TameData existingByTlId = TameRegistry.getByTlId(entityTlId);
+        if (existingByTlId != null) {
+            TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
+            TameRegistry.bindEntityToData(tame, existingByTlId);
+            boolean changed = false;
+            if (existingByTlId.dead) {
+                existingByTlId.dead = false;
+                existingByTlId.deadGameTime = 0L;
+                existingByTlId.deadUnixMillis = 0L;
+                existingByTlId.deathDimension = "";
+                existingByTlId.deathX = 0;
+                existingByTlId.deathY = 0;
+                existingByTlId.deathZ = 0;
+                changed = true;
+            }
+            if (TameBedRegistrySync.syncFromEntity(tame, existingByTlId)) {
+                changed = true;
+            }
+            if (changed) {
+                TameRegistry.markDirty();
+            }
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
+            return existingByTlId;
         }
 
         ParsedName parsed = parseName(tame);
@@ -135,7 +184,9 @@ public class TameSpawnEvents {
         data.name = uniqueLoadedNameFor(tame, data.name);
         TameBedRegistrySync.syncFromEntity(tame, data);
         TameRegistry.register(data);
+        TameRegistry.bindEntityToData(tame, data);
         LevelSystem.ensureClassAssigned(tame, data, notifyClassIfNew);
+        LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
         System.out.println("[TamesLevel] Registered tame: " + data.name);
         return data;
     }
@@ -161,14 +212,15 @@ public class TameSpawnEvents {
         if (candidate == null) return null;
 
         UUID oldUuid = candidate.uuid;
-        candidate.uuid = newUuid;
         if (candidate.ownerUUID == null) {
             candidate.ownerUUID = ownerId;
         }
         // Normalize back to base name if spawn item carried [Lvl X] prefix.
         candidate.name = uniqueLoadedNameFor(tame, parsed.baseName);
-        TameRegistry.TAMES.remove(oldUuid);
-        TameRegistry.register(candidate);
+        TameRegistry.rebindEntityUuid(candidate, newUuid);
+        TameRegistry.bindEntityToData(tame, candidate);
+        TameRegistry.markDirty();
+        LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
         System.out.println("[TamesLevel] Synced tame entry by [Lvl] name match: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
@@ -209,7 +261,6 @@ public class TameSpawnEvents {
         if (candidate == null) return null;
 
         UUID oldUuid = candidate.uuid;
-        candidate.uuid = newUuid;
         candidate.dead = false;
         candidate.deadGameTime = 0L;
         candidate.deadUnixMillis = 0L;
@@ -220,8 +271,10 @@ public class TameSpawnEvents {
         candidate.name = uniqueLoadedNameFor(tame, stripLevelPrefixes(candidate.name));
         TameBedRegistrySync.syncFromEntity(tame, candidate);
 
-        TameRegistry.TAMES.remove(oldUuid);
-        TameRegistry.register(candidate);
+        TameRegistry.rebindEntityUuid(candidate, newUuid);
+        TameRegistry.bindEntityToData(tame, candidate);
+        TameRegistry.markDirty();
+        LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
         System.out.println("[TamesLevel] Synced respawned tame to dead entry: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
@@ -275,6 +328,20 @@ public class TameSpawnEvents {
             var found = level.getEntity(uuid);
             if (found instanceof TamableAnimal other && other != context) {
                 return other;
+            }
+        }
+        return null;
+    }
+
+    private static TamableAnimal findOtherLoadedByTlId(TamableAnimal context, UUID tlId) {
+        if (context == null || tlId == null || context.level() == null || context.level().getServer() == null) return null;
+        for (var level : context.level().getServer().getAllLevels()) {
+            for (var entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal other) || other == context) continue;
+                UUID otherTlId = TameData.getTlId(other);
+                if (tlId.equals(otherTlId)) {
+                    return other;
+                }
             }
         }
         return null;

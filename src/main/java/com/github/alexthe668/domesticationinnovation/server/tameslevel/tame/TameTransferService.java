@@ -64,6 +64,7 @@ public final class TameTransferService {
                 moved.moveTo(pos[0], pos[1], pos[2], player.getYRot(), player.getXRot());
                 moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
+                TameRegistry.bindEntityToData(moved, data);
                 moved.setTarget(null);
                 moved.getNavigation().stop();
                 moved.setOrderedToSit(false);
@@ -144,6 +145,7 @@ public final class TameTransferService {
                 moved.moveTo(pos[0], pos[1], pos[2], yRot, xRot);
                 moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
+                TameRegistry.bindEntityToData(moved, data);
                 moved.setTarget(null);
                 moved.getNavigation().stop();
                 moved.setOrderedToSit(false);
@@ -197,6 +199,7 @@ public final class TameTransferService {
         data.lastKnownZ = tame.blockPosition().getZ();
         data.lastKnownGameTime = level.getGameTime();
         CompoundTag refreshedSnapshot = new CompoundTag();
+        TameRegistry.bindEntityToData(tame, data);
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
         TameRegistry.markDirty();

@@ -1,10 +1,10 @@
 package com.github.alexthe668.domesticationinnovation.server.block;
 
-import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.misc.RespawnRequest;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
@@ -15,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -43,7 +44,7 @@ public class PetBedBlockEntity extends BlockEntity {
                         data.removeRespawnRequest(request);
                         continue;
                     }
-                    if(addAndRemoveEntity(level, pos, state.getValue(PetBedBlock.FACING), request)){
+                    if(addAndRemoveEntity(level, pos, state.getValue(PetBedBlock.FACING), request, tameData)){
                         data.removeRespawnRequest(request);
                     }
                }
@@ -64,46 +65,27 @@ public class PetBedBlockEntity extends BlockEntity {
         }
     }
 
-    private static boolean addAndRemoveEntity(Level level, BlockPos pos, Direction dir, RespawnRequest request) {
-        EntityType type = request.getEntityType();
-        if(type != null && DomesticationMod.CONFIG.petBedRespawns.get()){
-            Entity entity = type.create(level);
-            if(entity instanceof LivingEntity living){
-                living.readAdditionalSaveData(request.getEntityData());
-                living.setPos(Vec3.upFromBottomCenterOf(pos, 0.8F));
-                living.setHealth(living.getMaxHealth());
-                if(!request.getNametag().isEmpty()){
-                    living.setCustomName(Component.translatable(request.getNametag()));
-                }
-                switch (dir){
-                    case NORTH:
-                        living.setYRot(180);
-                        break;
-                    case EAST:
-                        living.setYRot(-90);
-                        break;
-                    case SOUTH:
-                        living.setYRot(0);
-                        break;
-                    case WEST:
-                        living.setYRot(90);
-                        break;
-                }
-                if(living instanceof IComandableMob){
-                    ((IComandableMob) living).setCommand(1);
-                }
-                if(living instanceof TamableAnimal){
-                    ((TamableAnimal)living).setOrderedToSit(true);
-                }
-                level.addFreshEntity(living);
-                Entity owner = TameableUtils.getOwnerOf(entity);
-                if(owner instanceof Player){
-                    ((Player)owner).displayClientMessage(Component.translatable("message.domesticationinnovation.respawn", entity.getName()), false);
-                }
-                return true;
-            }
+    private static boolean addAndRemoveEntity(Level level, BlockPos pos, Direction dir, RespawnRequest request, TameData tameData) {
+        UUID requestUuid = readRequestUuid(request);
+        UUID requestTlId = readRequestTlId(request);
+        if (requestUuid != null && isEntityAliveAnywhere(level, requestUuid)) {
+            return true;
         }
-        return false;
+        if (requestTlId != null && isTlEntityAliveAnywhere(level, requestTlId)) {
+            return true;
+        }
+        if (!DomesticationMod.CONFIG.petBedRespawns.get() || !(level instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+        if (!TameCommands.respawnDeadTameAtBed(serverLevel, pos, dir, tameData)) {
+            return false;
+        }
+        Entity spawned = tameData != null && tameData.uuid != null ? serverLevel.getEntity(tameData.uuid) : null;
+        Entity owner = spawned == null ? null : TameableUtils.getOwnerOf(spawned);
+        if (owner instanceof Player player && spawned != null) {
+            player.displayClientMessage(Component.translatable("message.domesticationinnovation.respawn", spawned.getName()), false);
+        }
+        return true;
     }
 
     @Nullable
@@ -111,17 +93,75 @@ public class PetBedBlockEntity extends BlockEntity {
         if (request == null) {
             return null;
         }
+        UUID tlId = readRequestTlId(request);
+        if (tlId != null) {
+            TameData byTlId = TameRegistry.getByTlId(tlId);
+            if (byTlId != null) {
+                return byTlId;
+            }
+        }
+        UUID uuid = readRequestUuid(request);
+        return uuid == null ? null : TameRegistry.get(uuid);
+    }
+
+    @Nullable
+    private static UUID readRequestUuid(RespawnRequest request) {
+        if (request == null) {
+            return null;
+        }
         CompoundTag entityData = request.getEntityData();
         if (entityData == null) {
             return null;
         }
-        UUID uuid = null;
         if (entityData.hasUUID("TLRegistryUUID")) {
-            uuid = entityData.getUUID("TLRegistryUUID");
-        } else if (entityData.contains("UUID", Tag.TAG_INT_ARRAY) && entityData.hasUUID("UUID")) {
-            uuid = entityData.getUUID("UUID");
+            return entityData.getUUID("TLRegistryUUID");
         }
-        return uuid == null ? null : TameRegistry.get(uuid);
+        if (entityData.contains("UUID", Tag.TAG_INT_ARRAY) && entityData.hasUUID("UUID")) {
+            return entityData.getUUID("UUID");
+        }
+        return null;
+    }
+
+    @Nullable
+    private static UUID readRequestTlId(RespawnRequest request) {
+        if (request == null) {
+            return null;
+        }
+        CompoundTag entityData = request.getEntityData();
+        if (entityData == null) {
+            return null;
+        }
+        return entityData.hasUUID("TLID") ? entityData.getUUID("TLID") : null;
+    }
+
+    private static boolean isEntityAliveAnywhere(Level level, UUID uuid) {
+        if (level == null || level.getServer() == null || uuid == null) {
+            return false;
+        }
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            Entity loaded = serverLevel.getEntity(uuid);
+            if (loaded instanceof LivingEntity living && living.isAlive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isTlEntityAliveAnywhere(Level level, UUID tlId) {
+        if (level == null || level.getServer() == null || tlId == null) {
+            return false;
+        }
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            for (Entity loaded : serverLevel.getAllEntities()) {
+                if (!(loaded instanceof LivingEntity living) || !living.isAlive()) {
+                    continue;
+                }
+                if (loaded instanceof TamableAnimal tame && tlId.equals(TameData.getTlId(tame))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public void resetBedsForNearbyPets() {

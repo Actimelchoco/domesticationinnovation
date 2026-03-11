@@ -75,6 +75,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.EnchantmentInstance;
@@ -215,15 +216,6 @@ public class CommonProxy {
         if (event.getEntity() instanceof LivingEntity living) {
             if (living.getPersistentData().getBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG)) {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
-            } else
-            if (!living.level().isClientSide && living.isAlive() && TameableUtils.isTamed(living) && TameableUtils.shouldUnloadToLantern(living)) {
-                UUID ownerUUID = TameableUtils.getOwnerUUIDOf(event.getEntity());
-                String saveName = event.getEntity().hasCustomName() ? event.getEntity().getCustomName().getString() : "";
-                DIWorldData data = DIWorldData.get(living.level());
-                if (data != null) {
-                    LanternRequest request = new LanternRequest(living.getUUID(), ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType()).toString(), ownerUUID, living.blockPosition(), event.getEntity().level().dayTime(), saveName);
-                    data.addLanternRequest(request);
-                }
             }
             if (TameableUtils.couldBeTamed(living) && TameableUtils.hasEnchant(living, DIEnchantmentRegistry.HEALTH_BOOST)) {
                 TameableUtils.setSafePetHealth(living, living.getHealth());
@@ -700,7 +692,7 @@ public class CommonProxy {
     public void onLivingHurt(LivingAttackEvent event) {
         if (TameableUtils.isTamed(event.getEntity()) && !event.getSource().is(DIDamageTypes.SIPHON)) {
             boolean flag = false;
-            int thornsLevel = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.THORNS);
+            int thornsLevel = 0;
             if (thornsLevel > 0 && event.getSource().getEntity() instanceof LivingEntity attacker && !TameableUtils.hasSameOwnerAs(attacker, event.getEntity())) {
                 float chance = Math.min(1.0F, 0.15F * thornsLevel);
                 if (event.getEntity().getRandom().nextFloat() < chance) {
@@ -874,54 +866,13 @@ public class CommonProxy {
         if (!TameableUtils.isTamed(event.getEntity())) {
             return;
         }
-        if (event.getAmount() <= 0.0F) {
-            return;
-        }
-
-        int allProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION);
-        int fireProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.FIRE_PROTECTION);
-        int blastProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.BLAST_PROTECTION);
-        int projectileProt = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.PROJECTILE_PROTECTION);
-        int featherFalling = TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.FALL_PROTECTION);
-
-        int epf = allProt;
-        if (event.getSource().is(DamageTypeTags.IS_FIRE)) {
-            epf += fireProt * 2;
-        }
-        if (event.getSource().is(DamageTypeTags.IS_EXPLOSION)) {
-            epf += blastProt * 2;
-        }
-        if (event.getSource().is(DamageTypeTags.IS_PROJECTILE)) {
-            epf += projectileProt * 2;
-        }
-        if (event.getSource().is(DamageTypeTags.IS_FALL)) {
-            epf += featherFalling * 3;
-        }
-        epf = Mth.clamp(epf, 0, 20);
-        if (epf <= 0) {
-            return;
-        }
-
-        float reduced = event.getAmount() * (1.0F - (epf / 25.0F));
-        event.setAmount(Math.max(0.0F, reduced));
+        // Protection is now represented as direct armor/armor_toughness scaling on collar tags.
+        // Keep vanilla armor formula as the single source of truth and avoid extra EPF-style reduction.
     }
 
     @SubscribeEvent
     public void onLivingDie(LivingDeathEvent event) {
         if (TameableUtils.isTamed(event.getEntity()) && !TameableUtils.isZombiePet(event.getEntity())) {
-
-            BlockPos bedPos = TameableUtils.getPetBedPos(event.getEntity());
-            if (bedPos != null) {
-                CompoundTag data = new CompoundTag();
-                event.getEntity().addAdditionalSaveData(data);
-                data.putUUID("TLRegistryUUID", event.getEntity().getUUID());
-                String saveName = event.getEntity().hasCustomName() ? event.getEntity().getCustomName().getString() : "";
-                RespawnRequest request = new RespawnRequest(ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType()).toString(), TameableUtils.getPetBedDimension(event.getEntity()), data, bedPos, event.getEntity().level().dayTime(), saveName);
-                DIWorldData worldData = DIWorldData.get(event.getEntity().level());
-                if (worldData != null) {
-                    worldData.addRespawnRequest(request);
-                }
-            }
             if (!(event.getEntity() instanceof TamableAnimal)) {
                 Entity owner = TameableUtils.getOwnerOf(event.getEntity());
                 if (!event.getEntity().level().isClientSide && event.getEntity().level().getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES) && owner instanceof ServerPlayer) {
@@ -1068,7 +1019,7 @@ public class CommonProxy {
         if (event.getTarget() instanceof LivingEntity living && TameableUtils.isPetOf(event.getEntity(), entity) && !living.getType().is(DITagRegistry.REFUSES_COLLAR_TAGS)) {
             if (event.getItemStack().is(DIItemRegistry.COLLAR_TAG.get()) && DomesticationMod.CONFIG.collarTag.get()) {
                 if (!event.getEntity().level().isClientSide && living.isAlive()) {
-                    Map<Enchantment, Integer> itemEnchantments = EnchantmentHelper.deserializeEnchantments(stack.getEnchantmentTags());
+                    Map<Enchantment, Integer> itemEnchantments = readAnvilEnchantments(stack);
                     Map<ResourceLocation, Integer> entityEnchantments = TameableUtils.getEnchants(living);
                     if (stack.hasCustomHoverName() && living.hasCustomName() && stack.getHoverName().equals(living.getCustomName())) {
                         boolean hasSameEnchants = itemEnchantments.isEmpty();
@@ -1339,61 +1290,24 @@ public class CommonProxy {
     @SubscribeEvent
     public void onUpdateAnvil(AnvilUpdateEvent event) {
         if (event.getLeft().is(DIItemRegistry.COLLAR_TAG.get())) {
-            Map<Enchantment, Integer> base = EnchantmentHelper.getEnchantments(event.getLeft());
-            Map<Enchantment, Integer> incoming = EnchantmentHelper.getEnchantments(event.getRight());
-            if (incoming.isEmpty()) {
-                return;
-            }
-
-            base.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
-            incoming.entrySet().removeIf(entry -> !DIEnchantmentRegistry.isAllowedCollarTagEnchantment(entry.getKey()));
-            if (incoming.isEmpty()) {
-                return;
-            }
-
-            int totalCost = 0;
-            boolean changed = false;
-            for (Map.Entry<Enchantment, Integer> entry : incoming.entrySet()) {
-                Enchantment enchantment = entry.getKey();
-                int incomingLevel = entry.getValue();
-                int currentLevel = base.getOrDefault(enchantment, 0);
-                int targetLevel = currentLevel == incomingLevel ? incomingLevel + 1 : Math.max(incomingLevel, currentLevel);
-                targetLevel = Math.min(targetLevel, enchantment.getMaxLevel());
-                if (targetLevel <= currentLevel) {
-                    continue;
-                }
-
-                boolean compatible = true;
-                for (Enchantment existing : base.keySet()) {
-                    if (existing != enchantment && !enchantment.isCompatibleWith(existing)) {
-                        compatible = false;
-                        break;
-                    }
-                }
-                if (!compatible) {
-                    continue;
-                }
-
-                base.put(enchantment, targetLevel);
-                changed = true;
-                int rarityCost = switch (enchantment.getRarity()) {
-                    case COMMON -> 1;
-                    case UNCOMMON -> 2;
-                    case RARE -> 4;
-                    case VERY_RARE -> 8;
-                };
-                totalCost += rarityCost * targetLevel;
-            }
-
-            if (!changed) {
-                return;
-            }
-
-            ItemStack copy = event.getLeft().copy();
-            EnchantmentHelper.setEnchantments(base, copy);
-            event.setOutput(copy);
-            event.setCost(Math.max(1, totalCost));
+            event.setOutput(ItemStack.EMPTY);
+            event.setCost(0);
+            event.setMaterialCost(0);
         }
+    }
+
+    private static Map<Enchantment, Integer> readAnvilEnchantments(ItemStack stack) {
+        Map<Enchantment, Integer> enchants = new HashMap<>(EnchantmentHelper.getEnchantments(stack));
+        if (stack.is(Items.ENCHANTED_BOOK)) {
+            Map<Enchantment, Integer> stored = EnchantmentHelper.deserializeEnchantments(EnchantedBookItem.getEnchantments(stack));
+            for (Map.Entry<Enchantment, Integer> entry : stored.entrySet()) {
+                int prev = enchants.getOrDefault(entry.getKey(), 0);
+                if (entry.getValue() > prev) {
+                    enchants.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        return enchants;
     }
 
     private static int diList(CommandSourceStack source) {
@@ -1478,7 +1392,6 @@ public class CommonProxy {
         receiver.sendSystemMessage(Component.literal("K " + Math.max(0, d.getInt("kills")) + "  A " + Math.max(0, d.getInt("assists")) + "  D " + Math.max(0, d.getInt("deaths"))).withStyle(ChatFormatting.AQUA));
         receiver.sendSystemMessage(Component.literal("Mode " + modeKeyById(d.getInt("mode")) + "  Class " + tameClassName(d)).withStyle(ChatFormatting.GREEN));
         receiver.sendSystemMessage(Component.literal("Group " + (d.getString("group").isBlank() ? "-" : d.getString("group"))).withStyle(ChatFormatting.DARK_GREEN));
-        receiver.sendSystemMessage(Component.literal("Reincarnate eligible " + (d.getBoolean("hasSavedProgress") ? "yes (" + Math.max(0, d.getInt("savedProgressCost")) + "xp)" : "no")).withStyle(ChatFormatting.LIGHT_PURPLE));
         if (!detailed) {
             return;
         }
@@ -1500,11 +1413,6 @@ public class CommonProxy {
                 + " KB+" + fmt(d.getDouble("bonusKnockback")) + " KBR+" + fmt(d.getDouble("bonusKnockbackResist"))).withStyle(ChatFormatting.GRAY));
         receiver.sendSystemMessage(Component.literal("Attributes: " + formatLevelsCompact(d.getCompound("attributeLevels"))).withStyle(ChatFormatting.LIGHT_PURPLE));
         receiver.sendSystemMessage(Component.literal("Abilities: " + formatLevelsCompact(d.getCompound("abilityLevels"))).withStyle(ChatFormatting.BLUE));
-        if (d.getBoolean("hasProtectionZone")) {
-            receiver.sendSystemMessage(Component.literal("Zone " + d.getString("protectionDimension") + " @ " + d.getInt("protectionX") + " " + d.getInt("protectionY") + " " + d.getInt("protectionZ") + " r=" + d.getInt("protectionRadius")).withStyle(ChatFormatting.DARK_AQUA));
-        } else {
-            receiver.sendSystemMessage(Component.literal("Zone none").withStyle(ChatFormatting.DARK_AQUA));
-        }
     }
 
     private static CompletableFuture<Suggestions> suggestOwnedTameNames(CommandSourceStack source, SuggestionsBuilder builder) {
@@ -2039,7 +1947,7 @@ public class CommonProxy {
         int enchantLevel = switch (abilityId) {
             case "immunity_frame" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.IMMUNITY_FRAME);
             case "deflection" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFLECTION);
-            case "shadow_hands" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.SHADOW_HANDS);
+            case "shadow_hands" -> 0;
             case "psychic_wall" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.PSYCHIC_WALL);
             case "healing_aura" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.HEALING_AURA);
             case "defusal" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFUSAL);

@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Play
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -90,6 +91,8 @@ public class LevelSystem {
         MAGNETIC("magnetic", Integer.MAX_VALUE),
         LINKED_INVENTORY("linked_inventory", 1),
         HEALTH_SIPHON("health_siphon", Integer.MAX_VALUE),
+        VICTIM_SIPHON("victim_siphon", Integer.MAX_VALUE),
+        PIERCE("pierce", Integer.MAX_VALUE),
         BUBBLING("bubbling", Integer.MAX_VALUE),
         HERDING("herding", Integer.MAX_VALUE),
         AMPHIBIOUS("amphibious", 1),
@@ -465,36 +468,6 @@ public class LevelSystem {
 
         if (data.tameClass != null) {
             switch (data.tameClass) {
-                case TANKER -> {
-                    baseMult = 1.40D;
-                    attributeMult = 0.65D;
-                    abilityMult = 0.50D;
-                }
-                case DPS -> {
-                    baseMult = 1.30D;
-                    attributeMult = 0.70D;
-                    abilityMult = 0.80D;
-                }
-                case ASSASSIN -> {
-                    baseMult = 1.25D;
-                    attributeMult = 0.75D;
-                    abilityMult = 1.15D;
-                }
-                case PROTECTOR -> {
-                    baseMult = 1.20D;
-                    attributeMult = 1.20D;
-                    abilityMult = 0.75D;
-                }
-                case MAGE -> {
-                    baseMult = 0.60D;
-                    attributeMult = 1.20D;
-                    abilityMult = 2.80D;
-                }
-                case SHOOTER -> {
-                    baseMult = 0.90D;
-                    attributeMult = 0.80D;
-                    abilityMult = 1.80D;
-                }
                 case MANIAC -> {
                     baseMult = 0.45D;
                     attributeMult = 0.90D;
@@ -504,6 +477,8 @@ public class LevelSystem {
                     baseMult = 0.35D;
                     attributeMult = 3.50D;
                     abilityMult = 0.55D;
+                }
+                default -> {
                 }
             }
         }
@@ -727,33 +702,9 @@ public class LevelSystem {
         }
 
         return switch (tameClass) {
-            case TANKER -> switch (reward) {
-                case HP -> base * 3.0D;
-                case ARMOR, ARMOR_TOUGHNESS -> base * 3.0D;
-                default -> base;
-            };
-            case DPS -> switch (reward) {
-                case DAMAGE -> base * 3.0D;
-                default -> base;
-            };
-            case ASSASSIN -> switch (reward) {
-                case SPEED, DAMAGE -> base * 2.8D;
-                default -> base;
-            };
-            case PROTECTOR -> switch (reward) {
-                case SPEED, KNOCKBACK, KNOCKBACK_RESIST -> base * 2.8D;
-                default -> base;
-            };
-            case MAGE -> switch (reward) {
-                case SPEED -> base * 0.8D;
-                default -> base * 0.7D;
-            };
-            case SHOOTER -> switch (reward) {
-                case DAMAGE, SPEED -> base * 1.8D;
-                default -> base;
-            };
             case MANIAC -> base * 0.50D;
             case ATTRIBUTER -> base * 0.40D;
+            default -> base;
         };
     }
 
@@ -762,85 +713,24 @@ public class LevelSystem {
         if (tameClass == null) {
             return base;
         }
-
-        return switch (tameClass) {
-            case ATTRIBUTER -> base * 3.5D;
-            case MANIAC -> base * 1.8D;
-            case TANKER -> switch (reward) {
-                case RESISTANCE -> base * 4.6D;
-                case REGENERATION -> base * 4.2D;
-                case FIRE_RESISTANCE -> base * 3.8D;
-                case POISON_RESISTANCE -> base * 3.8D;
-                case TOTEM -> base * 3.6D;
-                case PACIFIST -> base * 2.8D;
-                case HEALTH_SIPHON -> base * 2.5D;
-                case BLAZING_PROTECTION -> base * 4.0D;
-                default -> base;
-            };
+        double specific = switch (tameClass) {
             case ASSASSIN -> switch (reward) {
-                case SPEED -> base * 3.2D;
-                case STRENGTH -> base * 3.4D;
-                case KILLER -> base * 4.0D;
-                case LIFESTEAL -> base * 3.0D;
-                case REJUVENATION -> base * 4.0D;
-                case FIREFANG -> base * 2.6D;
-                case WITHERFANG -> base * 3.0D;
-                case LIGHTNINGFANG -> base * 1.6D;
-                case CHAIN_LIGHTNING -> base * 4.0D;
-                case FROST_FANG -> base * 2.6D;
-                case MAGNETIC -> base * 4.0D;
-                case BUBBLING -> base * 2.5D;
-                case AMPHIBIOUS -> base * 4.0D;
-                case VOID_CLOUD -> base * 2.5D;
-                case WARPING_BITE -> base * 4.0D;
-                case MUFFLED -> base * 1.5D;
-                default -> base;
+                case VICTIM_SIPHON -> 4.0D;
+                case PIERCE -> 2.5D;
+                default -> 1.0D;
             };
             case DPS -> switch (reward) {
-                case STRENGTH -> base * 4.0D;
-                case ABILITY_POWER -> base * 3.2D;
-                case KILLER -> base * 3.4D;
-                case LIFESTEAL -> base * 2.8D;
-                case FIREFANG -> base * 3.0D;
-                case LIGHTNINGFANG -> base * 1.6D;
-                case SWEEPING_EDGE -> base * 4.0D;
-                case CHAIN_LIGHTNING -> base * 2.5D;
-                default -> base;
+                case PIERCE -> 4.0D;
+                default -> 1.0D;
             };
-            case PROTECTOR -> switch (reward) {
-                case RESISTANCE -> base * 4.2D;
-                case REGENERATION -> base * 4.0D;
-                case FIRE_RESISTANCE -> base * 3.6D;
-                case POISON_RESISTANCE -> base * 3.6D;
-                case TOTEM -> base * 4.2D;
-                case PACIFIST -> base * 3.2D;
-                case POSITIVE_EFFECT_STEAL -> base * 2.8D;
-                case LINKED_INVENTORY -> base * 2.5D;
-                case HERDING -> base * 2.5D;
-                case CHARISMA -> base * 2.5D;
-                case ORE_SCENTING -> base * 2.5D;
-                default -> base;
-            };
-            case MAGE -> switch (reward) {
-                case ABILITY_POWER -> base * 4.2D;
-                case REJUVENATION -> base * 2.5D;
-                case LIGHTNINGFANG -> base * 3.2D;
-                case WITHERFANG -> base * 3.2D;
-                case FIREFANG -> base * 3.0D;
-                case NEGATIVE_EFFECT_TRANSFER -> base * 3.2D;
-                case POSITIVE_EFFECT_STEAL -> base * 2.6D;
-                case CHAIN_LIGHTNING -> base * 2.5D;
-                default -> base;
-            };
-            case SHOOTER -> switch (reward) {
-                case SPEED -> base * 3.4D;
-                case STRENGTH -> base * 3.0D;
-                case KILLER -> base * 3.2D;
-                case LIGHTNINGFANG -> base * 2.6D;
-                case FIREFANG -> base * 2.6D;
-                default -> base;
-            };
+            default -> 1.0D;
         };
+        double classMultiplier = switch (tameClass) {
+            case ATTRIBUTER -> 3.5D;
+            case MANIAC -> 1.8D;
+            default -> 1.0D;
+        };
+        return base * specific * classMultiplier;
     }
 
     private static double modifiedAbilityWeight(TameClass tameClass, AbilityReward reward) {
@@ -851,81 +741,8 @@ public class LevelSystem {
 
         return switch (tameClass) {
             case MANIAC -> base * 3.0D;
-            case TANKER -> switch (reward) {
-                case DEFENSIVE_AURA -> base * 4.8D;
-                case BERSERKER -> base * 3.7D;
-                case IMMUNITY_FRAME -> base * 7.0D;
-                case DEFLECTION -> base * 4.0D;
-                case DEFUSAL -> base * 7.0D;
-                case GUARDIAN_REPULSE -> base * 4.8D;
-                case LAST_STAND_FURY -> base * 2.8D;
-                case SHIELD_BLOCK -> base * 4.6D;
-                case SKY_LAUNCH -> base * 4.4D;
-                case WARDEN_SCREAM -> base * 1.0D;
-                case EVOKER_FANGS -> base * 1.8D;
-                default -> base;
-            };
-            case ASSASSIN -> switch (reward) {
-                case SHULKER_BULLET -> base * 2.0D;
-                case WITHER_SKULL -> base * 2.4D;
-                case BLOODLUST -> base * 3.6D;
-                case BERSERKER -> base * 3.2D;
-                case ENDER_PEARL_JUMP -> base * 4.2D;
-                case WARDEN_SCREAM -> base * 2.8D;
-                default -> base;
-            };
-            case PROTECTOR -> switch (reward) {
-                case DEFENSIVE_AURA -> base * 4.6D;
-                case BATTLE_STRENGTH -> base * 3.2D;
-                case DEFUSAL -> base * 4.0D;
-                case PSYCHIC_WALL -> base * 4.0D;
-                case HEALING_AURA -> base * 10.0D;
-                case HEALING_BOTTLE -> base * 8.0D;
-                case GUARDIAN_REPULSE -> base * 4.8D;
-                case LAST_STAND_FURY -> base * 4.8D;
-                case SHIELD_BLOCK -> base * 4.6D;
-                case SKY_LAUNCH -> base * 4.4D;
-                case ELDER_GUARDIAN_BEAM -> base * 1.8D;
-                case WARDEN_SCREAM -> base * 1.8D;
-                default -> base;
-            };
-            case DPS -> switch (reward) {
-                case BLOODLUST -> base * 4.2D;
-                case BERSERKER -> base * 3.9D;
-                case ARROW_SHOT -> base * 1.5D;
-                case LIGHTNING_STRIKE -> base * 2.5D;
-                case WARDEN_SCREAM -> base * 1.8D;
-                default -> base;
-            };
-            case MAGE -> switch (reward) {
-                case DRAGON_FIREBALL -> base * 4.6D;
-                case GUARDIAN_BEAM -> base * 4.4D;
-                case ELDER_GUARDIAN_BEAM -> base * 4.2D;
-                case SHADOW_HANDS -> base * 4.0D;
-                case WITHER_SKULL -> base * 4.0D;
-                case EVOKER_FANGS -> base * 3.6D;
-                case HEALING_BOTTLE -> base * 2.2D;
-                case LIGHTNING_STRIKE -> base * 3.6D;
-                case GHAST_FIREBALL -> base * 3.2D;
-                case SHULKER_BULLET -> base * 4.0D;
-                case WARDEN_SCREAM -> base * 3.8D;
-                default -> base;
-            };
-            case SHOOTER -> switch (reward) {
-                case CROSSBOW -> base * 5.5D;
-                case TRIDENT -> base * 5.2D;
-                case ARROW_SHOT -> base * 5.0D;
-                case BLAZE_ATTACK -> base * 3.6D;
-                case LLAMA_SPIT -> base * 4.2D;
-                case SNOWBALL_SHOT -> base * 5.8D;
-                case SHULKER_BULLET -> base * 2.0D;
-                case WITHER_SKULL -> base * 2.4D;
-                case GHAST_FIREBALL -> base * 2.2D;
-                case EVOKER_FANGS -> base * 1.8D;
-                case WARDEN_SCREAM -> base * 1.8D;
-                default -> base;
-            };
             case ATTRIBUTER -> base * 0.6D;
+            default -> base;
         };
     }
 
@@ -1079,8 +896,8 @@ public class LevelSystem {
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
         setAttributeBaseValue(tame, Attributes.ARMOR, readBaseOrDefault(template, Attributes.ARMOR) + data.bonusArmor);
         setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, readBaseOrDefault(template, Attributes.ARMOR_TOUGHNESS) + data.bonusArmorToughness);
-        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback);
-        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist);
+        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback));
+        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist));
 
         updateTameName(tame, data);
         tame.setHealth(tame.getMaxHealth());
@@ -1097,7 +914,14 @@ public class LevelSystem {
     private static void setAttributeBaseValue(TamableAnimal tame, Attribute attribute, double value) {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return;
-        instance.setBaseValue(value);
+        instance.setBaseValue(clampAttributeBaseValue(attribute, value));
+    }
+
+    private static double clampAttributeBaseValue(Attribute attribute, double value) {
+        if (attribute == Attributes.ATTACK_KNOCKBACK) {
+            return Mth.clamp(value, 0.0D, 2.0D);
+        }
+        return value;
     }
 
     private static void trackBonus(TameData data, BaseStatReward reward) {

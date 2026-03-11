@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
@@ -57,7 +58,12 @@ public class TamePersistenceEvents {
             if (!(entity instanceof TamableAnimal tame)) continue;
             if (!tame.isTame() || !tame.isAlive()) continue;
             seenRegistryLoaded.add(data.uuid);
-            if (queueScrubTick) loadedAliveTameIds.add(data.uuid);
+            if (queueScrubTick) {
+                loadedAliveTameIds.add(data.uuid);
+                if (data.tlId != null) {
+                    loadedAliveTameIds.add(data.tlId);
+                }
+            }
             if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
                 changed = true;
             }
@@ -69,13 +75,18 @@ public class TamePersistenceEvents {
                 if (!tame.isTame() || !tame.isAlive()) continue;
                 UUID tameId = tame.getUUID();
                 if (seenRegistryLoaded.contains(tameId)) continue;
-                if (queueScrubTick) loadedAliveTameIds.add(tameId);
 
                 TameData data = TameRegistry.get(tameId);
                 if (data == null) {
                     data = TameSpawnEvents.registerOrRestoreTame(tame, false);
                     if (data == null) continue;
                     changed = true;
+                }
+                if (queueScrubTick) {
+                    loadedAliveTameIds.add(tameId);
+                    if (data.tlId != null) {
+                        loadedAliveTameIds.add(data.tlId);
+                    }
                 }
                 if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
                     changed = true;
@@ -143,12 +154,14 @@ public class TamePersistenceEvents {
         }
         if (saveSnapshotTick || data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
             net.minecraft.nbt.CompoundTag snapshot = new net.minecraft.nbt.CompoundTag();
+            TameRegistry.bindEntityToData(tame, data);
             tame.save(snapshot);
             if (!snapshot.equals(data.entitySnapshot)) {
                 data.entitySnapshot = snapshot;
                 changed = true;
             }
         }
+        TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
         return changed;
     }
 
