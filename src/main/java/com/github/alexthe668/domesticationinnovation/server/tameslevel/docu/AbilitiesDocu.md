@@ -6,6 +6,16 @@
 - In `passive` mode, offensive abilities are skipped.
 - Ability logic is no-grief (no block-breaking explosion behavior from custom ability code).
 
+## Ability Role Types
+- `attack`: offensive abilities that count toward the cooldown nerf and also have their own cooldown increased by it.
+- `heal`: healing abilities that do not count toward the cooldown nerf and are not affected by it.
+- `support`: utility/defensive/control abilities that do not count toward the cooldown nerf and are not affected by it.
+
+### Current Type Map
+- `attack`: `arrow_shot`, `snowball_shot`, `ghast_fireball`, `creeper_explosion`, `wither_skull`, `blaze_attack`, `guardian_beam`, `elder_guardian_beam`, `trident`, `crossbow`, `evoker_fangs`, `dragon_fireball`, `llama_spit`, `lightning_strike`, `warden_scream`, `shulker_bullet`, `fishing`, `dash`, `shadow_hands`
+- `heal`: `healing_aura`, `healing_bottle`
+- `support`: `battle_strength`, `defensive_aura`, `ender_pearl_jump`, `berserker`, `bloodlust`, `retaliation_slow`, `immunity_frame`, `deflection`, `defusal`, `psychic_wall`, `guardian_repulse`, `last_stand_fury`, `shield_block`, `sky_launch`
+
 ## Damage Multiplier
 - `ability_power_multiplier = 1.0 + 0.12 * ability_power_level`
 - For abilities marked with `* M` below, total damage is multiplied by this value.
@@ -20,6 +30,10 @@
 - No armor/resistance/reduction on target
 - `ability_power` level = `0` (`M = 1.00`) for numeric DPS examples
 - `DPS = damage_per_cast / cooldown_seconds`
+- Attack-only cooldown nerf:
+  - `cooldown_multiplier = 1 + (admin_percent / 100) * log2(attackAbilityCount)`
+  - only `attack` abilities count toward `attackAbilityCount`
+  - `heal` and `support` abilities are excluded from both the count and the cooldown increase
 
 ## Ability Details
 

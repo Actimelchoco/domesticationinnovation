@@ -12,7 +12,7 @@ public class HPReward implements LevelReward {
 
         entity.getAttribute(Attributes.MAX_HEALTH)
                 .setBaseValue(
-                        entity.getAttributeBaseValue(Attributes.MAX_HEALTH) + 2
+                        entity.getAttributeBaseValue(Attributes.MAX_HEALTH) + 1
                 );
 
         entity.setHealth(entity.getMaxHealth());

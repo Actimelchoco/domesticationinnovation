@@ -1318,7 +1318,19 @@ public class TameCommands {
             }
 
             if ((now - request.getTimestamp()) >= UNLOADED_TP_TIMEOUT_TICKS) {
-                owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout).").withStyle(ChatFormatting.RED));
+                boolean recovered = false;
+                String recoverError = "unknown";
+                if (data != null && isSameDimensionUnloadedRespawnFallback(owner, data)) {
+                    RecoverResult recoverResult = recoverPetEntity(null, owner, data);
+                    recovered = recoverResult.entity != null;
+                    recoverError = recoverResult.error;
+                }
+                if (recovered) {
+                    owner.sendSystemMessage(Component.literal("Respawned unloaded " + request.getNametag() + " at your position after entity load timeout.").withStyle(ChatFormatting.YELLOW));
+                } else {
+                    String detail = recoverError == null || recoverError.isBlank() ? "" : " Recover failed: " + recoverError + ".";
+                    owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout)." + detail).withStyle(ChatFormatting.RED));
+                }
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
             }
@@ -2704,6 +2716,15 @@ public class TameCommands {
         }
         TameRegistry.bindEntityToData(tame, data);
         applyLatestDeathSnapshotIfAvailable(tame, data);
+        tame.hurtTime = 0;
+        tame.deathTime = 0;
+        tame.invulnerableTime = 0;
+        tame.setRemainingFireTicks(0);
+        tame.fallDistance = 0.0F;
+        tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        tame.setNoAi(false);
         data.dead = false;
         data.deadGameTime = 0L;
         data.deadUnixMillis = 0L;
@@ -3022,7 +3043,27 @@ public class TameCommands {
         if (queueError == null) {
             return UnloadedTpResult.queued();
         }
+        if (isSameDimensionUnloadedRespawnFallback(owner, data)) {
+            RecoverResult recoverResult = recoverPetEntity(source, owner, data);
+            if (recoverResult.entity != null) {
+                return UnloadedTpResult.queued();
+            }
+            if (recoverResult.error != null && !recoverResult.error.isBlank()) {
+                return UnloadedTpResult.fail(queueError + "; respawn failed: " + recoverResult.error);
+            }
+        }
         return UnloadedTpResult.fail(queueError);
+    }
+
+    private static boolean isSameDimensionUnloadedRespawnFallback(ServerPlayer owner, TameData data) {
+        if (owner == null || data == null || data.dead || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            return false;
+        }
+        ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+        if (lastKnown == null || !owner.serverLevel().dimension().location().equals(lastKnown)) {
+            return false;
+        }
+        return owner.getServer() == null || findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId) == null;
     }
 
     private static String tryQueueUnloadedTeleportToPlayer(CommandSourceStack source, ServerPlayer owner, TameData data) {
@@ -4090,7 +4131,7 @@ public class TameCommands {
     private static int adminAbilityCooldownNerfStatus(CommandSourceStack source) {
         float percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent();
         source.sendSuccess(() -> Component.literal(
-                "Ability-count cooldown nerf percent is " + percent + "%. Multiplier = 1 + (" + percent + "% * log2(abilityCount))."
+                "Attack-ability cooldown nerf percent is " + percent + "%. Multiplier = 1 + (" + percent + "% * log2(attackAbilityCount)). Heal/support abilities do not count and are not affected."
         ).withStyle(ChatFormatting.YELLOW), false);
         return 1;
     }
@@ -4099,7 +4140,7 @@ public class TameCommands {
         float value = (float) Math.max(0.0D, percent);
         TLAdminRuntimeSettings.setAbilityCountCooldownNerfPercent(value);
         source.sendSuccess(() -> Component.literal(
-                "Temporary admin setting: ability-count cooldown nerf is now " + value + "% per log2 ability-count step."
+                "Temporary admin setting: attack-ability cooldown nerf is now " + value + "% per log2 attack-ability step. Heal/support abilities do not count and are not affected."
         ).withStyle(ChatFormatting.YELLOW), true);
         return 1;
     }

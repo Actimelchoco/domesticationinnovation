@@ -27,6 +27,12 @@ import java.util.HashSet;
 
 public class LevelSystem {
 
+    public enum AbilityType {
+        ATTACK,
+        HEAL,
+        SUPPORT
+    }
+
     public static final int BASE_XP = 50;
     public static final int XP_PER_LEVEL_STEP = 3;
     public static final double DEATH_XP_LOSS = 0.67D;
@@ -39,7 +45,7 @@ public class LevelSystem {
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
 
     private enum BaseStatReward {
-        HP("HP", Attributes.MAX_HEALTH, 2.0D),
+        HP("HP", Attributes.MAX_HEALTH, 1.0D),
         DAMAGE("Damage", Attributes.ATTACK_DAMAGE, 1.0D),
         SPEED("Speed", Attributes.MOVEMENT_SPEED, 0.01D),
         ARMOR("Armor", Attributes.ARMOR, 1.0D),
@@ -116,48 +122,50 @@ public class LevelSystem {
     }
 
     private enum AbilityReward {
-        CREEPER_EXPLOSION("creeper_explosion", true, Integer.MAX_VALUE),
-        ARROW_SHOT("arrow_shot", true, Integer.MAX_VALUE),
-        GHAST_FIREBALL("ghast_fireball", true, Integer.MAX_VALUE),
-        BATTLE_STRENGTH("battle_strength", true, Integer.MAX_VALUE),
-        DEFENSIVE_AURA("defensive_aura", true, Integer.MAX_VALUE),
-        SNOWBALL_SHOT("snowball_shot", true, Integer.MAX_VALUE),
-        ENDER_PEARL_JUMP("ender_pearl_jump", true, Integer.MAX_VALUE),
-        LIGHTNING_STRIKE("lightning_strike", true, Integer.MAX_VALUE),
-        WARDEN_SCREAM("warden_scream", true, Integer.MAX_VALUE),
-        WITHER_SKULL("wither_skull", true, Integer.MAX_VALUE),
-        BLAZE_ATTACK("blaze_attack", true, Integer.MAX_VALUE),
-        GUARDIAN_BEAM("guardian_beam", true, Integer.MAX_VALUE),
-        ELDER_GUARDIAN_BEAM("elder_guardian_beam", true, Integer.MAX_VALUE),
-        BERSERKER("berserker", true, Integer.MAX_VALUE),
-        BLOODLUST("bloodlust", true, Integer.MAX_VALUE),
-        TRIDENT("trident", true, Integer.MAX_VALUE),
-        CROSSBOW("crossbow", true, Integer.MAX_VALUE),
-        EVOKER_FANGS("evoker_fangs", true, Integer.MAX_VALUE),
-        SHULKER_BULLET("shulker_bullet", true, Integer.MAX_VALUE),
-        DRAGON_FIREBALL("dragon_fireball", true, Integer.MAX_VALUE),
-        LLAMA_SPIT("llama_spit", true, Integer.MAX_VALUE),
-        FISHING("fishing", true, Integer.MAX_VALUE),
-        DASH("dash", true, Integer.MAX_VALUE),
-        RETALIATION_SLOW("retaliation_slow", true, Integer.MAX_VALUE),
-        IMMUNITY_FRAME("immunity_frame", true, Integer.MAX_VALUE),
-        DEFLECTION("deflection", false, 1),
-        DEFUSAL("defusal", true, Integer.MAX_VALUE),
-        SHADOW_HANDS("shadow_hands", true, Integer.MAX_VALUE),
-        PSYCHIC_WALL("psychic_wall", true, Integer.MAX_VALUE),
-        HEALING_AURA("healing_aura", true, Integer.MAX_VALUE),
-        HEALING_BOTTLE("healing_bottle", true, Integer.MAX_VALUE),
-        GUARDIAN_REPULSE("guardian_repulse", true, Integer.MAX_VALUE),
-        LAST_STAND_FURY("last_stand_fury", true, Integer.MAX_VALUE),
-        SHIELD_BLOCK("shield_block", true, Integer.MAX_VALUE),
-        SKY_LAUNCH("sky_launch", true, Integer.MAX_VALUE);
+        CREEPER_EXPLOSION("creeper_explosion", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        ARROW_SHOT("arrow_shot", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        GHAST_FIREBALL("ghast_fireball", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        BATTLE_STRENGTH("battle_strength", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        DEFENSIVE_AURA("defensive_aura", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        SNOWBALL_SHOT("snowball_shot", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        ENDER_PEARL_JUMP("ender_pearl_jump", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        LIGHTNING_STRIKE("lightning_strike", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        WARDEN_SCREAM("warden_scream", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        WITHER_SKULL("wither_skull", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        BLAZE_ATTACK("blaze_attack", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        GUARDIAN_BEAM("guardian_beam", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        ELDER_GUARDIAN_BEAM("elder_guardian_beam", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        BERSERKER("berserker", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        BLOODLUST("bloodlust", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        TRIDENT("trident", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        CROSSBOW("crossbow", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        EVOKER_FANGS("evoker_fangs", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        SHULKER_BULLET("shulker_bullet", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        DRAGON_FIREBALL("dragon_fireball", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        LLAMA_SPIT("llama_spit", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        FISHING("fishing", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        DASH("dash", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        RETALIATION_SLOW("retaliation_slow", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        IMMUNITY_FRAME("immunity_frame", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        DEFLECTION("deflection", AbilityType.SUPPORT, false, 1),
+        DEFUSAL("defusal", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        SHADOW_HANDS("shadow_hands", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        PSYCHIC_WALL("psychic_wall", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        HEALING_AURA("healing_aura", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        HEALING_BOTTLE("healing_bottle", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        GUARDIAN_REPULSE("guardian_repulse", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        LAST_STAND_FURY("last_stand_fury", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        SHIELD_BLOCK("shield_block", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        SKY_LAUNCH("sky_launch", AbilityType.SUPPORT, true, Integer.MAX_VALUE);
 
         private final String id;
+        private final AbilityType type;
         private final boolean upgradable;
         private final int maxLevel;
 
-        AbilityReward(String id, boolean upgradable, int maxLevel) {
+        AbilityReward(String id, AbilityType type, boolean upgradable, int maxLevel) {
             this.id = id;
+            this.type = type;
             this.upgradable = upgradable;
             this.maxLevel = maxLevel;
         }
@@ -251,6 +259,15 @@ public class LevelSystem {
 
     public static Set<String> knownAbilityIds() {
         return KNOWN_ABILITIES;
+    }
+
+    public static AbilityType getAbilityType(String abilityId) {
+        AbilityReward reward = byAbilityId(abilityId);
+        return reward == null ? null : reward.type;
+    }
+
+    public static boolean isAttackAbility(String abilityId) {
+        return getAbilityType(abilityId) == AbilityType.ATTACK;
     }
 
     public static Set<String> knownAttributeIds() {
@@ -1091,4 +1108,3 @@ public class LevelSystem {
         }
     }
 }
-

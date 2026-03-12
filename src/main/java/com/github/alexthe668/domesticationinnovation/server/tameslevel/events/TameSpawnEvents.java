@@ -46,8 +46,14 @@ public class TameSpawnEvents {
         if (existingByTlId != null) {
             TamableAnimal loadedByTlId = findOtherLoadedByTlId(tame, entityTlId);
             if (loadedByTlId != null) {
-                tame.discard();
-                return;
+                if (shouldKeepJoiningTame(tame, loadedByTlId, existingByTlId)) {
+                    loadedByTlId.discard();
+                    TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
+                    TameRegistry.bindEntityToData(tame, existingByTlId);
+                } else {
+                    tame.discard();
+                    return;
+                }
             }
         }
 
@@ -345,6 +351,40 @@ public class TameSpawnEvents {
             }
         }
         return null;
+    }
+
+    private static boolean shouldKeepJoiningTame(TamableAnimal joining, TamableAnimal loaded, TameData tlData) {
+        int joiningXp = resolveTrackedXp(joining, tlData);
+        int loadedXp = resolveTrackedXp(loaded, tlData);
+        if (joiningXp != loadedXp) {
+            return joiningXp > loadedXp;
+        }
+        TameData joiningData = TameRegistry.get(joining.getUUID());
+        TameData loadedData = TameRegistry.get(loaded.getUUID());
+        int joiningLevel = joiningData != null ? joiningData.level : (tlData == null ? 1 : tlData.level);
+        int loadedLevel = loadedData != null ? loadedData.level : (tlData == null ? 1 : tlData.level);
+        if (joiningLevel != loadedLevel) {
+            return joiningLevel > loadedLevel;
+        }
+        return joining.tickCount >= loaded.tickCount;
+    }
+
+    private static int resolveTrackedXp(TamableAnimal tame, TameData fallback) {
+        if (tame == null) {
+            return Integer.MIN_VALUE;
+        }
+        TameData exact = TameRegistry.get(tame.getUUID());
+        if (exact != null) {
+            return exact.xp;
+        }
+        UUID tlId = TameData.getTlId(tame);
+        if (tlId != null) {
+            TameData byTlId = TameRegistry.getByTlId(tlId);
+            if (byTlId != null) {
+                return byTlId.xp;
+            }
+        }
+        return fallback == null ? 0 : fallback.xp;
     }
 
     private static TamableAnimal findLoadedCloneByIdentity(TamableAnimal context, ParsedName parsed) {

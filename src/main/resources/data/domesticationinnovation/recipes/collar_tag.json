@@ -1,14 +1,21 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "II",
-    " B"
+    "XIX",
+    "BCB",
+    "XBX"
   ],
   "key": {
+    "X": {
+      "item": "minecraft:bone_block"
+    },
     "I": {
-      "item": "minecraft:iron_ingot"
+      "item": "minecraft:iron_bars"
     },
     "B": {
+      "item": "minecraft:bone"
+    },
+    "C": {
       "item": "minecraft:copper_block"
     }
   },
