@@ -21,6 +21,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -93,6 +94,8 @@ import java.nio.file.Path;
 import java.io.IOException;
 
 public class TameCommands {
+    private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/docu/";
+    private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu");
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final long DUEL_INVITE_TIMEOUT_MS = 120_000L;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
@@ -750,7 +753,10 @@ public class TameCommands {
                                                 .executes(ctx -> setDebugAttributeUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
+                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                .then(Commands.literal("damage")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -764,6 +770,8 @@ public class TameCommands {
                                         .executes(ctx -> adminReloadTames(ctx.getSource())))
                                 .then(Commands.literal("doubleHpBonus")
                                         .executes(ctx -> adminDoubleHpBonus(ctx.getSource())))
+                                .then(Commands.literal("halfHpBonus")
+                                        .executes(ctx -> adminHalfHpBonus(ctx.getSource())))
                                 .then(Commands.literal("normalizeBonuses")
                                         .executes(ctx -> adminNormalizeAllBonuses(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -790,6 +798,29 @@ public class TameCommands {
                                                 .executes(ctx -> adminSetFriendlyFire(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("damageNerf")
+                                        .executes(ctx -> adminAbilityDamageNerfStatus(ctx.getSource()))
+                                        .then(Commands.literal("single")
+                                                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.0D))
+                                                        .executes(ctx -> adminSetAbilityDamageNerf(
+                                                                ctx.getSource(),
+                                                                "single",
+                                                                DoubleArgumentType.getDouble(ctx, "multiplier")
+                                                        ))))
+                                        .then(Commands.literal("aoe")
+                                                .then(Commands.argument("multiplier", DoubleArgumentType.doubleArg(0.0D))
+                                                        .executes(ctx -> adminSetAbilityDamageNerf(
+                                                                ctx.getSource(),
+                                                                "aoe",
+                                                                DoubleArgumentType.getDouble(ctx, "multiplier")
+                                                        )))))
+                                .then(Commands.literal("cooldownNerf")
+                                        .executes(ctx -> adminAbilityCooldownNerfStatus(ctx.getSource()))
+                                        .then(Commands.argument("percent", DoubleArgumentType.doubleArg(0.0D))
+                                                .executes(ctx -> adminSetAbilityCooldownNerf(
+                                                        ctx.getSource(),
+                                                        DoubleArgumentType.getDouble(ctx, "percent")
                                                 ))))
                                 .then(Commands.literal("uniteDuplicates")
                                         .executes(ctx -> adminUniteDuplicates(ctx.getSource(), "", true))
@@ -1057,49 +1088,55 @@ public class TameCommands {
             if (findLoadedTameByIdentity(server, data.uuid, data.tlId) != null) {
                 continue;
             }
-            if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
-                ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
-                if (bedDimId == null) {
-                    continue;
-                }
-                ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
-                if (bedLevel == null) {
-                    continue;
-                }
-                BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
-                bedLevel.getChunk(bedPos);
-                if (!(bedLevel.getBlockEntity(bedPos) instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity)) {
-                    continue;
-                }
-                Direction facing = bedLevel.getBlockState(bedPos).hasProperty(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
-                        ? bedLevel.getBlockState(bedPos).getValue(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
-                        : Direction.NORTH;
-                if (!respawnDeadTameAtBed(bedLevel, bedPos, facing, data)) {
-                    continue;
-                }
-                clearMatchingDiBedRespawnRequests(server, data);
-                ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
-                TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
-                if (owner != null && respawned != null) {
-                    owner.displayClientMessage(Component.translatable("message.domesticationinnovation.respawn", respawned.getName()), false);
-                }
+            SpawnTarget target = resolveMorningRespawnTarget(server, data);
+            if (target == null) {
                 continue;
             }
-
-            SpawnTarget ownerBedTarget = resolveOwnerBedTarget(server, data.ownerUUID);
-            if (ownerBedTarget == null) {
-                continue;
-            }
-            RespawnResult result = respawnDeadTameAtServer(data, ownerBedTarget.level, ownerBedTarget.pos, ownerBedTarget.yRot, ownerBedTarget.xRot);
+            RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
             if (!result.success) {
                 continue;
             }
+            clearMatchingDiBedRespawnRequests(server, data);
             ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
             TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
             if (owner != null && respawned != null) {
                 owner.displayClientMessage(Component.translatable("message.domesticationinnovation.respawn", respawned.getName()), false);
             }
         }
+    }
+
+    private static SpawnTarget resolveMorningRespawnTarget(MinecraftServer server, TameData data) {
+        if (server == null || data == null) {
+            return null;
+        }
+        if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
+            ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
+            if (bedDimId != null) {
+                ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
+                if (bedLevel != null) {
+                    BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
+                    bedLevel.getChunk(bedPos);
+                    if (bedLevel.getBlockEntity(bedPos) instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity) {
+                        Direction facing = bedLevel.getBlockState(bedPos).hasProperty(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
+                                ? bedLevel.getBlockState(bedPos).getValue(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
+                                : Direction.NORTH;
+                        return new SpawnTarget(bedLevel, Vec3.upFromBottomCenterOf(bedPos, 0.8F), yawFromDirection(facing), 0.0F);
+                    }
+                }
+            }
+        }
+        SpawnTarget ownerBedTarget = resolveOwnerBedTarget(server, data.ownerUUID);
+        if (ownerBedTarget != null) {
+            return ownerBedTarget;
+        }
+        if (data.ownerUUID != null) {
+            ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+            if (owner != null) {
+                return new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+            }
+        }
+        ServerLevel overworld = server.overworld();
+        return new SpawnTarget(overworld, Vec3.atCenterOf(overworld.getSharedSpawnPos()), 0.0F, 0.0F);
     }
 
     private static void scheduleMorningWaywardLanternRecalls(MinecraftServer server, long now) {
@@ -1391,7 +1428,7 @@ public class TameCommands {
         p.sendSystemMessage(Component.literal("/tames group <name>|add|remove|removefromallgroups"));
         p.sendSystemMessage(Component.literal("/tames mode <name> <mode>, /tames mode <all|group|type|state> ... <mode>"));
         p.sendSystemMessage(Component.literal("/tames info attribute [name] | ability [name] | class"));
-        p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed <true|false>"));
+        p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed|damage <true|false>"));
         p.sendSystemMessage(Component.literal("/tames admin normalizeBonuses <all|pet>, /tames admin approve item, /tames admin xp|ability|attribute|removeTarget ..."));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -1407,11 +1444,11 @@ public class TameCommands {
         else if (key.equals("mode")) p.sendSystemMessage(Component.literal("/tames mode <pet> <mode>, /tames mode <all|group|type|state> ... <mode>"));
         else if (key.equals("follow") || key.equals("sit") || key.equals("wander")) p.sendSystemMessage(Component.literal("/tames " + key + " [<name>|all|group <group>|type <type>|state <follow|wander|sit>]"));
         else if (key.equals("tp")) p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>"));
-        else if (key.equals("debug")) p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed <true|false>"));
+        else if (key.equals("debug")) p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed|damage <true|false>"));
         else if (key.equals("attribute")) {
             p.sendSystemMessage(Component.literal("Attribute docs (General):").withStyle(ChatFormatting.GOLD));
             sendDocLines(p, readDocSectionByHeading(
-                    Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AttributesDocu.md"),
+                    docPath("AttributesDocu.md"),
                     "## General",
                     "## "
             ));
@@ -1420,7 +1457,7 @@ public class TameCommands {
         else if (key.equals("ability")) {
             p.sendSystemMessage(Component.literal("Ability docs (General):").withStyle(ChatFormatting.GOLD));
             sendDocLines(p, readDocSectionByHeading(
-                    Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AbilitiesDocu.md"),
+                    docPath("AbilitiesDocu.md"),
                     "## General",
                     "## "
             ));
@@ -1429,7 +1466,7 @@ public class TameCommands {
         else if (key.equals("class")) {
             p.sendSystemMessage(Component.literal("Class docs (General):").withStyle(ChatFormatting.GOLD));
             sendDocLines(p, readDocSectionByHeading(
-                    Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "ClassesDocu.md"),
+                    docPath("ClassesDocu.md"),
                     "## General",
                     "## "
             ));
@@ -1446,7 +1483,7 @@ public class TameCommands {
         if (!LevelSystem.knownAbilityIds().contains(id)) return error(p, "Unknown ability: " + id);
 
         List<String> block = readDocSectionByHeading(
-                Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AbilitiesDocu.md"),
+                docPath("AbilitiesDocu.md"),
                 "### `" + id + "`",
                 "### `"
         );
@@ -1466,7 +1503,7 @@ public class TameCommands {
         if (!LevelSystem.knownAttributeIds().contains(id)) return error(p, "Unknown attribute: " + id);
 
         List<String> block = readDocBulletBlock(
-                Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "AttributesDocu.md"),
+                docPath("AttributesDocu.md"),
                 "- `" + id + "`"
         );
         if (block.isEmpty()) {
@@ -1489,7 +1526,7 @@ public class TameCommands {
         }
 
         List<String> block = readDocSectionByHeading(
-                Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu", "ClassesDocu.md"),
+                docPath("ClassesDocu.md"),
                 "### `" + id + "`",
                 "### `"
         );
@@ -1565,11 +1602,24 @@ public class TameCommands {
     }
     private static List<String> readDocFile(Path path) {
         if (path == null) return List.of();
+        String fileName = path.getFileName() == null ? "" : path.getFileName().toString();
+        if (!fileName.isBlank()) {
+            try (var stream = TameCommands.class.getClassLoader().getResourceAsStream(DOC_RESOURCE_BASE + fileName)) {
+                if (stream != null) {
+                    return new ArrayList<>(new java.io.BufferedReader(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8)).lines().toList());
+                }
+            } catch (IOException ignored) {
+            }
+        }
         try {
             return Files.readAllLines(path);
         } catch (IOException ignored) {
             return List.of();
         }
+    }
+
+    private static Path docPath(String fileName) {
+        return DOC_SOURCE_BASE.resolve(fileName);
     }
 
     private static int statShort(CommandSourceStack source, String petName) {
@@ -3376,13 +3426,21 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDebugDamage(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDamage(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Debug damage set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int debugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
         boolean ability = PlayerDebugSettings.abilityUsed(p.getUUID());
         boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", abilityUsed: " + ability + ", attributeUsed: " + attribute + ", levelUp: " + levelUp).withStyle(ChatFormatting.YELLOW));
+        boolean damage = PlayerDebugSettings.damage(p.getUUID());
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", abilityUsed: " + ability + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", damage: " + damage).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -4004,6 +4062,48 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminAbilityDamageNerfStatus(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal(
+                "Ability damage nerfs -> single: "
+                        + TLAdminRuntimeSettings.singleTargetAbilityDamageMultiplier()
+                        + ", aoe: "
+                        + TLAdminRuntimeSettings.aoeAbilityDamageMultiplier()
+        ).withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminSetAbilityDamageNerf(CommandSourceStack source, String type, double multiplier) {
+        float value = (float) Math.max(0.0D, multiplier);
+        if ("single".equalsIgnoreCase(type)) {
+            TLAdminRuntimeSettings.setSingleTargetAbilityDamageMultiplier(value);
+        } else if ("aoe".equalsIgnoreCase(type)) {
+            TLAdminRuntimeSettings.setAoeAbilityDamageMultiplier(value);
+        } else {
+            return error(source.getPlayer(), "Unknown nerf type: " + type);
+        }
+        source.sendSuccess(() -> Component.literal(
+                "Temporary admin setting: " + type + " ability damage multiplier is now " + value + "."
+        ).withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static int adminAbilityCooldownNerfStatus(CommandSourceStack source) {
+        float percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent();
+        source.sendSuccess(() -> Component.literal(
+                "Ability-count cooldown nerf percent is " + percent + "%. Multiplier = 1 + (" + percent + "% * log2(abilityCount))."
+        ).withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminSetAbilityCooldownNerf(CommandSourceStack source, double percent) {
+        float value = (float) Math.max(0.0D, percent);
+        TLAdminRuntimeSettings.setAbilityCountCooldownNerfPercent(value);
+        source.sendSuccess(() -> Component.literal(
+                "Temporary admin setting: ability-count cooldown nerf is now " + value + "% per log2 ability-count step."
+        ).withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
     private static int adminCleanPlayerList(CommandSourceStack source, String playerName) {
         MinecraftServer server = source.getServer();
         UUID ownerId = resolveKnownOwnerUuid(server, playerName);
@@ -4487,6 +4587,53 @@ public class TameCommands {
             return 1;
         }
         p.sendSystemMessage(Component.literal("No tame entries had HP bonus to double.").withStyle(ChatFormatting.YELLOW));
+        return 0;
+    }
+
+    private static int adminHalfHpBonus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        if (p == null || source.getServer() == null) {
+            return 0;
+        }
+
+        int updatedEntries = 0;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null) continue;
+            boolean changed = false;
+            if (data.bonusHealth != 0.0D) {
+                data.bonusHealth *= 0.5D;
+                changed = true;
+            }
+            if (data.savedBonusHealth != 0.0D) {
+                data.savedBonusHealth *= 0.5D;
+                changed = true;
+            }
+            if (changed) {
+                updatedEntries++;
+            }
+        }
+
+        int appliedLoaded = 0;
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null) continue;
+                if (applyTypeBasePlusBonus(tame, data)) {
+                    appliedLoaded++;
+                } else {
+                    LevelSystem.updateTameName(tame, data);
+                    tame.setHealth(tame.getMaxHealth());
+                }
+            }
+        }
+
+        if (updatedEntries > 0) {
+            TameRegistry.markDirty();
+            p.sendSystemMessage(Component.literal("Halved HP bonus for " + updatedEntries + " tame registry entries; refreshed " + appliedLoaded + " loaded tames.").withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
+        p.sendSystemMessage(Component.literal("No tame entries had HP bonus to halve.").withStyle(ChatFormatting.YELLOW));
         return 0;
     }
 

@@ -24,28 +24,34 @@
 
 ## Combat Attributes
 - `lifesteal`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit.
   - Level scaling: heal = `damage * (0.05 + 0.02 * level)`.
 
 - `firefang`
+  - Damage type: `single-target rider`
   - Activation chance: `100%` on hit.
   - Level scaling: burn duration = `2 + level` seconds.
 
 - `witherfang`
+  - Damage type: `single-target rider`
   - Activation chance: `100%` on hit.
   - Level scaling: Wither duration `60 + 20 * level` ticks, stronger amplifier at high levels.
 
 - `lightningfang`
+  - Damage type: `single-target`
   - Activation chance: `20%` on hit.
   - Level scaling: bonus lightning damage = `((2 + level) + 0.35 * baseDamage) * abilityPowerMultiplier * 5.0`.
   - Lightning is visual-only (no fire spread).
 
 - `killer`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit.
   - Level scaling: more damage vs low-HP targets.
   - Formula: damage multiplier `1 + missingHealthPercent * level`.
 
 - `pacifist`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit.
   - Level scaling: more damage vs high-HP targets.
   - Formula: damage multiplier `1 + targetHealthPercent * level`.
@@ -65,6 +71,7 @@
     - L10+: heal `50%` cap
 
 - `pierce`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit.
   - Effect: ignores part of the target's armor.
   - Class weight: mid chance for `ASSASSIN`, high chance for `DPS`.
@@ -76,14 +83,17 @@
     - L5+: `100%`
 
 - `sweeping_edge`
+  - Damage type: `aoe`
   - Activation chance: `100%` on hit.
   - Level scaling: splash radius and splash damage multiplier both increase with level.
 
 - `smite`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit vs undead.
   - Level scaling: extra damage multiplier `+ (0.20 + 0.08 * level)` against undead.
 
 - `bane_of_arthropods`
+  - Damage type: `single-target modifier`
   - Activation chance: `100%` on hit vs arthropods.
   - Level scaling: extra damage multiplier `+ (0.20 + 0.08 * level)` against arthropods.
   - Applies short Slowness on arthropod hit.
@@ -123,6 +133,7 @@
 
 - `killexploder`
   - Trigger: kill or assist.
+  - Damage type: `aoe`
   - Level scaling: explosion damage and radius increase with level.
   - No-grief direct AoE damage (visual explosion only).
   - Friendly fire: **enabled** (can hit players and allied tames in range).
@@ -138,6 +149,7 @@
 ## DI Migrated Attributes
 - `chain_lightning`
   - Source: `chain_lightning` enchantment becomes this attribute.
+  - Damage type: `aoe`
   - DI class weight: high chance for `ASSASSIN`, mid chance for `DPS` and `MAGE`.
   - Leveling: infinite.
   - Numeric example:
@@ -147,6 +159,7 @@
 
 - `frost_fang`
   - Source: `frost_fang` enchantment becomes this attribute.
+  - Damage type: `single-target rider`
   - DI class weight: same as `firefang`.
   - Scaling: each level increases slowness strength and/or activation chance.
   - Scaling: lower enemy HP increases activation chance.
@@ -185,6 +198,7 @@
 
 - `bubbling`
   - Source: `bubbling` enchantment becomes this attribute.
+  - Damage type: `single-target`
   - DI class weight: mid chance for `ASSASSIN`.
   - Base rule: does not work on 50+ HP mobs.
   - Scaling: level increases activation chance and allowed target HP cap.
@@ -236,6 +250,7 @@
 
 - `warping_bite`
   - Source: `warping_bite` enchantment becomes this attribute.
+  - Damage type: `single-target`
   - DI class weight: high chance for `ASSASSIN`.
   - Base rule: does not work on 50+ HP mobs.
   - Scaling: level increases activation chance and allowed target HP cap.

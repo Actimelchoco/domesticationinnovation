@@ -12,6 +12,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> ABILITY_USED = new HashMap<>();
     private static final Map<UUID, Boolean> ATTRIBUTE_USED = new HashMap<>();
     private static final Map<UUID, Boolean> LEVEL_UP = new HashMap<>();
+    private static final Map<UUID, Boolean> DAMAGE = new HashMap<>();
 
     public static boolean enemyKilled(UUID player) {
         return ENEMY_KILLED.getOrDefault(player, false);
@@ -33,6 +34,10 @@ public final class PlayerDebugSettings {
         return LEVEL_UP.getOrDefault(player, true);
     }
 
+    public static boolean damage(UUID player) {
+        return DAMAGE.getOrDefault(player, false);
+    }
+
     public static void setAbilityUsed(UUID player, boolean enabled) {
         ABILITY_USED.put(player, enabled);
     }
@@ -43,5 +48,9 @@ public final class PlayerDebugSettings {
 
     public static void setLevelUp(UUID player, boolean enabled) {
         LEVEL_UP.put(player, enabled);
+    }
+
+    public static void setDamage(UUID player, boolean enabled) {
+        DAMAGE.put(player, enabled);
     }
 }

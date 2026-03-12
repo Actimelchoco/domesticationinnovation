@@ -8,6 +8,8 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -68,8 +70,6 @@ public class TameAbilityEvents {
     private static final ThreadLocal<Boolean> INTERNAL_BONUS_DAMAGE = ThreadLocal.withInitial(() -> false);
     private static final float ARROW_TO_GUARDIAN_DPS_RATIO = 0.40F;
     private static final float ELDER_DPS_ABOVE_GUARDIAN = 1.125F; // Slightly higher DPS than guardian.
-    private static final float SINGLE_TARGET_DAMAGE_MULTIPLIER = 0.40F;
-    private static final float AOE_DAMAGE_MULTIPLIER = 0.20F;
     private static final int MAX_WARDEN_BEAM_TARGETS = 12;
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
         @Override
@@ -171,9 +171,11 @@ public class TameAbilityEvents {
                         && TameMode.byId(attackerData.mode) != TameMode.PASSIVE
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
                         && !INTERNAL_BONUS_DAMAGE.get()) {
+                    float beforeDamage = event.getAmount();
                     applyProjectileAbilityDamageScaling(event);
                     applyAttributeDamageBonuses(attackerTame, attackerData, event);
                     handleBattleStrength(attackerTame, attackerData, event);
+                    debugDamage(attackerTame, attackerData, event, beforeDamage, event.getAmount());
                 }
             }
 
@@ -845,11 +847,11 @@ public class TameAbilityEvents {
     private static void handlePassiveHeal(TamableAnimal tame, TameData data, long now) {
         if (!isReady(data, "passive_heal_tick", now)) return;
         if (tame.getHealth() >= tame.getMaxHealth()) {
-            setCooldown(data, "passive_heal_tick", now + 100L);
+            setCooldown(data, "passive_heal_tick", now + 200L);
             return;
         }
         tame.heal(1.0F);
-        setCooldown(data, "passive_heal_tick", now + 100L);
+        setCooldown(data, "passive_heal_tick", now + 200L);
     }
 
     private static void handleRejuvenation(TamableAnimal tame, TameData data) {
@@ -1400,7 +1402,8 @@ public class TameAbilityEvents {
         if (abilityCount <= 1) {
             return 1.0D;
         }
-        return 1.0D + 0.5D * (Math.log(abilityCount) / Math.log(2.0D));
+        double percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent() / 100.0D;
+        return 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
     }
 
     private static int countOwnedAbilities(TameData data) {
@@ -1437,6 +1440,30 @@ public class TameAbilityEvents {
         if (!attribute && !PlayerDebugSettings.abilityUsed(owner.getUUID())) return;
         String tameName = tame.hasCustomName() && tame.getCustomName() != null ? tame.getCustomName().getString() : tame.getName().getString();
         owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(tameName + ": " + ability));
+    }
+
+    private static void debugDamage(TamableAnimal tame, TameData data, LivingHurtEvent event, float before, float after) {
+        if (!(tame.level() instanceof ServerLevel level)) return;
+        if (tame.getOwnerUUID() == null) return;
+        ServerPlayer owner = level.getServer().getPlayerList().getPlayer(tame.getOwnerUUID());
+        if (owner == null || !PlayerDebugSettings.damage(owner.getUUID())) return;
+        String tameName = data != null && data.name != null && !data.name.isBlank()
+                ? data.name
+                : (tame.hasCustomName() && tame.getCustomName() != null ? tame.getCustomName().getString() : tame.getName().getString());
+        String targetName = event.getEntity().getName().getString();
+        String sourceName = event.getSource().getDirectEntity() == null
+                ? event.getSource().type().msgId()
+                : event.getSource().getDirectEntity().getType().toShortString();
+        owner.sendSystemMessage(
+                Component.literal("[DMG] ").withStyle(ChatFormatting.RED)
+                        .append(Component.literal(tameName).withStyle(ChatFormatting.GOLD))
+                        .append(Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY))
+                        .append(Component.literal(targetName).withStyle(ChatFormatting.AQUA))
+                        .append(Component.literal(" [" + sourceName + "] ").withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(String.format(java.util.Locale.ROOT, "%.2f", before)).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY))
+                        .append(Component.literal(String.format(java.util.Locale.ROOT, "%.2f", after)).withStyle(ChatFormatting.GREEN))
+        );
     }
 
     private static TamableAnimal resolveTameAttacker(LivingHurtEvent event) {
@@ -1510,14 +1537,14 @@ public class TameAbilityEvents {
     }
 
     private static float singleTargetDamage(float amount) {
-        return amount * SINGLE_TARGET_DAMAGE_MULTIPLIER;
-    }
+    return amount * TLAdminRuntimeSettings.singleTargetAbilityDamageMultiplier();
+}
 
-    private static float aoeDamage(float amount) {
-        return amount * AOE_DAMAGE_MULTIPLIER;
-    }
+private static float aoeDamage(float amount) {
+    return amount * TLAdminRuntimeSettings.aoeAbilityDamageMultiplier();
+}
 
-    private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity target, int levelValue) {
+private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity target, int levelValue) {
         Vec3 push = target.position().subtract(tame.position());
         if (push.lengthSqr() > 0.0001D) {
             push = push.normalize().scale(0.8D + levelValue * 0.1D);
@@ -1606,3 +1633,5 @@ public class TameAbilityEvents {
     }
 
 }
+
+

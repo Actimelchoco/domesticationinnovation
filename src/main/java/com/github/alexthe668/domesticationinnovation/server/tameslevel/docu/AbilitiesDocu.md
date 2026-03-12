@@ -25,6 +25,7 @@
 
 ### `arrow_shot`
 - Cooldown: `3.0s`
+- Damage type: `single-target`
 - Damage per arrow: `(2.0 + level + 0.65 * baseDamage) * M`
 - With baseDamage `5`: damage = `(5.25 + level) * M`
 - DPS example:
@@ -34,6 +35,7 @@
 
 ### `snowball_shot`
 - Cooldown: `1.0s`
+- Damage type: `single-target`
 - Damage: `0.30 * arrow_shot_damage_at_same_level`
 - Equivalent formula: `0.30 * (2.0 + level + 0.65 * baseDamage) * M`
 - Intended tuning: slightly less DPS than `arrow_shot`
@@ -44,6 +46,7 @@
 
 ### `ghast_fireball`
 - Cooldown: `5.0s`
+- Damage type: `aoe`
 - Uses `NoGriefLargeFireball`
 - Fireball power: `clamp(level, 1..3)`
 - Damage formula on hit: `6.0 + 2.0 * power + 0.80 * baseDamage` (no `M` multiplier in this class)
@@ -55,6 +58,7 @@
 
 ### `creeper_explosion`
 - Cooldown: `10.0s`
+- Damage type: `aoe`
 - Damage per target in AoE: `(8.0 + 1.5 * (level - 1) + 0.80 * baseDamage) * M`
 - Radius: `3.0 + 0.3 * (level - 1)`
 - Friendly fire: **enabled** (can hit players and allied tames in range)
@@ -66,6 +70,7 @@
 
 ### `wither_skull`
 - Cooldown: `4.0s`
+- Damage type: `aoe`
 - Damage: vanilla wither-skull projectile behavior (custom code spawns projectile; does not override hit damage directly)
 - Extra behavior: `dangerous = true` at ability level `>= 5`
 - DPS example:
@@ -73,6 +78,7 @@
 
 ### `blaze_attack`
 - Cooldown: `2.0s`
+- Damage type: `single-target`
 - Damage: `0.60 * arrow_shot_damage_at_same_level`
 - Equivalent formula: `0.60 * (2.0 + level + 0.65 * baseDamage) * M`
 - Intended tuning: slightly less DPS than `arrow_shot`
@@ -83,6 +89,7 @@
 
 ### `guardian_beam`
 - Cooldown: `3.5s`
+- Damage type: `single-target`
 - Damage target: `40% of arrow_shot DPS`
 - Equivalent per-cast damage: `0.40 * (guardianCooldown / arrowCooldown) * arrow_shot_damage`
 - With current cooldowns: `0.40 * (70/60) * arrow_shot_damage = 0.4667 * arrow_shot_damage`
@@ -94,6 +101,7 @@
 
 ### `elder_guardian_beam`
 - Cooldown: `6.0s`
+- Damage type: `single-target`
 - Damage target: slightly above `guardian_beam` DPS
 - Current tuning: `elder DPS = 1.125 * guardian DPS`
 - Equivalent DPS ratio vs arrow_shot: `0.45 * arrow_shot DPS`
@@ -109,6 +117,7 @@
 
 ### `trident`
 - Cooldown: `4.5s`
+- Damage type: `single-target`
 - Damage: `1.70 * arrow_shot_damage_at_same_level`
 - Equivalent formula: `1.70 * (2.0 + level + 0.65 * baseDamage) * M`
 - Intended tuning: slightly more DPS than `arrow_shot`
@@ -119,6 +128,7 @@
 
 ### `crossbow`
 - Cooldown: `4.0s`
+- Damage type: `single-target`
 - Fires: `ability level` arrows (every level adds one arrow)
 - Damage per arrow: `(3.5 + 0.50 * baseDamage) * M`
 - With baseDamage `5`: `6.0 * M` per arrow
@@ -129,6 +139,7 @@
 
 ### `evoker_fangs`
 - Cooldown: `5.0s`
+- Damage type: `aoe`
 - Damage: vanilla evoker-fangs behavior (custom code spawns fangs; no direct damage override)
 - Extra behavior:
   - Level `>= 3`: chance to spawn a forward fang line
@@ -138,6 +149,7 @@
 
 ### `dragon_fireball`
 - Cooldown: `7.0s`
+- Damage type: `aoe`
 - Damage per target in AoE: `(6.0 + 2.0 * level + 1.10 * baseDamage) * M`
 - Radius: `3.0 + 0.35 * level`
 - With baseDamage `5`: damage = `(11.5 + 2.0 * level) * M`
@@ -148,6 +160,7 @@
 
 ### `llama_spit`
 - Cooldown: `2.5s`
+- Damage type: `single-target`
 - Damage: `(3.0 + level + 0.60 * baseDamage) * M`
 - With baseDamage `5`: damage = `(6.0 + level) * M`
 - DPS example:
@@ -163,6 +176,7 @@
 
 ### `lightning_strike`
 - Cooldown: `25.0s`
+- Damage type: `single-target`
 - Damage: `(5.0 + 2.0 * (level - 1) + 0.80 * baseDamage) * M * 5.0`
 - Lightning is visual-only; damage is direct
 - With baseDamage `5`: damage = `(9.0 + 2.0 * (level - 1)) * M`
@@ -173,6 +187,7 @@
 
 ### `warden_scream`
 - Cooldown: `6.0s`
+- Damage type: `aoe`
 - Trigger: line-of-sight required
 - Range: `16.0 + 2.0 * level`
 - Damage: `(6.0 + 2.0 * (level - 1) + 1.0 * baseDamage) * M`
@@ -209,6 +224,7 @@
 
 ### `shulker_bullet`
 - Cooldown: `10.0s`
+- Damage type: `single-target`
 - Trigger gate: extra levitation application only if target HP `<= 50`
 - Damage: vanilla shulker-bullet projectile behavior (custom code does not override hit damage directly)
 - DPS example:
@@ -290,6 +306,7 @@
 - DI number: `19`
 - Class weight: high chance for `MAGE`
 - Leveling: infinite
+- Damage type: `single-target`
 - Effect scaling (current runtime):
   - Hands active = `+1 every level`
   - Per-hand windup = `10 ticks`
