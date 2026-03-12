@@ -845,11 +845,11 @@ public class TameAbilityEvents {
     private static void handlePassiveHeal(TamableAnimal tame, TameData data, long now) {
         if (!isReady(data, "passive_heal_tick", now)) return;
         if (tame.getHealth() >= tame.getMaxHealth()) {
-            setCooldown(data, "passive_heal_tick", now + 200L);
+            setCooldown(data, "passive_heal_tick", now + 100L);
             return;
         }
         tame.heal(1.0F);
-        setCooldown(data, "passive_heal_tick", now + 200L);
+        setCooldown(data, "passive_heal_tick", now + 100L);
     }
 
     private static void handleRejuvenation(TamableAnimal tame, TameData data) {

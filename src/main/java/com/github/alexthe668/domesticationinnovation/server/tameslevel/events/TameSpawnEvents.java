@@ -420,11 +420,15 @@ public class TameSpawnEvents {
 
         java.util.Set<String> used = new java.util.HashSet<>();
         UUID ownerId = self.getOwnerUUID();
+        UUID selfTlId = TameData.getTlId(self);
         if (ownerId != null) {
             for (TameData data : TameRegistry.TAMES.values()) {
                 if (data == null || data.uuid == null || data.name == null || data.name.isBlank()) continue;
                 if (!ownerId.equals(data.ownerUUID)) continue;
                 if (data.uuid.equals(self.getUUID())) continue;
+                if (data.dead) continue;
+                if (selfTlId != null && selfTlId.equals(data.tlId)) continue;
+                if (!isUuidLoaded(self, data.uuid)) continue;
                 used.add(stripLevelPrefixes(data.name).toLowerCase(java.util.Locale.ROOT));
             }
         }

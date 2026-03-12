@@ -510,6 +510,14 @@ public class CommonProxy {
                         }
                     }
                 }
+            } else if (event.getEntity() instanceof Mob mob) {
+                if (TameableUtils.getShadowPunchTimes(mob).length > 0
+                        || TameableUtils.getShadowPunchStriking(mob).length > 0
+                        || TameableUtils.getShadowPunchCooldown(mob) > 0
+                        || TameableUtils.getPetAttackTargetID(mob) != -1) {
+                    TameableUtils.clearShadowHandState(mob);
+                }
+                DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), new int[0]);
             }
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.DISK_JOCKEY) && !event.getEntity().level().isClientSide && event.getEntity().tickCount % 10 == 0) {
                 UUID uuid = TameableUtils.getPetJukeboxUUID(event.getEntity());

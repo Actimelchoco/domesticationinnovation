@@ -11,6 +11,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 
@@ -26,6 +27,8 @@ import java.util.UUID;
 import java.util.HashSet;
 
 public class LevelSystem {
+    private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
+    private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
 
     public enum AbilityType {
         ATTACK,
@@ -908,6 +911,7 @@ public class LevelSystem {
             template.setOwnerUUID(data.ownerUUID);
         }
 
+        scrubLegacyManagedModifiers(tame);
         setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
         setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
@@ -932,6 +936,31 @@ public class LevelSystem {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return;
         instance.setBaseValue(clampAttributeBaseValue(attribute, value));
+    }
+
+    private static void scrubLegacyManagedModifiers(TamableAnimal tame) {
+        scrubUnknownModifiers(tame, Attributes.MAX_HEALTH);
+        scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE);
+        scrubUnknownModifiers(tame, Attributes.MOVEMENT_SPEED);
+        scrubUnknownModifiers(tame, Attributes.ARMOR, COLLAR_ARMOR_UUID);
+        scrubUnknownModifiers(tame, Attributes.ARMOR_TOUGHNESS, COLLAR_ARMOR_TOUGHNESS_UUID);
+        scrubUnknownModifiers(tame, Attributes.ATTACK_KNOCKBACK);
+        scrubUnknownModifiers(tame, Attributes.KNOCKBACK_RESISTANCE);
+    }
+
+    private static void scrubUnknownModifiers(TamableAnimal tame, Attribute attribute, UUID... preservedModifierIds) {
+        AttributeInstance instance = tame.getAttribute(attribute);
+        if (instance == null) {
+            return;
+        }
+        Set<UUID> preserved = preservedModifierIds.length == 0
+                ? Set.of()
+                : new HashSet<>(List.of(preservedModifierIds));
+        for (AttributeModifier modifier : new ArrayList<>(instance.getModifiers())) {
+            if (!preserved.contains(modifier.getId())) {
+                instance.removeModifier(modifier);
+            }
+        }
     }
 
     private static double clampAttributeBaseValue(Attribute attribute, double value) {
@@ -988,6 +1017,78 @@ public class LevelSystem {
         data.savedAbilityLevels.putAll(data.abilityLevels);
         data.savedAttributeLevels.clear();
         data.savedAttributeLevels.putAll(data.attributeLevels);
+    }
+
+    public static int rerollHalfDamageBonus(TameData data) {
+        if (data == null) {
+            return 0;
+        }
+        int rerolled = 0;
+        rerolled += rerollHalfDamageValueIntoOtherBaseStats(data, false);
+        rerolled += rerollHalfDamageValueIntoOtherBaseStats(data, true);
+        return rerolled;
+    }
+
+    private static int rerollHalfDamageValueIntoOtherBaseStats(TameData data, boolean saved) {
+        double current = saved ? data.savedBonusDamage : data.bonusDamage;
+        if (current <= 0.0D) {
+            return 0;
+        }
+        int rollsToReroll = (int) Math.floor(current * 0.5D);
+        if (rollsToReroll <= 0) {
+            return 0;
+        }
+        if (saved) {
+            data.savedBonusDamage = Math.max(0.0D, data.savedBonusDamage - rollsToReroll);
+        } else {
+            data.bonusDamage = Math.max(0.0D, data.bonusDamage - rollsToReroll);
+        }
+        for (int i = 0; i < rollsToReroll; i++) {
+            BaseStatReward reward = pickWeightedNonDamageBaseReward();
+            if (reward == null) {
+                continue;
+            }
+            if (saved) {
+                applySavedBaseStatReward(data, reward);
+            } else {
+                trackBonus(data, reward);
+            }
+        }
+        return rollsToReroll;
+    }
+
+    private static BaseStatReward pickWeightedNonDamageBaseReward() {
+        List<WeightedOption<BaseStatReward>> options = new ArrayList<>();
+        for (BaseStatReward reward : BaseStatReward.values()) {
+            if (reward == BaseStatReward.DAMAGE) {
+                continue;
+            }
+            double weight = switch (reward) {
+                case HP -> 70.7D;
+                case SPEED -> 3.0D;
+                case ARMOR -> 5.0D;
+                case ARMOR_TOUGHNESS -> 2.0D;
+                case KNOCKBACK -> 5.0D;
+                case KNOCKBACK_RESIST -> 5.0D;
+                default -> 0.0D;
+            };
+            if (weight > 0.0D) {
+                options.add(new WeightedOption<>(reward, weight));
+            }
+        }
+        return options.isEmpty() ? null : pickWeighted(options);
+    }
+
+    private static void applySavedBaseStatReward(TameData data, BaseStatReward reward) {
+        switch (reward) {
+            case HP -> data.savedBonusHealth += reward.amount;
+            case DAMAGE -> data.savedBonusDamage += reward.amount;
+            case SPEED -> data.savedBonusSpeed += reward.amount;
+            case ARMOR -> data.savedBonusArmor += reward.amount;
+            case ARMOR_TOUGHNESS -> data.savedBonusArmorToughness += reward.amount;
+            case KNOCKBACK -> data.savedBonusKnockback += reward.amount;
+            case KNOCKBACK_RESIST -> data.savedBonusKnockbackResist += reward.amount;
+        }
     }
 
     public static void resetProgress(TamableAnimal tame, TameData data) {

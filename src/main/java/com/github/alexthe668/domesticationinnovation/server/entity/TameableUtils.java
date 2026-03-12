@@ -496,6 +496,7 @@ public class TameableUtils {
 
     public static void clearEnchants(LivingEntity entity) {
         setEnchantmentTag(entity, new ListTag());
+        clearShadowHandState(entity);
     }
 
     public static void setHasCollar(LivingEntity enchanted, boolean collar) {
@@ -640,6 +641,16 @@ public class TameableUtils {
     public static int[] getShadowPunchStriking(LivingEntity enchanted) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
         return tag.getIntArray(SHADOW_PUNCH_STRIKING);
+    }
+
+    public static void clearShadowHandState(LivingEntity enchanted) {
+        if (enchanted == null) {
+            return;
+        }
+        setShadowPunchCooldown(enchanted, 0);
+        setShadowPunchTimes(enchanted, new int[0]);
+        setShadowPunchStriking(enchanted, new int[0]);
+        setPetAttackTarget(enchanted, -1);
     }
 
     public static void setPetJukeboxUUID(LivingEntity enchanted, UUID id) {

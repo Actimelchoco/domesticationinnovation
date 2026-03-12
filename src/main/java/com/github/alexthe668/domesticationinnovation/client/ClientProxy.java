@@ -218,6 +218,10 @@ public class ClientProxy extends CommonProxy {
     }
 
     public void updateVisualDataForMob(Entity entity, int[] arr) {
+        if (arr == null || arr.length == 0) {
+            shadowPunchRenderData.remove(entity);
+            return;
+        }
         shadowPunchRenderData.put(entity, arr);
     }
 

@@ -94,6 +94,8 @@ import java.nio.file.Path;
 import java.io.IOException;
 
 public class TameCommands {
+    private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
+    private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/docu/";
     private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu");
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
@@ -745,18 +747,12 @@ public class TameCommands {
                                 .then(Commands.literal("enemyKilled")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                .then(Commands.literal("abilityUsed")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugAbilityUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                 .then(Commands.literal("attributeUsed")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugAttributeUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                .then(Commands.literal("damage")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
+                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -772,6 +768,8 @@ public class TameCommands {
                                         .executes(ctx -> adminDoubleHpBonus(ctx.getSource())))
                                 .then(Commands.literal("halfHpBonus")
                                         .executes(ctx -> adminHalfHpBonus(ctx.getSource())))
+                                .then(Commands.literal("rerollHalfDamageBonus")
+                                        .executes(ctx -> adminRerollHalfDamageBonus(ctx.getSource())))
                                 .then(Commands.literal("normalizeBonuses")
                                         .executes(ctx -> adminNormalizeAllBonuses(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -799,6 +797,17 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 ))))
+                                .then(Commands.literal("debug")
+                                        .executes(ctx -> adminDebugStatus(ctx.getSource()))
+                                        .then(Commands.literal("abilityUsed")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugAbilityUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("damage")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("damageDealt")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
                                 .then(Commands.literal("damageNerf")
                                         .executes(ctx -> adminAbilityDamageNerfStatus(ctx.getSource()))
                                         .then(Commands.literal("single")
@@ -3453,6 +3462,13 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminSetDebugAbilityUsed(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setAbilityUsed(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Admin debug abilityUsed set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int setDebugAttributeUsed(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setAttributeUsed(p.getUUID(), enabled);
@@ -3467,21 +3483,27 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setDebugDamage(CommandSourceStack source, boolean enabled) {
+    private static int adminSetDebugDamage(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setDamage(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Debug damage set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Admin debug damageDealt set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
     private static int debugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
-        boolean ability = PlayerDebugSettings.abilityUsed(p.getUUID());
         boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int adminDebugStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        boolean ability = PlayerDebugSettings.abilityUsed(p.getUUID());
         boolean damage = PlayerDebugSettings.damage(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", abilityUsed: " + ability + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", damage: " + damage).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -4678,6 +4700,47 @@ public class TameCommands {
         return 0;
     }
 
+    private static int adminRerollHalfDamageBonus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        if (p == null || source.getServer() == null) {
+            return 0;
+        }
+
+        int updatedEntries = 0;
+        int rerolledDamagePoints = 0;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null) continue;
+            int rerolled = LevelSystem.rerollHalfDamageBonus(data);
+            if (rerolled > 0) {
+                updatedEntries++;
+                rerolledDamagePoints += rerolled;
+            }
+        }
+
+        int appliedLoaded = 0;
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null) continue;
+                if (applyTypeBasePlusBonus(tame, data)) {
+                    appliedLoaded++;
+                } else {
+                    LevelSystem.updateTameName(tame, data);
+                    tame.setHealth(tame.getMaxHealth());
+                }
+            }
+        }
+
+        if (updatedEntries > 0) {
+            TameRegistry.markDirty();
+            p.sendSystemMessage(Component.literal("Rerolled " + rerolledDamagePoints + " damage bonus points across " + updatedEntries + " tame registry entries; refreshed " + appliedLoaded + " loaded tames.").withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
+        p.sendSystemMessage(Component.literal("No tame entries had enough damage bonus to reroll.").withStyle(ChatFormatting.YELLOW));
+        return 0;
+    }
+
     private static int adminNormalizeAllBonuses(CommandSourceStack source) {
         int normalized = 0;
         int missingData = 0;
@@ -5433,6 +5496,7 @@ public class TameCommands {
         }
         prepareTemplateAsTamed(template, tame, data);
 
+        scrubLegacyManagedModifiers(tame);
         setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
         setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
@@ -5495,6 +5559,29 @@ public class TameCommands {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return;
         instance.setBaseValue(clampAttributeBaseValue(attribute, value));
+    }
+
+    private static void scrubLegacyManagedModifiers(TamableAnimal tame) {
+        scrubUnknownModifiers(tame, Attributes.MAX_HEALTH);
+        scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE);
+        scrubUnknownModifiers(tame, Attributes.MOVEMENT_SPEED);
+        scrubUnknownModifiers(tame, Attributes.ARMOR, COLLAR_ARMOR_UUID);
+        scrubUnknownModifiers(tame, Attributes.ARMOR_TOUGHNESS, COLLAR_ARMOR_TOUGHNESS_UUID);
+        scrubUnknownModifiers(tame, Attributes.ATTACK_KNOCKBACK);
+        scrubUnknownModifiers(tame, Attributes.KNOCKBACK_RESISTANCE);
+    }
+
+    private static void scrubUnknownModifiers(TamableAnimal tame, Attribute attribute, UUID... preservedModifierIds) {
+        AttributeInstance instance = tame.getAttribute(attribute);
+        if (instance == null) return;
+        Set<UUID> preserved = preservedModifierIds.length == 0
+                ? Set.of()
+                : new HashSet<>(List.of(preservedModifierIds));
+        for (AttributeModifier modifier : new ArrayList<>(instance.getModifiers())) {
+            if (!preserved.contains(modifier.getId())) {
+                instance.removeModifier(modifier);
+            }
+        }
     }
 
     private static double clampAttributeBaseValue(Attribute attribute, double value) {
