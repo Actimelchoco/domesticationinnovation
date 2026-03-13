@@ -1,13 +1,14 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.LargeFireball;
 import net.minecraft.world.level.Level;
@@ -28,11 +29,14 @@ public class NoGriefLargeFireball extends LargeFireball {
         }
 
         LivingEntity shooter = this.getOwner() instanceof LivingEntity living ? living : null;
-        float baseDamage = 2.0F;
-        if (shooter != null && shooter.getAttribute(Attributes.ATTACK_DAMAGE) != null) {
-            baseDamage = (float) shooter.getAttributeValue(Attributes.ATTACK_DAMAGE);
+        float damage = 6.0F + this.noGriefExplosionPower * 2.0F;
+        if (shooter instanceof TamableAnimal tame) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null) {
+                int level = Math.max(1, LevelSystem.getAbilityLevel(data, "ghast_fireball"));
+                damage = TameAbilityEvents.offensiveAbilityCastDamage(data, "ghast_fireball", level);
+            }
         }
-        float damage = 6.0F + this.noGriefExplosionPower * 2.0F + baseDamage * 0.80F;
         for (LivingEntity nearby : this.level().getEntitiesOfClass(LivingEntity.class, this.getBoundingBox().inflate(3.0D))) {
             if (!nearby.isAlive()) continue;
             if (nearby == shooter) continue;

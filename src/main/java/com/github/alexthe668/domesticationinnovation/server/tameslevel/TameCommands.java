@@ -9,6 +9,7 @@ import com.github.alexthe668.domesticationinnovation.server.misc.LanternRequest;
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
@@ -96,8 +97,8 @@ import java.io.IOException;
 public class TameCommands {
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
-    private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/docu/";
-    private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "docu");
+    private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
+    private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "old docus");
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final long DUEL_INVITE_TIMEOUT_MS = 120_000L;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
@@ -290,6 +291,23 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("inspect")
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                        .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("search")
+                                .then(Commands.literal("ability")
+                                        .then(Commands.argument("id", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestAbilities(b))
+                                                .executes(ctx -> searchTamesByAbility(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
+                                .then(Commands.literal("attribute")
+                                        .then(Commands.argument("id", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestAttributes(b))
+                                                .executes(ctx -> searchTamesByAttribute(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
+                                .then(Commands.literal("class")
+                                        .then(Commands.argument("id", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestClasses(b))
+                                                .executes(ctx -> searchTamesByClass(ctx.getSource(), StringArgumentType.getString(ctx, "id"))))))
                         .then(Commands.literal("deaths")
                                 .executes(ctx -> recentDeaths(ctx.getSource(), 10))
                                 .then(Commands.argument("number", IntegerArgumentType.integer(1, 200))
@@ -527,21 +545,45 @@ public class TameCommands {
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
                         .then(Commands.literal("leaderboard")
-                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null))
+                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, 10))
+                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                .then(Commands.literal("everytame")
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, Integer.MAX_VALUE)))
                                 .then(Commands.literal("all")
-                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, Integer.MAX_VALUE)))
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestLeaderboardTypes(b))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null))))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, Integer.MAX_VALUE)))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name")))))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
                                 .then(Commands.argument("type", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestLeaderboardTypes(b))
-                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, Integer.MAX_VALUE)))
                                         .then(Commands.literal("all")
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null)))))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, Integer.MAX_VALUE))))))
 
                         .then(Commands.literal("follow")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.FOLLOW))
@@ -1440,15 +1482,16 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames"));
         p.sendSystemMessage(Component.literal("/tames, /tames strongest, /tames <name>"));
+        p.sendSystemMessage(Component.literal("/tames stat <name>, /tames inspect <name>, /tames search ability|attribute|class <id>"));
         p.sendSystemMessage(Component.literal("/tames loaded"));
         p.sendSystemMessage(Component.literal("/tames deaths <number>"));
-        p.sendSystemMessage(Component.literal("/tames leaderboard [mix|kills|deaths|assists|lvl|days] [all]"));
+        p.sendSystemMessage(Component.literal("/tames leaderboard [mix|kills|deaths|assists|lvl|days] [all] [<number>|everytame]"));
         p.sendSystemMessage(Component.literal("/tames follow|sit|wander [<name>|all|group <name>|type <name>|state <follow|wander|sit>]"));
         p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <name>|type <name>>"));
         p.sendSystemMessage(Component.literal("/tames respawn <name|all|group <name>|type <name>> [toMe]"));
         p.sendSystemMessage(Component.literal("/tames group <name>|add|remove|removefromallgroups"));
         p.sendSystemMessage(Component.literal("/tames mode <name> <mode>, /tames mode <all|group|type|state> ... <mode>"));
-        p.sendSystemMessage(Component.literal("/tames info attribute [name] | ability [name] | class"));
+        p.sendSystemMessage(Component.literal("/tames info attribute [name] | ability [name] | class | inspect | search"));
         p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed|damage <true|false>"));
         p.sendSystemMessage(Component.literal("/tames admin normalizeBonuses <all|pet>, /tames admin approve item, /tames admin xp|ability|attribute|removeTarget ..."));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
@@ -1458,13 +1501,24 @@ public class TameCommands {
     private static int infoDetail(CommandSourceStack source, String topic) {
         ServerPlayer p = source.getPlayer();
         String key = topic.trim().toLowerCase(Locale.ROOT);
-        if (key.equals("leaderboard")) p.sendSystemMessage(Component.literal("/tames leaderboard [mix|kills|deaths|assists|lvl|days] [all]"));
+        if (key.equals("leaderboard")) p.sendSystemMessage(Component.literal("/tames leaderboard [mix|kills|deaths|assists|lvl|days] [all] [<number>|everytame]"));
         else if (key.equals("deaths")) p.sendSystemMessage(Component.literal("/tames deaths <number>"));
         else if (key.equals("loaded")) p.sendSystemMessage(Component.literal("/tames loaded"));
         else if (key.equals("group")) p.sendSystemMessage(Component.literal("/tames group <name> | add <pet> <group> | remove <pet> <group> | removefromallgroups <pet>"));
         else if (key.equals("mode")) p.sendSystemMessage(Component.literal("/tames mode <pet> <mode>, /tames mode <all|group|type|state> ... <mode>"));
         else if (key.equals("follow") || key.equals("sit") || key.equals("wander")) p.sendSystemMessage(Component.literal("/tames " + key + " [<name>|all|group <group>|type <type>|state <follow|wander|sit>]"));
         else if (key.equals("tp")) p.sendSystemMessage(Component.literal("/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>"));
+        else if (key.equals("inspect")) {
+            p.sendSystemMessage(Component.literal("/tames inspect <pet>").withStyle(ChatFormatting.GOLD));
+            p.sendSystemMessage(Component.literal("Shows live combat inspection for a loaded tame.").withStyle(ChatFormatting.GRAY));
+            p.sendSystemMessage(Component.literal("Includes current base stats, runtime damage multipliers, exact ability DPS where formula is known, and attribute combat notes where DPS depends on target or hit rate.").withStyle(ChatFormatting.GRAY));
+        }
+        else if (key.equals("search")) {
+            p.sendSystemMessage(Component.literal("/tames search ability <id>").withStyle(ChatFormatting.GOLD));
+            p.sendSystemMessage(Component.literal("/tames search attribute <id>").withStyle(ChatFormatting.GOLD));
+            p.sendSystemMessage(Component.literal("/tames search class <id>").withStyle(ChatFormatting.GOLD));
+            p.sendSystemMessage(Component.literal("Searches your registered tames by ability, attribute, or tame class.").withStyle(ChatFormatting.GRAY));
+        }
         else if (key.equals("debug")) p.sendSystemMessage(Component.literal("/tames debug enemyKilled|abilityUsed|attributeUsed|damage <true|false>"));
         else if (key.equals("attribute")) {
             p.sendSystemMessage(Component.literal("Attribute docs (General):").withStyle(ChatFormatting.GOLD));
@@ -1961,6 +2015,272 @@ public class TameCommands {
         receiver.sendSystemMessage(Component.literal("Abilities: " + formatLevelsCompact(d.abilityLevels)).withStyle(ChatFormatting.BLUE));
     }
 
+    private static int inspectPet(CommandSourceStack source, String petName) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTameAny(player.getUUID(), petName);
+        if (data == null) {
+            return error(player, "Pet not found.");
+        }
+
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null) {
+            player.sendSystemMessage(Component.literal("=== " + data.name + " ===").withStyle(ChatFormatting.GOLD));
+            player.sendSystemMessage(Component.literal("Inspect needs the tame to be loaded for exact runtime DPS math.").withStyle(ChatFormatting.RED));
+            player.sendSystemMessage(Component.literal("Stored abilities: " + formatLevelsCompact(data.abilityLevels)).withStyle(ChatFormatting.BLUE));
+            player.sendSystemMessage(Component.literal("Stored attributes: " + formatLevelsCompact(data.attributeLevels)).withStyle(ChatFormatting.LIGHT_PURPLE));
+            return 0;
+        }
+
+        double abilityPowerMultiplier = inspectAbilityPowerMultiplier(data);
+        int attackAbilityCount = inspectOwnedAttackAbilityCount(data);
+        double cooldownMultiplier = inspectAttackCooldownMultiplier(attackAbilityCount);
+
+        player.sendSystemMessage(Component.literal("=== Inspect " + data.name + " ===").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Bonus DMG " + fmt(data.bonusDamage) + "  ability_power x" + fmt(abilityPowerMultiplier)
+                + "  attack abilities " + attackAbilityCount + "  attack cooldown x" + fmt(cooldownMultiplier)).withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("Runtime multipliers: single x" + fmt(TLAdminRuntimeSettings.singleTargetAbilityDamageMultiplier())
+                + "  aoe x" + fmt(TLAdminRuntimeSettings.aoeAbilityDamageMultiplier())
+                + "  cooldown nerf " + fmt(TLAdminRuntimeSettings.abilityCountCooldownNerfPercent()) + "%").withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("Assumptions: exact where formula is known; projectile/utility abilities may be noted as situational. Crossbow assumes all arrows hit one target.").withStyle(ChatFormatting.DARK_GRAY));
+
+        List<String> abilityLines = buildAbilityInspectLines(tame, data);
+        if (abilityLines.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Abilities: none").withStyle(ChatFormatting.BLUE));
+        } else {
+            player.sendSystemMessage(Component.literal("Abilities").withStyle(ChatFormatting.BLUE));
+            for (String line : abilityLines) {
+                player.sendSystemMessage(Component.literal("- " + line).withStyle(ChatFormatting.GRAY));
+            }
+        }
+
+        List<String> attributeLines = buildAttributeInspectLines(data);
+        if (attributeLines.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Attributes: none").withStyle(ChatFormatting.LIGHT_PURPLE));
+        } else {
+            player.sendSystemMessage(Component.literal("Attributes").withStyle(ChatFormatting.LIGHT_PURPLE));
+            for (String line : attributeLines) {
+                player.sendSystemMessage(Component.literal("- " + line).withStyle(ChatFormatting.GRAY));
+            }
+        }
+        return 1;
+    }
+
+    private static int searchTamesByAbility(CommandSourceStack source, String abilityId) {
+        ServerPlayer player = source.getPlayer();
+        String id = abilityId == null ? "" : abilityId.trim().toLowerCase(Locale.ROOT);
+        if (id.isBlank()) return error(player, "Ability name cannot be blank.");
+        if (!LevelSystem.knownAbilityIds().contains(id)) return error(player, "Unknown ability: " + id);
+        return searchOwnedTames(source, "Ability", id, data -> LevelSystem.hasAbility(data, id));
+    }
+
+    private static int searchTamesByAttribute(CommandSourceStack source, String attributeId) {
+        ServerPlayer player = source.getPlayer();
+        String id = attributeId == null ? "" : attributeId.trim().toLowerCase(Locale.ROOT);
+        if (id.isBlank()) return error(player, "Attribute name cannot be blank.");
+        if (!LevelSystem.knownAttributeIds().contains(id)) return error(player, "Unknown attribute: " + id);
+        return searchOwnedTames(source, "Attribute", id, data -> LevelSystem.getAttributeLevel(data, id) > 0);
+    }
+
+    private static int searchTamesByClass(CommandSourceStack source, String className) {
+        ServerPlayer player = source.getPlayer();
+        String id = className == null ? "" : className.trim().toLowerCase(Locale.ROOT);
+        if (id.isBlank()) return error(player, "Class name cannot be blank.");
+        TameClass tameClass;
+        try {
+            tameClass = TameClass.valueOf(id.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return error(player, "Unknown class: " + id);
+        }
+        return searchOwnedTames(source, "Class", tameClass.name().toLowerCase(Locale.ROOT), data -> data.tameClass == tameClass);
+    }
+
+    private static int searchOwnedTames(CommandSourceStack source, String category, String query, java.util.function.Predicate<TameData> predicate) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> matches = new ArrayList<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.name == null || !player.getUUID().equals(data.ownerUUID)) continue;
+            if (!predicate.test(data)) continue;
+            matches.add(data);
+        }
+        if (matches.isEmpty()) {
+            return error(player, "No tames matched " + category.toLowerCase(Locale.ROOT) + " " + query + ".");
+        }
+
+        matches.sort(Comparator
+                .comparing((TameData data) -> isDeadEntry(data.uuid))
+                .thenComparing((TameData data) -> !isLoadedAnywhere(source.getServer(), data.uuid))
+                .thenComparing((TameData data) -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT))
+                .thenComparing((TameData data) -> -data.level));
+
+        player.sendSystemMessage(Component.literal("=== Search " + category + ": " + query + " ===").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Matches: " + matches.size()).withStyle(ChatFormatting.GRAY));
+        for (TameData data : matches) {
+            boolean dead = isDeadEntry(data.uuid);
+            boolean loaded = !dead && isLoadedAnywhere(source.getServer(), data.uuid);
+            String state = dead ? "dead" : loaded ? "loaded" : "unloaded";
+            ChatFormatting color = dead ? ChatFormatting.DARK_GRAY : loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
+            String extra = switch (category) {
+                case "Ability" -> " L" + Math.max(1, LevelSystem.getAbilityLevel(data, query));
+                case "Attribute" -> " L" + Math.max(1, LevelSystem.getAttributeLevel(data, query));
+                case "Class" -> "";
+                default -> "";
+            };
+            player.sendSystemMessage(Component.literal("- [" + data.level + "] " + data.name + " (" + state + ")" + extra).withStyle(color));
+        }
+        return 1;
+    }
+
+    private static List<String> buildAbilityInspectLines(TamableAnimal tame, TameData data) {
+        List<String> lines = new ArrayList<>();
+        for (String id : LevelSystem.knownAbilityIds()) {
+            if (!LevelSystem.hasAbility(data, id)) continue;
+            int level = Math.max(1, LevelSystem.getAbilityLevel(data, id));
+            String line = buildAbilityInspectLine(tame, data, id, level);
+            if (line != null && !line.isBlank()) {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    private static String buildAbilityInspectLine(TamableAnimal tame, TameData data, String id, int level) {
+        return switch (id) {
+            case "arrow_shot", "creeper_explosion", "ghast_fireball", "blaze_attack", "guardian_beam",
+                    "elder_guardian_beam", "trident", "crossbow", "fishing", "dash", "dragon_fireball",
+                    "llama_spit", "snowball_shot", "lightning_strike", "warden_scream", "wither_skull",
+                    "evoker_fangs", "shulker_bullet", "sky_launch" -> inspectReworkedAbilityLine(data, id, level);
+            case "shadow_hands" -> id + " L" + level + ": complex sustained runtime based on hand count, windup, and target uptime; exact closed-form DPS not reliable from command";
+            case "battle_strength", "defensive_aura", "ender_pearl_jump", "berserker", "bloodlust", "retaliation_slow", "immunity_frame", "deflection", "defusal", "psychic_wall", "healing_aura", "healing_bottle", "guardian_repulse", "last_stand_fury", "shield_block" ->
+                    id + " L" + level + ": utility/support ability, no fixed direct DPS";
+            default -> id + " L" + level + ": no inspect profile";
+        };
+    }
+
+    private static String inspectDamageAbilityLine(String id, int level, double castDamage, long cooldownTicks) {
+        double cooldownSeconds = cooldownTicks / 20.0D;
+        double dps = cooldownSeconds <= 0.0D ? 0.0D : castDamage / cooldownSeconds;
+        return id + " L" + level + ": " + fmt(castDamage) + " dmg / " + fmt(cooldownSeconds) + "s = " + fmt(dps) + " DPS";
+    }
+
+    private static String inspectReworkedAbilityLine(TameData data, String id, int level) {
+        long budgetTicks = TameAbilityEvents.offensiveAbilityBudgetCooldownTicks(id, level);
+        long effectiveTicks = inspectEffectiveCooldownTicks(data, id, budgetTicks);
+        double castDamage = TameAbilityEvents.offensiveAbilityCastDamage(data, id, level);
+        String suffix = switch (id) {
+            case "creeper_explosion", "dragon_fireball" -> " per target";
+            case "ghast_fireball" -> " per target in blast";
+            case "warden_scream" -> " per target in beam";
+            case "elder_guardian_beam" -> " + mining fatigue";
+            case "lightning_strike" -> " + visual lightning";
+            case "fishing" -> " + pull";
+            case "dash" -> " per target hit in sweep";
+            case "crossbow" -> " total cast damage assuming all " + Math.max(1, level) + " arrows hit";
+            case "shulker_bullet" -> " + levitation utility";
+            case "sky_launch" -> " + launch";
+            default -> "";
+        };
+        return inspectDamageAbilityLine(id, level, castDamage, effectiveTicks) + suffix;
+    }
+
+    private static List<String> buildAttributeInspectLines(TameData data) {
+        List<String> lines = new ArrayList<>();
+        for (String id : LevelSystem.knownAttributeIds()) {
+            int level = LevelSystem.getAttributeLevel(data, id);
+            if (level <= 0) continue;
+            String line = buildAttributeInspectLine(data, id, level);
+            if (line != null && !line.isBlank()) {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    private static String buildAttributeInspectLine(TameData data, String id, int level) {
+        return switch (id) {
+            case "lifesteal" -> id + " L" + level + ": heals " + fmt((0.04D + level * 0.02D) * 100.0D) + "% of actual final damage on real base attacks only";
+            case "killer" -> id + " L" + level + ": damage x(1 + missingHP% * " + fmt(0.20D + 0.10D * level) + ")";
+            case "pacifist" -> id + " L" + level + ": damage x(1 + targetHP% * " + fmt(0.20D + 0.10D * level) + ")";
+            case "bosskiller" -> id + " L" + level + ": on hit vs large-max-HP targets, grants short str/res/speed buffs; threshold " + Math.max(40, 100 - (level - 1) * 10) + " HP";
+            case "pierce" -> id + " L" + level + ": ignores " + fmt(Math.min(0.80D, 0.20D + Math.max(0, level - 1) * 0.15D) * 100.0D) + "% of target armor";
+            case "smite" -> id + " L" + level + ": +" + fmt((0.15D + 0.10D * level) * 100.0D) + "% damage vs undead";
+            case "bane_of_arthropods" -> id + " L" + level + ": +" + fmt((0.15D + 0.10D * level) * 100.0D) + "% damage vs arthropods + slowness";
+            case "lightningfang" -> id + " L" + level + ": " + fmt(Math.min(0.35D, 0.10D + 0.05D * level) * 100.0D) + "% proc for " + fmt((2.0D + 2.0D * level) * (1.0D + 0.02D * Math.max(0.0D, data.bonusDamage))) + " bonus damage";
+            case "firefang" -> id + " L" + level + ": burns target for " + (2 + level) + "s on hit" + (level >= 5 ? " and adds +2 damage" : level >= 3 ? " and adds +1 damage" : "");
+            case "poison_fang" -> id + " L" + level + ": applies Poison " + (40 + level * 20) + " ticks on hit, amp " + (level >= 3 ? "II" : "I");
+            case "witherfang" -> id + " L" + level + ": applies Wither " + (40 + level * 20) + " ticks on hit, amp " + (level >= 4 ? "II" : "I");
+            case "frost_fang" -> id + " L" + level + ": " + fmt(Math.min(0.45D, 0.15D + Math.max(0, level - 1) * 0.075D) * 100.0D) + "% slow proc, amp " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "chain_lightning" -> id + " L" + level + ": " + fmt(Math.min(0.28D, 0.12D + Math.max(0, level - 1) * 0.04D) * 100.0D) + "% proc; chains up to " + (1 + level) + " targets for " + fmt((2.0D + level) * (1.0D + 0.01D * Math.max(0.0D, data.bonusDamage))) + " aoe damage each";
+            case "sweeping_edge" -> id + " L" + level + ": splash radius " + fmt(1.4D + Math.max(0, level - 1) * 0.20D) + ", splash scaling " + fmt(Math.min(0.50D, 0.20D + Math.max(0, level - 1) * 0.075D) * 100.0D) + "%";
+            case "victim_siphon" -> id + " L" + level + ": on kill heals " + fmt(Math.min(0.35D, 0.04D + 0.04D * level) * 100.0D) + "% of victim max HP";
+            case "killexploder" -> id + " L" + level + ": on kill/assist explodes for " + fmt((4.0D + Math.max(0, level - 1) * 1.5D) * (1.0D + 0.01D * Math.max(0.0D, data.bonusDamage))) + " aoe damage, radius " + fmt(2.0D + Math.max(0, level - 1) * 0.40D);
+            case "positive_effect_steal" -> id + " L" + level + ": " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to steal one beneficial effect on hit";
+            case "negative_effect_transfer" -> id + " L" + level + ": transfers harmful effects with x" + fmt(inspectAttributeLevelMultiplier(level)) + " duration";
+            case "feather_falling" -> id + " L" + level + ": reduces fall damage by " + fmt(Math.min(0.70D, 0.20D + Math.max(0, level - 1) * 0.125D) * 100.0D) + "%";
+            case "explosion_resistance" -> id + " L" + level + ": reduces explosion damage by " + fmt(Math.min(0.55D, 0.15D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "%";
+            case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt(level >= 5 ? 1.0D : level >= 3 ? 1.5D : 2.0D) + "s while damaged";
+            case "ability_power" -> id + " L" + level + ": ability damage/effects x" + fmt(1.0D + level * 0.10D);
+            case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
+            case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
+            case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";
+            case "speed", "strength", "resistance", "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "fire_resistance", "poison_resistance" -> id + " L" + level + ": binary resistance effect";
+            case "health_siphon", "bubbling", "herding", "amphibious", "void_cloud", "charisma", "disc_jockey", "warping_bite", "ore_scenting", "gluttonous", "tethered_teleport", "muffled", "blazing_protection", "rejuvenation", "linked_inventory" ->
+                    id + " L" + level + ": utility/survival attribute; inspect is situational rather than fixed DPS";
+            default -> id + " L" + level + ": no inspect profile";
+        };
+    }
+
+    private static double inspectAttributeLevelMultiplier(int level) {
+        int safeLevel = Math.max(1, level);
+        int tier = (safeLevel - 1) / 5;
+        int step = (safeLevel - 1) % 5;
+        return Math.pow(2.0D, tier) * (1.0D + 0.25D * step);
+    }
+
+    private static double inspectAbilityPowerMultiplier(TameData data) {
+        return 1.0D + (LevelSystem.getAttributeLevel(data, "ability_power") * 0.10D);
+    }
+
+    private static double inspectSingleTargetDamage(double amount) {
+        return amount * TLAdminRuntimeSettings.singleTargetAbilityDamageMultiplier();
+    }
+
+    private static double inspectAoeDamage(double amount) {
+        return amount * TLAdminRuntimeSettings.aoeAbilityDamageMultiplier();
+    }
+
+    private static long inspectEffectiveCooldownTicks(TameData data, String sourceId, long baseTicks) {
+        return Math.max(1L, Math.round(baseTicks * inspectAbilityCooldownMultiplier(data, sourceId)));
+    }
+
+    private static double inspectAbilityCooldownMultiplier(TameData data, String sourceId) {
+        if (!LevelSystem.isAttackAbility(sourceId)) {
+            return 1.0D;
+        }
+        return inspectAttackCooldownMultiplier(inspectOwnedAttackAbilityCount(data));
+    }
+
+    private static double inspectAttackCooldownMultiplier(int abilityCount) {
+        if (abilityCount <= 1) {
+            return 1.0D;
+        }
+        double percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent() / 100.0D;
+        return 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
+    }
+
+    private static int inspectOwnedAttackAbilityCount(TameData data) {
+        if (data == null) {
+            return 0;
+        }
+        int count = 0;
+        for (String id : LevelSystem.knownAbilityIds()) {
+            if (LevelSystem.hasAbility(data, id) && LevelSystem.isAttackAbility(id)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static String formatBedLocation(TameData data) {
         if (data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
             return "-";
@@ -2148,6 +2468,7 @@ public class TameCommands {
     private static int groupTp(CommandSourceStack source, String group) {
         ServerPlayer p = source.getPlayer();
         List<TameData> requested = ownedGroup(p.getUUID(), group);
+        int deadSkipped = ownedDeadGroup(p.getUUID(), group).size();
         List<TamableAnimal> targets = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
@@ -2173,7 +2494,7 @@ public class TameCommands {
         }
         if (!payTeleportXp(p, cost)) return 0;
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        p.sendSystemMessage(Component.literal("Teleported " + targets.size() + " loaded tames (-" + cost + " XP points, " + crossDimension + " cross-dimension), queued " + queued + " unloaded to your position, failed " + queueFailed + "."));
+        sendTeleportSummary(p, "TP group " + group, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -2184,6 +2505,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         List<TameData> requested = ownedType(p.getUUID(), typeFilter);
         if (requested.isEmpty()) return error(p, "No tames found for type '" + typeFilter + "'.");
+        int deadSkipped = ownedDeadType(p.getUUID(), typeFilter).size();
 
         List<TamableAnimal> targets = new ArrayList<>();
         int queued = 0;
@@ -2210,7 +2532,7 @@ public class TameCommands {
         }
         if (!payTeleportXp(p, cost)) return 0;
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        p.sendSystemMessage(Component.literal("Type tp '" + typeFilter + "': teleported " + targets.size() + " loaded tames (-" + cost + " XP points, " + crossDimension + " cross-dimension), queued " + queued + " unloaded to your position, failed " + queueFailed + "."));
+        sendTeleportSummary(p, "TP type " + typeFilter, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -2910,7 +3232,7 @@ public class TameCommands {
         }
         if (!payTeleportXp(p, cost)) return 0;
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        p.sendSystemMessage(Component.literal("Teleported " + targets.size() + " loaded tames (-" + cost + " XP points, " + crossDimension + " cross-dimension), queued " + queued + " unloaded to your position, failed " + queueFailed + "."));
+        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTames(p.getUUID()).size(), queueFailed, cost, crossDimension);
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -2956,7 +3278,13 @@ public class TameCommands {
 
         if (!payTeleportXp(p, cost)) return 0;
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        p.sendSystemMessage(Component.literal("Dimension tp '" + dimensionId + "': teleported " + targets.size() + " loaded tames (-" + cost + " XP points, " + crossDimension + " cross-dimension), queued " + queued + " unloaded to your position, failed " + queueFailed + "."));
+        int deadSkipped = 0;
+        for (TameData d : ownedDeadTames(p.getUUID())) {
+            if (matchesDimensionFilter(d, null, dimensionId)) {
+                deadSkipped++;
+            }
+        }
+        sendTeleportSummary(p, "TP dim " + dimensionId, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -2983,7 +3311,7 @@ public class TameCommands {
             }
         }
 
-        p.sendSystemMessage(Component.literal("Tp unloaded: queued " + queued + " to your position, failed " + failed + "."));
+        sendTeleportSummary(p, "TP unloaded", 0, queued, ownedDeadTames(p.getUUID()).size(), failed, 0, 0);
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -3039,8 +3367,8 @@ public class TameCommands {
             }
         }
 
-        String label = unloadedOnly ? "Admin tp allOwners unloaded" : "Admin tp allOwners";
-        admin.sendSystemMessage(Component.literal(label + ": teleported " + movedLoaded + " loaded, queued " + queued + " unloaded, failed " + queueFailed + ".").withStyle(ChatFormatting.GOLD));
+        String label = unloadedOnly ? "Admin TP unloaded" : "Admin TP allOwners";
+        admin.sendSystemMessage(buildTeleportSummary(label, movedLoaded, queued, 0, queueFailed, 0, 0));
         if (!failedQueueNames.isEmpty()) {
             admin.sendSystemMessage(Component.literal("Queue failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -3244,7 +3572,7 @@ public class TameCommands {
         }
         if (!payTeleportXp(p, cost)) return 0;
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        p.sendSystemMessage(Component.literal("Teleported " + targets.size() + " " + movementLabel(order) + " tames (-" + cost + " XP points, " + crossDimension + " cross-dimension), skipped " + skipped + " unloaded."));
+        sendTeleportSummary(p, "TP " + movementLabel(order), targets.size(), 0, 0, skipped, cost, crossDimension);
         return 1;
     }
 
@@ -3317,7 +3645,7 @@ public class TameCommands {
         }
     }
 
-    private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter) {
+    private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, int requestedLimit) {
         ServerPlayer p = source.getPlayer();
         String m = mode == null ? "mix" : mode.trim().toLowerCase(Locale.ROOT);
         List<TameData> entries = new ArrayList<>();
@@ -3334,13 +3662,15 @@ public class TameCommands {
         else entries.sort((a, b) -> Integer.compare(b.level, a.level));
 
         if (entries.isEmpty()) return error(p, "No entries found.");
+        int limit = Math.min(Math.max(1, requestedLimit), entries.size());
         String scope = includeAll ? "all players" : "your tames";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
-        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + " ----").withStyle(ChatFormatting.GOLD));
-        for (int i = 0; i < Math.min(10, entries.size()); i++) {
+        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        for (int i = 0; i < limit; i++) {
             TameData d = entries.get(i);
             int score = weightedCombatScore(d);
             p.sendSystemMessage(Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal("(" + ownerInitials(source.getServer(), d.ownerUUID) + ") ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("[" + d.level + "] ").withStyle(ChatFormatting.YELLOW))
                     .append(Component.literal(d.name + " ").withStyle(ChatFormatting.AQUA))
                     .append((m.equals("mix") || m.equals("score")) ? Component.literal("S:" + score + " ").withStyle(ChatFormatting.LIGHT_PURPLE) : Component.empty())
@@ -3350,6 +3680,57 @@ public class TameCommands {
                     .append(Component.literal("Days:" + daysAlive(source, d)).withStyle(ChatFormatting.DARK_AQUA)));
         }
         return 1;
+    }
+
+    private static void sendTeleportSummary(ServerPlayer player, String label, int loaded, int unloaded, int deadSkipped, int failed, int xpCost, int crossDimension) {
+        if (player == null) {
+            return;
+        }
+        player.sendSystemMessage(buildTeleportSummary(label, loaded, unloaded, deadSkipped, failed, xpCost, crossDimension));
+    }
+
+    private static Component buildTeleportSummary(String label, int loaded, int unloaded, int deadSkipped, int failed, int xpCost, int crossDimension) {
+        net.minecraft.network.chat.MutableComponent line = Component.literal(label + ": ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal("teleported ").withStyle(ChatFormatting.GRAY))
+                .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("l:" + loaded).withStyle(ChatFormatting.GREEN))
+                .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("u:" + unloaded).withStyle(ChatFormatting.YELLOW))
+                .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("d:" + deadSkipped).withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.literal("f:" + failed).withStyle(failed > 0 ? ChatFormatting.RED : ChatFormatting.GRAY))
+                .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY));
+        if (xpCost > 0) {
+            line = line.append(Component.literal(" xp:" + xpCost).withStyle(ChatFormatting.AQUA));
+        }
+        if (crossDimension > 0) {
+            line = line.append(Component.literal(" xdim:" + crossDimension).withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
+        return line;
+    }
+
+    private static String ownerInitials(MinecraftServer server, UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return "--";
+        }
+        String name = null;
+        if (server != null) {
+            ServerPlayer live = server.getPlayerList().getPlayer(ownerUuid);
+            if (live != null) {
+                name = live.getGameProfile().getName();
+            } else if (server.getProfileCache() != null) {
+                java.util.Optional<GameProfile> profile = server.getProfileCache().get(ownerUuid);
+                if (profile.isPresent()) {
+                    name = profile.get().getName();
+                }
+            }
+        }
+        if (name == null || name.isBlank()) {
+            return "??";
+        }
+        String trimmed = name.trim();
+        return trimmed.substring(0, Math.min(2, trimmed.length()));
     }
 
     private static int weightedCombatScore(TameData data) {

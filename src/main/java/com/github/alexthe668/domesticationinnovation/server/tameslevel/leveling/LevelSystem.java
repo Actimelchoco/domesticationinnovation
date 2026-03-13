@@ -39,7 +39,6 @@ public class LevelSystem {
     public static final int BASE_XP = 50;
     public static final int XP_PER_LEVEL_STEP = 3;
     public static final double DEATH_XP_LOSS = 0.67D;
-    public static final double ABILITY_UPGRADE_EXISTING_CHANCE = 0.625D;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
 
     private static final Random RANDOM = new Random();
@@ -172,6 +171,11 @@ public class LevelSystem {
             this.upgradable = upgradable;
             this.maxLevel = maxLevel;
         }
+    }
+
+    private enum AbilityRollChoice {
+        NEW_UNLOCK,
+        UPGRADE_EXISTING
     }
 
     private record WeightedOption<T>(T value, double weight) {}
@@ -455,32 +459,17 @@ public class LevelSystem {
 
     public static String applyLevelReward(TamableAnimal tame, TameData data) {
         RewardCategory category = rollCategory(data);
-        String primary = switch (category) {
+        return switch (category) {
             case BASE_STAT -> applyBaseStatReward(tame, data);
             case ATTRIBUTE -> applyAttributeReward(tame, data, true);
             case ABILITY -> applyAbilityReward(tame, data, true);
         };
-        List<String> guaranteed = grantGuaranteedAttributesForLevel(data);
-        if (guaranteed.isEmpty()) {
-            return primary;
-        }
-        if (primary == null || primary.isBlank()) {
-            return String.join(" + ", guaranteed);
-        }
-        return primary + " + " + String.join(" + ", guaranteed);
     }
 
     private static RewardCategory rollCategory(TameData data) {
-        if (data.level % 30 == 0) {
-            return RewardCategory.ABILITY;
-        }
-        if (data.level % 20 == 0) {
-            return RewardCategory.ATTRIBUTE;
-        }
-
-        double baseChance = 0.93D;
-        double attributeChance = 0.05D;
-        double abilityChance = 0.02D;
+        double baseChance = 0.80D;
+        double attributeChance = 0.10D;
+        double abilityChance = 0.10D;
 
         double baseMult = 1.0D;
         double attributeMult = 1.0D;
@@ -547,9 +536,6 @@ public class LevelSystem {
 
         List<WeightedOption<AttributeReward>> options = new ArrayList<>();
         for (AttributeReward reward : AttributeReward.values()) {
-            if (isGuaranteedOnlyAttribute(reward.id)) {
-                continue;
-            }
             int current = data.attributeLevels.getOrDefault(reward.id, 0);
             if (current >= reward.maxLevel) {
                 continue;
@@ -572,7 +558,19 @@ public class LevelSystem {
     }
 
     private static String applyAbilityReward(TamableAnimal tame, TameData data, boolean allowAttributeFallback) {
-        AbilityReward upgraded = tryUpgradeExistingAbility(data);
+        AbilityReward unlocked = null;
+        AbilityReward upgraded = null;
+
+        AbilityRollChoice choice = rollAbilityChoice(data);
+        if (choice == AbilityRollChoice.NEW_UNLOCK) {
+            unlocked = tryUnlockNewAbility(data);
+        } else if (choice == AbilityRollChoice.UPGRADE_EXISTING) {
+            upgraded = tryUpgradeExistingAbility(data);
+        }
+
+        if (unlocked != null) {
+            return "Unlocked " + unlocked.id + " I";
+        }
         if (upgraded != null) {
             int newLevel = data.abilityLevels.get(upgraded.id);
             return upgraded.id + " upgraded to " + roman(newLevel);
@@ -580,14 +578,18 @@ public class LevelSystem {
 
         List<WeightedOption<AbilityReward>> options = new ArrayList<>();
         for (AbilityReward reward : AbilityReward.values()) {
-            int current = resolveAbilityLevel(data, reward.id);
-            if (current >= reward.maxLevel) {
+            if (resolveAbilityLevel(data, reward.id) > 0) {
                 continue;
             }
-            double weight = modifiedAbilityWeight(data.tameClass, reward) * ownedAbilityRollMultiplier(current);
+            double weight = modifiedAbilityWeight(data.tameClass, reward);
             options.add(new WeightedOption<>(reward, weight));
         }
         if (options.isEmpty()) {
+            AbilityReward fallbackUpgrade = tryUpgradeExistingAbility(data);
+            if (fallbackUpgrade != null) {
+                int newLevel = data.abilityLevels.get(fallbackUpgrade.id);
+                return fallbackUpgrade.id + " upgraded to " + roman(newLevel);
+            }
             if (allowAttributeFallback) {
                 return applyAttributeReward(tame, data, false);
             }
@@ -595,29 +597,13 @@ public class LevelSystem {
         }
 
         AbilityReward rolled = pickWeighted(options);
-        int current = resolveAbilityLevel(data, rolled.id);
-        if (current == 0) {
-            normalizeAliasesForAbility(data, rolled.id);
-            data.abilities.add(rolled.id);
-            data.abilityLevels.put(rolled.id, 1);
-            TameRegistry.markDirty();
-            return "Unlocked " + rolled.id + " I";
-        }
-
-        if (rolled.upgradable && current < rolled.maxLevel) {
-            normalizeAliasesForAbility(data, rolled.id);
-            data.abilityLevels.put(rolled.id, current + 1);
-            data.abilities.add(rolled.id);
-            TameRegistry.markDirty();
-            return rolled.id + " upgraded to " + roman(current + 1);
-        }
-
-        return applyBaseStatReward(tame, data);
+        unlockAbility(data, rolled);
+        return "Unlocked " + rolled.id + " I";
     }
 
     private static AbilityReward tryUpgradeExistingAbility(TameData data) {
         AbilityReward existing = pickRandomOwnedUpgradeableAbility(data);
-        if (existing == null || RANDOM.nextDouble() > abilityUpgradeChance(data)) {
+        if (existing == null) {
             return null;
         }
         int level = data.abilityLevels.getOrDefault(existing.id, 0);
@@ -627,16 +613,14 @@ public class LevelSystem {
     }
 
     private static AbilityReward pickRandomOwnedUpgradeableAbility(TameData data) {
-        List<AbilityReward> pool = new ArrayList<>();
         List<WeightedOption<AbilityReward>> weighted = new ArrayList<>();
         for (AbilityReward reward : AbilityReward.values()) {
             int current = data.abilityLevels.getOrDefault(reward.id, 0);
             if (current > 0 && reward.upgradable && current < reward.maxLevel) {
-                pool.add(reward);
                 weighted.add(new WeightedOption<>(reward, ownedAbilityRollMultiplier(current)));
             }
         }
-        if (pool.isEmpty()) {
+        if (weighted.isEmpty()) {
             return null;
         }
         return pickWeighted(weighted);
@@ -657,9 +641,6 @@ public class LevelSystem {
         List<AttributeReward> pool = new ArrayList<>();
         List<WeightedOption<AttributeReward>> weighted = new ArrayList<>();
         for (AttributeReward reward : AttributeReward.values()) {
-            if (isGuaranteedOnlyAttribute(reward.id)) {
-                continue;
-            }
             int current = data.attributeLevels.getOrDefault(reward.id, 0);
             if (current > 0 && current < reward.maxLevel) {
                 pool.add(reward);
@@ -677,9 +658,9 @@ public class LevelSystem {
             return 1.0D;
         }
         if (currentLevel < 5) {
-            return 5.0D;
+            return 9.0D;
         }
-        return 1.5D;
+        return 4.0D;
     }
 
     private static double ownedAttributeRollMultiplier(int currentLevel) {
@@ -690,10 +671,6 @@ public class LevelSystem {
             return 3.0D;
         }
         return 1.5D;
-    }
-
-    private static double abilityUpgradeChance(TameData data) {
-        return ABILITY_UPGRADE_EXISTING_CHANCE;
     }
 
     private static int ownedAbilityCount(TameData data) {
@@ -793,25 +770,63 @@ public class LevelSystem {
         return ABILITY_ALIASES.getOrDefault(normalized, normalized);
     }
 
-    private static boolean isGuaranteedOnlyAttribute(String attributeId) {
-        if (attributeId == null) {
-            return false;
+    private static AbilityReward tryUnlockNewAbility(TameData data) {
+        List<WeightedOption<AbilityReward>> options = new ArrayList<>();
+        for (AbilityReward reward : AbilityReward.values()) {
+            if (resolveAbilityLevel(data, reward.id) > 0) {
+                continue;
+            }
+            options.add(new WeightedOption<>(reward, modifiedAbilityWeight(data.tameClass, reward)));
         }
-        return "gluttonous".equals(attributeId) || "tethered_teleport".equals(attributeId);
+        if (options.isEmpty()) {
+            return null;
+        }
+        return pickWeighted(options);
     }
 
-    private static List<String> grantGuaranteedAttributesForLevel(TameData data) {
-        List<String> granted = new ArrayList<>();
-        if (data == null) {
-            return granted;
+    private static AbilityRollChoice rollAbilityChoice(TameData data) {
+        List<WeightedOption<AbilityRollChoice>> options = new ArrayList<>();
+
+        double newAbilityWeight = unownedAbilityCount(data) > 0 ? 1.0D : 0.0D;
+        if (newAbilityWeight > 0.0D) {
+            options.add(new WeightedOption<>(AbilityRollChoice.NEW_UNLOCK, newAbilityWeight));
         }
-        if (data.level >= 10 && getAttributeLevel(data, "tethered_teleport") <= 0 && addAttribute(data, "tethered_teleport", 1)) {
-            granted.add("Unlocked tethered_teleport I");
+
+        double upgradeWeight = 0.0D;
+        for (AbilityReward reward : AbilityReward.values()) {
+            int current = data.abilityLevels.getOrDefault(reward.id, 0);
+            if (current > 0 && reward.upgradable && current < reward.maxLevel) {
+                upgradeWeight += ownedAbilityRollMultiplier(current);
+            }
         }
-        if (data.level >= 30 && getAttributeLevel(data, "gluttonous") <= 0 && addAttribute(data, "gluttonous", 1)) {
-            granted.add("Unlocked gluttonous I");
+        if (upgradeWeight > 0.0D) {
+            options.add(new WeightedOption<>(AbilityRollChoice.UPGRADE_EXISTING, upgradeWeight));
         }
-        return granted;
+
+        if (options.isEmpty()) {
+            return AbilityRollChoice.NEW_UNLOCK;
+        }
+        return pickWeighted(options);
+    }
+
+    private static void unlockAbility(TameData data, AbilityReward reward) {
+        if (data == null || reward == null) {
+            return;
+        }
+        normalizeAliasesForAbility(data, reward.id);
+        data.abilities.add(reward.id);
+        data.abilityLevels.put(reward.id, 1);
+        TameRegistry.markDirty();
+    }
+
+    private static int unownedAbilityCount(TameData data) {
+        int count = 0;
+        for (AbilityReward reward : AbilityReward.values()) {
+            if (resolveAbilityLevel(data, reward.id) <= 0) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static int resolveAbilityLevel(TameData data, String canonicalId) {
@@ -1024,12 +1039,12 @@ public class LevelSystem {
             return 0;
         }
         int rerolled = 0;
-        rerolled += rerollHalfDamageValueIntoOtherBaseStats(data, false);
-        rerolled += rerollHalfDamageValueIntoOtherBaseStats(data, true);
+        rerolled += rerollHalfDamageValueIntoProgress(data, false);
+        rerolled += rerollHalfDamageValueIntoProgress(data, true);
         return rerolled;
     }
 
-    private static int rerollHalfDamageValueIntoOtherBaseStats(TameData data, boolean saved) {
+    private static int rerollHalfDamageValueIntoProgress(TameData data, boolean saved) {
         double current = saved ? data.savedBonusDamage : data.bonusDamage;
         if (current <= 0.0D) {
             return 0;
@@ -1044,17 +1059,101 @@ public class LevelSystem {
             data.bonusDamage = Math.max(0.0D, data.bonusDamage - rollsToReroll);
         }
         for (int i = 0; i < rollsToReroll; i++) {
-            BaseStatReward reward = pickWeightedNonDamageBaseReward();
-            if (reward == null) {
+            double roll = RANDOM.nextDouble();
+            if (roll < 0.70D) {
+                BaseStatReward reward = pickWeightedNonDamageBaseReward();
+                if (reward == null) {
+                    continue;
+                }
+                if (saved) {
+                    applySavedBaseStatReward(data, reward);
+                } else {
+                    trackBonus(data, reward);
+                }
                 continue;
             }
-            if (saved) {
-                applySavedBaseStatReward(data, reward);
-            } else {
-                trackBonus(data, reward);
+            if (roll < 0.90D) {
+                applyMigratedAttributeReward(data, saved);
+                continue;
             }
+            applyMigratedAbilityReward(data, saved);
         }
         return rollsToReroll;
+    }
+
+    private static void applyMigratedAttributeReward(TameData data, boolean saved) {
+        AttributeReward reward = pickMigratedAttributeReward(data, saved);
+        if (reward == null) {
+            BaseStatReward fallback = pickWeightedNonDamageBaseReward();
+            if (fallback != null) {
+                if (saved) {
+                    applySavedBaseStatReward(data, fallback);
+                } else {
+                    trackBonus(data, fallback);
+                }
+            }
+            return;
+        }
+        if (saved) {
+            int current = data.savedAttributeLevels.getOrDefault(reward.id, 0);
+            data.savedAttributeLevels.put(reward.id, current + 1);
+        } else {
+            int current = data.attributeLevels.getOrDefault(reward.id, 0);
+            data.attributeLevels.put(reward.id, current + 1);
+            TameRegistry.markDirty();
+        }
+    }
+
+    private static AttributeReward pickMigratedAttributeReward(TameData data, boolean saved) {
+        List<WeightedOption<AttributeReward>> options = new ArrayList<>();
+        for (AttributeReward reward : AttributeReward.values()) {
+            int current = saved
+                    ? data.savedAttributeLevels.getOrDefault(reward.id, 0)
+                    : data.attributeLevels.getOrDefault(reward.id, 0);
+            if (current >= reward.maxLevel) {
+                continue;
+            }
+            double weight = modifiedAttributeWeight(data.tameClass, reward) * ownedAttributeRollMultiplier(current);
+            options.add(new WeightedOption<>(reward, weight));
+        }
+        return options.isEmpty() ? null : pickWeighted(options);
+    }
+
+    private static void applyMigratedAbilityReward(TameData data, boolean saved) {
+        AbilityReward reward = pickMigratedAbilityReward(data, saved);
+        if (reward == null) {
+            applyMigratedAttributeReward(data, saved);
+            return;
+        }
+        if (saved) {
+            data.savedAbilities.add(reward.id);
+            int current = data.savedAbilityLevels.getOrDefault(reward.id, 0);
+            data.savedAbilityLevels.put(reward.id, current + 1);
+        } else {
+            normalizeAliasesForAbility(data, reward.id);
+            data.abilities.add(reward.id);
+            int current = data.abilityLevels.getOrDefault(reward.id, 0);
+            data.abilityLevels.put(reward.id, current + 1);
+            TameRegistry.markDirty();
+        }
+    }
+
+    private static AbilityReward pickMigratedAbilityReward(TameData data, boolean saved) {
+        List<WeightedOption<AbilityReward>> options = new ArrayList<>();
+        for (AbilityReward reward : AbilityReward.values()) {
+            int current = saved
+                    ? data.savedAbilityLevels.getOrDefault(reward.id, 0)
+                    : resolveAbilityLevel(data, reward.id);
+            if (current >= reward.maxLevel) {
+                continue;
+            }
+            double weight = modifiedAbilityWeight(data.tameClass, reward);
+            if (current > 0) {
+                weight *= ownedAbilityRollMultiplier(current);
+            }
+            options.add(new WeightedOption<>(reward, weight));
+        }
+        return options.isEmpty() ? null : pickWeighted(options);
     }
 
     private static BaseStatReward pickWeightedNonDamageBaseReward() {

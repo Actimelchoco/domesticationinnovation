@@ -69,8 +69,6 @@ public class TameAbilityEvents {
     private static final int MAX_SWEEP_TARGETS = 6;
     private static final ThreadLocal<Boolean> INTERNAL_BONUS_DAMAGE = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<List<String>> DAMAGE_DEBUG_CONTRIBUTORS = ThreadLocal.withInitial(ArrayList::new);
-    private static final float ARROW_TO_GUARDIAN_DPS_RATIO = 0.40F;
-    private static final float ELDER_DPS_ABOVE_GUARDIAN = 1.125F; // Slightly higher DPS than guardian.
     private static final int MAX_WARDEN_BEAM_TARGETS = 12;
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
         @Override
@@ -204,7 +202,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "explode", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "creeper_explosion"));
-        float damage = aoeDamage(((8.0F + (levelValue - 1) * 1.5F) + tameBaseDamage(tame) * 0.80F) * abilityPowerMultiplier(data));
+        float damage = offensiveAbilityCastDamage(data, "creeper_explosion", levelValue);
         double radius = 3.0D + (levelValue - 1) * 0.3D;
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(3))) {
             if (nearby == tame || !nearby.isAlive()) continue;
@@ -239,7 +237,7 @@ public class TameAbilityEvents {
 
         Arrow arrow = new Arrow(level, tame);
         arrow.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
-        arrow.setBaseDamage(arrowShotDamageForScaling(tame, data, levelValue));
+        arrow.setBaseDamage(offensiveAbilityCastDamage(data, "arrow_shot", levelValue));
         arrow.pickup = AbstractArrow.Pickup.DISALLOWED;
         arrow.shoot(direction.x, direction.y, direction.z, velocity, 0.0F);
         level.addFreshEntity(arrow);
@@ -289,7 +287,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "blaze_attack_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "blaze_attack"));
-        float damage = singleTargetDamage(rawArrowShotDamageForScaling(tame, data, levelValue) * 0.60F); // Slightly less DPS than arrow_shot due to shorter cooldown.
+        float damage = offensiveAbilityCastDamage(data, "blaze_attack", levelValue);
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
         target.setSecondsOnFire(2 + Math.max(0, levelValue - 1));
@@ -306,9 +304,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "guardian_beam_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "guardian_beam"));
-        // DPS target: guardian_beam DPS = 40% of arrow_shot DPS.
-        // With different cooldowns, per-cast damage must be scaled by (guardianCd / arrowCd).
-        float damage = singleTargetDamage(rawArrowShotDamageForScaling(tame, data, levelValue) * ARROW_TO_GUARDIAN_DPS_RATIO * (70.0F / 60.0F));
+        float damage = offensiveAbilityCastDamage(data, "guardian_beam", levelValue);
         LevelSystem.trackDamage(target, tame);
         target.hurt(tame.damageSources().mobAttack(tame), damage);
         Vec3 start = tame.getEyePosition();
@@ -332,9 +328,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "elder_guardian_beam_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "elder_guardian_beam"));
-        // DPS target: elder is only slightly above guardian DPS.
-        float elderDpsRatio = ARROW_TO_GUARDIAN_DPS_RATIO * ELDER_DPS_ABOVE_GUARDIAN;
-        float damage = singleTargetDamage(rawArrowShotDamageForScaling(tame, data, levelValue) * elderDpsRatio * (120.0F / 60.0F));
+        float damage = offensiveAbilityCastDamage(data, "elder_guardian_beam", levelValue);
         LevelSystem.trackDamage(target, tame);
         target.hurt(tame.damageSources().mobAttack(tame), damage);
         target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 100 + levelValue * 20, Math.max(0, levelValue - 1)));
@@ -385,7 +379,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "trident_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "trident"));
-        float damage = singleTargetDamage(rawArrowShotDamageForScaling(tame, data, levelValue) * 1.70F); // Slightly more DPS than arrow_shot at longer cooldown.
+        float damage = offensiveAbilityCastDamage(data, "trident", levelValue);
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
         level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 8), 0.3D, 0.25D, 0.3D, 0.02D);
@@ -402,14 +396,16 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "crossbow"));
         Vec3 dir = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
-        int arrowCount = levelValue; // Every level adds one arrow.
+        int arrowCount = Math.max(1, levelValue);
+        float totalCastDamage = offensiveAbilityCastDamage(data, "crossbow", levelValue);
+        double perArrowDamage = totalCastDamage / arrowCount;
         int center = (arrowCount - 1) / 2;
         for (int i = 0; i < arrowCount; i++) {
             int spreadIndex = i - center;
             Arrow arrow = new Arrow(level, tame);
             arrow.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
             arrow.pickup = AbstractArrow.Pickup.DISALLOWED;
-            arrow.setBaseDamage(singleTargetDamage((float) ((3.5D + tameBaseDamage(tame) * 0.50D) * abilityPowerMultiplier(data))));
+            arrow.setBaseDamage(perArrowDamage);
             arrow.shoot(dir.x, dir.y, dir.z, 2.0F, 4.0F * spreadIndex);
             level.addFreshEntity(arrow);
         }
@@ -433,15 +429,14 @@ public class TameAbilityEvents {
         target.setDeltaMovement(newMotion);
         target.hurtMarked = true;
 
-        float damage = singleTargetDamage(((2.0F + levelValue * 0.6F) + tameBaseDamage(tame) * 0.35F) * abilityPowerMultiplier(data));
+        float damage = offensiveAbilityCastDamage(data, "fishing", levelValue);
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
 
         level.sendParticles(ParticleTypes.SPLASH, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 10), 0.3D, 0.2D, 0.3D, 0.02D);
         level.playSound(null, target.blockPosition(), SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.HOSTILE, 0.9F, 1.0F);
 
-        long cooldown = Math.max(20L, 90L - (levelValue - 1L) * 3L);
-        setAbilityCooldown(tame, data, "fishing", "fishing_hook_tick", now, cooldown);
+        setAbilityCooldown(tame, data, "fishing", "fishing_hook_tick", now, 90L);
         debugAbilityUse(tame, "fishing");
     }
 
@@ -461,7 +456,7 @@ public class TameAbilityEvents {
         Vec3 end = start.add(dir.scale(dashDistance));
 
         AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
-        float damage = singleTargetDamage((float) (tameBaseDamage(tame) * abilityPowerMultiplier(data)));
+        float damage = offensiveAbilityCastDamage(data, "dash", levelValue);
 
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, sweep)) {
             if (!nearby.isAlive()) continue;
@@ -478,8 +473,7 @@ public class TameAbilityEvents {
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), capParticles(tame, 6), 0.25D, 0.1D, 0.25D, 0.0D);
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 0.8F, 1.2F);
 
-        long cooldown = Math.max(20L, 90L - (levelValue - 1L) * 4L);
-        setAbilityCooldown(tame, data, "dash", "dash_tick", now, cooldown);
+        setAbilityCooldown(tame, data, "dash", "dash_tick", now, 90L);
         debugAbilityUse(tame, "dash");
     }
 
@@ -518,7 +512,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "dragon_fireball_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dragon_fireball"));
-        float baseDamage = aoeDamage(((6.0F + levelValue * 2.0F) + tameBaseDamage(tame) * 1.10F) * abilityPowerMultiplier(data));
+        float baseDamage = offensiveAbilityCastDamage(data, "dragon_fireball", levelValue);
         double radius = 3.0D + levelValue * 0.35D;
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(radius))) {
             if (!nearby.isAlive()) continue;
@@ -540,8 +534,9 @@ public class TameAbilityEvents {
         if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
         if (!isReady(data, "llama_spit_tick", now)) return;
 
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "llama_spit"));
         LevelSystem.trackDamage(target, tame);
-        target.hurt(tame.damageSources().mobAttack(tame), singleTargetDamage(((3.0F + LevelSystem.getAbilityLevel(data, "llama_spit")) + tameBaseDamage(tame) * 0.60F) * abilityPowerMultiplier(data)));
+        target.hurt(tame.damageSources().mobAttack(tame), offensiveAbilityCastDamage(data, "llama_spit", levelValue));
         level.sendParticles(ParticleTypes.SPIT, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 8), 0.3D, 0.3D, 0.3D, 0.02D);
 
         setAbilityCooldown(tame, data, "llama_spit", "llama_spit_tick", now, 50);
@@ -578,10 +573,7 @@ public class TameAbilityEvents {
             target.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 60 + levelValue * 20, Math.max(0, levelValue / 3)));
         }
         level.sendParticles(ParticleTypes.END_ROD, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 16), 0.4D, 0.5D, 0.4D, 0.01D);
-        // Reduce cooldown by 10% per level (min 20 ticks).
-        double cooldownMultiplier = Math.max(0.20D, 1.0D - 0.10D * (levelValue - 1));
-        long cooldown = Math.max(20L, Math.round(100.0D * cooldownMultiplier));
-        setAbilityCooldown(tame, data, "shulker_bullet", "shulker_bullet_tick", now, cooldown);
+        setAbilityCooldown(tame, data, "shulker_bullet", "shulker_bullet_tick", now, 200L);
         debugAbilityUse(tame, "shulker_bullet");
     }
 
@@ -597,7 +589,7 @@ public class TameAbilityEvents {
         snowball.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
         snowball.shoot(direction.x, direction.y, direction.z, 1.5F, 0.0F);
         level.addFreshEntity(snowball);
-        float damage = singleTargetDamage(rawArrowShotDamageForScaling(tame, data, levelValue) * 0.30F); // Slightly less DPS than arrow_shot at 1s cooldown.
+        float damage = offensiveAbilityCastDamage(data, "snowball_shot", levelValue);
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
 
@@ -718,8 +710,7 @@ public class TameAbilityEvents {
         if (!isReady(data, "lightning_strike_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "lightning_strike"));
-        float damage = singleTargetDamage((((5.0F + (levelValue - 1) * 2.0F) + tameBaseDamage(tame) * 0.80F) * abilityPowerMultiplier(data))
-                * LIGHTNING_DAMAGE_MULTIPLIER);
+        float damage = offensiveAbilityCastDamage(data, "lightning_strike", levelValue);
         spawnLightningVisual(level, target.getX(), target.getY(), target.getZ(), tame);
         LevelSystem.trackDamage(target, tame);
         target.hurt(tame.damageSources().mobAttack(tame), damage);
@@ -738,7 +729,7 @@ public class TameAbilityEvents {
         double maxRange = 16.0D + levelValue * 2.0D;
         if (tame.distanceTo(target) > maxRange) return;
 
-        float damage = aoeDamage(((6.0F + (levelValue - 1) * 2.0F) + tameBaseDamage(tame)) * abilityPowerMultiplier(data));
+        float damage = offensiveAbilityCastDamage(data, "warden_scream", levelValue);
         Vec3 start = tame.getEyePosition();
         Vec3 end = target.getEyePosition();
         Vec3 beam = end.subtract(start);
@@ -837,8 +828,9 @@ public class TameAbilityEvents {
         if (!isReady(data, "attr_regen", now)) return;
         if (tame.getHealth() >= tame.getMaxHealth()) return;
 
-        tame.heal(0.6F * regenLevel);
-        setAbilityCooldown(tame, data, "regeneration", "attr_regen", now, 40);
+        tame.heal(0.5F + 0.5F * regenLevel);
+        long cooldown = regenLevel >= 5 ? 20L : regenLevel >= 3 ? 30L : 40L;
+        setAbilityCooldown(tame, data, "regeneration", "attr_regen", now, cooldown);
         debugAbilityUse(tame, "regeneration");
     }
 
@@ -912,7 +904,7 @@ public class TameAbilityEvents {
         double chance = Math.min(0.90D, baseChance + levelValue * 0.04D);
         if (tame.getRandom().nextDouble() > chance) return;
 
-        float damage = singleTargetDamage(((1.5F + levelValue * 0.8F) + tameBaseDamage(tame) * 0.45F) * abilityPowerMultiplier(data));
+        float damage = offensiveAbilityCastDamage(data, "sky_launch", levelValue);
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
         Vec3 motion = target.getDeltaMovement();
@@ -935,7 +927,7 @@ public class TameAbilityEvents {
         if (killerLevel > 0) {
             float hpPct = target.getHealth() / Math.max(1.0F, target.getMaxHealth());
             float missing = Mth.clamp(1.0F - hpPct, 0.0F, 1.0F);
-            float multiplier = 1.0F + missing * killerLevel;
+            float multiplier = 1.0F + missing * attributeConditionalMultiplier(killerLevel);
             event.setAmount(event.getAmount() * multiplier);
             damage = event.getAmount();
             noteDamageContributor("killer");
@@ -945,7 +937,7 @@ public class TameAbilityEvents {
         int pacifistLevel = attributeLevel(data, "pacifist");
         if (pacifistLevel > 0) {
             float hpPct = Mth.clamp(target.getHealth() / Math.max(1.0F, target.getMaxHealth()), 0.0F, 1.0F);
-            float multiplier = 1.0F + hpPct * pacifistLevel;
+            float multiplier = 1.0F + hpPct * attributeConditionalMultiplier(pacifistLevel);
             event.setAmount(event.getAmount() * multiplier);
             damage = event.getAmount();
             noteDamageContributor("pacifist");
@@ -954,20 +946,21 @@ public class TameAbilityEvents {
 
         int bossKillerLevel = attributeLevel(data, "bosskiller");
         if (bossKillerLevel > 0) {
-            int threshold = Math.max(10, 100 - (bossKillerLevel - 1) * 10);
+            int threshold = Math.max(40, 100 - (bossKillerLevel - 1) * 10);
             int stacks = Math.max(0, (int) (target.getMaxHealth() / threshold));
             if (stacks > 0) {
-                int amp = Math.min(4, stacks - 1);
-                tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 60, amp, false, false, true));
-                tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, amp, false, false, true));
-                tame.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 60, amp, false, false, true));
+                int amp = Math.min(2, Math.max(0, (bossKillerLevel - 1) / 2));
+                int duration = 60 + bossKillerLevel * 20;
+                tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, duration, amp, false, false, true));
+                tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, duration, amp, false, false, true));
+                tame.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, duration, amp, false, false, true));
                 debugAbilityUse(tame, "bosskiller");
             }
         }
 
         int lifestealLevel = attributeLevel(data, "lifesteal");
-        if (lifestealLevel > 0) {
-            float heal = event.getAmount() * (0.05F + (lifestealLevel * 0.02F));
+        if (lifestealLevel > 0 && isBaseAttackHit(tame, event)) {
+            float heal = event.getAmount() * (0.04F + (lifestealLevel * 0.02F));
             tame.heal(heal);
             debugAbilityUse(tame, "lifesteal");
         }
@@ -986,31 +979,36 @@ public class TameAbilityEvents {
         int firefangLevel = attributeLevel(data, "firefang");
         if (firefangLevel > 0) {
             event.getEntity().setSecondsOnFire(2 + firefangLevel);
+            float bonus = firefangLevel >= 5 ? 2.0F : firefangLevel >= 3 ? 1.0F : 0.0F;
+            if (bonus > 0.0F) {
+                event.setAmount(event.getAmount() + bonus);
+                damage = event.getAmount();
+                noteDamageContributor("firefang");
+            }
             debugAbilityUse(tame, "firefang");
         }
 
         int poisonFangLevel = attributeLevel(data, "poison_fang");
         if (poisonFangLevel > 0) {
             int duration = 40 + poisonFangLevel * 20;
-            int amplifier = Math.min(4, Math.max(0, poisonFangLevel / 3));
+            int amplifier = poisonFangLevel >= 3 ? 1 : 0;
             event.getEntity().addEffect(new MobEffectInstance(MobEffects.POISON, duration, amplifier));
             debugAbilityUse(tame, "poison_fang");
         }
 
         int witherfangLevel = attributeLevel(data, "witherfang");
         if (witherfangLevel > 0) {
-            event.getEntity().addEffect(new MobEffectInstance(MobEffects.WITHER, 60 + witherfangLevel * 20, Math.max(0, witherfangLevel - 1)));
+            int duration = 40 + witherfangLevel * 20;
+            int amplifier = witherfangLevel >= 4 ? 1 : 0;
+            event.getEntity().addEffect(new MobEffectInstance(MobEffects.WITHER, duration, amplifier));
             debugAbilityUse(tame, "witherfang");
         }
 
         int frostFangLevel = attributeLevel(data, "frost_fang");
         if (frostFangLevel > 0) {
-            float hpPct = Mth.clamp(target.getHealth() / Math.max(1.0F, target.getMaxHealth()), 0.0F, 1.0F);
-            double baseChance = Math.min(0.85D, 0.15D * frostFangLevel);
-            double lowHpBonus = (1.0D - hpPct) * 0.20D;
-            double totalChance = Math.min(0.95D, baseChance + lowHpBonus);
-            if (tame.getRandom().nextDouble() < totalChance) {
-                int slownessAmp = Math.max(0, (frostFangLevel - 1) / 2);
+            double chance = Math.min(0.45D, 0.15D + Math.max(0, frostFangLevel - 1) * 0.075D);
+            if (tame.getRandom().nextDouble() < chance) {
+                int slownessAmp = frostFangLevel >= 5 ? 2 : frostFangLevel >= 3 ? 1 : 0;
                 int duration = 40 + frostFangLevel * 20;
                 target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, duration, slownessAmp));
                 debugAbilityUse(tame, "frost_fang");
@@ -1024,13 +1022,16 @@ public class TameAbilityEvents {
 
         int chainLightningLevel = attributeLevel(data, "chain_lightning");
         if (chainLightningLevel > 0 && tame.level() instanceof ServerLevel serverLevel) {
-            noteDamageContributor("chain_lightning");
-            applyChainLightning(serverLevel, tame, data, target, event.getAmount(), chainLightningLevel);
+            double chance = Math.min(0.28D, 0.12D + Math.max(0, chainLightningLevel - 1) * 0.04D);
+            if (tame.getRandom().nextDouble() < chance) {
+                noteDamageContributor("chain_lightning");
+                applyChainLightning(serverLevel, tame, data, target, event.getAmount(), chainLightningLevel);
+            }
         }
 
         int smiteLevel = attributeLevel(data, "smite");
         if (smiteLevel > 0 && target.getMobType() == MobType.UNDEAD) {
-            float extra = event.getAmount() * (0.20F + 0.08F * smiteLevel);
+            float extra = event.getAmount() * (0.15F + 0.10F * smiteLevel);
             event.setAmount(event.getAmount() + extra);
             noteDamageContributor("smite");
             debugAbilityUse(tame, "smite");
@@ -1038,32 +1039,30 @@ public class TameAbilityEvents {
 
         int arthropodLevel = attributeLevel(data, "bane_of_arthropods");
         if (arthropodLevel > 0 && target.getMobType() == MobType.ARTHROPOD) {
-            float extra = event.getAmount() * (0.20F + 0.08F * arthropodLevel);
+            float extra = event.getAmount() * (0.15F + 0.10F * arthropodLevel);
             event.setAmount(event.getAmount() + extra);
-            target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 20 + arthropodLevel * 10, Math.max(0, arthropodLevel / 2)));
+            target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 20 + arthropodLevel * 10, arthropodLevel >= 5 ? 2 : arthropodLevel >= 3 ? 1 : 0));
             noteDamageContributor("bane_of_arthropods");
             debugAbilityUse(tame, "bane_of_arthropods");
         }
 
         int lightningfangLevel = attributeLevel(data, "lightningfang");
         if (lightningfangLevel > 0 && tame.level() instanceof ServerLevel serverLevel) {
-            if (tame.getRandom().nextDouble() <= LIGHTNING_PROC_CHANCE) {
+            if (tame.getRandom().nextDouble() <= lightningfangChance(lightningfangLevel)) {
                 noteDamageContributor("lightningfang");
                 spawnLightningVisual(serverLevel, target.getX(), target.getY(), target.getZ(), tame);
                 LevelSystem.trackDamage(target, tame);
                 applyInternalBonusDamage(
                         target,
                         tame,
-                        singleTargetDamage((((2.0F + lightningfangLevel) + tameBaseDamage(tame) * 0.35F) * abilityPowerMultiplier(data))
-                                * LIGHTNING_DAMAGE_MULTIPLIER
-                        )
+                        singleTargetDamage(lightningfangDamage(data, lightningfangLevel))
                 );
                 debugAbilityUse(tame, "lightningfang");
             }
         }
 
         int stealLevel = attributeLevel(data, "positive_effect_steal");
-        if (stealLevel > 0 && tame.getRandom().nextDouble() < Math.min(0.80D, 0.10D * stealLevel)) {
+        if (stealLevel > 0 && tame.getRandom().nextDouble() < Math.min(0.38D, 0.08D + 0.06D * stealLevel)) {
             stealPositiveEffect(target, tame);
             debugAbilityUse(tame, "positive_effect_steal");
         }
@@ -1092,7 +1091,7 @@ public class TameAbilityEvents {
     private static void applyNamedAttributeEffect(TamableAnimal tame, TameData data, String attribute, net.minecraft.world.effect.MobEffect effect) {
         int level = attributeLevel(data, attribute);
         if (level <= 0) return;
-        int amplifier = Math.max(0, level - 1);
+        int amplifier = binaryAttribute(attribute) ? 0 : breakpointAmplifier(level);
         MobEffectInstance current = tame.getEffect(effect);
         if (current != null && current.getAmplifier() == amplifier && current.getDuration() > 20) {
             return;
@@ -1115,7 +1114,7 @@ public class TameAbilityEvents {
 
         int feather = attributeLevel(data, "feather_falling");
         if (feather > 0 && event.getSource().is(DamageTypeTags.IS_FALL)) {
-            float reduce = Math.min(0.90F, 0.12F * feather);
+            float reduce = (float) Math.min(0.70D, 0.20D + Math.max(0, feather - 1) * 0.125D);
             amount *= (1.0F - reduce);
             event.setAmount(amount);
             debugAbilityUse(tame, "feather_falling");
@@ -1123,7 +1122,7 @@ public class TameAbilityEvents {
 
         int explosion = attributeLevel(data, "explosion_resistance");
         if (explosion > 0 && event.getSource().is(DamageTypeTags.IS_EXPLOSION)) {
-            float reduce = Math.min(0.80F, 0.10F * explosion);
+            float reduce = (float) Math.min(0.55D, 0.15D + Math.max(0, explosion - 1) * 0.10D);
             amount *= (1.0F - reduce);
             event.setAmount(amount);
             debugAbilityUse(tame, "explosion_resistance");
@@ -1178,7 +1177,7 @@ public class TameAbilityEvents {
     private static void transferNegativeEffects(TamableAnimal from, LivingEntity to, int level) {
         for (MobEffectInstance fx : from.getActiveEffects()) {
             if (fx.getEffect().getCategory() != MobEffectCategory.HARMFUL) continue;
-            int duration = Math.max(20, fx.getDuration() + level * 20);
+            int duration = Math.max(20, Math.round(fx.getDuration() * attributeLevelMultiplier(level)));
             int amp = Math.max(0, fx.getAmplifier());
             to.addEffect(new MobEffectInstance(fx.getEffect(), duration, amp));
         }
@@ -1212,9 +1211,9 @@ public class TameAbilityEvents {
         if (firstTarget == null || !firstTarget.isAlive()) {
             return;
         }
-        int maxChains = Math.min(60, 3 + levelValue * 3);
-        double chainRadius = 4.0D + levelValue * 0.35D;
-        float chainDamage = aoeDamage(Math.max(1.0F, hitDamage * (0.30F + Math.min(0.70F, levelValue * 0.03F))) * abilityPowerMultiplier(data));
+        int maxChains = 1 + levelValue;
+        double chainRadius = 4.0D + Math.max(0, levelValue - 1) * 0.25D;
+        float chainDamage = aoeDamage((2.0F + levelValue) * attributeDamageBonusMultiplier(data, 0.50F));
 
         Set<Integer> hitIds = new HashSet<>();
         hitIds.add(firstTarget.getId());
@@ -1258,9 +1257,9 @@ public class TameAbilityEvents {
 
     private static void applySweepingEdge(TamableAnimal tame, TameData data, LivingEntity primaryTarget, float hitDamage, int level) {
         int hits = 0;
-        double radius = 1.8D + level * 0.25D;
-        float scaling = Math.min(1.25F, 0.15F + (0.08F * level));
-        float splash = aoeDamage((hitDamage + tameBaseDamage(tame)) * scaling);
+        double radius = 1.4D + Math.max(0, level - 1) * 0.20D;
+        float scaling = (float) Math.min(0.50D, 0.20D + Math.max(0, level - 1) * 0.075D);
+        float splash = aoeDamage(hitDamage * scaling * attributeDamageBonusMultiplier(data, 0.50F));
         for (LivingEntity nearby : tame.level().getEntitiesOfClass(LivingEntity.class, primaryTarget.getBoundingBox().inflate(radius))) {
             if (nearby == tame || nearby == primaryTarget || !nearby.isAlive()) continue;
             if (isFriendly(tame, nearby)) continue;
@@ -1296,8 +1295,8 @@ public class TameAbilityEvents {
 
         int explodeLevel = attributeLevel(data, "killexploder");
         if (explodeLevel > 0 && tame.level() instanceof ServerLevel level) {
-            float damage = aoeDamage((4.0F + explodeLevel * 2.0F) + tameBaseDamage(tame) * 0.90F);
-            double radius = 2.5D + explodeLevel * 0.35D;
+            float damage = aoeDamage((float) ((4.0D + Math.max(0, explodeLevel - 1) * 1.5D) * attributeDamageBonusMultiplier(data, 0.50F)));
+            double radius = 2.0D + Math.max(0, explodeLevel - 1) * 0.40D;
             for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, dead.getBoundingBox().inflate(radius))) {
                 if (!nearby.isAlive() || nearby == tame) continue;
                 LevelSystem.trackDamage(nearby, tame);
@@ -1310,7 +1309,7 @@ public class TameAbilityEvents {
 
         int victimSiphonLevel = attributeLevel(data, "victim_siphon");
         if (victimSiphonLevel > 0 && wasKiller) {
-            float heal = (float) (dead.getMaxHealth() * Math.min(0.50D, 0.05D * victimSiphonLevel));
+            float heal = (float) (dead.getMaxHealth() * Math.min(0.35D, 0.04D + 0.04D * victimSiphonLevel));
             if (heal > 0.0F) {
                 tame.heal(heal);
                 debugAbilityUse(tame, "victim_siphon");
@@ -1326,25 +1325,144 @@ public class TameAbilityEvents {
         return Math.min(cap, level * perLevel);
     }
 
+    private static float attributeLevelMultiplier(int level) {
+        return offensiveAbilityLevelMultiplier(level);
+    }
+
+    private static float attributeConditionalMultiplier(int level) {
+        return 0.20F + 0.10F * Math.max(1, level);
+    }
+
+    private static float attributeDamageBonusMultiplier(TameData data, float scaling) {
+        return offensiveDamageBonusMultiplier(data, scaling);
+    }
+
+    private static int breakpointAmplifier(int level) {
+        if (level >= 5) {
+            return 2;
+        }
+        if (level >= 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private static boolean binaryAttribute(String attribute) {
+        return "fire_resistance".equals(attribute) || "poison_resistance".equals(attribute);
+    }
+
+    private static boolean isBaseAttackHit(TamableAnimal tame, LivingHurtEvent event) {
+        if (tame == null || event == null || event.getSource() == null) {
+            return false;
+        }
+        if (INTERNAL_BONUS_DAMAGE.get()) {
+            return false;
+        }
+        return event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame;
+    }
+
+    private static float lightningfangChance(int level) {
+        return (float) Math.min(0.35D, 0.10D + 0.05D * Math.max(1, level));
+    }
+
+    private static float lightningfangDamage(TameData data, int level) {
+        return (2.0F + 2.0F * Math.max(1, level)) * attributeDamageBonusMultiplier(data, 1.0F);
+    }
+
     private static float abilityPowerMultiplier(TameData data) {
         int level = attributeLevel(data, "ability_power");
-        return 1.0F + (float) level * 0.12F;
+        return 1.0F + (float) level * 0.10F;
     }
 
-    private static float rawArrowShotDamageForScaling(TamableAnimal tame, TameData data, int abilityLevel) {
-        int lvl = Math.max(1, abilityLevel);
-        return (float) (((2.0D + lvl) + tameBaseDamage(tame) * 0.65D) * abilityPowerMultiplier(data));
+    public static float offensiveAbilityCastDamage(TameData data, String abilityId, int abilityLevel) {
+        int level = Math.max(1, abilityLevel);
+        float baseDps = offensiveAbilityBaseDps(abilityId);
+        float cooldownSeconds = offensiveAbilityBudgetCooldownTicks(abilityId, level) / 20.0F;
+        float damageBonusScaling = offensiveAbilityDamageBonusScaling(abilityId);
+        float castDamage = cooldownSeconds
+                * baseDps
+                * offensiveAbilityLevelMultiplier(level)
+                * offensiveDamageBonusMultiplier(data, damageBonusScaling)
+                * abilityPowerMultiplier(data);
+        return offensiveAbilityUsesAoeScaling(abilityId) ? aoeDamage(castDamage) : singleTargetDamage(castDamage);
     }
 
-    private static float arrowShotDamageForScaling(TamableAnimal tame, TameData data, int abilityLevel) {
-        return singleTargetDamage(rawArrowShotDamageForScaling(tame, data, abilityLevel));
+    public static long offensiveAbilityBudgetCooldownTicks(String abilityId, int abilityLevel) {
+        return switch (abilityId) {
+            case "arrow_shot" -> 60L;
+            case "creeper_explosion" -> 200L;
+            case "ghast_fireball" -> 100L;
+            case "wither_skull" -> 80L;
+            case "blaze_attack" -> 40L;
+            case "guardian_beam" -> 70L;
+            case "elder_guardian_beam" -> 120L;
+            case "trident" -> 90L;
+            case "crossbow" -> 80L;
+            case "fishing" -> 90L;
+            case "dash" -> 90L;
+            case "evoker_fangs" -> 100L;
+            case "dragon_fireball" -> 140L;
+            case "llama_spit" -> 50L;
+            case "shulker_bullet" -> 200L;
+            case "snowball_shot" -> 20L;
+            case "lightning_strike" -> 500L;
+            case "warden_scream" -> 120L;
+            case "sky_launch" -> 70L;
+            default -> 0L;
+        };
+    }
+
+    private static float offensiveAbilityBaseDps(String abilityId) {
+        return switch (abilityId) {
+            case "trident" -> 1.15F;
+            case "arrow_shot" -> 1.00F;
+            case "crossbow", "llama_spit" -> 0.95F;
+            case "blaze_attack" -> 0.90F;
+            case "elder_guardian_beam", "shulker_bullet" -> 0.85F;
+            case "lightning_strike", "shadow_hands" -> 0.80F;
+            case "wither_skull" -> 0.75F;
+            case "guardian_beam", "snowball_shot" -> 0.70F;
+            case "fishing", "dash" -> 0.65F;
+            case "warden_scream" -> 0.60F;
+            case "ghast_fireball" -> 0.55F;
+            case "evoker_fangs", "dragon_fireball" -> 0.50F;
+            case "creeper_explosion" -> 0.45F;
+            case "sky_launch" -> 0.65F;
+            default -> 0.0F;
+        };
+    }
+
+    private static float offensiveAbilityDamageBonusScaling(String abilityId) {
+        return switch (abilityId) {
+            case "arrow_shot", "trident", "crossbow", "llama_spit", "blaze_attack", "snowball_shot" -> 1.00F;
+            case "elder_guardian_beam", "guardian_beam", "lightning_strike", "shulker_bullet" -> 0.85F;
+            case "fishing", "dash", "wither_skull", "sky_launch" -> 0.75F;
+            case "creeper_explosion", "ghast_fireball", "evoker_fangs", "dragon_fireball", "warden_scream" -> 0.50F;
+            default -> 1.00F;
+        };
+    }
+
+    private static boolean offensiveAbilityUsesAoeScaling(String abilityId) {
+        return switch (abilityId) {
+            case "creeper_explosion", "ghast_fireball", "wither_skull", "evoker_fangs", "dragon_fireball", "warden_scream" -> true;
+            default -> false;
+        };
+    }
+
+    public static float offensiveAbilityLevelMultiplier(int abilityLevel) {
+        int level = Math.max(1, abilityLevel);
+        int tier = (level - 1) / 5;
+        int step = (level - 1) % 5;
+        return (float) (Math.pow(2.0D, tier) * (1.0D + 0.25D * step));
+    }
+
+    public static float offensiveDamageBonusMultiplier(TameData data, float scaling) {
+        double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
+        return (float) (1.0D + bonusDamage * 0.02D * scaling);
     }
 
     private static float tameBaseDamage(TamableAnimal tame) {
-        if (tame == null) {
-            return 2.0F;
-        }
-        if (tame.getAttribute(Attributes.ATTACK_DAMAGE) == null) {
+        if (tame == null || tame.getAttribute(Attributes.ATTACK_DAMAGE) == null) {
             return 2.0F;
         }
         return (float) tame.getAttributeValue(Attributes.ATTACK_DAMAGE);
@@ -1395,8 +1513,9 @@ public class TameAbilityEvents {
         int emergency = attributeLevel(data, "emergency_cooldown_reduction");
         if (emergency > 0) {
             float hp = tame.getHealth() / Math.max(1.0F, tame.getMaxHealth());
-            if (hp <= 0.30F) {
-                double chance = chanceByLevel(emergency, 0.12D, 0.60D);
+            double threshold = 0.25D + Math.max(0, emergency - 1) * 0.025D;
+            if (hp <= threshold) {
+                double chance = Math.min(0.38D, 0.08D + 0.06D * emergency);
                 if (tame.getRandom().nextDouble() < chance) {
                     ticks = 20L;
                     debugAbilityUse(tame, "emergency_cooldown_reduction");
@@ -1564,13 +1683,44 @@ public class TameAbilityEvents {
             if (direct instanceof NoGriefLargeFireball) noteDamageContributor("ghast_fireball");
             if (direct instanceof WitherSkull) noteDamageContributor("wither_skull");
             if (direct instanceof EvokerFangs) noteDamageContributor("evoker_fangs");
-            event.setAmount(aoeDamage(event.getAmount()));
+            TamableAnimal tame = resolveProjectileOwner(direct);
+            TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+            int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data,
+                    direct instanceof NoGriefLargeFireball ? "ghast_fireball"
+                            : direct instanceof WitherSkull ? "wither_skull"
+                            : "evoker_fangs"));
+            String abilityId = direct instanceof NoGriefLargeFireball ? "ghast_fireball"
+                    : direct instanceof WitherSkull ? "wither_skull"
+                    : "evoker_fangs";
+            if (data != null) {
+                event.setAmount(offensiveAbilityCastDamage(data, abilityId, level));
+            } else {
+                event.setAmount(aoeDamage(event.getAmount()));
+            }
             return;
         }
         if (direct instanceof ShulkerBullet) {
             noteDamageContributor("shulker_bullet");
-            event.setAmount(singleTargetDamage(event.getAmount()));
+            TamableAnimal tame = resolveProjectileOwner(direct);
+            TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+            int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data, "shulker_bullet"));
+            if (data != null) {
+                event.setAmount(offensiveAbilityCastDamage(data, "shulker_bullet", level));
+            } else {
+                event.setAmount(singleTargetDamage(event.getAmount()));
+            }
         }
+    }
+
+    private static TamableAnimal resolveProjectileOwner(Entity direct) {
+        if (direct == null) {
+            return null;
+        }
+        Entity owner = null;
+        if (direct instanceof net.minecraft.world.entity.projectile.Projectile projectile) {
+            owner = projectile.getOwner();
+        }
+        return owner instanceof TamableAnimal tame ? tame : null;
     }
 
     private static float singleTargetDamage(float amount) {
