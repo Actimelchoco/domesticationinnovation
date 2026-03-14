@@ -39,6 +39,7 @@ public class TameSpawnEvents {
         TameData existingByUuid = TameRegistry.get(tame.getUUID());
         if (existingByUuid != null) {
             TameRegistry.bindEntityToData(tame, existingByUuid);
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByUuid);
             return;
         }
 
@@ -50,6 +51,7 @@ public class TameSpawnEvents {
                     loadedByTlId.discard();
                     TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
                     TameRegistry.bindEntityToData(tame, existingByTlId);
+                    LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
                 } else {
                     tame.discard();
                     return;

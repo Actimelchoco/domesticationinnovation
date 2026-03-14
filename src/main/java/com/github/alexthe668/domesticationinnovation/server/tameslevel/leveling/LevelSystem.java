@@ -76,6 +76,7 @@ public class LevelSystem {
         LIFESTEAL("lifesteal", Integer.MAX_VALUE),
         REGENERATION("regeneration", Integer.MAX_VALUE),
         REJUVENATION("rejuvenation", Integer.MAX_VALUE),
+        COMFORT("comfort", Integer.MAX_VALUE),
         FIREFANG("firefang", Integer.MAX_VALUE),
         POISON_FANG("poison_fang", Integer.MAX_VALUE),
         WITHERFANG("witherfang", Integer.MAX_VALUE),
@@ -158,7 +159,16 @@ public class LevelSystem {
         GUARDIAN_REPULSE("guardian_repulse", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         LAST_STAND_FURY("last_stand_fury", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         SHIELD_BLOCK("shield_block", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
-        SKY_LAUNCH("sky_launch", AbilityType.SUPPORT, true, Integer.MAX_VALUE);
+        SKY_LAUNCH("sky_launch", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        GUARDIAN_INTERCEPT("guardian_intercept", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        EMERGENCY_SHIELD("emergency_shield", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        BODY_BLOCK("body_block", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        BATTLEFIELD_MEDIC("battlefield_medic", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        TRIAGE_PULSE("triage_pulse", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        REVITALIZING_PRESENCE("revitalizing_presence", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        CLEANSE_TOUCH("cleanse_touch", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        PACK_GUARD("pack_guard", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        LIFE_GIFT("life_gift", AbilityType.HEAL, true, Integer.MAX_VALUE);
 
         private final String id;
         private final AbilityType type;
@@ -739,7 +749,50 @@ public class LevelSystem {
         return switch (tameClass) {
             case MANIAC -> base * 3.0D;
             case ATTRIBUTER -> base * 0.6D;
+            case PROTECTOR -> base * protectorAbilityWeight(reward);
+            case TANKER -> base * tankerAbilityWeight(reward);
             default -> base;
+        };
+    }
+
+    private static double protectorAbilityWeight(AbilityReward reward) {
+        if (reward == null) {
+            return 1.0D;
+        }
+        if (isHealingSupportAbility(reward)) {
+            return 3.5D;
+        }
+        if (isProtectiveSupportAbility(reward)) {
+            return 1.8D;
+        }
+        return 1.0D;
+    }
+
+    private static double tankerAbilityWeight(AbilityReward reward) {
+        if (reward == null) {
+            return 1.0D;
+        }
+        if (isProtectiveSupportAbility(reward)) {
+            return 3.5D;
+        }
+        if (isHealingSupportAbility(reward)) {
+            return 1.8D;
+        }
+        return 1.0D;
+    }
+
+    private static boolean isHealingSupportAbility(AbilityReward reward) {
+        return switch (reward) {
+            case HEALING_AURA, HEALING_BOTTLE, BATTLEFIELD_MEDIC, TRIAGE_PULSE, REVITALIZING_PRESENCE, LIFE_GIFT -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isProtectiveSupportAbility(AbilityReward reward) {
+        return switch (reward) {
+            case DEFENSIVE_AURA, DEFLECTION, DEFUSAL, PSYCHIC_WALL, GUARDIAN_REPULSE, SHIELD_BLOCK,
+                    GUARDIAN_INTERCEPT, EMERGENCY_SHIELD, BODY_BLOCK, CLEANSE_TOUCH, PACK_GUARD -> true;
+            default -> false;
         };
     }
 

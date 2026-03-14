@@ -2150,7 +2150,8 @@ public class TameCommands {
                     "llama_spit", "snowball_shot", "lightning_strike", "warden_scream", "wither_skull",
                     "evoker_fangs", "shulker_bullet", "sky_launch" -> inspectReworkedAbilityLine(data, id, level);
             case "shadow_hands" -> id + " L" + level + ": complex sustained runtime based on hand count, windup, and target uptime; exact closed-form DPS not reliable from command";
-            case "battle_strength", "defensive_aura", "ender_pearl_jump", "berserker", "bloodlust", "retaliation_slow", "immunity_frame", "deflection", "defusal", "psychic_wall", "healing_aura", "healing_bottle", "guardian_repulse", "last_stand_fury", "shield_block" ->
+            case "battle_strength", "defensive_aura", "ender_pearl_jump", "berserker", "bloodlust", "retaliation_slow", "immunity_frame", "deflection", "defusal", "psychic_wall", "healing_aura", "healing_bottle", "guardian_repulse", "last_stand_fury", "shield_block",
+                    "guardian_intercept", "emergency_shield", "body_block", "battlefield_medic", "triage_pulse", "revitalizing_presence", "cleanse_touch", "pack_guard", "life_gift" ->
                     id + " L" + level + ": utility/support ability, no fixed direct DPS";
             default -> id + " L" + level + ": no inspect profile";
         };
@@ -2224,6 +2225,7 @@ public class TameCommands {
             case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";
             case "speed", "strength", "resistance", "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
             case "fire_resistance", "poison_resistance" -> id + " L" + level + ": binary resistance effect";
+            case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "health_siphon", "bubbling", "herding", "amphibious", "void_cloud", "charisma", "disc_jockey", "warping_bite", "ore_scenting", "gluttonous", "tethered_teleport", "muffled", "blazing_protection", "rejuvenation", "linked_inventory" ->
                     id + " L" + level + ": utility/survival attribute; inspect is situational rather than fixed DPS";
             default -> id + " L" + level + ": no inspect profile";
@@ -2362,15 +2364,13 @@ public class TameCommands {
         if (mode == null) return error(p, "Invalid mode.");
         int count = 0;
         for (TameData d : ownedTames(p.getUUID())) {
-            d.mode = mode.id();
             Entity e = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
-            if (e instanceof TamableAnimal ta && mode != TameMode.PASSIVE) {
-                applySitFollowOverride(ta, false);
-            }
+            if (!(e instanceof TamableAnimal ta) || !ta.isAlive()) continue;
+            d.mode = mode.id();
             count++;
         }
         TameRegistry.markDirty();
-        p.sendSystemMessage(Component.literal("Set mode " + mode.key() + " for all " + count + " tames."));
+        p.sendSystemMessage(Component.literal("Set mode " + mode.key() + " for " + count + " loaded tames."));
         return 1;
     }
 
@@ -3380,6 +3380,9 @@ public class TameCommands {
         if (queueError == null) {
             return UnloadedTpResult.queued();
         }
+        if (isUnloadedRespawnFallbackBlockedType(data)) {
+            return UnloadedTpResult.fail(queueError + "; respawn fallback disabled for " + recoverEntityTypeId(data));
+        }
         if (isSameDimensionUnloadedRespawnFallback(owner, data)) {
             RecoverResult recoverResult = recoverPetEntity(source, owner, data);
             if (recoverResult.entity != null) {
@@ -3390,6 +3393,11 @@ public class TameCommands {
             }
         }
         return UnloadedTpResult.fail(queueError);
+    }
+
+    private static boolean isUnloadedRespawnFallbackBlockedType(TameData data) {
+        String typeId = recoverEntityTypeId(data);
+        return "alexsmobs:flutter".equals(typeId);
     }
 
     private static boolean isSameDimensionUnloadedRespawnFallback(ServerPlayer owner, TameData data) {

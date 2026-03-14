@@ -94,6 +94,11 @@ public class TameCombatEvents {
         if (!tame.isTame()) return;
 
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID());
+        if (diedInDuel) {
+            UUID killerTameUuid = resolveKillerTameUuid(event);
+            Set<UUID> contributors = new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(tame.getUUID(), Set.of()));
+            TameDuelManager.recordElimination(tame.level().getServer(), tame.getUUID(), contributors, killerTameUuid);
+        }
         TameDuelManager.endDuelForTame(tame.level().getServer(), tame.getUUID());
         LevelSystem.onTameDeath(tame);
         TameData data = TameRegistry.get(tame.getUUID());
@@ -147,6 +152,21 @@ public class TameCombatEvents {
             return tame;
         }
 
+        return null;
+    }
+
+    private static UUID resolveKillerTameUuid(LivingDeathEvent event) {
+        if (event == null || event.getSource() == null) {
+            return null;
+        }
+        if (event.getSource().getEntity() instanceof TamableAnimal tame && tame.isTame()) {
+            return tame.getUUID();
+        }
+        if (event.getSource().getDirectEntity() instanceof OwnableEntity ownable
+                && ownable.getOwner() instanceof TamableAnimal tame
+                && tame.isTame()) {
+            return tame.getUUID();
+        }
         return null;
     }
 

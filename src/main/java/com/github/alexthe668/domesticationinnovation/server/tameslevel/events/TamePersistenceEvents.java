@@ -22,7 +22,7 @@ public class TamePersistenceEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
             java.util.regex.Pattern.compile("^\\[lvl\\s*\\d+\\]\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final long LOCATION_SAVE_INTERVAL_TICKS = 200L; // 10 seconds
-    private static final long FULL_SNAPSHOT_INTERVAL_TICKS = 600L; // 30 seconds
+    private static final long FULL_SNAPSHOT_INTERVAL_TICKS = 1200L; // 60 seconds
     private static final long QUEUE_SCRUB_INTERVAL_TICKS = 100L; // 5 seconds
     private static final long BACKFILL_SCAN_INTERVAL_TICKS = 600L; // 30 seconds
 

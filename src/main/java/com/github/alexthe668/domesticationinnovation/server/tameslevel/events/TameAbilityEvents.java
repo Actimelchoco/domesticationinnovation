@@ -50,6 +50,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingHealEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.joml.Vector3f;
@@ -58,16 +59,19 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 public class TameAbilityEvents {
 
     private static final int ABILITY_TICK_RATE = 5;
     private static final int HEAVY_ABILITY_STAGGER_TICKS = 20;
+    private static final int GUARDIAN_LOCK_ON_PARTICLE_RATE = 10;
     private static final float LIGHTNING_DAMAGE_MULTIPLIER = 5.0F;
     private static final double LIGHTNING_PROC_CHANCE = 0.20D; // 5x less frequent
     private static final int MAX_WARDEN_BEAM_PARTICLES = 64;
     private static final int MAX_SWEEP_TARGETS = 6;
     private static final ThreadLocal<Boolean> INTERNAL_BONUS_DAMAGE = ThreadLocal.withInitial(() -> false);
+    private static final ThreadLocal<Boolean> INTERNAL_SUPPORT_REDIRECT = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<List<String>> DAMAGE_DEBUG_CONTRIBUTORS = ThreadLocal.withInitial(ArrayList::new);
     private static final int MAX_WARDEN_BEAM_TARGETS = 12;
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
@@ -90,11 +94,16 @@ public class TameAbilityEvents {
 
             if (level.getGameTime() % ABILITY_TICK_RATE != 0) return;
 
-            for (TamableAnimal tame : collectLoadedRegistryTames(level)) {
+            boolean revivedDeadEntry = false;
+            ResourceLocation levelId = level.dimension().location();
+            for (TameData data : TameRegistry.TAMES.values()) {
+                TamableAnimal tame = resolveLoadedRegistryTame(level, levelId, data);
+                if (tame == null) continue;
                 if (!tame.isTame()) continue;
-
-                TameData data = TameRegistry.get(tame.getUUID());
                 if (data == null || (data.abilityLevels.isEmpty() && data.abilities.isEmpty() && data.attributeLevels.isEmpty())) continue;
+                if (reviveDeadEntry(data)) {
+                    revivedDeadEntry = true;
+                }
 
                 if (TameMode.byId(data.mode) == TameMode.PASSIVE) {
                     if (tame.getTarget() != null) {
@@ -112,8 +121,11 @@ public class TameAbilityEvents {
                 handleNamedAttributeEffects(tame, data);
                 OwnerProtectionAbilityModule.onTick(tame, data);
                 handlePassiveHeal(tame, data, now);
+                handleComfort(tame, data, now);
                 handleAttributeRegeneration(tame, data, now);
                 handleRejuvenation(tame, data);
+                handleTriagePulse(level, tame, data, now);
+                handleCleanseTouch(level, tame, data, now);
                 if (heavyPass) {
                     handleGuardianRepulse(level, tame, data, now);
                 }
@@ -150,6 +162,9 @@ public class TameAbilityEvents {
                     handleWardenScream(level, tame, data, target, now);
                 }
             }
+            if (revivedDeadEntry) {
+                TameRegistry.markDirty();
+            }
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onLevelTick error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
@@ -161,6 +176,9 @@ public class TameAbilityEvents {
         try {
             if (event.getEntity() instanceof ServerPlayer owner && event.getAmount() > 0.0F) {
                 OwnerProtectionAbilityModule.onOwnerHurt(owner, event, OWNER_PROTECTION_HOOKS);
+                if (!INTERNAL_SUPPORT_REDIRECT.get()) {
+                    handleOwnerSupportResponses(owner, event);
+                }
             }
 
             TamableAnimal attackerTame = resolveTameAttacker(event);
@@ -184,6 +202,10 @@ public class TameAbilityEvents {
             TameData targetData = TameRegistry.get(targetTame.getUUID());
             if (targetData == null) return;
 
+            if (!INTERNAL_SUPPORT_REDIRECT.get()) {
+                handleAllyTameSupportResponses(targetTame, targetData, event);
+            }
+
             handleRetaliationSlow(targetTame, targetData, event);
             handleTotem(targetTame, targetData, event);
             handleDefensiveAura(targetTame, targetData, event);
@@ -192,6 +214,36 @@ public class TameAbilityEvents {
             handleSkyLaunchOnDefend(targetTame, targetData, event);
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
+            t.printStackTrace();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onHeal(LivingHealEvent event) {
+        try {
+            if (event.getAmount() <= 0.0F) return;
+            LivingEntity healed = event.getEntity();
+            if (!(healed.level() instanceof ServerLevel level)) return;
+
+            if (healed instanceof ServerPlayer owner) {
+                for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, owner, owner.getUUID(), 10.0D)) {
+                    TameData data = TameRegistry.get(supporter.getUUID());
+                    if (data == null) continue;
+                    handleRevitalizingPresence(level, supporter, data, owner, event.getAmount(), level.getGameTime());
+                }
+                return;
+            }
+
+            if (healed instanceof TamableAnimal healedTame && healedTame.isTame() && healedTame.getOwnerUUID() != null) {
+                for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, healedTame, healedTame.getOwnerUUID(), 10.0D)) {
+                    if (supporter == healedTame) continue;
+                    TameData data = TameRegistry.get(supporter.getUUID());
+                    if (data == null) continue;
+                    handleRevitalizingPresence(level, supporter, data, healedTame, event.getAmount(), level.getGameTime());
+                }
+            }
+        } catch (Throwable t) {
+            System.err.println("[TamesLevel] onHeal error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
         }
     }
@@ -346,6 +398,7 @@ public class TameAbilityEvents {
         boolean elder = LevelSystem.hasAbility(data, "elder_guardian_beam");
         if (!guardian && !elder) return;
         if (!tame.hasLineOfSight(target)) return;
+        if (now % GUARDIAN_LOCK_ON_PARTICLE_RATE != 0L) return;
 
         Vec3 start = tame.getEyePosition();
         Vec3 end = target.getEyePosition();
@@ -844,6 +897,23 @@ public class TameAbilityEvents {
         setCooldown(data, "passive_heal_tick", now + 100L);
     }
 
+    private static void handleComfort(TamableAnimal tame, TameData data, long now) {
+        int comfortLevel = attributeLevel(data, "comfort");
+        if (comfortLevel <= 0) return;
+        if (!isReady(data, "comfort_tick", now)) return;
+        if (tame.getHealth() >= tame.getMaxHealth()) {
+            setCooldown(data, "comfort_tick", now + 100L);
+            return;
+        }
+        if (isInBattle(tame)) {
+            setCooldown(data, "comfort_tick", now + 40L);
+            return;
+        }
+        tame.heal(comfortLevel);
+        setCooldown(data, "comfort_tick", now + 100L);
+        debugAbilityUse(tame, "comfort");
+    }
+
     private static void handleRejuvenation(TamableAnimal tame, TameData data) {
         int rejuvenationLevel = attributeLevel(data, "rejuvenation");
         if (rejuvenationLevel <= 0) {
@@ -875,6 +945,44 @@ public class TameAbilityEvents {
         setAbilityCooldown(tame, data, "healing_bottle", "healing_bottle_tick", now, cooldown);
         applySupportActivationVisual(tame, "healing_bottle");
         debugAbilityUse(tame, "healing_bottle");
+    }
+
+    private static void handleTriagePulse(ServerLevel level, TamableAnimal tame, TameData data, long now) {
+        if (!LevelSystem.hasAbility(data, "triage_pulse")) return;
+        if (!isReady(data, "triage_pulse_tick", now)) return;
+        LivingEntity patient = findLowestHealthAlly(level, tame, 10.0D, true);
+        if (patient == null || patient.getHealth() >= patient.getMaxHealth()) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "triage_pulse"));
+        float heal = 1.5F + 0.75F * levelValue;
+        patient.heal(heal);
+        long cooldown = Math.max(40L, 120L - Math.max(0, levelValue - 1) * 10L);
+        setAbilityCooldown(tame, data, "triage_pulse", "triage_pulse_tick", now, cooldown);
+        applySupportActivationVisual(tame, "triage_pulse");
+        if (level != null) {
+            level.sendParticles(ParticleTypes.HEART, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(tame, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
+        }
+        debugAbilityUse(tame, "triage_pulse");
+    }
+
+    private static void handleCleanseTouch(ServerLevel level, TamableAnimal tame, TameData data, long now) {
+        if (!LevelSystem.hasAbility(data, "cleanse_touch")) return;
+        if (!isReady(data, "cleanse_touch_tick", now)) return;
+        LivingEntity patient = findFirstDebuffedAlly(level, tame, 10.0D);
+        if (patient == null) return;
+
+        MobEffectInstance harmful = firstHarmfulEffect(patient);
+        if (harmful == null) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "cleanse_touch"));
+        patient.removeEffect(harmful.getEffect());
+        long cooldown = Math.max(60L, 180L - Math.max(0, levelValue - 1) * 15L);
+        setAbilityCooldown(tame, data, "cleanse_touch", "cleanse_touch_tick", now, cooldown);
+        applySupportActivationVisual(tame, "cleanse_touch");
+        if (level != null) {
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(tame, 5), 0.25D, 0.25D, 0.25D, 0.02D);
+        }
+        debugAbilityUse(tame, "cleanse_touch");
     }
 
     private static void handleSkyLaunchOnOffense(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
@@ -1315,6 +1423,158 @@ public class TameAbilityEvents {
                 debugAbilityUse(tame, "victim_siphon");
             }
         }
+
+        if (LevelSystem.hasAbility(data, "battlefield_medic") && isReady(data, "battlefield_medic_tick", now) && tame.level() instanceof ServerLevel level) {
+            int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battlefield_medic"));
+            float heal = (wasKiller ? 2.0F : 1.0F) + 0.75F * levelValue;
+            int healed = healNearbyAllies(level, tame, 8.0D, heal, true);
+            if (healed > 0) {
+                setAbilityCooldown(tame, data, "battlefield_medic", "battlefield_medic_tick", now, wasKiller ? 80L : 120L);
+                applySupportActivationVisual(tame, "battlefield_medic");
+                level.sendParticles(ParticleTypes.HEART, tame.getX(), tame.getY(0.7D), tame.getZ(), capParticles(tame, 4 + healed), 0.35D, 0.35D, 0.35D, 0.03D);
+                debugAbilityUse(tame, "battlefield_medic");
+            }
+        }
+    }
+
+    private static void handleOwnerSupportResponses(ServerPlayer owner, LivingHurtEvent event) {
+        if (!(owner.level() instanceof ServerLevel level)) return;
+        long now = level.getGameTime();
+        for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, owner, owner.getUUID(), 10.0D)) {
+            TameData data = TameRegistry.get(supporter.getUUID());
+            if (data == null) continue;
+            if (handleLifeGiftSupport(level, supporter, data, owner, event, now)) break;
+            if (handleGuardianInterceptSupport(level, supporter, data, owner, event, now)) break;
+            if (handleBodyBlockSupport(level, supporter, data, owner, event, now)) break;
+            handleEmergencyShieldSupport(level, supporter, data, owner, event, now);
+            handlePackGuardSupport(level, supporter, data, owner, event, now);
+        }
+    }
+
+    private static void handleAllyTameSupportResponses(TamableAnimal victim, TameData victimData, LivingHurtEvent event) {
+        if (!(victim.level() instanceof ServerLevel level)) return;
+        UUID ownerId = victim.getOwnerUUID();
+        if (ownerId == null) return;
+        long now = level.getGameTime();
+        for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, victim, ownerId, 10.0D)) {
+            if (supporter == victim) continue;
+            TameData data = TameRegistry.get(supporter.getUUID());
+            if (data == null) continue;
+            if (handleLifeGiftSupport(level, supporter, data, victim, event, now)) break;
+            if (handleGuardianInterceptSupport(level, supporter, data, victim, event, now)) break;
+            if (handleBodyBlockSupport(level, supporter, data, victim, event, now)) break;
+            handleEmergencyShieldSupport(level, supporter, data, victim, event, now);
+            handlePackGuardSupport(level, supporter, data, victim, event, now);
+        }
+    }
+
+    private static boolean handleGuardianInterceptSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
+        if (!LevelSystem.hasAbility(data, "guardian_intercept")) return false;
+        if (ally == supporter || event.getAmount() <= 0.0F) return false;
+        if (!isReady(data, "guardian_intercept_tick", now)) return false;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "guardian_intercept"));
+        float redirected = event.getAmount() * (float) Math.min(0.60D, 0.20D + 0.10D * levelValue);
+        if (redirected <= 0.0F) return false;
+        event.setAmount(Math.max(0.0F, event.getAmount() - redirected));
+        applyRedirectDamage(supporter, event, redirected);
+        setAbilityCooldown(supporter, data, "guardian_intercept", "guardian_intercept_tick", now, Math.max(40L, 140L - levelValue * 10L));
+        applySupportActivationVisual(supporter, "guardian_intercept");
+        level.sendParticles(ParticleTypes.CRIT, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
+        debugAbilityUse(supporter, "guardian_intercept");
+        return true;
+    }
+
+    private static boolean handleBodyBlockSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
+        if (!LevelSystem.hasAbility(data, "body_block")) return false;
+        if (ally == supporter || event.getAmount() <= 0.0F) return false;
+        if (!isProjectileDamage(event)) return false;
+        if (!isReady(data, "body_block_tick", now)) return false;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "body_block"));
+        float prevented = event.getAmount() * (float) Math.min(0.90D, 0.45D + 0.10D * levelValue);
+        event.setAmount(Math.max(0.0F, event.getAmount() - prevented));
+        setAbilityCooldown(supporter, data, "body_block", "body_block_tick", now, Math.max(40L, 180L - levelValue * 15L));
+        applySupportActivationVisual(supporter, "body_block");
+        level.playSound(null, supporter.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
+        debugAbilityUse(supporter, "body_block");
+        return true;
+    }
+
+    private static void handleEmergencyShieldSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
+        if (!LevelSystem.hasAbility(data, "emergency_shield")) return;
+        if (event.getAmount() <= 0.0F) return;
+        if (!isReady(data, "emergency_shield_tick", now)) return;
+        float postDamageHealth = ally.getHealth() - event.getAmount();
+        float threshold = ally.getMaxHealth() * 0.35F;
+        if (postDamageHealth > threshold) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "emergency_shield"));
+        event.setAmount(event.getAmount() * (1.0F - Math.min(0.60F, 0.20F + levelValue * 0.08F)));
+        ally.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 80 + levelValue * 20, Math.max(0, (levelValue - 1) / 2), false, false, true));
+        ally.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40 + levelValue * 20, Math.max(0, levelValue >= 4 ? 1 : 0), false, false, true));
+        setAbilityCooldown(supporter, data, "emergency_shield", "emergency_shield_tick", now, Math.max(80L, 240L - levelValue * 20L));
+        applySupportActivationVisual(supporter, "emergency_shield");
+        level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6 + levelValue), 0.3D, 0.35D, 0.3D, 0.02D);
+        debugAbilityUse(supporter, "emergency_shield");
+    }
+
+    private static void handlePackGuardSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
+        if (!LevelSystem.hasAbility(data, "pack_guard")) return;
+        if (!isReady(data, "pack_guard_tick", now)) return;
+        LivingEntity attacker = resolveLivingAttacker(event);
+        if (!(attacker instanceof Monster monster) || !monster.isAlive()) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "pack_guard"));
+        monster.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60 + levelValue * 20, Math.max(0, levelValue >= 4 ? 1 : 0), false, true, true));
+        monster.setTarget(supporter);
+        setAbilityCooldown(supporter, data, "pack_guard", "pack_guard_tick", now, Math.max(40L, 140L - levelValue * 10L));
+        applySupportActivationVisual(supporter, "pack_guard");
+        debugAbilityUse(supporter, "pack_guard");
+    }
+
+    private static boolean handleLifeGiftSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
+        if (!LevelSystem.hasAbility(data, "life_gift")) return false;
+        if (!(ally instanceof TamableAnimal)) return false;
+        if (!isReady(data, "life_gift_tick", now)) return false;
+        float lethalOverflow = event.getAmount() - ally.getHealth();
+        if (lethalOverflow < 0.0F) return false;
+
+        float donorSpendCap = Math.max(0.0F, supporter.getHealth() - 5.0F);
+        if (donorSpendCap <= 0.0F) return false;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "life_gift"));
+        float desiredRecoveryHp = Math.min(5.0F, 2.0F + levelValue);
+        float required = lethalOverflow + desiredRecoveryHp;
+        float transfer = Math.min(required, donorSpendCap);
+        if (transfer <= lethalOverflow) return false;
+
+        event.setAmount(Math.max(0.0F, event.getAmount() - transfer));
+        supporter.setHealth(Math.max(5.0F, supporter.getHealth() - transfer));
+        setAbilityCooldown(supporter, data, "life_gift", "life_gift_tick", now, Math.max(100L, 300L - levelValue * 20L));
+        applySupportActivationVisual(supporter, "life_gift");
+        level.sendParticles(ParticleTypes.HEART, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6), 0.25D, 0.25D, 0.25D, 0.02D);
+        debugAbilityUse(supporter, "life_gift");
+        return true;
+    }
+
+    private static void handleRevitalizingPresence(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity healed, float amount, long now) {
+        if (!LevelSystem.hasAbility(data, "revitalizing_presence")) return;
+        if (!isReady(data, "revitalizing_presence_tick", now)) return;
+        if (amount <= 0.0F) return;
+
+        LivingEntity patient = findLowestHealthAlly(level, supporter, 10.0D, true);
+        if (patient == null || patient == healed || patient.getHealth() >= patient.getMaxHealth()) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "revitalizing_presence"));
+        float mirrored = amount * (0.20F + 0.10F * levelValue);
+        if (mirrored <= 0.0F) return;
+
+        patient.heal(mirrored);
+        setAbilityCooldown(supporter, data, "revitalizing_presence", "revitalizing_presence_tick", now, Math.max(20L, 80L - levelValue * 5L));
+        applySupportActivationVisual(supporter, "revitalizing_presence");
+        level.sendParticles(ParticleTypes.HEART, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(supporter, 4), 0.2D, 0.2D, 0.2D, 0.02D);
+        debugAbilityUse(supporter, "revitalizing_presence");
     }
 
     private static int attributeLevel(TameData data, String id) {
@@ -1629,6 +1889,131 @@ public class TameAbilityEvents {
         return null;
     }
 
+    private static LivingEntity resolveLivingAttacker(LivingHurtEvent event) {
+        if (event == null || event.getSource() == null) {
+            return null;
+        }
+        if (event.getSource().getEntity() instanceof LivingEntity living) {
+            return living;
+        }
+        if (event.getSource().getDirectEntity() instanceof LivingEntity living) {
+            return living;
+        }
+        return null;
+    }
+
+    private static boolean isProjectileDamage(LivingHurtEvent event) {
+        if (event == null || event.getSource() == null) {
+            return false;
+        }
+        Entity direct = event.getSource().getDirectEntity();
+        return direct instanceof net.minecraft.world.entity.projectile.Projectile;
+    }
+
+    private static void applyRedirectDamage(TamableAnimal supporter, LivingHurtEvent originalEvent, float amount) {
+        if (supporter == null || amount <= 0.0F) return;
+        INTERNAL_SUPPORT_REDIRECT.set(true);
+        try {
+            supporter.hurt(originalEvent.getSource(), amount);
+        } finally {
+            INTERNAL_SUPPORT_REDIRECT.set(false);
+        }
+    }
+
+    private static List<TamableAnimal> collectOwnedNearbySupportTames(ServerLevel level, Entity center, UUID ownerId, double radius) {
+        if (level == null || center == null || ownerId == null) {
+            return List.of();
+        }
+        AABB box = center.getBoundingBox().inflate(radius);
+        return level.getEntitiesOfClass(TamableAnimal.class, box, tame ->
+                tame.isTame()
+                        && tame.isAlive()
+                        && ownerId.equals(tame.getOwnerUUID())
+        );
+    }
+
+    private static LivingEntity findLowestHealthAlly(ServerLevel level, TamableAnimal supporter, double radius, boolean includeOwner) {
+        if (level == null || supporter == null || supporter.getOwnerUUID() == null) return null;
+        LivingEntity best = null;
+        float bestRatio = 1.01F;
+
+        LivingEntity owner = supporter.getOwner();
+        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius) {
+            float ratio = owner.getHealth() / Math.max(1.0F, owner.getMaxHealth());
+            if (ratio < bestRatio && owner.getHealth() < owner.getMaxHealth()) {
+                bestRatio = ratio;
+                best = owner;
+            }
+        }
+
+        for (TamableAnimal ally : collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), radius)) {
+            float ratio = ally.getHealth() / Math.max(1.0F, ally.getMaxHealth());
+            if (ratio < bestRatio && ally.getHealth() < ally.getMaxHealth()) {
+                bestRatio = ratio;
+                best = ally;
+            }
+        }
+        return best;
+    }
+
+    private static LivingEntity findFirstDebuffedAlly(ServerLevel level, TamableAnimal supporter, double radius) {
+        if (level == null || supporter == null || supporter.getOwnerUUID() == null) return null;
+        LivingEntity owner = supporter.getOwner();
+        if (owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius && firstHarmfulEffect(owner) != null) {
+            return owner;
+        }
+        for (TamableAnimal ally : collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), radius)) {
+            if (firstHarmfulEffect(ally) != null) {
+                return ally;
+            }
+        }
+        return null;
+    }
+
+    private static MobEffectInstance firstHarmfulEffect(LivingEntity target) {
+        if (target == null) {
+            return null;
+        }
+        for (MobEffectInstance effect : target.getActiveEffects()) {
+            if (effect != null && effect.getEffect().getCategory() == MobEffectCategory.HARMFUL) {
+                return effect;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isInBattle(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            return true;
+        }
+        if (tame.hurtTime > 0) {
+            return true;
+        }
+        LivingEntity attacker = tame.getLastHurtByMob();
+        return attacker != null && attacker.isAlive() && tame.distanceToSqr(attacker) < 20.0D * 20.0D;
+    }
+
+    private static int healNearbyAllies(ServerLevel level, TamableAnimal source, double radius, float amount, boolean includeOwner) {
+        if (level == null || source == null || source.getOwnerUUID() == null || amount <= 0.0F) {
+            return 0;
+        }
+        int healed = 0;
+        LivingEntity owner = source.getOwner();
+        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(source) <= radius * radius && owner.getHealth() < owner.getMaxHealth()) {
+            owner.heal(amount);
+            healed++;
+        }
+        for (TamableAnimal ally : collectOwnedNearbySupportTames(level, source, source.getOwnerUUID(), radius)) {
+            if (ally.getHealth() >= ally.getMaxHealth()) continue;
+            ally.heal(amount);
+            healed++;
+        }
+        return healed;
+    }
+
     private static boolean isFriendly(TamableAnimal tame, Entity entity) {
         if (entity == tame) return true;
         if (entity instanceof Player player) {
@@ -1753,36 +2138,33 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
         return point.distanceToSqr(closest);
     }
 
-    private static Set<TamableAnimal> collectLoadedRegistryTames(ServerLevel level) {
-        Set<TamableAnimal> result = new HashSet<>();
-        ResourceLocation levelId = level.dimension().location();
-        boolean revivedDeadEntry = false;
-        for (TameData data : TameRegistry.TAMES.values()) {
-            if (data == null || data.uuid == null) continue;
-            if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
-                ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
-                if (lastKnown != null && !lastKnown.equals(levelId)) {
-                    continue;
-                }
+    private static TamableAnimal resolveLoadedRegistryTame(ServerLevel level, ResourceLocation levelId, TameData data) {
+        if (data == null || data.uuid == null) return null;
+        if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
+            ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+            if (lastKnown != null && !lastKnown.equals(levelId)) {
+                return null;
             }
-            Entity entity = level.getEntity(data.uuid);
-            if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) continue;
-            if (data.dead) {
-                data.dead = false;
-                data.deadGameTime = 0L;
-                data.deadUnixMillis = 0L;
-                data.deathDimension = "";
-                data.deathX = 0;
-                data.deathY = 0;
-                data.deathZ = 0;
-                revivedDeadEntry = true;
-            }
-            result.add(tame);
         }
-        if (revivedDeadEntry) {
-            TameRegistry.markDirty();
+        Entity entity = level.getEntity(data.uuid);
+        if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) {
+            return null;
         }
-        return result;
+        return tame;
+    }
+
+    private static boolean reviveDeadEntry(TameData data) {
+        if (data == null || !data.dead) {
+            return false;
+        }
+        data.dead = false;
+        data.deadGameTime = 0L;
+        data.deadUnixMillis = 0L;
+        data.deathDimension = "";
+        data.deathX = 0;
+        data.deathY = 0;
+        data.deathZ = 0;
+        return true;
     }
 
     private static boolean shouldRunHeavyPass(TamableAnimal tame, long now) {
