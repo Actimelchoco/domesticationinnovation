@@ -19,6 +19,8 @@ import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -28,6 +30,10 @@ import java.util.Set;
 import java.util.UUID;
 
 public class TameCombatEvents {
+    private static final Object DEATH_QUEUE_LOCK = new Object();
+    private static final Deque<PendingDeath> PENDING_DEATHS = new ArrayDeque<>();
+    private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
+    private static boolean processingDeaths = false;
 
     @SubscribeEvent
     public static void onHurt(LivingHurtEvent event) {
@@ -44,42 +50,11 @@ public class TameCombatEvents {
     @SubscribeEvent
     public static void onDeath(LivingDeathEvent event) {
         try {
-            LivingEntity dead = event.getEntity();
-            UUID deadId = dead.getUUID();
-            LivingEntity killer = null;
-            UUID killerTameUuid = null;
-
-            if (event.getSource().getEntity() instanceof LivingEntity e) {
-                killer = e;
-                if (e instanceof TamableAnimal tame && tame.isTame()) {
-                    killerTameUuid = tame.getUUID();
-                }
-            }
-            if (killerTameUuid == null
-                    && event.getSource().getDirectEntity() instanceof OwnableEntity ownable
-                    && ownable.getOwner() instanceof TamableAnimal tame
-                    && tame.isTame()) {
-                killer = tame;
-                killerTameUuid = tame.getUUID();
-            }
-
-            Set<UUID> contributors = new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(deadId, Set.of()));
-            LevelSystem.distributeXP(dead, killer);
-            if (!(dead.level() instanceof ServerLevel serverLevel)) {
+            PendingDeath death = PendingDeath.capture(event);
+            if (death == null) {
                 return;
             }
-            for (UUID tameId : contributors) {
-                if (!(serverLevel.getEntity(tameId) instanceof TamableAnimal tame) || !tame.isTame()) {
-                    continue;
-                }
-                TameData data = TameRegistry.get(tameId);
-                if (data == null) {
-                    continue;
-                }
-                boolean wasKiller = killerTameUuid != null && killerTameUuid.equals(tameId);
-                TameAbilityEvents.onKillOrAssist(tame, data, dead, wasKiller);
-            }
-            debugEnemyKilled(serverLevel, dead, dead.getExperienceReward(), contributors, killerTameUuid);
+            enqueueAndDrainDeaths(death);
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onDeath error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
@@ -168,6 +143,98 @@ public class TameCombatEvents {
             return tame.getUUID();
         }
         return null;
+    }
+
+    private static void enqueueAndDrainDeaths(PendingDeath death) {
+        synchronized (DEATH_QUEUE_LOCK) {
+            if (!ACTIVE_DEATHS.add(death.deadId())) {
+                return;
+            }
+            if (processingDeaths) {
+                PENDING_DEATHS.addLast(death);
+                return;
+            }
+            processingDeaths = true;
+        }
+
+        try {
+            PendingDeath current = death;
+            while (current != null) {
+                try {
+                    processDeath(current);
+                } catch (Throwable t) {
+                    System.err.println("[TamesLevel] queued onDeath error: " + t.getClass().getName() + ": " + t.getMessage());
+                    t.printStackTrace();
+                } finally {
+                    synchronized (DEATH_QUEUE_LOCK) {
+                        ACTIVE_DEATHS.remove(current.deadId());
+                        current = PENDING_DEATHS.pollFirst();
+                    }
+                }
+            }
+        } finally {
+            synchronized (DEATH_QUEUE_LOCK) {
+                processingDeaths = false;
+                PENDING_DEATHS.clear();
+                ACTIVE_DEATHS.clear();
+            }
+        }
+    }
+
+    private static void processDeath(PendingDeath death) {
+        LivingEntity dead = death.dead();
+        LevelSystem.distributeXP(dead, death.killer());
+        if (!(dead.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        for (UUID tameId : death.contributors()) {
+            if (!(serverLevel.getEntity(tameId) instanceof TamableAnimal tame) || !tame.isTame()) {
+                continue;
+            }
+            TameData data = TameRegistry.get(tameId);
+            if (data == null) {
+                continue;
+            }
+            boolean wasKiller = death.killerTameUuid() != null && death.killerTameUuid().equals(tameId);
+            TameAbilityEvents.onKillOrAssist(tame, data, dead, wasKiller);
+        }
+        debugEnemyKilled(serverLevel, dead, dead.getExperienceReward(), death.contributors(), death.killerTameUuid());
+    }
+
+    private record PendingDeath(LivingEntity dead, UUID deadId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {
+        private static PendingDeath capture(LivingDeathEvent event) {
+            if (event == null || event.isCanceled()) {
+                return null;
+            }
+            LivingEntity dead = event.getEntity();
+            if (dead == null) {
+                return null;
+            }
+            LivingEntity killer = null;
+            UUID killerTameUuid = null;
+
+            if (event.getSource().getEntity() instanceof LivingEntity e) {
+                killer = e;
+                if (e instanceof TamableAnimal tame && tame.isTame()) {
+                    killerTameUuid = tame.getUUID();
+                }
+            }
+            if (killerTameUuid == null
+                    && event.getSource().getDirectEntity() instanceof OwnableEntity ownable
+                    && ownable.getOwner() instanceof TamableAnimal tame
+                    && tame.isTame()) {
+                killer = tame;
+                killerTameUuid = tame.getUUID();
+            }
+
+            return new PendingDeath(
+                    dead,
+                    dead.getUUID(),
+                    killer,
+                    killerTameUuid,
+                    new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(dead.getUUID(), Set.of()))
+            );
+        }
     }
 
     private static void debugEnemyKilled(ServerLevel level, LivingEntity dead, int xpReward, Set<UUID> contributors, UUID killerTameUuid) {

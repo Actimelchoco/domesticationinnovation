@@ -4,6 +4,9 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -25,6 +28,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HashSet;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public class LevelSystem {
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
@@ -447,6 +451,7 @@ public class LevelSystem {
             data.xpToNext = xpRequiredForLevel(data.level);
 
             String rewardSummary = applyLevelReward(tame, data);
+            recordLevelReward(data, data.level, rewardSummary, tame.level().getGameTime());
             updateTameName(tame, data);
 
             if (tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
@@ -460,6 +465,20 @@ public class LevelSystem {
         }
         if (leveled) {
             TameRegistry.markDirty();
+        }
+    }
+
+    private static void recordLevelReward(TameData data, int level, String rewardSummary, long gameTime) {
+        if (data == null) {
+            return;
+        }
+        CompoundTag row = new CompoundTag();
+        row.putInt("level", Math.max(1, level));
+        row.putString("reward", rewardSummary == null ? "" : rewardSummary);
+        row.putLong("gameTime", Math.max(0L, gameTime));
+        data.levelRewardHistory.add(row);
+        while (data.levelRewardHistory.size() > 256) {
+            data.levelRewardHistory.remove(0);
         }
     }
 
@@ -477,6 +496,17 @@ public class LevelSystem {
     }
 
     private static RewardCategory rollCategory(TameData data) {
+        if (data.tameClass == TameClass.DPS) {
+            double roll = RANDOM.nextDouble();
+            if (roll < 0.94D) {
+                return RewardCategory.BASE_STAT;
+            }
+            if (roll < 0.98D) {
+                return RewardCategory.ATTRIBUTE;
+            }
+            return RewardCategory.ABILITY;
+        }
+
         double baseChance = 0.80D;
         double attributeChance = 0.10D;
         double abilityChance = 0.10D;
@@ -487,15 +517,20 @@ public class LevelSystem {
 
         if (data.tameClass != null) {
             switch (data.tameClass) {
+                case SHOOTER -> {
+                    baseMult = 1.00D;
+                    attributeMult = 1.00D;
+                    abilityMult = 2.00D;
+                }
                 case MANIAC -> {
-                    baseMult = 0.45D;
-                    attributeMult = 0.90D;
-                    abilityMult = 3.20D;
+                    baseMult = 0.75D;
+                    attributeMult = 0.75D;
+                    abilityMult = 2.50D;
                 }
                 case ATTRIBUTER -> {
-                    baseMult = 0.35D;
-                    attributeMult = 3.50D;
-                    abilityMult = 0.55D;
+                    baseMult = 0.75D;
+                    attributeMult = 2.75D;
+                    abilityMult = 0.75D;
                 }
                 default -> {
                 }
@@ -695,13 +730,13 @@ public class LevelSystem {
 
     private static double modifiedBaseStatWeight(TameClass tameClass, BaseStatReward reward) {
         double base = switch (reward) {
-            case HP -> 59.7D;
-            case DAMAGE -> 20.0D;
+            case HP -> 70.0D;
+            case DAMAGE -> 3.0D;
             case SPEED -> 3.0D;
-            case ARMOR -> 5.0D;
-            case ARMOR_TOUGHNESS -> 2.0D;
-            case KNOCKBACK -> 5.0D;
-            case KNOCKBACK_RESIST -> 5.0D;
+            case ARMOR -> 3.0D;
+            case ARMOR_TOUGHNESS -> 3.0D;
+            case KNOCKBACK -> 3.0D;
+            case KNOCKBACK_RESIST -> 3.0D;
         };
 
         if (tameClass == null) {
@@ -709,8 +744,10 @@ public class LevelSystem {
         }
 
         return switch (tameClass) {
-            case MANIAC -> base * 0.50D;
-            case ATTRIBUTER -> base * 0.40D;
+            case DPS -> reward == BaseStatReward.DAMAGE ? base * 4.0D : base;
+            case SHOOTER -> reward == BaseStatReward.SPEED ? base * 3.0D : base;
+            case MANIAC -> base * 0.75D;
+            case ATTRIBUTER -> base * 0.75D;
             default -> base;
         };
     }
@@ -733,8 +770,8 @@ public class LevelSystem {
             default -> 1.0D;
         };
         double classMultiplier = switch (tameClass) {
-            case ATTRIBUTER -> 3.5D;
-            case MANIAC -> 1.8D;
+            case ATTRIBUTER -> 2.75D;
+            case MANIAC -> 0.75D;
             default -> 1.0D;
         };
         return base * specific * classMultiplier;
@@ -747,8 +784,9 @@ public class LevelSystem {
         }
 
         return switch (tameClass) {
-            case MANIAC -> base * 3.0D;
-            case ATTRIBUTER -> base * 0.6D;
+            case SHOOTER -> base * 2.0D;
+            case MANIAC -> base * 2.5D;
+            case ATTRIBUTER -> base * 0.75D;
             case PROTECTOR -> base * protectorAbilityWeight(reward);
             case TANKER -> base * tankerAbilityWeight(reward);
             default -> base;
@@ -980,13 +1018,13 @@ public class LevelSystem {
         }
 
         scrubLegacyManagedModifiers(tame);
-        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
-        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
-        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
-        setAttributeBaseValue(tame, Attributes.ARMOR, readBaseOrDefault(template, Attributes.ARMOR) + data.bonusArmor);
-        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, readBaseOrDefault(template, Attributes.ARMOR_TOUGHNESS) + data.bonusArmorToughness);
-        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback));
-        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist));
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth);
+        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
+        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
+        setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
+        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, resolveBaseValue(data, template, Attributes.ARMOR_TOUGHNESS, data.bonusArmorToughness) + data.bonusArmorToughness);
+        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, resolveBaseValue(data, template, Attributes.ATTACK_KNOCKBACK, data.bonusKnockback) + data.bonusKnockback));
+        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, resolveBaseValue(data, template, Attributes.KNOCKBACK_RESISTANCE, data.bonusKnockbackResist) + data.bonusKnockbackResist));
 
         updateTameName(tame, data);
         tame.setHealth(tame.getMaxHealth());
@@ -998,6 +1036,39 @@ public class LevelSystem {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return attribute.getDefaultValue();
         return instance.getBaseValue();
+    }
+
+    private static double resolveBaseValue(TameData data, TamableAnimal template, Attribute attribute, double trackedBonus) {
+        Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus);
+        if (snapshotBase != null) {
+            return snapshotBase;
+        }
+        return readBaseOrDefault(template, attribute);
+    }
+
+    private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus) {
+        if (snapshot == null || snapshot.isEmpty() || attribute == null) {
+            return null;
+        }
+        if (!snapshot.contains("Attributes", Tag.TAG_LIST)) {
+            return null;
+        }
+        net.minecraft.resources.ResourceLocation key = ForgeRegistries.ATTRIBUTES.getKey(attribute);
+        if (key == null) {
+            return null;
+        }
+        ListTag attributes = snapshot.getList("Attributes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < attributes.size(); i++) {
+            CompoundTag entry = attributes.getCompound(i);
+            if (!entry.contains("Name", Tag.TAG_STRING) || !entry.contains("Base", Tag.TAG_DOUBLE)) {
+                continue;
+            }
+            if (!key.toString().equals(entry.getString("Name"))) {
+                continue;
+            }
+            return entry.getDouble("Base") - trackedBonus;
+        }
+        return null;
     }
 
     private static void setAttributeBaseValue(TamableAnimal tame, Attribute attribute, double value) {
@@ -1095,6 +1166,36 @@ public class LevelSystem {
         rerolled += rerollHalfDamageValueIntoProgress(data, false);
         rerolled += rerollHalfDamageValueIntoProgress(data, true);
         return rerolled;
+    }
+
+    public static int restoreHalfDamageBonusFromHealth(TameData data) {
+        if (data == null) {
+            return 0;
+        }
+        int moved = 0;
+        moved += restoreHalfDamageBonusFromHealth(data, false);
+        moved += restoreHalfDamageBonusFromHealth(data, true);
+        return moved;
+    }
+
+    private static int restoreHalfDamageBonusFromHealth(TameData data, boolean saved) {
+        double currentDamage = saved ? data.savedBonusDamage : data.bonusDamage;
+        double currentHealth = saved ? data.savedBonusHealth : data.bonusHealth;
+        if (currentDamage <= 0.0D || currentHealth <= 0.0D) {
+            return 0;
+        }
+        int pointsToMove = (int) Math.min(Math.floor(currentDamage), Math.floor(currentHealth));
+        if (pointsToMove <= 0) {
+            return 0;
+        }
+        if (saved) {
+            data.savedBonusHealth = Math.max(0.0D, data.savedBonusHealth - pointsToMove);
+            data.savedBonusDamage += pointsToMove;
+        } else {
+            data.bonusHealth = Math.max(0.0D, data.bonusHealth - pointsToMove);
+            data.bonusDamage += pointsToMove;
+        }
+        return pointsToMove;
     }
 
     private static int rerollHalfDamageValueIntoProgress(TameData data, boolean saved) {

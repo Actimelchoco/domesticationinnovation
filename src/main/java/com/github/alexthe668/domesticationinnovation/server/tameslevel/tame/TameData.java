@@ -42,6 +42,7 @@ public class TameData {
     public int deathY = 0;
     public int deathZ = 0;
     public final List<CompoundTag> deathHistory = new ArrayList<>();
+    public final List<CompoundTag> levelRewardHistory = new ArrayList<>();
     public String lastKnownDimension = "";
     public int lastKnownX = 0;
     public int lastKnownY = 0;
@@ -165,6 +166,13 @@ public class TameData {
             }
         }
         tag.put("deathHistory", deathHistoryTag);
+        ListTag levelRewardHistoryTag = new ListTag();
+        for (CompoundTag entry : levelRewardHistory) {
+            if (entry != null && !entry.isEmpty()) {
+                levelRewardHistoryTag.add(entry.copy());
+            }
+        }
+        tag.put("levelRewardHistory", levelRewardHistoryTag);
         tag.putString("lastKnownDimension", lastKnownDimension == null ? "" : lastKnownDimension);
         tag.putInt("lastKnownX", lastKnownX);
         tag.putInt("lastKnownY", lastKnownY);
@@ -284,6 +292,16 @@ public class TameData {
                 CompoundTag row = list.getCompound(i);
                 if (!row.isEmpty()) {
                     data.deathHistory.add(row.copy());
+                }
+            }
+        }
+        data.levelRewardHistory.clear();
+        if (tag.contains("levelRewardHistory", Tag.TAG_LIST)) {
+            ListTag list = tag.getList("levelRewardHistory", Tag.TAG_COMPOUND);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag row = list.getCompound(i);
+                if (!row.isEmpty()) {
+                    data.levelRewardHistory.add(row.copy());
                 }
             }
         }

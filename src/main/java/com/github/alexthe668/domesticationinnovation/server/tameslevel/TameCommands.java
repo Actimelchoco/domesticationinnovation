@@ -36,6 +36,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
@@ -327,6 +328,12 @@ public class TameCommands {
                                         .then(Commands.literal("group")
                                                 .then(Commands.argument("left", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelStartSameOwner(
+                                                                        ctx.getSource(),
+                                                                        DuelSelection.group(StringArgumentType.getString(ctx, "left")),
+                                                                        DuelSelection.all()
+                                                                )))
                                                         .then(Commands.literal("group")
                                                                 .then(Commands.argument("right", StringArgumentType.word())
                                                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -354,6 +361,12 @@ public class TameCommands {
                                         .then(Commands.literal("type")
                                                 .then(Commands.argument("left", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelStartSameOwner(
+                                                                        ctx.getSource(),
+                                                                        DuelSelection.type(StringArgumentType.getString(ctx, "left")),
+                                                                        DuelSelection.all()
+                                                                )))
                                                         .then(Commands.literal("group")
                                                                 .then(Commands.argument("right", StringArgumentType.word())
                                                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -381,6 +394,12 @@ public class TameCommands {
                                         .then(Commands.literal("name")
                                                 .then(Commands.argument("left", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelStartSameOwner(
+                                                                        ctx.getSource(),
+                                                                        DuelSelection.single(StringArgumentType.getString(ctx, "left")),
+                                                                        DuelSelection.all()
+                                                                )))
                                                         .then(Commands.literal("group")
                                                                 .then(Commands.argument("right", StringArgumentType.word())
                                                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -812,6 +831,10 @@ public class TameCommands {
                                         .executes(ctx -> adminHalfHpBonus(ctx.getSource())))
                                 .then(Commands.literal("rerollHalfDamageBonus")
                                         .executes(ctx -> adminRerollHalfDamageBonus(ctx.getSource())))
+                                .then(Commands.literal("rerollHalfDamageBonusExcludeDps")
+                                        .executes(ctx -> adminRerollHalfDamageBonusExcludeDps(ctx.getSource())))
+                                .then(Commands.literal("revertRerollHalfDamageBonusExcludeDps")
+                                        .executes(ctx -> adminConvertHealthToDamageExcludeDps(ctx.getSource())))
                                 .then(Commands.literal("normalizeBonuses")
                                         .executes(ctx -> adminNormalizeAllBonuses(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -1567,8 +1590,26 @@ public class TameCommands {
         }
 
         p.sendSystemMessage(Component.literal("Ability doc: " + id).withStyle(ChatFormatting.GOLD));
+        sendAbilityRuntimeInfo(p, id);
         sendDocLines(p, block);
         return 1;
+    }
+
+    private static void sendAbilityRuntimeInfo(ServerPlayer player, String abilityId) {
+        if (player == null || abilityId == null || abilityId.isBlank()) {
+            return;
+        }
+        if (!LevelSystem.isAttackAbility(abilityId)) {
+            player.sendSystemMessage(Component.literal("Live runtime note: support/heal abilities are not affected by the attack-ability cooldown nerf.").withStyle(ChatFormatting.DARK_AQUA));
+            return;
+        }
+        player.sendSystemMessage(Component.literal(
+                "Live runtime scaling: level multiplier = 1 + 0.25 * (level - 1), bonus-damage multiplier = 1 + 0.05 * bonusDamage * scaling, ability_power multiplier = 1 + 0.10 * ability_power."
+        ).withStyle(ChatFormatting.DARK_AQUA));
+        player.sendSystemMessage(Component.literal(
+                "Live runtime cooldown nerf: attack cooldown x(1 + " + fmt(TLAdminRuntimeSettings.abilityCountCooldownNerfPercent()) + "% * log2(owned attack abilities))."
+        ).withStyle(ChatFormatting.DARK_AQUA));
+        player.sendSystemMessage(Component.literal("Use /tames inspect <pet> for exact current damage and cooldown on a specific tame.").withStyle(ChatFormatting.DARK_AQUA));
     }
 
     private static int infoAttribute(CommandSourceStack source, String attributeName) {
@@ -1759,13 +1800,24 @@ public class TameCommands {
 
     private static int duelStartSameOwner(CommandSourceStack source, DuelSelection leftSelection, DuelSelection rightSelection) {
         ServerPlayer owner = source.getPlayer();
+        if (leftSelection != null && rightSelection != null
+                && leftSelection.kind == DuelSelectionKind.ALL
+                && rightSelection.kind == DuelSelectionKind.ALL) {
+            return error(owner, "Both duel selections cannot be all.");
+        }
         DuelSelectionResult leftResult = resolveLoadedDuelSelection(source, owner.getUUID(), leftSelection);
         if (!leftResult.error.isBlank()) return error(owner, leftResult.error);
         DuelSelectionResult rightResult = resolveLoadedDuelSelection(source, owner.getUUID(), rightSelection);
         if (!rightResult.error.isBlank()) return error(owner, rightResult.error);
 
-        List<TamableAnimal> leftGroup = leftResult.tames;
-        List<TamableAnimal> rightGroup = rightResult.tames;
+        List<TamableAnimal> leftGroup = new ArrayList<>(leftResult.tames);
+        List<TamableAnimal> rightGroup = new ArrayList<>(rightResult.tames);
+        if (leftSelection != null && leftSelection.kind == DuelSelectionKind.ALL) {
+            leftGroup = remainingDuelOpponents(source, owner.getUUID(), rightGroup);
+        }
+        if (rightSelection != null && rightSelection.kind == DuelSelectionKind.ALL) {
+            rightGroup = remainingDuelOpponents(source, owner.getUUID(), leftGroup);
+        }
         if (leftGroup.isEmpty()) return error(owner, "Left duel selection has no loaded/alive tames.");
         if (rightGroup.isEmpty()) return error(owner, "Right duel selection has no loaded/alive tames.");
 
@@ -2013,6 +2065,16 @@ public class TameCommands {
                 + " KB+" + fmt(d.bonusKnockback) + " KBR+" + fmt(d.bonusKnockbackResist)).withStyle(ChatFormatting.GRAY));
         receiver.sendSystemMessage(Component.literal("Attributes: " + formatLevelsCompact(d.attributeLevels)).withStyle(ChatFormatting.LIGHT_PURPLE));
         receiver.sendSystemMessage(Component.literal("Abilities: " + formatLevelsCompact(d.abilityLevels)).withStyle(ChatFormatting.BLUE));
+        if (!d.levelRewardHistory.isEmpty()) {
+            receiver.sendSystemMessage(Component.literal("Recent level rewards:").withStyle(ChatFormatting.DARK_AQUA));
+            int start = Math.max(0, d.levelRewardHistory.size() - 5);
+            for (int i = start; i < d.levelRewardHistory.size(); i++) {
+                CompoundTag row = d.levelRewardHistory.get(i);
+                int level = row.getInt("level");
+                String reward = row.getString("reward");
+                receiver.sendSystemMessage(Component.literal("- L" + level + ": " + (reward == null || reward.isBlank() ? "-" : reward)).withStyle(ChatFormatting.GRAY));
+            }
+        }
     }
 
     private static int inspectPet(CommandSourceStack source, String petName) {
@@ -5090,6 +5152,14 @@ public class TameCommands {
     }
 
     private static int adminRerollHalfDamageBonus(CommandSourceStack source) {
+        return adminRerollHalfDamageBonus(source, false);
+    }
+
+    private static int adminRerollHalfDamageBonusExcludeDps(CommandSourceStack source) {
+        return adminRerollHalfDamageBonus(source, true);
+    }
+
+    private static int adminRerollHalfDamageBonus(CommandSourceStack source, boolean excludeDps) {
         ServerPlayer p = source.getPlayer();
         if (p == null || source.getServer() == null) {
             return 0;
@@ -5099,6 +5169,7 @@ public class TameCommands {
         int rerolledDamagePoints = 0;
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null) continue;
+            if (excludeDps && data.tameClass == TameClass.DPS) continue;
             int rerolled = LevelSystem.rerollHalfDamageBonus(data);
             if (rerolled > 0) {
                 updatedEntries++;
@@ -5112,6 +5183,7 @@ public class TameCommands {
                 if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
                 TameData data = TameRegistry.get(tame.getUUID());
                 if (data == null) continue;
+                if (excludeDps && data.tameClass == TameClass.DPS) continue;
                 if (applyTypeBasePlusBonus(tame, data)) {
                     appliedLoaded++;
                 } else {
@@ -5123,10 +5195,55 @@ public class TameCommands {
 
         if (updatedEntries > 0) {
             TameRegistry.markDirty();
-            p.sendSystemMessage(Component.literal("Rerolled " + rerolledDamagePoints + " damage bonus points across " + updatedEntries + " tame registry entries; refreshed " + appliedLoaded + " loaded tames.").withStyle(ChatFormatting.GREEN));
+            String scope = excludeDps ? " excluding DPS class" : "";
+            p.sendSystemMessage(Component.literal("Rerolled " + rerolledDamagePoints + " damage bonus points across " + updatedEntries + " tame registry entries" + scope + "; refreshed " + appliedLoaded + " loaded tames.").withStyle(ChatFormatting.GREEN));
             return 1;
         }
-        p.sendSystemMessage(Component.literal("No tame entries had enough damage bonus to reroll.").withStyle(ChatFormatting.YELLOW));
+        String emptyMessage = excludeDps
+                ? "No non-DPS tame entries had enough damage bonus to reroll."
+                : "No tame entries had enough damage bonus to reroll.";
+        p.sendSystemMessage(Component.literal(emptyMessage).withStyle(ChatFormatting.YELLOW));
+        return 0;
+    }
+
+    private static int adminConvertHealthToDamageExcludeDps(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        if (p == null || source.getServer() == null) {
+            return 0;
+        }
+
+        int updatedEntries = 0;
+        int movedHealthPoints = 0;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.tameClass == TameClass.DPS) continue;
+            int moved = LevelSystem.restoreHalfDamageBonusFromHealth(data);
+            if (moved > 0) {
+                updatedEntries++;
+                movedHealthPoints += moved;
+            }
+        }
+
+        int appliedLoaded = 0;
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null || data.tameClass == TameClass.DPS) continue;
+                if (applyTypeBasePlusBonus(tame, data)) {
+                    appliedLoaded++;
+                } else {
+                    LevelSystem.updateTameName(tame, data);
+                    tame.setHealth(tame.getMaxHealth());
+                }
+            }
+        }
+
+        if (updatedEntries > 0) {
+            TameRegistry.markDirty();
+            p.sendSystemMessage(Component.literal("Restored " + movedHealthPoints + " damage bonus points by taking the same amount from bonus HP across " + updatedEntries + " non-DPS tame registry entries; refreshed " + appliedLoaded + " loaded tames. This is a compensation pass, not a perfect reroll undo.").withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
+        p.sendSystemMessage(Component.literal("No non-DPS tame entries had enough matching whole bonus HP and bonus damage to restore.").withStyle(ChatFormatting.YELLOW));
         return 0;
     }
 
@@ -5886,13 +6003,13 @@ public class TameCommands {
         prepareTemplateAsTamed(template, tame, data);
 
         scrubLegacyManagedModifiers(tame);
-        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
-        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
-        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
-        setAttributeBaseValue(tame, Attributes.ARMOR, readBaseOrDefault(template, Attributes.ARMOR) + data.bonusArmor);
-        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, readBaseOrDefault(template, Attributes.ARMOR_TOUGHNESS) + data.bonusArmorToughness);
-        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback));
-        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist));
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth);
+        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
+        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
+        setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
+        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, resolveBaseValue(data, template, Attributes.ARMOR_TOUGHNESS, data.bonusArmorToughness) + data.bonusArmorToughness);
+        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, resolveBaseValue(data, template, Attributes.ATTACK_KNOCKBACK, data.bonusKnockback) + data.bonusKnockback));
+        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, resolveBaseValue(data, template, Attributes.KNOCKBACK_RESISTANCE, data.bonusKnockbackResist) + data.bonusKnockbackResist));
 
         LevelSystem.updateTameName(tame, data);
         tame.setHealth(tame.getMaxHealth());
@@ -5933,6 +6050,39 @@ public class TameCommands {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return attribute.getDefaultValue();
         return instance.getBaseValue();
+    }
+
+    private static double resolveBaseValue(TameData data, TamableAnimal template, Attribute attribute, double trackedBonus) {
+        Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus);
+        if (snapshotBase != null) {
+            return snapshotBase;
+        }
+        return readBaseOrDefault(template, attribute);
+    }
+
+    private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus) {
+        if (snapshot == null || snapshot.isEmpty() || attribute == null) {
+            return null;
+        }
+        if (!snapshot.contains("Attributes", Tag.TAG_LIST)) {
+            return null;
+        }
+        ResourceLocation key = ForgeRegistries.ATTRIBUTES.getKey(attribute);
+        if (key == null) {
+            return null;
+        }
+        ListTag attributes = snapshot.getList("Attributes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < attributes.size(); i++) {
+            CompoundTag entry = attributes.getCompound(i);
+            if (!entry.contains("Name", Tag.TAG_STRING) || !entry.contains("Base", Tag.TAG_DOUBLE)) {
+                continue;
+            }
+            if (!key.toString().equals(entry.getString("Name"))) {
+                continue;
+            }
+            return entry.getDouble("Base") - trackedBonus;
+        }
+        return null;
     }
 
     private static void setAttributeToValue(TamableAnimal tame, Attribute attribute, double value) {
@@ -6499,18 +6649,12 @@ public class TameCommands {
                 if (owned.isEmpty()) {
                     yield DuelSelectionResult.fail("You have no living tames to duel.");
                 }
-                List<String> unloaded = new ArrayList<>();
                 List<TamableAnimal> loaded = new ArrayList<>();
                 for (TameData data : owned) {
                     TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
-                    if (tame == null || !tame.isAlive()) {
-                        unloaded.add(data.name == null || data.name.isBlank() ? "unknown" : data.name);
-                    } else {
+                    if (tame != null && tame.isAlive()) {
                         loaded.add(tame);
                     }
-                }
-                if (!unloaded.isEmpty()) {
-                    yield DuelSelectionResult.fail("Load all selected tames first. Unloaded: " + String.join(", ", unloaded));
                 }
                 if (loaded.isEmpty()) {
                     yield DuelSelectionResult.fail("No loaded alive tames found for duel.");
@@ -6526,7 +6670,6 @@ public class TameCommands {
             return DuelSelectionResult.fail("Group '" + group + "' has no tames.");
         }
         List<String> dead = new ArrayList<>();
-        List<String> unloaded = new ArrayList<>();
         List<TamableAnimal> loaded = new ArrayList<>();
         for (TameData data : groupMembers) {
             String name = data.name == null || data.name.isBlank() ? "unknown" : data.name;
@@ -6535,20 +6678,14 @@ public class TameCommands {
                 continue;
             }
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
-            if (tame == null || !tame.isAlive()) {
-                unloaded.add(name);
-                continue;
+            if (tame != null && tame.isAlive()) {
+                loaded.add(tame);
             }
-            loaded.add(tame);
-        }
-        if (!dead.isEmpty()) {
-            return DuelSelectionResult.fail("Group '" + group + "' contains dead tames: " + String.join(", ", dead));
-        }
-        if (!unloaded.isEmpty()) {
-            return DuelSelectionResult.fail("Group '" + group + "' has unloaded tames: " + String.join(", ", unloaded));
         }
         if (loaded.isEmpty()) {
-            return DuelSelectionResult.fail("Group '" + group + "' has no loaded alive tames.");
+            return DuelSelectionResult.fail(dead.isEmpty()
+                    ? "Group '" + group + "' has no loaded alive tames."
+                    : "Group '" + group + "' has no loaded alive tames. Dead skipped: " + String.join(", ", dead));
         }
         return DuelSelectionResult.ok(loaded);
     }
@@ -6559,7 +6696,6 @@ public class TameCommands {
             return DuelSelectionResult.fail("Type '" + type + "' has no tames.");
         }
         List<String> dead = new ArrayList<>();
-        List<String> unloaded = new ArrayList<>();
         List<TamableAnimal> loaded = new ArrayList<>();
         for (TameData data : typeMembers) {
             String name = data.name == null || data.name.isBlank() ? "unknown" : data.name;
@@ -6568,22 +6704,34 @@ public class TameCommands {
                 continue;
             }
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
-            if (tame == null || !tame.isAlive()) {
-                unloaded.add(name);
-                continue;
+            if (tame != null && tame.isAlive()) {
+                loaded.add(tame);
             }
-            loaded.add(tame);
-        }
-        if (!dead.isEmpty()) {
-            return DuelSelectionResult.fail("Type '" + type + "' contains dead tames: " + String.join(", ", dead));
-        }
-        if (!unloaded.isEmpty()) {
-            return DuelSelectionResult.fail("Type '" + type + "' has unloaded tames: " + String.join(", ", unloaded));
         }
         if (loaded.isEmpty()) {
-            return DuelSelectionResult.fail("Type '" + type + "' has no loaded alive tames.");
+            return DuelSelectionResult.fail(dead.isEmpty()
+                    ? "Type '" + type + "' has no loaded alive tames."
+                    : "Type '" + type + "' has no loaded alive tames. Dead skipped: " + String.join(", ", dead));
         }
         return DuelSelectionResult.ok(loaded);
+    }
+
+    private static List<TamableAnimal> remainingDuelOpponents(CommandSourceStack source, UUID owner, List<TamableAnimal> excluded) {
+        Set<UUID> excludedIds = new HashSet<>();
+        if (excluded != null) {
+            for (TamableAnimal tame : excluded) {
+                if (tame != null) {
+                    excludedIds.add(tame.getUUID());
+                }
+            }
+        }
+        List<TamableAnimal> remaining = new ArrayList<>();
+        for (TamableAnimal tame : loadedOwnedAllTames(source, owner)) {
+            if (tame == null || !tame.isAlive()) continue;
+            if (excludedIds.contains(tame.getUUID())) continue;
+            remaining.add(tame);
+        }
+        return remaining;
     }
 
     private static String duelSelectionLabel(DuelSelection selection) {
@@ -6811,7 +6959,7 @@ public class TameCommands {
 
     private static CompletableFuture<Suggestions> suggestOnlinePlayers(CommandSourceStack source, SuggestionsBuilder b) {
         for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
-            b.suggest(player.getGameProfile().getName());
+            suggestCommandString(b, player.getGameProfile().getName());
         }
         return b.buildFuture();
     }
@@ -6830,7 +6978,7 @@ public class TameCommands {
             }
         }
         for (String name : names) {
-            b.suggest(name);
+            suggestCommandString(b, name);
         }
         return b.buildFuture();
     }
@@ -6844,7 +6992,7 @@ public class TameCommands {
         for (UUID challengerId : incoming.keySet()) {
             ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(challengerId);
             if (challenger != null) {
-                b.suggest(challenger.getGameProfile().getName());
+                suggestCommandString(b, challenger.getGameProfile().getName());
             }
         }
         return b.buildFuture();
@@ -6856,7 +7004,7 @@ public class TameCommands {
         Set<String> seen = new HashSet<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID) || d.group == null || d.group.isBlank()) continue;
-            if (seen.add(d.group)) b.suggest(d.group);
+            if (seen.add(d.group)) suggestCommandString(b, d.group);
         }
         return b.buildFuture();
     }
@@ -6872,7 +7020,7 @@ public class TameCommands {
             if (full.isBlank()) continue;
             int sep = full.indexOf(':');
             String path = sep >= 0 ? full.substring(sep + 1) : full;
-            if (!path.isBlank() && seenPath.add(path)) b.suggest(path);
+            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
         }
         return b.buildFuture();
     }
@@ -6889,37 +7037,37 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestModes(SuggestionsBuilder b) {
-        for (TameMode mode : TameMode.values()) b.suggest(mode.key());
+        for (TameMode mode : TameMode.values()) suggestCommandString(b, mode.key());
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestMovementStates(SuggestionsBuilder b) {
-        b.suggest("follow");
-        b.suggest("wander");
-        b.suggest("sit");
+        suggestCommandString(b, "follow");
+        suggestCommandString(b, "wander");
+        suggestCommandString(b, "sit");
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestAbilities(SuggestionsBuilder b) {
-        LevelSystem.knownAbilityIds().forEach(b::suggest);
+        LevelSystem.knownAbilityIds().forEach(id -> suggestCommandString(b, id));
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestAdminAbilities(SuggestionsBuilder b) {
         for (String id : LevelSystem.knownAbilityIds()) {
             if ("berserker".equalsIgnoreCase(id) || "passive".equalsIgnoreCase(id)) continue;
-            b.suggest(id);
+            suggestCommandString(b, id);
         }
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestAttributes(SuggestionsBuilder b) {
-        LevelSystem.knownAttributeIds().forEach(b::suggest);
+        LevelSystem.knownAttributeIds().forEach(id -> suggestCommandString(b, id));
         return b.buildFuture();
     }
 
     private static CompletableFuture<Suggestions> suggestClasses(SuggestionsBuilder b) {
-        classNames().forEach(b::suggest);
+        classNames().forEach(name -> suggestCommandString(b, name));
         return b.buildFuture();
     }
 
@@ -6950,6 +7098,11 @@ public class TameCommands {
         if (b == null || value == null || value.isBlank()) {
             return;
         }
+        String remaining = b.getRemainingLowerCase();
+        String candidate = value.toLowerCase(Locale.ROOT);
+        if (!remaining.isBlank() && !candidate.startsWith(remaining)) {
+            return;
+        }
         b.suggest(StringArgumentType.escapeIfRequired(value));
     }
 
@@ -6962,7 +7115,12 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestLeaderboardTypes(SuggestionsBuilder b) {
-        b.suggest("mix"); b.suggest("kills"); b.suggest("deaths"); b.suggest("assists"); b.suggest("lvl"); b.suggest("days");
+        suggestCommandString(b, "mix");
+        suggestCommandString(b, "kills");
+        suggestCommandString(b, "deaths");
+        suggestCommandString(b, "assists");
+        suggestCommandString(b, "lvl");
+        suggestCommandString(b, "days");
         return b.buildFuture();
     }
 

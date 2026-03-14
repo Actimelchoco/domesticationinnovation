@@ -955,9 +955,12 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "triage_pulse"));
         float heal = 1.5F + 0.75F * levelValue;
+        float before = patient.getHealth();
         patient.heal(heal);
+        float actualHealed = Math.max(0.0F, patient.getHealth() - before);
         long cooldown = Math.max(40L, 120L - Math.max(0, levelValue - 1) * 10L);
         setAbilityCooldown(tame, data, "triage_pulse", "triage_pulse_tick", now, cooldown);
+        grantSupportXp(tame, data, patient, now, actualHealed, 0.5F);
         applySupportActivationVisual(tame, "triage_pulse");
         if (level != null) {
             level.sendParticles(ParticleTypes.HEART, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(tame, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
@@ -1430,6 +1433,7 @@ public class TameAbilityEvents {
             int healed = healNearbyAllies(level, tame, 8.0D, heal, true);
             if (healed > 0) {
                 setAbilityCooldown(tame, data, "battlefield_medic", "battlefield_medic_tick", now, wasKiller ? 80L : 120L);
+                grantSupportXp(tame, data, tame, now, healed * heal, 0.35F);
                 applySupportActivationVisual(tame, "battlefield_medic");
                 level.sendParticles(ParticleTypes.HEART, tame.getX(), tame.getY(0.7D), tame.getZ(), capParticles(tame, 4 + healed), 0.35D, 0.35D, 0.35D, 0.03D);
                 debugAbilityUse(tame, "battlefield_medic");
@@ -1479,6 +1483,7 @@ public class TameAbilityEvents {
         event.setAmount(Math.max(0.0F, event.getAmount() - redirected));
         applyRedirectDamage(supporter, event, redirected);
         setAbilityCooldown(supporter, data, "guardian_intercept", "guardian_intercept_tick", now, Math.max(40L, 140L - levelValue * 10L));
+        grantSupportXp(supporter, data, ally, now, redirected, 0.75F);
         applySupportActivationVisual(supporter, "guardian_intercept");
         level.sendParticles(ParticleTypes.CRIT, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
         debugAbilityUse(supporter, "guardian_intercept");
@@ -1495,6 +1500,7 @@ public class TameAbilityEvents {
         float prevented = event.getAmount() * (float) Math.min(0.90D, 0.45D + 0.10D * levelValue);
         event.setAmount(Math.max(0.0F, event.getAmount() - prevented));
         setAbilityCooldown(supporter, data, "body_block", "body_block_tick", now, Math.max(40L, 180L - levelValue * 15L));
+        grantSupportXp(supporter, data, ally, now, prevented, 0.75F);
         applySupportActivationVisual(supporter, "body_block");
         level.playSound(null, supporter.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
         debugAbilityUse(supporter, "body_block");
@@ -1510,10 +1516,12 @@ public class TameAbilityEvents {
         if (postDamageHealth > threshold) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "emergency_shield"));
+        float before = event.getAmount();
         event.setAmount(event.getAmount() * (1.0F - Math.min(0.60F, 0.20F + levelValue * 0.08F)));
         ally.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 80 + levelValue * 20, Math.max(0, (levelValue - 1) / 2), false, false, true));
         ally.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40 + levelValue * 20, Math.max(0, levelValue >= 4 ? 1 : 0), false, false, true));
         setAbilityCooldown(supporter, data, "emergency_shield", "emergency_shield_tick", now, Math.max(80L, 240L - levelValue * 20L));
+        grantSupportXp(supporter, data, ally, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
         applySupportActivationVisual(supporter, "emergency_shield");
         level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6 + levelValue), 0.3D, 0.35D, 0.3D, 0.02D);
         debugAbilityUse(supporter, "emergency_shield");
@@ -1552,6 +1560,7 @@ public class TameAbilityEvents {
         event.setAmount(Math.max(0.0F, event.getAmount() - transfer));
         supporter.setHealth(Math.max(5.0F, supporter.getHealth() - transfer));
         setAbilityCooldown(supporter, data, "life_gift", "life_gift_tick", now, Math.max(100L, 300L - levelValue * 20L));
+        grantSupportXp(supporter, data, ally, now, transfer, 0.75F);
         applySupportActivationVisual(supporter, "life_gift");
         level.sendParticles(ParticleTypes.HEART, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6), 0.25D, 0.25D, 0.25D, 0.02D);
         debugAbilityUse(supporter, "life_gift");
@@ -1570,8 +1579,11 @@ public class TameAbilityEvents {
         float mirrored = amount * (0.20F + 0.10F * levelValue);
         if (mirrored <= 0.0F) return;
 
+        float before = patient.getHealth();
         patient.heal(mirrored);
+        float actualHealed = Math.max(0.0F, patient.getHealth() - before);
         setAbilityCooldown(supporter, data, "revitalizing_presence", "revitalizing_presence_tick", now, Math.max(20L, 80L - levelValue * 5L));
+        grantSupportXp(supporter, data, patient, now, actualHealed, 0.5F);
         applySupportActivationVisual(supporter, "revitalizing_presence");
         level.sendParticles(ParticleTypes.HEART, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(supporter, 4), 0.2D, 0.2D, 0.2D, 0.02D);
         debugAbilityUse(supporter, "revitalizing_presence");
@@ -1711,14 +1723,12 @@ public class TameAbilityEvents {
 
     public static float offensiveAbilityLevelMultiplier(int abilityLevel) {
         int level = Math.max(1, abilityLevel);
-        int tier = (level - 1) / 5;
-        int step = (level - 1) % 5;
-        return (float) (Math.pow(2.0D, tier) * (1.0D + 0.25D * step));
+        return (float) (1.0D + 0.25D * Math.max(0, level - 1));
     }
 
     public static float offensiveDamageBonusMultiplier(TameData data, float scaling) {
         double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
-        return (float) (1.0D + bonusDamage * 0.02D * scaling);
+        return (float) (1.0D + bonusDamage * 0.05D * scaling);
     }
 
     private static float tameBaseDamage(TamableAnimal tame) {
@@ -2012,6 +2022,31 @@ public class TameAbilityEvents {
             healed++;
         }
         return healed;
+    }
+
+    private static void grantSupportXp(TamableAnimal supporter, TameData data, LivingEntity beneficiary, long now, float effectiveAmount, float scale) {
+        if (supporter == null || data == null || effectiveAmount <= 0.0F) {
+            return;
+        }
+        if (!isSupportCombatRelevant(supporter, beneficiary)) {
+            return;
+        }
+        if (!isReady(data, "support_xp_tick", now)) {
+            return;
+        }
+        int xp = Math.max(1, Mth.ceil(effectiveAmount * Math.max(0.0F, scale)));
+        LevelSystem.grantXP(supporter, data, xp);
+        setCooldown(data, "support_xp_tick", now + 20L);
+    }
+
+    private static boolean isSupportCombatRelevant(TamableAnimal supporter, LivingEntity beneficiary) {
+        if (supporter == null) {
+            return false;
+        }
+        if (isInBattle(supporter)) {
+            return true;
+        }
+        return beneficiary instanceof TamableAnimal tame && isInBattle(tame);
     }
 
     private static boolean isFriendly(TamableAnimal tame, Entity entity) {
