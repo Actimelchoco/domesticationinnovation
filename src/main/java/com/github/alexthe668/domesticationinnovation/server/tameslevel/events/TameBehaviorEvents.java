@@ -26,8 +26,9 @@ public class TameBehaviorEvents {
         if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
         if (tame.level().isClientSide) return;
         if (!tame.isAlive()) return;
+        int scanInterval = getBehaviorScanInterval(tame);
+        if (tame.tickCount % scanInterval != 0) return;
         if (tame.isOrderedToSit()) return;
-        if (tame.tickCount % 20 != 0) return;
 
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) return;
@@ -194,5 +195,22 @@ public class TameBehaviorEvents {
             }
         }
         return best;
+    }
+
+    private static int getBehaviorScanInterval(TamableAnimal tame) {
+        return isIdleOrSitting(tame) ? 60 : 20;
+    }
+
+    private static boolean isIdleOrSitting(TamableAnimal tame) {
+        if (tame.isOrderedToSit()) {
+            return true;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            return false;
+        }
+        return tame.getLastHurtByMob() == null
+                && tame.getLastHurtMob() == null
+                && tame.tickCount - tame.getLastHurtByMobTimestamp() >= 100
+                && tame.tickCount - tame.getLastHurtMobTimestamp() >= 100;
     }
 }

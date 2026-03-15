@@ -42,7 +42,8 @@ public class LevelSystem {
 
     public static final int BASE_XP = 50;
     public static final int XP_PER_LEVEL_STEP = 3;
-    public static final double DEATH_XP_LOSS = 0.67D;
+    public static final double DEATH_XP_LOSS = 0.10D;
+    public static final int MAX_DEATH_LEVEL_LOSS = 5;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
 
     private static final Random RANDOM = new Random();
@@ -194,6 +195,25 @@ public class LevelSystem {
 
     private record WeightedOption<T>(T value, double weight) {}
 
+    private record LevelRewardResult(RewardCategory category, String rewardId, double amount, String summary) {
+        private static LevelRewardResult fromHistoryRow(CompoundTag row) {
+            if (row == null
+                    || !row.contains("rewardCategory", Tag.TAG_STRING)
+                    || !row.contains("rewardId", Tag.TAG_STRING)) {
+                return null;
+            }
+            try {
+                RewardCategory category = RewardCategory.valueOf(row.getString("rewardCategory"));
+                String rewardId = row.getString("rewardId");
+                double amount = row.contains("rewardAmount", Tag.TAG_DOUBLE) ? row.getDouble("rewardAmount") : 1.0D;
+                String summary = row.contains("reward", Tag.TAG_STRING) ? row.getString("reward") : "";
+                return new LevelRewardResult(category, rewardId, amount, summary);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+    }
+
     private static final Set<String> KNOWN_ABILITIES;
     private static final Set<String> KNOWN_ATTRIBUTES;
     private static final Map<String, String> ABILITY_ALIASES;
@@ -273,7 +293,17 @@ public class LevelSystem {
             return;
         }
 
-        data.xp = (int) Math.floor(data.xp * (1.0D - DEATH_XP_LOSS));
+        int previousLevel = data.level;
+        int totalXp = estimateInvestedXp(data);
+        int xpLoss = (int) Math.floor(totalXp * DEATH_XP_LOSS);
+        int minLevelAfterDeath = Math.max(1, data.level - MAX_DEATH_LEVEL_LOSS);
+        int minTotalXpAfterDeath = totalXpRequiredForLevel(minLevelAfterDeath);
+        int remainingXp = Math.max(minTotalXpAfterDeath, totalXp - xpLoss);
+        int resultingLevel = levelForInvestedXp(remainingXp);
+
+        rollbackLostLevelRewards(tame, data, previousLevel, resultingLevel);
+        applyInvestedXp(data, remainingXp);
+        updateTameName(tame, data);
         data.deaths++;
         TameRegistry.markDirty();
     }
@@ -450,8 +480,12 @@ public class LevelSystem {
             data.level++;
             data.xpToNext = xpRequiredForLevel(data.level);
 
-            String rewardSummary = applyLevelReward(tame, data);
-            recordLevelReward(data, data.level, rewardSummary, tame.level().getGameTime());
+            LevelRewardResult reward = restoreStoredLevelReward(tame, data, data.level);
+            if (reward == null) {
+                reward = applyLevelReward(tame, data);
+                recordLevelReward(data, data.level, reward, tame.level().getGameTime());
+            }
+            String rewardSummary = reward.summary();
             updateTameName(tame, data);
 
             if (tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
@@ -468,14 +502,20 @@ public class LevelSystem {
         }
     }
 
-    private static void recordLevelReward(TameData data, int level, String rewardSummary, long gameTime) {
+    private static void recordLevelReward(TameData data, int level, LevelRewardResult reward, long gameTime) {
         if (data == null) {
             return;
         }
         CompoundTag row = new CompoundTag();
         row.putInt("level", Math.max(1, level));
-        row.putString("reward", rewardSummary == null ? "" : rewardSummary);
+        row.putString("reward", reward == null ? "" : reward.summary());
         row.putLong("gameTime", Math.max(0L, gameTime));
+        if (reward != null) {
+            row.putString("rewardCategory", reward.category().name());
+            row.putString("rewardId", reward.rewardId());
+            row.putDouble("rewardAmount", reward.amount());
+        }
+        row.putBoolean("active", true);
         data.levelRewardHistory.add(row);
         while (data.levelRewardHistory.size() > 256) {
             data.levelRewardHistory.remove(0);
@@ -486,7 +526,7 @@ public class LevelSystem {
     // REWARD ROLLING
     // ===============================
 
-    public static String applyLevelReward(TamableAnimal tame, TameData data) {
+    public static LevelRewardResult applyLevelReward(TamableAnimal tame, TameData data) {
         RewardCategory category = rollCategory(data);
         return switch (category) {
             case BASE_STAT -> applyBaseStatReward(tame, data);
@@ -556,27 +596,21 @@ public class LevelSystem {
         return RewardCategory.ABILITY;
     }
 
-    private static String applyBaseStatReward(TamableAnimal tame, TameData data) {
+    private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data) {
         List<WeightedOption<BaseStatReward>> options = new ArrayList<>();
         for (BaseStatReward reward : BaseStatReward.values()) {
             options.add(new WeightedOption<>(reward, modifiedBaseStatWeight(data.tameClass, reward)));
         }
 
         BaseStatReward reward = pickWeighted(options);
-        addToAttribute(tame, reward.attribute, reward.amount);
-        trackBonus(data, reward);
-        if (reward == BaseStatReward.HP) {
-            tame.setHealth(tame.getMaxHealth());
-        }
-        TameRegistry.markDirty();
-        return reward.display + " +" + formatDouble(reward.amount);
+        return applyBaseStatReward(tame, data, reward, reward.amount);
     }
 
-    private static String applyAttributeReward(TamableAnimal tame, TameData data, boolean allowAbilityFallback) {
+    private static LevelRewardResult applyAttributeReward(TamableAnimal tame, TameData data, boolean allowAbilityFallback) {
         AttributeReward upgraded = tryUpgradeExistingAttribute(data);
         if (upgraded != null) {
             int newLevel = data.attributeLevels.get(upgraded.id);
-            return upgraded.id + " upgraded to " + roman(newLevel);
+            return new LevelRewardResult(RewardCategory.ATTRIBUTE, upgraded.id, 1.0D, upgraded.id + " upgraded to " + roman(newLevel));
         }
 
         List<WeightedOption<AttributeReward>> options = new ArrayList<>();
@@ -599,10 +633,10 @@ public class LevelSystem {
         int current = data.attributeLevels.getOrDefault(rolled.id, 0);
         data.attributeLevels.put(rolled.id, current + 1);
         TameRegistry.markDirty();
-        return rolled.id + " " + roman(current + 1);
+        return new LevelRewardResult(RewardCategory.ATTRIBUTE, rolled.id, 1.0D, rolled.id + " " + roman(current + 1));
     }
 
-    private static String applyAbilityReward(TamableAnimal tame, TameData data, boolean allowAttributeFallback) {
+    private static LevelRewardResult applyAbilityReward(TamableAnimal tame, TameData data, boolean allowAttributeFallback) {
         AbilityReward unlocked = null;
         AbilityReward upgraded = null;
 
@@ -614,11 +648,11 @@ public class LevelSystem {
         }
 
         if (unlocked != null) {
-            return "Unlocked " + unlocked.id + " I";
+            return new LevelRewardResult(RewardCategory.ABILITY, unlocked.id, 1.0D, "Unlocked " + unlocked.id + " I");
         }
         if (upgraded != null) {
             int newLevel = data.abilityLevels.get(upgraded.id);
-            return upgraded.id + " upgraded to " + roman(newLevel);
+            return new LevelRewardResult(RewardCategory.ABILITY, upgraded.id, 1.0D, upgraded.id + " upgraded to " + roman(newLevel));
         }
 
         List<WeightedOption<AbilityReward>> options = new ArrayList<>();
@@ -633,7 +667,7 @@ public class LevelSystem {
             AbilityReward fallbackUpgrade = tryUpgradeExistingAbility(data);
             if (fallbackUpgrade != null) {
                 int newLevel = data.abilityLevels.get(fallbackUpgrade.id);
-                return fallbackUpgrade.id + " upgraded to " + roman(newLevel);
+                return new LevelRewardResult(RewardCategory.ABILITY, fallbackUpgrade.id, 1.0D, fallbackUpgrade.id + " upgraded to " + roman(newLevel));
             }
             if (allowAttributeFallback) {
                 return applyAttributeReward(tame, data, false);
@@ -643,7 +677,21 @@ public class LevelSystem {
 
         AbilityReward rolled = pickWeighted(options);
         unlockAbility(data, rolled);
-        return "Unlocked " + rolled.id + " I";
+        return new LevelRewardResult(RewardCategory.ABILITY, rolled.id, 1.0D, "Unlocked " + rolled.id + " I");
+    }
+
+    private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data, BaseStatReward reward, double amount) {
+        addToAttribute(tame, reward.attribute, amount);
+        trackBonus(data, reward, amount);
+        if (reward == BaseStatReward.HP) {
+            if (amount >= 0.0D) {
+                tame.setHealth(tame.getMaxHealth());
+            } else {
+                tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
+            }
+        }
+        TameRegistry.markDirty();
+        return new LevelRewardResult(RewardCategory.BASE_STAT, reward.name(), amount, reward.display + " +" + formatDouble(amount));
     }
 
     private static AbilityReward tryUpgradeExistingAbility(TameData data) {
@@ -851,6 +899,17 @@ public class LevelSystem {
             }
         }
         return null;
+    }
+
+    private static BaseStatReward byBaseStatId(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        try {
+            return BaseStatReward.valueOf(id);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private static String canonicalAbilityId(String id) {
@@ -1110,14 +1169,18 @@ public class LevelSystem {
     }
 
     private static void trackBonus(TameData data, BaseStatReward reward) {
+        trackBonus(data, reward, reward.amount);
+    }
+
+    private static void trackBonus(TameData data, BaseStatReward reward, double amount) {
         switch (reward) {
-            case HP -> data.bonusHealth += reward.amount;
-            case DAMAGE -> data.bonusDamage += reward.amount;
-            case SPEED -> data.bonusSpeed += reward.amount;
-            case ARMOR -> data.bonusArmor += reward.amount;
-            case ARMOR_TOUGHNESS -> data.bonusArmorToughness += reward.amount;
-            case KNOCKBACK -> data.bonusKnockback += reward.amount;
-            case KNOCKBACK_RESIST -> data.bonusKnockbackResist += reward.amount;
+            case HP -> data.bonusHealth += amount;
+            case DAMAGE -> data.bonusDamage += amount;
+            case SPEED -> data.bonusSpeed += amount;
+            case ARMOR -> data.bonusArmor += amount;
+            case ARMOR_TOUGHNESS -> data.bonusArmorToughness += amount;
+            case KNOCKBACK -> data.bonusKnockback += amount;
+            case KNOCKBACK_RESIST -> data.bonusKnockbackResist += amount;
         }
     }
 
@@ -1128,6 +1191,106 @@ public class LevelSystem {
         }
         total += Math.max(0, data.xp);
         return total;
+    }
+
+    private static int totalXpRequiredForLevel(int level) {
+        int total = 0;
+        for (int lvl = 1; lvl < Math.max(1, level); lvl++) {
+            total += xpRequiredForLevel(lvl);
+        }
+        return total;
+    }
+
+    private static int levelForInvestedXp(int totalXp) {
+        int remaining = Math.max(0, totalXp);
+        int level = 1;
+        int xpToNext = xpRequiredForLevel(level);
+
+        while (remaining >= xpToNext) {
+            remaining -= xpToNext;
+            level++;
+            xpToNext = xpRequiredForLevel(level);
+        }
+        return level;
+    }
+
+    private static void applyInvestedXp(TameData data, int totalXp) {
+        int remaining = Math.max(0, totalXp);
+        int level = 1;
+        int xpToNext = xpRequiredForLevel(level);
+
+        while (remaining >= xpToNext) {
+            remaining -= xpToNext;
+            level++;
+            xpToNext = xpRequiredForLevel(level);
+        }
+
+        data.level = level;
+        data.xp = remaining;
+        data.xpToNext = xpToNext;
+    }
+
+    private static void rollbackLostLevelRewards(TamableAnimal tame, TameData data, int previousLevel, int resultingLevel) {
+        for (int level = previousLevel; level > resultingLevel; level--) {
+            CompoundTag row = findLatestLevelRewardRow(data, level, true);
+            LevelRewardResult reward = LevelRewardResult.fromHistoryRow(row);
+            if (reward == null) {
+                continue;
+            }
+            removeStoredLevelReward(tame, data, reward);
+            row.putBoolean("active", false);
+        }
+    }
+
+    private static LevelRewardResult restoreStoredLevelReward(TamableAnimal tame, TameData data, int level) {
+        CompoundTag row = findLatestLevelRewardRow(data, level, false);
+        LevelRewardResult reward = LevelRewardResult.fromHistoryRow(row);
+        if (reward == null) {
+            return null;
+        }
+        applyStoredLevelReward(tame, data, reward);
+        row.putBoolean("active", true);
+        return reward;
+    }
+
+    private static CompoundTag findLatestLevelRewardRow(TameData data, int level, boolean active) {
+        for (int i = data.levelRewardHistory.size() - 1; i >= 0; i--) {
+            CompoundTag row = data.levelRewardHistory.get(i);
+            if (row.getInt("level") != level) {
+                continue;
+            }
+            boolean rowActive = !row.contains("active") || row.getBoolean("active");
+            if (rowActive == active) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    private static void applyStoredLevelReward(TamableAnimal tame, TameData data, LevelRewardResult reward) {
+        switch (reward.category()) {
+            case BASE_STAT -> {
+                BaseStatReward baseReward = byBaseStatId(reward.rewardId());
+                if (baseReward != null) {
+                    applyBaseStatReward(tame, data, baseReward, reward.amount());
+                }
+            }
+            case ATTRIBUTE -> addAttribute(data, reward.rewardId(), Math.max(1, (int) Math.round(reward.amount())));
+            case ABILITY -> addAbility(data, reward.rewardId(), Math.max(1, (int) Math.round(reward.amount())));
+        }
+    }
+
+    private static void removeStoredLevelReward(TamableAnimal tame, TameData data, LevelRewardResult reward) {
+        switch (reward.category()) {
+            case BASE_STAT -> {
+                BaseStatReward baseReward = byBaseStatId(reward.rewardId());
+                if (baseReward != null) {
+                    applyBaseStatReward(tame, data, baseReward, -reward.amount());
+                }
+            }
+            case ATTRIBUTE -> removeAttribute(data, reward.rewardId(), Math.max(1, (int) Math.round(reward.amount())));
+            case ABILITY -> removeAbility(data, reward.rewardId(), Math.max(1, (int) Math.round(reward.amount())));
+        }
     }
 
     public static int xpRequiredForLevel(int level) {

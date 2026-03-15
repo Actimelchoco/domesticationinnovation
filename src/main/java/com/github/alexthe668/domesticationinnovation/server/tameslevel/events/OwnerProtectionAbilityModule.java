@@ -26,6 +26,8 @@ public final class OwnerProtectionAbilityModule {
         void debugAbilityUse(TamableAnimal tame, String ability);
 
         void applySupportActivationVisual(TamableAnimal tame, String source);
+
+        void grantSupportXp(TamableAnimal supporter, TameData data, LivingEntity beneficiary, long now, float effectiveAmount, float scale);
     }
 
     private OwnerProtectionAbilityModule() {}
@@ -94,6 +96,7 @@ public final class OwnerProtectionAbilityModule {
         long cooldownTicks = Math.max(20L, 800L - (long) Math.max(0, levelValue - 1) * 60L);
         setCooldown(data, "guardian_repulse_tick", now + cooldownTicks);
         if (affected > 0 && tame.level() instanceof ServerLevel level) {
+            hooks.grantSupportXp(tame, data, owner, now, affected * (1.0F + 0.25F * levelValue), 0.5F);
             level.sendParticles(ParticleTypes.CLOUD, owner.getX(), owner.getY(0.8D), owner.getZ(), 16, radius * 0.20D, 0.3D, radius * 0.20D, 0.03D);
             level.playSound(null, owner.blockPosition(), SoundEvents.PLAYER_ATTACK_KNOCKBACK, SoundSource.NEUTRAL, 0.9F, 1.0F);
             hooks.debugAbilityUse(tame, "guardian_repulse");
@@ -124,6 +127,7 @@ public final class OwnerProtectionAbilityModule {
 
         setCooldown(data, "sky_launch_tick", now + 240L);
         if (affected > 0 && tame.level() instanceof ServerLevel level) {
+            hooks.grantSupportXp(tame, data, owner, now, affected * (1.5F + 0.25F * levelValue), 0.5F);
             level.sendParticles(ParticleTypes.SWEEP_ATTACK, owner.getX(), owner.getY(0.7D), owner.getZ(), 6, radius * 0.15D, 0.2D, radius * 0.15D, 0.0D);
             level.playSound(null, owner.blockPosition(), SoundEvents.IRON_GOLEM_ATTACK, SoundSource.NEUTRAL, 0.8F, 1.1F);
             hooks.debugAbilityUse(tame, "sky_launch");
@@ -139,11 +143,13 @@ public final class OwnerProtectionAbilityModule {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "shield_block"));
         float reduction = Math.min(0.95F, 0.65F + (levelValue - 1) * 0.03F);
+        float before = event.getAmount();
         event.setAmount(event.getAmount() * (1.0F - reduction));
 
         long cooldownTicks = Math.max(20L, 200L - (long) Math.max(0, levelValue - 1) * 20L);
         setCooldown(data, "shield_block_tick", now + cooldownTicks);
         if (tame.level() instanceof ServerLevel level) {
+            hooks.grantSupportXp(tame, data, tame, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
             level.sendParticles(ParticleTypes.CRIT, tame.getX(), tame.getY(0.6D), tame.getZ(), 8, 0.3D, 0.3D, 0.3D, 0.02D);
             level.playSound(null, tame.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
         }

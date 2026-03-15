@@ -2214,8 +2214,38 @@ public class TameCommands {
             case "shadow_hands" -> id + " L" + level + ": complex sustained runtime based on hand count, windup, and target uptime; exact closed-form DPS not reliable from command";
             case "battle_strength", "defensive_aura", "ender_pearl_jump", "berserker", "bloodlust", "retaliation_slow", "immunity_frame", "deflection", "defusal", "psychic_wall", "healing_aura", "healing_bottle", "guardian_repulse", "last_stand_fury", "shield_block",
                     "guardian_intercept", "emergency_shield", "body_block", "battlefield_medic", "triage_pulse", "revitalizing_presence", "cleanse_touch", "pack_guard", "life_gift" ->
-                    id + " L" + level + ": utility/support ability, no fixed direct DPS";
+                    inspectSupportAbilityLine(id, level);
             default -> id + " L" + level + ": no inspect profile";
+        };
+    }
+
+    private static String inspectSupportAbilityLine(String id, int level) {
+        return switch (id) {
+            case "battle_strength" -> id + " L" + level + ": 10% proc on hurt; allies within 8 get Strength " + romanAmp(level - 1) + " for " + fmtSeconds(100L);
+            case "defensive_aura" -> id + " L" + level + ": 10% proc on hurt; allies within 8 get Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(100L + Math.max(0, level - 1) * 20L);
+            case "ender_pearl_jump" -> id + " L" + level + ": if target is >5 blocks away, teleports up to " + fmt(4.0D + level * 2.0D) + " blocks toward target; cooldown " + fmtSeconds(100L);
+            case "berserker" -> id + " L" + level + ": at <=20% HP, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(400L);
+            case "bloodlust" -> id + " L" + level + ": on kill, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(400L);
+            case "retaliation_slow" -> id + " L" + level + ": on hurt, " + fmt(Math.min(0.85D, 0.20D + level * 0.04D) * 100.0D) + "% proc; radius " + fmt(2.0D + Math.max(0, level - (level / 3)) * 0.35D) + ", Slowness " + romanAmp(level / 3) + " for " + fmtSeconds(40L + level * 10L) + "; cooldown " + fmtSeconds(60L);
+            case "immunity_frame" -> id + " L" + level + ": reactive invulnerability window " + fmtSeconds(20L + 20L * level) + "; passive/no active cast DPS";
+            case "deflection" -> id + " L" + level + ": projectile deflect; reverses incoming projectile to 20% speed; passive reactive trigger";
+            case "defusal" -> id + " L" + level + ": cancels nearby explosions; range " + fmt(10.0D + (level / 3) * 10.0D) + ", cooldown " + fmtSeconds(Math.max(0L, 100L - Math.max(0, level - 1) * 20L));
+            case "psychic_wall" -> id + " L" + level + ": wall width " + (level + 1) + ", lifespan " + fmtSeconds(100L * level) + ", cooldown " + fmtSeconds(200L * level + 40L);
+            case "healing_aura" -> id + " L" + level + ": regeneration pulse window " + fmtSeconds(200L) + " with Regeneration " + romanAmp(level - 1) + "; downtime 30-60s between cycles";
+            case "healing_bottle" -> id + " L" + level + ": self-heal splash potion; instant heal " + (level >= 4 ? "II" : "I") + ", Regeneration " + romanAmp((level - 1) / 3) + " for " + fmtSeconds(60L + Math.max(0, level - 1) * 40L) + "; cooldown " + fmtSeconds(Math.max(60L, 220L - Math.max(0, level - 1) * 15L));
+            case "guardian_repulse" -> id + " L" + level + ": retarget aura radius " + fmt(6.0D + level * 0.6D) + ", " + fmt(Math.min(0.90D, 0.12D + level * 0.04D) * 100.0D) + "% chance per monster; cooldown " + fmtSeconds(60L);
+            case "last_stand_fury" -> id + " L" + level + ": passive; as owner HP drops, tame gains scaling Strength/Speed buffs, refreshed every " + fmtSeconds(40L);
+            case "shield_block" -> id + " L" + level + ": on hurt, reduces hit by " + fmt(Math.min(0.95D, 0.65D + (level - 1) * 0.03D) * 100.0D) + "%; cooldown " + fmtSeconds(Math.max(20L, 200L - Math.max(0, level - 1) * 20L));
+            case "guardian_intercept" -> id + " L" + level + ": redirects " + fmt(Math.min(0.60D, 0.20D + 0.10D * level) * 100.0D) + "% of ally hit damage to supporter; cooldown " + fmtSeconds(Math.max(40L, 140L - level * 10L));
+            case "emergency_shield" -> id + " L" + level + ": triggers if ally would fall below 35% HP; reduces triggering hit by " + fmt(Math.min(0.60D, 0.20D + level * 0.08D) * 100.0D) + "%, grants Absorption " + romanAmp((level - 1) / 2) + " for " + fmtSeconds(80L + level * 20L) + " and Resistance " + (level >= 4 ? "II" : "I") + " for " + fmtSeconds(40L + level * 20L) + "; cooldown " + fmtSeconds(Math.max(80L, 240L - level * 20L));
+            case "body_block" -> id + " L" + level + ": projectile-only ally protection; prevents " + fmt(Math.min(0.90D, 0.45D + 0.10D * level) * 100.0D) + "% of hit; cooldown " + fmtSeconds(Math.max(40L, 180L - level * 15L));
+            case "battlefield_medic" -> id + " L" + level + ": on kill/assist heals allies within 8 for " + fmt(1.0D + 0.75D * level) + " assist / " + fmt(2.0D + 0.75D * level) + " kill; cooldown " + fmtSeconds(120L) + " assist / " + fmtSeconds(80L) + " kill";
+            case "triage_pulse" -> id + " L" + level + ": heals lowest ally in 10 blocks for " + fmt(1.5D + 0.75D * level) + "; cooldown " + fmtSeconds(Math.max(40L, 120L - Math.max(0, level - 1) * 10L));
+            case "revitalizing_presence" -> id + " L" + level + ": when an ally is healed, mirrors " + fmt((0.20D + 0.10D * level) * 100.0D) + "% of that heal to another injured ally within 10; cooldown " + fmtSeconds(Math.max(20L, 80L - level * 5L));
+            case "cleanse_touch" -> id + " L" + level + ": removes 1 harmful effect from an ally within 10; cooldown " + fmtSeconds(Math.max(60L, 180L - Math.max(0, level - 1) * 15L));
+            case "pack_guard" -> id + " L" + level + ": when ally is hurt by a monster, applies Weakness " + (level >= 4 ? "II" : "I") + " for " + fmtSeconds(60L + level * 20L) + " and retargets attacker; cooldown " + fmtSeconds(Math.max(40L, 140L - level * 10L));
+            case "life_gift" -> id + " L" + level + ": lethal-save for allied tames; transfers up to " + fmt(2.0D + level) + " desired recovery HP from supporter while leaving supporter at >=5 HP; cooldown " + fmtSeconds(Math.max(100L, 300L - level * 20L));
+            default -> id + " L" + level + ": utility/support ability, no fixed direct DPS";
         };
     }
 
@@ -2370,6 +2400,22 @@ public class TameCommands {
             return "?";
         }
         return fmt(value);
+    }
+
+    private static String fmtSeconds(long ticks) {
+        return fmt(ticks / 20.0D) + "s";
+    }
+
+    private static String romanAmp(int amplifier) {
+        int tier = Math.max(0, amplifier) + 1;
+        return switch (tier) {
+            case 1 -> "I";
+            case 2 -> "II";
+            case 3 -> "III";
+            case 4 -> "IV";
+            case 5 -> "V";
+            default -> Integer.toString(tier);
+        };
     }
 
     private static int setMode(CommandSourceStack source, String pet, String modeName) {
@@ -6003,13 +6049,13 @@ public class TameCommands {
         prepareTemplateAsTamed(template, tame, data);
 
         scrubLegacyManagedModifiers(tame);
-        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth);
-        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
-        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
-        setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
-        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, resolveBaseValue(data, template, Attributes.ARMOR_TOUGHNESS, data.bonusArmorToughness) + data.bonusArmorToughness);
-        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, resolveBaseValue(data, template, Attributes.ATTACK_KNOCKBACK, data.bonusKnockback) + data.bonusKnockback));
-        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, resolveBaseValue(data, template, Attributes.KNOCKBACK_RESISTANCE, data.bonusKnockbackResist) + data.bonusKnockbackResist));
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, readBaseOrDefault(template, Attributes.MAX_HEALTH) + data.bonusHealth);
+        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, readBaseOrDefault(template, Attributes.ATTACK_DAMAGE) + data.bonusDamage);
+        setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, readBaseOrDefault(template, Attributes.MOVEMENT_SPEED) + data.bonusSpeed);
+        setAttributeBaseValue(tame, Attributes.ARMOR, readBaseOrDefault(template, Attributes.ARMOR) + data.bonusArmor);
+        setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, readBaseOrDefault(template, Attributes.ARMOR_TOUGHNESS) + data.bonusArmorToughness);
+        setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, readBaseOrDefault(template, Attributes.ATTACK_KNOCKBACK) + data.bonusKnockback));
+        setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, readBaseOrDefault(template, Attributes.KNOCKBACK_RESISTANCE) + data.bonusKnockbackResist));
 
         LevelSystem.updateTameName(tame, data);
         tame.setHealth(tame.getMaxHealth());
@@ -6866,10 +6912,29 @@ public class TameCommands {
     }
 
     private static long daysAlive(CommandSourceStack source, TameData data) {
-        if (data == null || data.bornDayTime <= 0L) return 0L;
+        if (data == null) return 0L;
         long now = source.getServer().overworld().getDayTime();
-        long ticks = Math.max(0L, now - data.bornDayTime);
+        long start = survivalStartDayTime(data);
+        if (start <= 0L) return 0L;
+        long ticks = Math.max(0L, now - start);
         return ticks / 24000L;
+    }
+
+    private static long survivalStartDayTime(TameData data) {
+        long latestDeath = 0L;
+        if (data != null) {
+            for (CompoundTag row : data.deathHistory) {
+                if (row == null || row.isEmpty() || !row.contains("gameTime", Tag.TAG_LONG)) {
+                    continue;
+                }
+                latestDeath = Math.max(latestDeath, row.getLong("gameTime"));
+            }
+            if (latestDeath > 0L) {
+                return latestDeath;
+            }
+            return data.bornDayTime;
+        }
+        return 0L;
     }
 
     private static TamableAnimal findLoadedOwnedTameByUuid(CommandSourceStack source, UUID owner, UUID tameUuid) {
