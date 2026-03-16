@@ -79,11 +79,8 @@ public class TameCombatEvents {
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
         }
-        LevelSystem.onTameDeath(tame);
+        LevelSystem.onTameDeath(tame, !diedInDuel);
         if (data != null) {
-            String deathMessage = event.getSource().getLocalizedDeathMessage(tame).getString();
-            TameDeathRecord deathRecord = TameDeathRecord.fromTame(data, tame, tame.level().getGameTime());
-            TameRegistry.archiveDeath(deathRecord);
             // Reincarnation is disabled; keep the live registry row so DI respawn
             // can continue with the same tame progress and bonuses.
             if (data.entitySnapshot != null) {
@@ -96,21 +93,26 @@ public class TameCombatEvents {
             data.deathX = tame.blockPosition().getX();
             data.deathY = tame.blockPosition().getY();
             data.deathZ = tame.blockPosition().getZ();
-            CompoundTag deathRow = new CompoundTag();
-            deathRow.putLong("gameTime", data.deadGameTime);
-            deathRow.putLong("unixMillis", data.deadUnixMillis);
-            deathRow.putInt("level", data.level);
-            deathRow.putInt("kills", data.kills);
-            deathRow.putInt("assists", data.assists);
-            deathRow.putInt("deaths", data.deaths);
-            deathRow.putString("message", deathMessage == null ? "" : deathMessage);
-            deathRow.putString("dimension", data.deathDimension == null ? "" : data.deathDimension);
-            deathRow.putInt("x", data.deathX);
-            deathRow.putInt("y", data.deathY);
-            deathRow.putInt("z", data.deathZ);
-            data.deathHistory.add(deathRow);
-            while (data.deathHistory.size() > 64) {
-                data.deathHistory.remove(0);
+            if (!diedInDuel) {
+                String deathMessage = event.getSource().getLocalizedDeathMessage(tame).getString();
+                TameDeathRecord deathRecord = TameDeathRecord.fromTame(data, tame, tame.level().getGameTime());
+                TameRegistry.archiveDeath(deathRecord);
+                CompoundTag deathRow = new CompoundTag();
+                deathRow.putLong("gameTime", data.deadGameTime);
+                deathRow.putLong("unixMillis", data.deadUnixMillis);
+                deathRow.putInt("level", data.level);
+                deathRow.putInt("kills", data.kills);
+                deathRow.putInt("assists", data.assists);
+                deathRow.putInt("deaths", data.deaths);
+                deathRow.putString("message", deathMessage == null ? "" : deathMessage);
+                deathRow.putString("dimension", data.deathDimension == null ? "" : data.deathDimension);
+                deathRow.putInt("x", data.deathX);
+                deathRow.putInt("y", data.deathY);
+                deathRow.putInt("z", data.deathZ);
+                data.deathHistory.add(deathRow);
+                while (data.deathHistory.size() > 64) {
+                    data.deathHistory.remove(0);
+                }
             }
             if (diedInDuel) {
                 data.escapeActive = false;

@@ -1378,7 +1378,7 @@ public class TameAbilityEvents {
         }
         int maxChains = 1 + levelValue;
         double chainRadius = 4.0D + Math.max(0, levelValue - 1) * 0.25D;
-        float chainDamage = aoeDamage((2.0F + levelValue) * attributeDamageBonusMultiplier(data, 0.50F));
+        float chainDamage = aoeDamage(attributeDamageFromLevelOneBase(2.0F + levelValue, 3.0F, data, 0.50F));
 
         Set<Integer> hitIds = new HashSet<>();
         hitIds.add(firstTarget.getId());
@@ -1461,7 +1461,7 @@ public class TameAbilityEvents {
 
         int explodeLevel = attributeLevel(data, "killexploder");
         if (explodeLevel > 0 && tame.level() instanceof ServerLevel level) {
-            float damage = aoeDamage((float) ((4.0D + Math.max(0, explodeLevel - 1) * 1.5D) * attributeDamageBonusMultiplier(data, 0.50F)));
+            float damage = aoeDamage(attributeDamageFromLevelOneBase((float) (4.0D + Math.max(0, explodeLevel - 1) * 1.5D), 4.0F, data, 0.50F));
             double radius = 2.0D + Math.max(0, explodeLevel - 1) * 0.40D;
             for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, dead.getBoundingBox().inflate(radius))) {
                 if (!nearby.isAlive() || nearby == tame) continue;
@@ -1664,7 +1664,11 @@ public class TameAbilityEvents {
     }
 
     private static float attributeDamageBonusMultiplier(TameData data, float scaling) {
-        return offensiveDamageBonusMultiplier(data, scaling);
+        return 1.0F + offensiveDamageBonusBonusFromLevelOne(data, scaling);
+    }
+
+    private static float attributeDamageFromLevelOneBase(float scaledDamage, float levelOneBaseDamage, TameData data, float scaling) {
+        return scaledDamage + levelOneBaseDamage * offensiveDamageBonusBonusFromLevelOne(data, scaling);
     }
 
     private static int breakpointAmplifier(int level) {
@@ -1696,12 +1700,13 @@ public class TameAbilityEvents {
     }
 
     private static float lightningfangDamage(TameData data, int level) {
-        return (2.0F + 2.0F * Math.max(1, level)) * attributeDamageBonusMultiplier(data, 1.0F);
+        int safeLevel = Math.max(1, level);
+        return attributeDamageFromLevelOneBase(2.0F + 2.0F * safeLevel, 4.0F, data, 1.0F);
     }
 
-    private static float abilityPowerMultiplier(TameData data) {
+    private static float abilityPowerBaseDamageBonus(TameData data) {
         int level = attributeLevel(data, "ability_power");
-        return 1.0F + (float) level * 0.10F;
+        return (float) level * 0.25F;
     }
 
     public static float offensiveAbilityCastDamage(TameData data, String abilityId, int abilityLevel) {
@@ -1709,11 +1714,11 @@ public class TameAbilityEvents {
         float baseDps = offensiveAbilityBaseDps(abilityId);
         float cooldownSeconds = offensiveAbilityBudgetCooldownTicks(abilityId, level) / 20.0F;
         float damageBonusScaling = offensiveAbilityDamageBonusScaling(abilityId);
-        float castDamage = cooldownSeconds
-                * baseDps
-                * offensiveAbilityLevelMultiplier(level)
-                * offensiveDamageBonusMultiplier(data, damageBonusScaling)
-                * abilityPowerMultiplier(data);
+        float levelOneBaseDamage = cooldownSeconds * baseDps;
+        float castDamage = levelOneBaseDamage
+                * (offensiveAbilityLevelMultiplier(level)
+                + offensiveDamageBonusBonusFromLevelOne(data, damageBonusScaling)
+                + abilityPowerBaseDamageBonus(data));
         return offensiveAbilityUsesAoeScaling(abilityId) ? aoeDamage(castDamage) : singleTargetDamage(castDamage);
     }
 
@@ -1784,9 +1789,9 @@ public class TameAbilityEvents {
         return (float) (1.0D + (Math.max(0, level - 1) / 4.0D));
     }
 
-    public static float offensiveDamageBonusMultiplier(TameData data, float scaling) {
+    public static float offensiveDamageBonusBonusFromLevelOne(TameData data, float scaling) {
         double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
-        return (float) (1.0D + bonusDamage * 0.05D * scaling);
+        return (float) (bonusDamage * 0.05D * scaling);
     }
 
     private static float tameBaseDamage(TamableAnimal tame) {

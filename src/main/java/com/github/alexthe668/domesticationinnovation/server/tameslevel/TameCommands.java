@@ -1588,6 +1588,13 @@ public class TameCommands {
     }
 
     private static int reviveApprovedItemCost(TameData data, ReviveMode mode) {
+        if (mode == ReviveMode.RESPAWN
+                && data != null
+                && data.hasPetBed
+                && data.petBedDimension != null
+                && !data.petBedDimension.isBlank()) {
+            return 1;
+        }
         int level = Math.max(1, data == null ? 1 : data.level);
         double divisor = mode == ReviveMode.ARISE ? 10.0D : 20.0D;
         return Math.max(1, (int) Math.ceil(level / divisor));
@@ -2056,7 +2063,7 @@ public class TameCommands {
                     "/tames respawn order [default|level|leaderboard]",
                     "Respawn works only on dead tames and does not apply an extra death penalty.",
                     "Respawn target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
-                    "Payment options: full invested XP, or ceil(level/20) approved items, or 1 totem in main hand.",
+                    "Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 totem in main hand.",
                     "Morning auto-respawn is separate: up to 1 dead tame per owner each morning, ordered by that owner's respawn order."
             );
         }
@@ -2193,7 +2200,7 @@ public class TameCommands {
             return;
         }
         player.sendSystemMessage(Component.literal(
-                "Live runtime scaling: level multiplier = 1 + (level - 1) / 4, bonus-damage multiplier = 1 + 0.05 * bonusDamage * scaling, ability_power multiplier = 1 + 0.10 * ability_power."
+                "Live runtime scaling: cast damage = level-1 base * (1 + (level - 1) / 4 + 0.05 * bonusDamage * scaling + 0.25 * ability_power)."
         ).withStyle(ChatFormatting.DARK_AQUA));
         player.sendSystemMessage(Component.literal(
                 "Live runtime cooldown nerf: attack cooldown x(1 + " + fmt(TLAdminRuntimeSettings.abilityCountCooldownNerfPercent()) + "% * log2(owned attack abilities))."
@@ -2970,12 +2977,12 @@ public class TameCommands {
             return 0;
         }
 
-        double abilityPowerMultiplier = inspectAbilityPowerMultiplier(data);
+        double abilityPowerBonus = inspectAbilityPowerBaseBonus(data);
         int attackAbilityCount = inspectOwnedAttackAbilityCount(data);
         double cooldownMultiplier = inspectAttackCooldownMultiplier(attackAbilityCount);
 
         player.sendSystemMessage(Component.literal("=== Inspect " + data.name + " ===").withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("Bonus DMG " + fmt(data.bonusDamage) + "  ability_power x" + fmt(abilityPowerMultiplier)
+        player.sendSystemMessage(Component.literal("Bonus DMG " + fmt(data.bonusDamage) + "  ability_power +" + fmt(abilityPowerBonus * 100.0D) + "% base"
                 + "  attack abilities " + attackAbilityCount + "  attack cooldown x" + fmt(cooldownMultiplier)).withStyle(ChatFormatting.GRAY));
         player.sendSystemMessage(Component.literal("Days " + daysAlive(source, data) + "  ActiveDays " + Math.max(0, data.activeSurvivalDays)).withStyle(ChatFormatting.GRAY));
         player.sendSystemMessage(Component.literal("Runtime multipliers: single x" + fmt(TLAdminRuntimeSettings.singleTargetAbilityDamageMultiplier())
@@ -3221,21 +3228,21 @@ public class TameCommands {
             case "pierce" -> id + " L" + level + ": ignores " + fmt(Math.min(0.80D, 0.20D + Math.max(0, level - 1) * 0.15D) * 100.0D) + "% of target armor";
             case "smite" -> id + " L" + level + ": +" + fmt((0.15D + 0.10D * level) * 100.0D) + "% damage vs undead";
             case "bane_of_arthropods" -> id + " L" + level + ": +" + fmt((0.15D + 0.10D * level) * 100.0D) + "% damage vs arthropods + slowness";
-            case "lightningfang" -> id + " L" + level + ": " + fmt(Math.min(0.35D, 0.10D + 0.05D * level) * 100.0D) + "% proc for " + fmt((2.0D + 2.0D * level) * (1.0D + 0.02D * Math.max(0.0D, data.bonusDamage))) + " bonus damage";
+            case "lightningfang" -> id + " L" + level + ": " + fmt(Math.min(0.35D, 0.10D + 0.05D * level) * 100.0D) + "% proc for " + fmt((2.0D + 2.0D * level) + (4.0D * 0.05D * Math.max(0.0D, data.bonusDamage))) + " bonus damage";
             case "firefang" -> id + " L" + level + ": burns target for " + (2 + level) + "s on hit" + (level >= 5 ? " and adds +2 damage" : level >= 3 ? " and adds +1 damage" : "");
             case "poison_fang" -> id + " L" + level + ": applies Poison " + (40 + level * 20) + " ticks on hit, amp " + (level >= 3 ? "II" : "I");
             case "witherfang" -> id + " L" + level + ": applies Wither " + (40 + level * 20) + " ticks on hit, amp " + (level >= 4 ? "II" : "I");
             case "frost_fang" -> id + " L" + level + ": " + fmt(Math.min(0.45D, 0.15D + Math.max(0, level - 1) * 0.075D) * 100.0D) + "% slow proc, amp " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
-            case "chain_lightning" -> id + " L" + level + ": " + fmt(Math.min(0.28D, 0.12D + Math.max(0, level - 1) * 0.04D) * 100.0D) + "% proc; chains up to " + (1 + level) + " targets for " + fmt((2.0D + level) * (1.0D + 0.01D * Math.max(0.0D, data.bonusDamage))) + " aoe damage each";
+            case "chain_lightning" -> id + " L" + level + ": " + fmt(Math.min(0.28D, 0.12D + Math.max(0, level - 1) * 0.04D) * 100.0D) + "% proc; chains up to " + (1 + level) + " targets for " + fmt((2.0D + level) + (3.0D * 0.05D * 0.50D * Math.max(0.0D, data.bonusDamage))) + " aoe damage each";
             case "sweeping_edge" -> id + " L" + level + ": splash radius " + fmt(1.4D + Math.max(0, level - 1) * 0.20D) + ", splash scaling " + fmt(Math.min(0.50D, 0.20D + Math.max(0, level - 1) * 0.075D) * 100.0D) + "%";
             case "victim_siphon" -> id + " L" + level + ": on kill heals " + fmt(Math.min(0.35D, 0.04D + 0.04D * level) * 100.0D) + "% of victim max HP";
-            case "killexploder" -> id + " L" + level + ": on kill/assist explodes for " + fmt((4.0D + Math.max(0, level - 1) * 1.5D) * (1.0D + 0.01D * Math.max(0.0D, data.bonusDamage))) + " aoe damage, radius " + fmt(2.0D + Math.max(0, level - 1) * 0.40D);
+            case "killexploder" -> id + " L" + level + ": on kill/assist explodes for " + fmt((4.0D + Math.max(0, level - 1) * 1.5D) + (4.0D * 0.05D * 0.50D * Math.max(0.0D, data.bonusDamage))) + " aoe damage, radius " + fmt(2.0D + Math.max(0, level - 1) * 0.40D);
             case "positive_effect_steal" -> id + " L" + level + ": " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to steal one beneficial effect on hit";
             case "negative_effect_transfer" -> id + " L" + level + ": transfers harmful effects with x" + fmt(inspectAttributeLevelMultiplier(level)) + " duration";
             case "feather_falling" -> id + " L" + level + ": reduces fall damage by " + fmt(Math.min(0.70D, 0.20D + Math.max(0, level - 1) * 0.125D) * 100.0D) + "%";
             case "explosion_resistance" -> id + " L" + level + ": reduces explosion damage by " + fmt(Math.min(0.55D, 0.15D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "%";
             case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt(level >= 5 ? 1.0D : level >= 3 ? 1.5D : 2.0D) + "s while damaged";
-            case "ability_power" -> id + " L" + level + ": ability damage/effects x" + fmt(1.0D + level * 0.10D);
+            case "ability_power" -> id + " L" + level + ": +" + fmt(level * 25.0D) + "% level-1 ability damage";
             case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
             case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
             case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";
@@ -3254,8 +3261,8 @@ public class TameCommands {
         return 1.0D + (Math.max(0, safeLevel - 1) / 3.0D);
     }
 
-    private static double inspectAbilityPowerMultiplier(TameData data) {
-        return 1.0D + (LevelSystem.getAttributeLevel(data, "ability_power") * 0.10D);
+    private static double inspectAbilityPowerBaseBonus(TameData data) {
+        return LevelSystem.getAttributeLevel(data, "ability_power") * 0.25D;
     }
 
     private static double inspectSingleTargetDamage(double amount) {

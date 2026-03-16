@@ -41,7 +41,7 @@ public class LevelSystem {
         SUPPORT
     }
 
-    public static final double DEATH_XP_LOSS = 0.10D;
+    public static final double DEATH_XP_LOSS = 0.05D;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
     private static final double DPS_DAMAGE_REWARD_AMOUNT = 0.80D;
     private static volatile ClassWeightConfig CLASS_WEIGHT_CONFIG = ClassWeightConfig.loadOrThrow();
@@ -293,41 +293,28 @@ public class LevelSystem {
     // XP LOSS ON DEATH
     // ===============================
 
-    public static void onTameDeath(TamableAnimal tame) {
+    public static void onTameDeath(TamableAnimal tame, boolean applyPenaltyAndCountDeath) {
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) {
             return;
         }
 
-        int previousLevel = data.level;
         int totalXp = estimateInvestedXp(data);
         int xpLoss = (int) Math.floor(totalXp * DEATH_XP_LOSS);
-        int levelLoss = deathLevelLossFromActiveDays(data.activeSurvivalDays);
-        int minLevelAfterDeath = Math.max(1, data.level - levelLoss);
-        int minTotalXpAfterDeath = totalXpRequiredForLevel(minLevelAfterDeath);
-        int remainingXp = Math.max(minTotalXpAfterDeath, totalXp - xpLoss);
-        int resultingLevel = levelForInvestedXp(remainingXp);
-
-        rollbackLostLevelRewards(tame, data, previousLevel, resultingLevel);
-        applyInvestedXp(data, remainingXp);
+        if (applyPenaltyAndCountDeath && xpLoss > 0) {
+            int previousLevel = data.level;
+            int remainingXp = Math.max(0, totalXp - xpLoss);
+            int resultingLevel = levelForInvestedXp(remainingXp);
+            rollbackLostLevelRewards(tame, data, previousLevel, resultingLevel);
+            applyInvestedXp(data, remainingXp);
+        }
         data.activeSurvivalDays = 0;
         data.lastActiveSurvivalDay = Long.MIN_VALUE;
         updateTameName(tame, data);
-        data.deaths++;
-        TameRegistry.markDirty();
-    }
-
-    public static int deathLevelLossFromActiveDays(int activeDays) {
-        int normalizedDays = Math.max(0, activeDays);
-        int levelsLost = 1;
-        int remaining = Math.max(0, normalizedDays - 5);
-        int nextBand = 6;
-        while (remaining > 0) {
-            levelsLost++;
-            remaining -= nextBand;
-            nextBand++;
+        if (applyPenaltyAndCountDeath) {
+            data.deaths++;
         }
-        return levelsLost;
+        TameRegistry.markDirty();
     }
 
     public static Set<String> knownAbilityIds() {

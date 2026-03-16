@@ -27,6 +27,7 @@ public final class TameDuelManager {
         private final UUID ownerB;
         private final Set<UUID> teamA;
         private final Set<UUID> teamB;
+        private final Set<UUID> roster;
         private final Set<UUID> participants;
         private final List<DuelElimination> eliminations = new ArrayList<>();
 
@@ -36,9 +37,11 @@ public final class TameDuelManager {
             this.ownerB = ownerB;
             this.teamA = teamA;
             this.teamB = teamB;
+            this.roster = new HashSet<>();
+            this.roster.addAll(teamA);
+            this.roster.addAll(teamB);
             this.participants = new HashSet<>();
-            this.participants.addAll(teamA);
-            this.participants.addAll(teamB);
+            this.participants.addAll(this.roster);
         }
     }
 
@@ -243,7 +246,7 @@ public final class TameDuelManager {
         List<String> healthSummary = buildHealthSummary(server, battle);
         List<String> eliminationSummary = buildEliminationSummary(server, battle);
 
-        Set<UUID> allParticipants = new HashSet<>(battle.participants);
+        Set<UUID> allParticipants = new HashSet<>(battle.roster);
         int resetCount = 0;
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
@@ -286,11 +289,11 @@ public final class TameDuelManager {
 
     private static List<String> buildHealthSummary(MinecraftServer server, DuelBattle battle) {
         List<String> lines = new ArrayList<>();
-        if (server == null || battle == null || battle.participants.isEmpty()) {
+        if (server == null || battle == null || battle.roster.isEmpty()) {
             return lines;
         }
         lines.add("Final health:");
-        List<UUID> ordered = new ArrayList<>(battle.participants);
+        List<UUID> ordered = new ArrayList<>(battle.roster);
         ordered.sort(Comparator.comparing(id -> entityLabel(server, id)));
         for (UUID participantId : ordered) {
             LivingEntity entity = findLoadedLivingParticipant(server, participantId);
