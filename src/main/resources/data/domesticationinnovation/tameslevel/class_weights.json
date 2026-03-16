@@ -1,0 +1,849 @@
+{
+  "preferredAttributeWeightMultiplier": 30.0,
+  "preferredAbilityWeightMultiplier": 9.0,
+  "defaultCategoryWeights": {
+    "base": 90.0,
+    "attribute": 10.0,
+    "ability": 10.0
+  },
+  "defaultBaseStatWeights": {
+    "armor": 3.0,
+    "armor_toughness": 3.0,
+    "damage": 3.0,
+    "hp": 70.0,
+    "knockback": 3.0,
+    "knockback_resist": 3.0,
+    "speed": 3.0
+  },
+  "classes": {
+    "assassin": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 3.8
+      },
+      "attributes": {
+        "amphibious": 4.0,
+        "bubbling": 2.5,
+        "chain_lightning": 4.0,
+        "firefang": 2.6,
+        "frost_fang": 2.6,
+        "killer": 4.0,
+        "killexploder": 2.5,
+        "lifesteal": 3.0,
+        "lightningfang": 1.6,
+        "magnetic": 4.0,
+        "muffled": 1.5,
+        "pierce": 2.5,
+        "poison_fang": 4.0,
+        "rejuvenation": 4.0,
+        "speed": 3.2,
+        "strength": 1.4,
+        "victim_siphon": 4.0,
+        "void_cloud": 2.5,
+        "warping_bite": 4.0,
+        "witherfang": 3.0
+      },
+      "abilities": {
+        "berserker": 3.2,
+        "bloodlust": 3.6,
+        "creeper_explosion": 2.0,
+        "dash": 5.0,
+        "ender_pearl_jump": 5.0,
+        "fishing": 2.0,
+        "retaliation_slow": 4.0,
+        "shadow_hands": 2.0,
+        "shulker_bullet": 2.0,
+        "sky_launch": 2.0,
+        "warden_scream": 3.8,
+        "wither_skull": 2.4
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "attributer": {
+      "category": {
+        "base": 63.6,
+        "attribute": 34.2,
+        "ability": 2.2
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "blaze": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 3.0
+      },
+      "attributes": {
+        "ability_power": 5.0,
+        "blazing_protection": 15.0,
+        "fire_resistance": 25.0,
+        "firefang": 25.0,
+        "lightningfang": 4.0,
+        "poison_resistance": 3.0
+      },
+      "abilities": {
+        "blaze_attack": 45.0,
+        "lightning_strike": 8.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "bee": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 5.0
+      },
+      "attributes": {
+        "charisma": 4.0,
+        "poison_fang": 35.0,
+        "speed": 16.0
+      },
+      "abilities": {
+        "dash": 35.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "creeper": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "knockback_resist": 4.0,
+        "speed": 4.0
+      },
+      "attributes": {
+        "amphibious": 2.0,
+        "comfort": 2.0,
+        "feather_falling": 4.0,
+        "killer": 3.0,
+        "killexploder": 3.0,
+        "magnetic": 5.0,
+        "speed": 5.0
+      },
+      "abilities": {
+        "creeper_explosion": 30.0,
+        "dash": 10.0,
+        "defusal": 5.0,
+        "fishing": 5.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "disco": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "attributes": {
+        "charisma": 18.0,
+        "comfort": 20.0,
+        "disc_jockey": 40.0
+      },
+      "abilities": {
+        "battle_strength": 18.0,
+        "defensive_aura": 18.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "dps": {
+      "category": {
+        "base": 96.0,
+        "attribute": 3.0,
+        "ability": 1.0
+      },
+      "baseStats": {
+        "damage": 4.3
+      },
+      "attributes": {
+        "bane_of_arthropods": 2.5,
+        "chain_lightning": 1.5,
+        "firefang": 3.0,
+        "frost_fang": 2.6,
+        "killer": 3.4,
+        "lightningfang": 2.6,
+        "pierce": 4.0,
+        "poison_fang": 2.6,
+        "smite": 2.5,
+        "strength": 4.0,
+        "sweeping_edge": 4.0,
+        "witherfang": 2.6
+      },
+      "abilities": {
+        "berserker": 4.0,
+        "bloodlust": 4.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "enderman": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 4.0
+      },
+      "attributes": {
+        "charisma": 3.0,
+        "feather_falling": 6.0,
+        "jump_boost": 8.0,
+        "muffled": 5.0,
+        "speed": 10.0,
+        "void_cloud": 12.0,
+        "warping_bite": 15.0
+      },
+      "abilities": {
+        "dash": 14.0,
+        "ender_pearl_jump": 45.0,
+        "shadow_hands": 5.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "dolphin": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 4.0
+      },
+      "attributes": {
+        "amphibious": 40.0,
+        "bubbling": 18.0,
+        "speed": 14.0
+      },
+      "abilities": {
+        "dash": 12.0,
+        "trident": 28.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "evoker": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "ability_power": 28.0,
+        "rejuvenation": 12.0
+      },
+      "abilities": {
+        "evoker_fangs": 42.0,
+        "shadow_hands": 24.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "fisher": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "attributes": {
+        "amphibious": 20.0,
+        "bane_of_arthropods": 5.0,
+        "bubbling": 5.0,
+        "chain_lightning": 6.0,
+        "explosion_resistance": 5.0,
+        "frost_fang": 5.0,
+        "jump_boost": 2.0,
+        "lightningfang": 2.0,
+        "pierce": 10.0,
+        "poison_fang": 10.0,
+        "poison_resistance": 10.0,
+        "rejuvenation": 3.0
+      },
+      "abilities": {
+        "dash": 15.0,
+        "fishing": 6.0,
+        "healing_aura": 4.0,
+        "llama_spit": 13.0,
+        "revitalizing_presence": 4.0,
+        "trident": 14.0
+      },
+      "baseStats": {
+        "hp": 5.0,
+        "speed": 5.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "guardian": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 4.0,
+        "knockback_resist": 4.0
+      },
+      "attributes": {
+        "ability_power": 5.0,
+        "amphibious": 20.0,
+        "bubbling": 12.0,
+        "chain_lightning": 4.0,
+        "health_siphon": 4.0,
+        "poison_resistance": 5.0,
+        "resistance": 8.0,
+        "totem": 3.0
+      },
+      "abilities": {
+        "defensive_aura": 10.0,
+        "guardian_beam": 45.0,
+        "guardian_intercept": 8.0,
+        "guardian_repulse": 15.0,
+        "psychic_wall": 8.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "ghast": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "ability_power": 18.0,
+        "feather_falling": 10.0,
+        "fire_resistance": 22.0,
+        "firefang": 18.0
+      },
+      "abilities": {
+        "ghast_fireball": 55.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "healer": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "damage": 0.5,
+        "hp": 1.5
+      },
+      "attributes": {
+        "comfort": 10.0,
+        "feather_falling": 3.0,
+        "fire_resistance": 3.0,
+        "pacifist": 2.0,
+        "poison_resistance": 5.0,
+        "positive_effect_steal": 2.0,
+        "regeneration": 10.0,
+        "totem": 2.0
+      },
+      "abilities": {
+        "battlefield_medic": 10.0,
+        "cleanse_touch": 2.0,
+        "healing_aura": 10.0,
+        "healing_bottle": 10.0,
+        "life_gift": 10.0,
+        "llama_spit": 2.0,
+        "revitalizing_presence": 10.0,
+        "triage_pulse": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "mage": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "ability_power": 6.2,
+        "chain_lightning": 2.5,
+        "firefang": 2.0,
+        "lightningfang": 3.2,
+        "positive_effect_steal": 2.6,
+        "rejuvenation": 2.5,
+        "witherfang": 2.0
+      },
+      "abilities": {
+        "dragon_fireball": 4.6,
+        "elder_guardian_beam": 4.2,
+        "evoker_fangs": 3.6,
+        "ghast_fireball": 3.2,
+        "guardian_beam": 4.4,
+        "lightning_strike": 3.6,
+        "shadow_hands": 4.0,
+        "shulker_bullet": 4.0,
+        "warden_scream": 3.8,
+        "wither_skull": 4.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "iron_golem": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 6.0,
+        "hp": 6.0,
+        "knockback": 5.0,
+        "knockback_resist": 5.0
+      },
+      "attributes": {
+        "resistance": 16.0
+      },
+      "abilities": {
+        "body_block": 26.0,
+        "guardian_intercept": 24.0,
+        "shield_block": 24.0,
+        "sky_launch": 24.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "maniac": {
+      "category": {
+        "base": 65.0,
+        "attribute": 5.0,
+        "ability": 30.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "protector": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 2.0,
+        "armor_toughness": 2.0,
+        "knockback": 2.0,
+        "knockback_resist": 2.0,
+        "speed": 2.0
+      },
+      "attributes": {
+        "charisma": 3.0,
+        "emergency_cooldown_reduction": 3.0,
+        "feather_falling": 2.0,
+        "fire_resistance": 2.0,
+        "pacifist": 2.0
+      },
+      "abilities": {
+        "defensive_aura": 7.0,
+        "deflection": 5.0,
+        "emergency_shield": 10.0,
+        "guardian_intercept": 5.0,
+        "guardian_repulse": 5.0,
+        "immunity_frame": 3.0,
+        "pack_guard": 7.0,
+        "psychic_wall": 7.0,
+        "shield_block": 10.0,
+        "sky_launch": 7.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "phantom": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 4.0
+      },
+      "attributes": {
+        "feather_falling": 16.0,
+        "jump_boost": 10.0,
+        "muffled": 18.0,
+        "speed": 18.0,
+        "void_cloud": 18.0
+      },
+      "abilities": {
+        "dash": 38.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "piglin": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "attributes": {
+        "charisma": 10.0,
+        "fire_resistance": 14.0,
+        "killer": 14.0
+      },
+      "abilities": {
+        "crossbow": 42.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "shooter": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "baseStats": {
+        "knockback": 2.8,
+        "speed": 1.8
+      },
+      "attributes": {
+        "bane_of_arthropods": 2.5,
+        "chain_lightning": 1.5,
+        "firefang": 3.0,
+        "frost_fang": 2.6,
+        "killer": 3.4,
+        "lightningfang": 2.6,
+        "pierce": 4.0,
+        "poison_fang": 2.6,
+        "smite": 2.5,
+        "speed": 3.4,
+        "strength": 4.0,
+        "sweeping_edge": 4.0,
+        "witherfang": 2.6
+      },
+      "abilities": {
+        "arrow_shot": 5.0,
+        "blaze_attack": 3.6,
+        "crossbow": 5.5,
+        "llama_spit": 4.2,
+        "snowball_shot": 5.8,
+        "trident": 5.2
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "shulker": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 3.0
+      },
+      "attributes": {
+        "feather_falling": 4.0,
+        "muffled": 5.0,
+        "resistance": 6.0,
+        "void_cloud": 8.0,
+        "warping_bite": 8.0
+      },
+      "abilities": {
+        "deflection": 12.0,
+        "ender_pearl_jump": 10.0,
+        "psychic_wall": 10.0,
+        "shulker_bullet": 50.0,
+        "sky_launch": 8.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "slime": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "hp": 5.0,
+        "knockback_resist": 4.0
+      },
+      "attributes": {
+        "bubbling": 22.0,
+        "jump_boost": 18.0,
+        "resistance": 16.0
+      },
+      "abilities": {
+        "body_block": 26.0,
+        "sky_launch": 20.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "skeleton": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 3.0
+      },
+      "attributes": {
+        "bosskiller": 10.0,
+        "firefang": 6.0,
+        "killer": 4.0,
+        "lifesteal": 3.0,
+        "poison_fang": 10.0,
+        "poison_resistance": 5.0,
+        "regeneration": 10.0,
+        "rejuvenation": 10.0,
+        "resistance": 5.0,
+        "smite": 10.0,
+        "speed": 3.0,
+        "totem": 3.0,
+        "victim_siphon": 10.0
+      },
+      "abilities": {
+        "arrow_shot": 50.0,
+        "crossbow": 50.0,
+        "last_stand_fury": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "speedster": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "damage": 0.5,
+        "speed": 10.0
+      },
+      "attributes": {
+        "amphibious": 4.0,
+        "chain_lightning": 3.0,
+        "emergency_cooldown_reduction": 4.0,
+        "feather_falling": 4.0,
+        "jump_boost": 4.0,
+        "lightningfang": 2.0,
+        "speed": 7.0,
+        "void_cloud": 2.0,
+        "wall_climber": 2.0
+      },
+      "abilities": {
+        "dash": 40.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "spider": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 3.0
+      },
+      "attributes": {
+        "bane_of_arthropods": 10.0,
+        "killer": 3.0,
+        "poison_fang": 10.0,
+        "poison_resistance": 10.0,
+        "wall_climber": 20.0,
+        "warping_bite": 2.0,
+        "witherfang": 5.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "supporter": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "baseStats": {
+        "knockback_resist": 2.8,
+        "speed": 1.8
+      },
+      "attributes": {
+        "charisma": 2.5,
+        "fire_resistance": 3.6,
+        "herding": 2.5,
+        "linked_inventory": 2.5,
+        "ore_scenting": 2.5,
+        "poison_resistance": 3.6,
+        "regeneration": 4.0,
+        "resistance": 4.2,
+        "totem": 4.2
+      },
+      "abilities": {
+        "battle_strength": 3.2,
+        "battlefield_medic": 4.0,
+        "cleanse_touch": 4.0,
+        "defensive_aura": 4.6,
+        "healing_aura": 10.0,
+        "healing_bottle": 6.0,
+        "life_gift": 4.0,
+        "shield_block": 2.5
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "tanker": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 3.0,
+        "armor_toughness": 3.0,
+        "hp": 3.0
+      },
+      "attributes": {
+        "blazing_protection": 4.0,
+        "fire_resistance": 3.8,
+        "health_siphon": 2.5,
+        "pacifist": 2.8,
+        "poison_resistance": 3.8,
+        "regeneration": 4.2,
+        "resistance": 4.6,
+        "totem": 3.6
+      },
+      "abilities": {
+        "body_block": 4.0,
+        "defensive_aura": 4.8,
+        "deflection": 4.0,
+        "defusal": 7.0,
+        "emergency_shield": 4.0,
+        "guardian_intercept": 4.0,
+        "guardian_repulse": 4.0,
+        "immunity_frame": 4.0,
+        "last_stand_fury": 4.0,
+        "psychic_wall": 4.0,
+        "shield_block": 4.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "witch": {
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "negative_effect_transfer": 18.0,
+        "poison_resistance": 12.0,
+        "positive_effect_steal": 18.0,
+        "regeneration": 14.0,
+        "rejuvenation": 14.0
+      },
+      "abilities": {
+        "cleanse_touch": 14.0,
+        "healing_bottle": 28.0,
+        "retaliation_slow": 18.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "warden": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "damage": 3.0,
+        "knockback_resist": 5.0,
+        "speed": 3.0
+      },
+      "attributes": {
+        "ability_power": 3.0,
+        "bosskiller": 5.0,
+        "killer": 5.0,
+        "lifesteal": 2.0,
+        "muffled": 5.0,
+        "rejuvenation": 5.0,
+        "resistance": 3.0,
+        "strength": 3.0
+      },
+      "abilities": {
+        "bloodlust": 3.0,
+        "deflection": 2.0,
+        "shadow_hands": 2.0,
+        "warden_scream": 20.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "wither": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "attributes": {
+        "lifesteal": 4.0,
+        "rejuvenation": 4.0,
+        "sweeping_edge": 3.0,
+        "witherfang": 25.0
+      },
+      "abilities": {
+        "wither_skull": 40.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    },
+    "zombie": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "hp": 3.0
+      },
+      "attributes": {
+        "bosskiller": 10.0,
+        "killer": 4.0,
+        "lifesteal": 3.0,
+        "poison_fang": 5.0,
+        "poison_resistance": 5.0,
+        "positive_effect_steal": 3.0,
+        "regeneration": 10.0,
+        "rejuvenation": 10.0,
+        "resistance": 5.0,
+        "smite": 10.0,
+        "totem": 10.0,
+        "victim_siphon": 10.0
+      },
+      "abilities": {
+        "bloodlust": 50.0,
+        "immunity_frame": 50.0,
+        "last_stand_fury": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
+    }
+  }
+}

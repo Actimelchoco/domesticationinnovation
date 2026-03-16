@@ -1,0 +1,152 @@
+----Commands----
+`/tame` is an alias for `/tames`.
+
+/tames
+Lists all your registered tames.
+
+/tames strongest
+Shows short stats for your strongest tame.
+
+/tames stat <name>
+Shows full/long stats for that tame.
+
+/tames <name> long
+Also shows long stats (legacy style).
+
+/tames info
+Shows command overview.
+
+/tames info <command>
+Shows details for one command topic.
+
+/tames info ability <abilityId>
+Shows the exact ability section from `AbilitiesDocu.md`.
+
+/tames info attribute <attributeId>
+Shows the exact attribute section from `AttributesDocu.md`.
+
+/tame info
+Same as `/tames info`.
+
+----Leaderboards----
+/tames leaderboard
+/tames leaderboard <kills|deaths|assists|lvl|days>
+/tames leaderboard <type> all
+/tames leaderboard group <groupName>
+
+----Behavior----
+/tames follow
+/tames sit
+/tames wander
+/tames follow <name>
+/tames sit <name>
+/tames wander <name>
+/tames follow all
+/tames sit all
+/tames wander all
+/tames follow group <groupName>
+/tames sit group <groupName>
+/tames wander group <groupName>
+/tames follow type <typeName>
+/tames sit type <typeName>
+/tames wander type <typeName>
+/tames follow state <follow|wander|sit>
+/tames sit state <follow|wander|sit>
+/tames wander state <follow|wander|sit>
+
+----Teleport----
+/tames tp <name>
+/tames tp all
+/tames tp unloaded
+/tames tp follow
+/tames tp sit
+/tames tp wander
+/tames tp state <follow|wander|sit>
+/tames tp group <groupName>
+/tames tp type <typeName>
+/tames tp dim <dimension>
+/tames tp all dim <dimension>
+
+Cross-dimension unloaded tp is blocked.
+
+----Groups----
+/tames group <groupName>
+/tames group add <pet> <groupName>
+/tames group remove <pet> <groupName>
+/tames group removefromallgroups <pet>
+/tames group leader <groupName> <pet> (not implemented)
+/tames group removeleader <groupName> (not implemented)
+
+----Modes----
+/tames mode <pet> <mode>
+/tames mode all <mode>
+/tames mode group <groupName> <mode>
+/tames mode type <typeName> <mode>
+/tames mode state <follow|wander|sit> <mode>
+
+----Targets----
+/tames removeTarget
+Removes target from all loaded tames you own.
+
+/tames removeTarget <name>
+Removes target from one loaded tame.
+
+/tames removeTarget group <groupName>
+Removes targets from loaded tames in that group.
+
+/tames removeTarget type <typeName>
+/tames removeTarget state <follow|wander|sit>
+
+----Respawn----
+/tames respawn <name> [toMe]
+/tames respawn group <groupName> [toMe]
+/tames respawn type <typeName> [toMe]
+/tames respawn all [toMe]
+
+----Emergency----
+/tames berserk
+Sets nearby owned tames to `monster_hunter`.
+
+/tames passive
+Sets nearby owned tames to passive and clears their targets.
+
+----XP / Abilities / Attributes----
+/tames xp add <pet> <amount>
+/tames xp remove <pet> <amount>
+
+/tames ability add <id> <pet> [levels]
+/tames ability remove <id> <pet> [levels]
+/tames ability clear <pet>
+/tames ability list <pet>
+
+/tames attribute add <id> <pet> [levels]
+/tames attribute remove <id> <pet> [levels]
+/tames attribute clear <pet>
+/tames attribute list <pet>
+
+----Auto Follow----
+When an owner changes dimension, loaded owned tames that are following (not sitting)
+are teleported to the owner after ~1 second automatically.
+
+----Debug----
+/tames debug enemyKilled <true|false>
+Shows kill debug:
+enemyKilled true/false: Killed: MobType[xp give]: K: Killer Name, A: Assister Name...
+
+/tames debug abilityUsed <true|false>
+Enables/disables ability usage chat messages.
+
+/tames debug attributeUsed <true|false>
+Enables/disables attribute usage chat messages.
+
+----Admin----
+/tames admin normalizeBonuses all
+Rebuilds loaded tame combat stats as: base stats of tame type + stored bonuses.
+
+/tames admin normalizeBonuses <pet>
+Same normalization for one loaded tame.
+
+/tames admin xp add|remove <pet> <amount>
+/tames admin ability add|remove|clear|list ...
+/tames admin attribute add|remove|clear|list ...
+/tames admin removeTarget [<name>|group <name>|type <name>|state <follow|wander|sit>]

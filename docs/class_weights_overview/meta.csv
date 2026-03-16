@@ -1,0 +1,13 @@
+key,value
+preferredAttributeWeightMultiplier,30.0
+preferredAbilityWeightMultiplier,9.0
+defaultCategory.base,90.0
+defaultCategory.attribute,10.0
+defaultCategory.ability,10.0
+defaultBaseStat.armor,3.0
+defaultBaseStat.armor_toughness,3.0
+defaultBaseStat.damage,3.0
+defaultBaseStat.hp,70.0
+defaultBaseStat.knockback,3.0
+defaultBaseStat.knockback_resist,3.0
+defaultBaseStat.speed,3.0

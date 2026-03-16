@@ -1,0 +1,58 @@
+{
+  "type": "create:mechanical_crafting",
+  "acceptMirrored": false,
+  "pattern": [
+    "DABZD",
+    "DPNPD",
+    "SMCDH",
+    "DPTPD",
+    "DSOSD"
+  ],
+  "key": {
+    "C": {
+      "type": "forge:nbt",
+      "item": "domesticationinnovation:collar_tag",
+      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:2s}]}"
+    },
+    "B": {
+      "type": "forge:nbt",
+      "item": "minecraft:enchanted_book",
+      "nbt": "{StoredEnchantments:[{id:\"minecraft:protection\",lvl:3s}]}"
+    },
+    "O": {
+      "item": "born_in_chaos_v1:orbofthe_summoner"
+    },
+    "S": {
+      "item": "create:sturdy_sheet"
+    },
+    "A": {
+      "item": "born_in_chaos_v1:armor_plate_from_dark_metal"
+    },
+    "Z": {
+      "item": "create:blaze_cake"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "N": {
+      "item": "minecraft:honeycomb_block"
+    },
+    "M": {
+      "item": "minecraft:slime_block"
+    },
+    "T": {
+      "item": "minecraft:enchanted_golden_apple"
+    },
+    "D": {
+      "item": "minecraft:diamond"
+    },
+    "H": {
+      "item": "minecraft:shield"
+    }
+  },
+  "result": {
+    "item": "domesticationinnovation:collar_tag",
+    "count": 1,
+    "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:3s}]}"
+  }
+}

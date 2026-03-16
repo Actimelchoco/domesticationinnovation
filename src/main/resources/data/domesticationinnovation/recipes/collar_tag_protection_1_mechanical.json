@@ -1,0 +1,50 @@
+{
+  "type": "create:mechanical_crafting",
+  "acceptMirrored": false,
+  "pattern": [
+    "IIBII",
+    "IRSLI",
+    "SICPS",
+    "IHSMI",
+    "IIOII"
+  ],
+  "key": {
+    "C": {
+      "item": "domesticationinnovation:collar_tag"
+    },
+    "B": {
+      "type": "forge:nbt",
+      "item": "minecraft:enchanted_book",
+      "nbt": "{StoredEnchantments:[{id:\"minecraft:protection\",lvl:1s}]}"
+    },
+    "O": {
+      "item": "born_in_chaos_v1:orbofthe_summoner"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "R": {
+      "item": "minecraft:iron_bars"
+    },
+    "L": {
+      "item": "minecraft:lapis_block"
+    },
+    "H": {
+      "tag": "domesticationinnovation:any_horse_armor"
+    },
+    "M": {
+      "tag": "domesticationinnovation:any_music_disc"
+    },
+    "S": {
+      "item": "minecraft:slime_block"
+    },
+    "P": {
+      "item": "minecraft:pufferfish"
+    }
+  },
+  "result": {
+    "item": "domesticationinnovation:collar_tag",
+    "count": 1,
+    "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:1s}]}"
+  }
+}
