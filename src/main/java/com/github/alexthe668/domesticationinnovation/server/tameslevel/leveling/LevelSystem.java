@@ -19,6 +19,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -40,11 +41,10 @@ public class LevelSystem {
         SUPPORT
     }
 
-    public static final int BASE_XP = 50;
-    public static final int XP_PER_LEVEL_STEP = 3;
     public static final double DEATH_XP_LOSS = 0.10D;
-    public static final int MAX_DEATH_LEVEL_LOSS = 5;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
+    private static final double DPS_DAMAGE_REWARD_AMOUNT = 0.80D;
+    private static volatile ClassWeightConfig CLASS_WEIGHT_CONFIG = ClassWeightConfig.loadOrThrow();
 
     private static final Random RANDOM = new Random();
 
@@ -52,19 +52,21 @@ public class LevelSystem {
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
 
     private enum BaseStatReward {
-        HP("HP", Attributes.MAX_HEALTH, 1.0D),
-        DAMAGE("Damage", Attributes.ATTACK_DAMAGE, 1.0D),
-        SPEED("Speed", Attributes.MOVEMENT_SPEED, 0.01D),
-        ARMOR("Armor", Attributes.ARMOR, 1.0D),
-        ARMOR_TOUGHNESS("Armor Toughness", Attributes.ARMOR_TOUGHNESS, 1.0D),
-        KNOCKBACK("Attack Knockback", Attributes.ATTACK_KNOCKBACK, 0.5D),
-        KNOCKBACK_RESIST("Knockback Resistance", Attributes.KNOCKBACK_RESISTANCE, 0.05D);
+        HP("hp", "HP", Attributes.MAX_HEALTH, 1.0D),
+        DAMAGE("damage", "Damage", Attributes.ATTACK_DAMAGE, 1.0D),
+        SPEED("speed", "Speed", Attributes.MOVEMENT_SPEED, 0.01D),
+        ARMOR("armor", "Armor", Attributes.ARMOR, 1.0D),
+        ARMOR_TOUGHNESS("armor_toughness", "Armor Toughness", Attributes.ARMOR_TOUGHNESS, 1.0D),
+        KNOCKBACK("knockback", "Attack Knockback", Attributes.ATTACK_KNOCKBACK, 0.5D),
+        KNOCKBACK_RESIST("knockback_resist", "Knockback Resistance", Attributes.KNOCKBACK_RESISTANCE, 0.05D);
 
+        private final String id;
         private final String display;
         private final Attribute attribute;
         private final double amount;
 
-        BaseStatReward(String display, Attribute attribute, double amount) {
+        BaseStatReward(String id, String display, Attribute attribute, double amount) {
+            this.id = id;
             this.display = display;
             this.attribute = attribute;
             this.amount = amount;
@@ -110,6 +112,7 @@ public class LevelSystem {
         BUBBLING("bubbling", Integer.MAX_VALUE),
         HERDING("herding", Integer.MAX_VALUE),
         AMPHIBIOUS("amphibious", 1),
+        WALL_CLIMBER("wall_climber", 1),
         VOID_CLOUD("void_cloud", 1),
         CHARISMA("charisma", Integer.MAX_VALUE),
         DISC_JOCKEY("disc_jockey", 1),
@@ -194,6 +197,9 @@ public class LevelSystem {
     }
 
     private record WeightedOption<T>(T value, double weight) {}
+
+    public record ClassCategoryView(double base, double attribute, double ability) {
+    }
 
     private record LevelRewardResult(RewardCategory category, String rewardId, double amount, String summary) {
         private static LevelRewardResult fromHistoryRow(CompoundTag row) {
@@ -296,16 +302,32 @@ public class LevelSystem {
         int previousLevel = data.level;
         int totalXp = estimateInvestedXp(data);
         int xpLoss = (int) Math.floor(totalXp * DEATH_XP_LOSS);
-        int minLevelAfterDeath = Math.max(1, data.level - MAX_DEATH_LEVEL_LOSS);
+        int levelLoss = deathLevelLossFromActiveDays(data.activeSurvivalDays);
+        int minLevelAfterDeath = Math.max(1, data.level - levelLoss);
         int minTotalXpAfterDeath = totalXpRequiredForLevel(minLevelAfterDeath);
         int remainingXp = Math.max(minTotalXpAfterDeath, totalXp - xpLoss);
         int resultingLevel = levelForInvestedXp(remainingXp);
 
         rollbackLostLevelRewards(tame, data, previousLevel, resultingLevel);
         applyInvestedXp(data, remainingXp);
+        data.activeSurvivalDays = 0;
+        data.lastActiveSurvivalDay = Long.MIN_VALUE;
         updateTameName(tame, data);
         data.deaths++;
         TameRegistry.markDirty();
+    }
+
+    public static int deathLevelLossFromActiveDays(int activeDays) {
+        int normalizedDays = Math.max(0, activeDays);
+        int levelsLost = 1;
+        int remaining = Math.max(0, normalizedDays - 5);
+        int nextBand = 6;
+        while (remaining > 0) {
+            levelsLost++;
+            remaining -= nextBand;
+            nextBand++;
+        }
+        return levelsLost;
     }
 
     public static Set<String> knownAbilityIds() {
@@ -460,7 +482,7 @@ public class LevelSystem {
 
         if (tame.getOwner() instanceof Player owner) {
             owner.sendSystemMessage(Component.literal(
-                    "§b" + data.name + " class assigned: §e" + data.tameClass.name()
+                    "§b" + data.name + " class assigned: §e" + data.tameClass.id()
             ));
         }
     }
@@ -536,50 +558,10 @@ public class LevelSystem {
     }
 
     private static RewardCategory rollCategory(TameData data) {
-        if (data.tameClass == TameClass.DPS) {
-            double roll = RANDOM.nextDouble();
-            if (roll < 0.94D) {
-                return RewardCategory.BASE_STAT;
-            }
-            if (roll < 0.98D) {
-                return RewardCategory.ATTRIBUTE;
-            }
-            return RewardCategory.ABILITY;
-        }
-
-        double baseChance = 0.80D;
-        double attributeChance = 0.10D;
-        double abilityChance = 0.10D;
-
-        double baseMult = 1.0D;
-        double attributeMult = 1.0D;
-        double abilityMult = 1.0D;
-
-        if (data.tameClass != null) {
-            switch (data.tameClass) {
-                case SHOOTER -> {
-                    baseMult = 1.00D;
-                    attributeMult = 1.00D;
-                    abilityMult = 2.00D;
-                }
-                case MANIAC -> {
-                    baseMult = 0.75D;
-                    attributeMult = 0.75D;
-                    abilityMult = 2.50D;
-                }
-                case ATTRIBUTER -> {
-                    baseMult = 0.75D;
-                    attributeMult = 2.75D;
-                    abilityMult = 0.75D;
-                }
-                default -> {
-                }
-            }
-        }
-
-        baseChance *= baseMult;
-        attributeChance *= attributeMult;
-        abilityChance *= abilityMult;
+        ClassWeightConfig.CategoryWeights weights = CLASS_WEIGHT_CONFIG.categoryWeights(data.tameClass);
+        double baseChance = weights.base();
+        double attributeChance = weights.attribute();
+        double abilityChance = weights.ability();
 
         double total = baseChance + attributeChance + abilityChance;
         if (total <= 0.0D) {
@@ -603,7 +585,7 @@ public class LevelSystem {
         }
 
         BaseStatReward reward = pickWeighted(options);
-        return applyBaseStatReward(tame, data, reward, reward.amount);
+        return applyBaseStatReward(tame, data, reward, effectiveBaseStatAmount(data, reward));
     }
 
     private static LevelRewardResult applyAttributeReward(TamableAnimal tame, TameData data, boolean allowAbilityFallback) {
@@ -777,7 +759,7 @@ public class LevelSystem {
     }
 
     private static double modifiedBaseStatWeight(TameClass tameClass, BaseStatReward reward) {
-        double base = switch (reward) {
+        double base = CLASS_WEIGHT_CONFIG.defaultBaseStatWeight(reward.id, switch (reward) {
             case HP -> 70.0D;
             case DAMAGE -> 3.0D;
             case SPEED -> 3.0D;
@@ -785,60 +767,107 @@ public class LevelSystem {
             case ARMOR_TOUGHNESS -> 3.0D;
             case KNOCKBACK -> 3.0D;
             case KNOCKBACK_RESIST -> 3.0D;
-        };
+        });
+        return base * CLASS_WEIGHT_CONFIG.baseStatMultiplier(tameClass, reward.id);
+    }
 
-        if (tameClass == null) {
-            return base;
+    private static double effectiveBaseStatAmount(TameData data, BaseStatReward reward) {
+        if (data == null || reward == null) {
+            return reward == null ? 0.0D : reward.amount;
         }
-
-        return switch (tameClass) {
-            case DPS -> reward == BaseStatReward.DAMAGE ? base * 4.0D : base;
-            case SHOOTER -> reward == BaseStatReward.SPEED ? base * 3.0D : base;
-            case MANIAC -> base * 0.75D;
-            case ATTRIBUTER -> base * 0.75D;
-            default -> base;
-        };
+        if (data.tameClass == TameClass.DPS && reward == BaseStatReward.DAMAGE) {
+            return DPS_DAMAGE_REWARD_AMOUNT;
+        }
+        return reward.amount;
     }
 
     private static double modifiedAttributeWeight(TameClass tameClass, AttributeReward reward) {
-        double base = 1.0D;
-        if (tameClass == null) {
-            return base;
-        }
-        double specific = switch (tameClass) {
-            case ASSASSIN -> switch (reward) {
-                case VICTIM_SIPHON -> 4.0D;
-                case PIERCE -> 2.5D;
-                default -> 1.0D;
-            };
-            case DPS -> switch (reward) {
-                case PIERCE -> 4.0D;
-                default -> 1.0D;
-            };
-            default -> 1.0D;
-        };
-        double classMultiplier = switch (tameClass) {
-            case ATTRIBUTER -> 2.75D;
-            case MANIAC -> 0.75D;
-            default -> 1.0D;
-        };
-        return base * specific * classMultiplier;
+        double weight = CLASS_WEIGHT_CONFIG.attributeWeight(tameClass, reward.id);
+        return amplifyPreferredAttributeWeight(tameClass, weight);
     }
 
     private static double modifiedAbilityWeight(TameClass tameClass, AbilityReward reward) {
-        double base = 1.0D;
-        if (tameClass == null) {
-            return base;
-        }
+        double weight = CLASS_WEIGHT_CONFIG.abilityWeight(tameClass, reward.id);
+        return amplifyPreferredAbilityWeight(tameClass, weight);
+    }
 
-        return switch (tameClass) {
-            case SHOOTER -> base * 2.0D;
-            case MANIAC -> base * 2.5D;
-            case ATTRIBUTER -> base * 0.75D;
-            case PROTECTOR -> base * protectorAbilityWeight(reward);
-            case TANKER -> base * tankerAbilityWeight(reward);
-            default -> base;
-        };
+    private static double amplifyPreferredAttributeWeight(TameClass tameClass, double weight) {
+        if (weight <= 1.0D) {
+            return weight;
+        }
+        return weight * CLASS_WEIGHT_CONFIG.preferredAttributeWeightMultiplier(tameClass);
+    }
+
+    private static double amplifyPreferredAbilityWeight(TameClass tameClass, double weight) {
+        if (weight <= 1.0D) {
+            return weight;
+        }
+        return weight * CLASS_WEIGHT_CONFIG.preferredAbilityWeightMultiplier(tameClass);
+    }
+
+    public static void reloadClassWeightConfig() {
+        CLASS_WEIGHT_CONFIG = ClassWeightConfig.loadOrThrow();
+    }
+
+    public static String classWeightConfigResourcePath() {
+        return ClassWeightConfig.resourcePath();
+    }
+
+    public static ClassCategoryView classCategoryWeights(TameClass tameClass) {
+        ClassWeightConfig.CategoryWeights weights = CLASS_WEIGHT_CONFIG.categoryWeights(tameClass);
+        return new ClassCategoryView(weights.base(), weights.attribute(), weights.ability());
+    }
+
+    public static Map<String, Double> classBaseStatWeights(TameClass tameClass) {
+        List<Map.Entry<String, Double>> entries = new ArrayList<>();
+        for (BaseStatReward reward : BaseStatReward.values()) {
+            double multiplier = CLASS_WEIGHT_CONFIG.baseStatMultiplier(tameClass, reward.id);
+            if (multiplier > 1.0D) {
+                entries.add(Map.entry(reward.id, multiplier));
+            }
+        }
+        return toOrderedWeightMap(entries);
+    }
+
+    public static Map<String, Double> classAttributeWeights(TameClass tameClass) {
+        List<Map.Entry<String, Double>> entries = new ArrayList<>();
+        for (AttributeReward reward : AttributeReward.values()) {
+            double multiplier = CLASS_WEIGHT_CONFIG.attributeWeight(tameClass, reward.id);
+            if (multiplier > 1.0D) {
+                entries.add(Map.entry(reward.id, multiplier));
+            }
+        }
+        return toOrderedWeightMap(entries);
+    }
+
+    public static Map<String, Double> classAbilityWeights(TameClass tameClass) {
+        List<Map.Entry<String, Double>> entries = new ArrayList<>();
+        for (AbilityReward reward : AbilityReward.values()) {
+            double multiplier = CLASS_WEIGHT_CONFIG.abilityWeight(tameClass, reward.id);
+            if (multiplier > 1.0D) {
+                entries.add(Map.entry(reward.id, multiplier));
+            }
+        }
+        return toOrderedWeightMap(entries);
+    }
+
+    public static double preferredAttributeWeightMultiplier() {
+        return CLASS_WEIGHT_CONFIG.preferredAttributeWeightMultiplier();
+    }
+
+    public static double preferredAbilityWeightMultiplier() {
+        return CLASS_WEIGHT_CONFIG.preferredAbilityWeightMultiplier();
+    }
+
+    private static Map<String, Double> toOrderedWeightMap(List<Map.Entry<String, Double>> entries) {
+        entries.sort(Comparator
+                .comparingDouble((Map.Entry<String, Double> entry) -> -entry.getValue())
+                .thenComparing(Map.Entry::getKey));
+        Map<String, Double> ordered = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, Double> entry : entries) {
+            ordered.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(ordered);
     }
 
     private static double protectorAbilityWeight(AbilityReward reward) {
@@ -1066,14 +1095,20 @@ public class LevelSystem {
             return false;
         }
         Entity spawned = tame.getType().create(serverLevel);
-        if (!(spawned instanceof TamableAnimal template)) {
-            return false;
+        TamableAnimal template;
+        if (spawned instanceof TamableAnimal createdTemplate) {
+            template = createdTemplate;
+        } else {
+            // Some tames do not expose a separate "tamed template"; their default entity is already the tamed form.
+            template = tame;
         }
-        template.setTame(true);
-        if (tame.getOwnerUUID() != null) {
-            template.setOwnerUUID(tame.getOwnerUUID());
-        } else if (data.ownerUUID != null) {
-            template.setOwnerUUID(data.ownerUUID);
+        if (template != tame) {
+            template.setTame(true);
+            if (tame.getOwnerUUID() != null) {
+                template.setOwnerUUID(tame.getOwnerUUID());
+            } else if (data.ownerUUID != null) {
+                template.setOwnerUUID(data.ownerUUID);
+            }
         }
 
         scrubLegacyManagedModifiers(tame);
@@ -1294,7 +1329,64 @@ public class LevelSystem {
     }
 
     public static int xpRequiredForLevel(int level) {
-        return BASE_XP + (Math.max(1, level) - 1) * XP_PER_LEVEL_STEP;
+        int currentLevel = Math.max(1, level);
+        if (currentLevel <= 16) {
+            return 2 * currentLevel + 7;
+        }
+        if (currentLevel <= 31) {
+            return 5 * currentLevel - 38;
+        }
+        return 9 * currentLevel - 158;
+    }
+
+    public static boolean normalizeXpForCurrentLevel(TameData data) {
+        if (data == null) {
+            return false;
+        }
+        boolean changed = false;
+
+        int normalizedLevel = Math.max(1, data.level);
+        if (data.level != normalizedLevel) {
+            data.level = normalizedLevel;
+            changed = true;
+        }
+        int normalizedXpToNext = xpRequiredForLevel(data.level);
+        int remappedXp = remapProgressXp(data.xp, data.xpToNext, normalizedXpToNext);
+        if (data.xp != remappedXp) {
+            data.xp = remappedXp;
+            changed = true;
+        }
+        if (data.xpToNext != normalizedXpToNext) {
+            data.xpToNext = normalizedXpToNext;
+            changed = true;
+        }
+
+        if (data.hasSavedProgress) {
+            int normalizedSavedLevel = Math.max(1, data.savedLevel);
+            if (data.savedLevel != normalizedSavedLevel) {
+                data.savedLevel = normalizedSavedLevel;
+                changed = true;
+            }
+            int normalizedSavedXpToNext = xpRequiredForLevel(data.savedLevel);
+            int remappedSavedXp = remapProgressXp(data.savedXp, data.savedXpToNext, normalizedSavedXpToNext);
+            if (data.savedXp != remappedSavedXp) {
+                data.savedXp = remappedSavedXp;
+                changed = true;
+            }
+            if (data.savedXpToNext != normalizedSavedXpToNext) {
+                data.savedXpToNext = normalizedSavedXpToNext;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static int remapProgressXp(int xp, int oldXpToNext, int newXpToNext) {
+        int safeTarget = Math.max(1, newXpToNext);
+        int safeOld = Math.max(1, oldXpToNext);
+        int clampedXp = Mth.clamp(xp, 0, Math.max(0, safeOld - 1));
+        double progress = (double) clampedXp / (double) safeOld;
+        return Mth.clamp((int) Math.floor(progress * safeTarget), 0, Math.max(0, safeTarget - 1));
     }
 
     public static void storeProgressSnapshot(TameData data) {
@@ -1319,6 +1411,38 @@ public class LevelSystem {
         data.savedAbilityLevels.putAll(data.abilityLevels);
         data.savedAttributeLevels.clear();
         data.savedAttributeLevels.putAll(data.attributeLevels);
+    }
+
+    public static void storeHighestProgressSnapshot(TameData data) {
+        if (data == null) {
+            return;
+        }
+        int currentTotal = estimateInvestedXp(data);
+        if (!data.hasSavedProgress || currentTotal >= estimateSavedProgress(data)) {
+            storeProgressSnapshot(data);
+        }
+    }
+
+    public static int estimateSavedProgress(TameData data) {
+        if (data == null || !data.hasSavedProgress) {
+            return 0;
+        }
+        int total = 0;
+        for (int lvl = 1; lvl < Math.max(1, data.savedLevel); lvl++) {
+            total += xpRequiredForLevel(lvl);
+        }
+        total += Math.max(0, data.savedXp);
+        return total;
+    }
+
+    public static int reincarnationXpCost(TameData data) {
+        if (data == null || !data.hasSavedProgress) {
+            return 0;
+        }
+        if (data.level >= data.savedLevel) {
+            return 0;
+        }
+        return Math.max(0, estimateSavedProgress(data) - estimateInvestedXp(data));
     }
 
     public static int rerollHalfDamageBonus(TameData data) {
@@ -1575,6 +1699,69 @@ public class LevelSystem {
         data.bonusKnockbackResist = data.savedBonusKnockbackResist;
         data.cooldowns.clear();
         data.hasSavedProgress = false;
+
+        updateTameName(tame, data);
+        tame.setHealth(tame.getMaxHealth());
+        TameRegistry.markDirty();
+        return true;
+    }
+
+    public static boolean restoreHighestProgressWithoutXpCost(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !data.hasSavedProgress) {
+            return false;
+        }
+        if (data.level >= data.savedLevel) {
+            return false;
+        }
+
+        data.level = data.savedLevel;
+        data.xp = data.savedXp;
+        data.xpToNext = data.savedXpToNext;
+        data.kills = data.savedKills;
+        data.assists = data.savedAssists;
+        data.abilities.clear();
+        data.abilities.addAll(data.savedAbilities);
+        data.abilityLevels.clear();
+        data.abilityLevels.putAll(data.savedAbilityLevels);
+        data.attributeLevels.clear();
+        data.attributeLevels.putAll(data.savedAttributeLevels);
+
+        applyBonusDelta(
+                tame,
+                data.savedBonusHealth - data.bonusHealth,
+                data.savedBonusDamage - data.bonusDamage,
+                data.savedBonusSpeed - data.bonusSpeed,
+                data.savedBonusArmor - data.bonusArmor,
+                data.savedBonusArmorToughness - data.bonusArmorToughness,
+                data.savedBonusKnockback - data.bonusKnockback,
+                data.savedBonusKnockbackResist - data.bonusKnockbackResist
+        );
+
+        data.bonusHealth = data.savedBonusHealth;
+        data.bonusDamage = data.savedBonusDamage;
+        data.bonusSpeed = data.savedBonusSpeed;
+        data.bonusArmor = data.savedBonusArmor;
+        data.bonusArmorToughness = data.savedBonusArmorToughness;
+        data.bonusKnockback = data.savedBonusKnockback;
+        data.bonusKnockbackResist = data.savedBonusKnockbackResist;
+
+        data.hasSavedProgress = false;
+        data.savedProgressCost = 0;
+        data.savedLevel = 1;
+        data.savedXp = 0;
+        data.savedXpToNext = xpRequiredForLevel(1);
+        data.savedKills = 0;
+        data.savedAssists = 0;
+        data.savedBonusHealth = 0;
+        data.savedBonusDamage = 0;
+        data.savedBonusSpeed = 0;
+        data.savedBonusArmor = 0;
+        data.savedBonusArmorToughness = 0;
+        data.savedBonusKnockback = 0;
+        data.savedBonusKnockbackResist = 0;
+        data.savedAbilities.clear();
+        data.savedAbilityLevels.clear();
+        data.savedAttributeLevels.clear();
 
         updateTameName(tame, data);
         tame.setHealth(tame.getMaxHealth());

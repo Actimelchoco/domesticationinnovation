@@ -9,6 +9,8 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
+import java.util.UUID;
+
 public class TameProtectionEvents {
 
     @SubscribeEvent
@@ -16,10 +18,22 @@ public class TameProtectionEvents {
         var victim = event.getEntity();
         var attacker = event.getSource().getEntity();
         var direct = event.getSource().getDirectEntity();
+        UUID attackerParticipantId = resolveParticipantId(attacker, direct);
+        UUID victimParticipantId = victim == null ? null : victim.getUUID();
+
+        if (attackerParticipantId != null && TameDuelManager.isEntityInDuel(attackerParticipantId)) {
+            if (victimParticipantId != null && TameDuelManager.areDuelOpponents(attackerParticipantId, victimParticipantId)) {
+                return;
+            }
+            event.setCanceled(true);
+            return;
+        }
 
         // Block direct player attacks against tamed animals.
         if (victim instanceof TamableAnimal target && target.isTame() && attacker instanceof Player) {
-            event.setCanceled(true);
+            if (!TameDuelManager.areDuelOpponents(attacker.getUUID(), target.getUUID())) {
+                event.setCanceled(true);
+            }
             return;
         }
 
@@ -40,8 +54,7 @@ public class TameProtectionEvents {
         }
 
         if (TameDuelManager.isTameInDuel(tameAttacker.getUUID())) {
-            if (victim instanceof TamableAnimal targetTame && targetTame.isTame()
-                    && TameDuelManager.areDuelOpponents(tameAttacker.getUUID(), targetTame.getUUID())) {
+            if (victimParticipantId != null && TameDuelManager.areDuelOpponents(tameAttacker.getUUID(), victimParticipantId)) {
                 return;
             }
             event.setCanceled(true);
@@ -70,6 +83,13 @@ public class TameProtectionEvents {
         if (target == null) {
             return;
         }
+        if (TameDuelManager.isTameInDuel(tame.getUUID())) {
+            if (TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID())) {
+                return;
+            }
+            tame.setTarget(null);
+            return;
+        }
         if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
             if (target instanceof Player) {
                 tame.setTarget(null);
@@ -79,14 +99,6 @@ public class TameProtectionEvents {
                 tame.setTarget(null);
                 return;
             }
-        }
-        if (TameDuelManager.isTameInDuel(tame.getUUID())) {
-            if (target instanceof TamableAnimal targetTame && targetTame.isTame()
-                    && TameDuelManager.areDuelOpponents(tame.getUUID(), targetTame.getUUID())) {
-                return;
-            }
-            tame.setTarget(null);
-            return;
         }
         if (target instanceof TamableAnimal targetTame && targetTame.isTame()) {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), targetTame.getUUID())) {
@@ -104,5 +116,13 @@ public class TameProtectionEvents {
             return tame;
         }
         return null;
+    }
+
+    private static UUID resolveParticipantId(net.minecraft.world.entity.Entity attacker, net.minecraft.world.entity.Entity direct) {
+        if (attacker instanceof Player player) {
+            return player.getUUID();
+        }
+        TamableAnimal tame = resolveTameAttacker(attacker, direct);
+        return tame == null ? null : tame.getUUID();
     }
 }

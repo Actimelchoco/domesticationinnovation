@@ -10,6 +10,7 @@ import java.util.UUID;
 public class LanternRequest {
     public static final String MODE_LANTERN = "LANTERN";
     public static final String MODE_PLAYER_TP = "PLAYER_TP";
+    public static final String MODE_FIXED_TARGET_TP = "FIXED_TARGET_TP";
 
     private String entityType;
     private long timestamp;
@@ -110,6 +111,10 @@ public class LanternRequest {
 
     public boolean isPlayerTeleportMode() {
         return MODE_PLAYER_TP.equalsIgnoreCase(getMode());
+    }
+
+    public boolean isFixedTargetTeleportMode() {
+        return MODE_FIXED_TARGET_TP.equalsIgnoreCase(getMode());
     }
 
     public String getTargetDimension() {

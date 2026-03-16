@@ -30,6 +30,8 @@ public class TameData {
     public int xp = 0;
     public int xpToNext = 50;
     public long bornDayTime = -1L;
+    public int activeSurvivalDays = 0;
+    public long lastActiveSurvivalDay = Long.MIN_VALUE;
 
     public int kills = 0;
     public int assists = 0;
@@ -53,6 +55,12 @@ public class TameData {
     public int homeX = 0;
     public int homeY = 0;
     public int homeZ = 0;
+    public boolean hasPreviousHome = false;
+    public String previousHomeDimension = "";
+    public int previousHomeX = 0;
+    public int previousHomeY = 0;
+    public int previousHomeZ = 0;
+    public int guardianReturnTicks = 0;
     public boolean hasPetBed = false;
     public String petBedDimension = "";
     public int petBedX = 0;
@@ -74,12 +82,15 @@ public class TameData {
     public boolean defendAllies = false;
     public boolean escapeMode = true;
     public boolean escapeActive = false;
+    public boolean skeletonMovement = false;
+    public boolean closeMovement = false;
     public boolean hasProtectionZone = false;
     public String protectionDimension = "";
     public int protectionX = 0;
     public int protectionY = 0;
     public int protectionZ = 0;
     public int protectionRadius = 16;
+    public final Map<String, CompoundTag> guardianSetAnchors = new LinkedHashMap<>();
 
     public final Set<String> abilities = new LinkedHashSet<>();
     public final Map<String, Integer> abilityLevels = new LinkedHashMap<>();
@@ -149,6 +160,8 @@ public class TameData {
         tag.putInt("xp", xp);
         tag.putInt("xpToNext", xpToNext);
         tag.putLong("bornDayTime", bornDayTime);
+        tag.putInt("activeSurvivalDays", activeSurvivalDays);
+        tag.putLong("lastActiveSurvivalDay", lastActiveSurvivalDay);
         tag.putInt("kills", kills);
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
@@ -183,6 +196,12 @@ public class TameData {
         tag.putInt("homeX", homeX);
         tag.putInt("homeY", homeY);
         tag.putInt("homeZ", homeZ);
+        tag.putBoolean("hasPreviousHome", hasPreviousHome);
+        tag.putString("previousHomeDimension", previousHomeDimension == null ? "" : previousHomeDimension);
+        tag.putInt("previousHomeX", previousHomeX);
+        tag.putInt("previousHomeY", previousHomeY);
+        tag.putInt("previousHomeZ", previousHomeZ);
+        tag.putInt("guardianReturnTicks", guardianReturnTicks);
         tag.putBoolean("hasPetBed", hasPetBed);
         tag.putString("petBedDimension", petBedDimension == null ? "" : petBedDimension);
         tag.putInt("petBedX", petBedX);
@@ -204,12 +223,21 @@ public class TameData {
         tag.putBoolean("defendAllies", defendAllies);
         tag.putBoolean("escapeMode", escapeMode);
         tag.putBoolean("escapeActive", escapeActive);
+        tag.putBoolean("skeletonMovement", skeletonMovement);
+        tag.putBoolean("closeMovement", closeMovement);
         tag.putBoolean("hasProtectionZone", hasProtectionZone);
         tag.putString("protectionDimension", protectionDimension == null ? "" : protectionDimension);
         tag.putInt("protectionX", protectionX);
         tag.putInt("protectionY", protectionY);
         tag.putInt("protectionZ", protectionZ);
         tag.putInt("protectionRadius", protectionRadius);
+        CompoundTag guardianSetsTag = new CompoundTag();
+        guardianSetAnchors.forEach((key, value) -> {
+            if (key != null && !key.isBlank() && value != null && !value.isEmpty()) {
+                guardianSetsTag.put(key, value.copy());
+            }
+        });
+        tag.put("guardianSetAnchors", guardianSetsTag);
 
         ListTag abilityList = new ListTag();
         for (String ability : abilities) {
@@ -275,6 +303,8 @@ public class TameData {
         data.xp = Math.max(0, tag.getInt("xp"));
         data.xpToNext = Math.max(1, tag.getInt("xpToNext"));
         data.bornDayTime = tag.contains("bornDayTime") ? tag.getLong("bornDayTime") : -1L;
+        data.activeSurvivalDays = Math.max(0, tag.getInt("activeSurvivalDays"));
+        data.lastActiveSurvivalDay = tag.contains("lastActiveSurvivalDay", Tag.TAG_LONG) ? tag.getLong("lastActiveSurvivalDay") : Long.MIN_VALUE;
         data.kills = Math.max(0, tag.getInt("kills"));
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
@@ -315,6 +345,12 @@ public class TameData {
         data.homeX = tag.getInt("homeX");
         data.homeY = tag.getInt("homeY");
         data.homeZ = tag.getInt("homeZ");
+        data.hasPreviousHome = tag.getBoolean("hasPreviousHome");
+        data.previousHomeDimension = tag.contains("previousHomeDimension", Tag.TAG_STRING) ? tag.getString("previousHomeDimension") : "";
+        data.previousHomeX = tag.getInt("previousHomeX");
+        data.previousHomeY = tag.getInt("previousHomeY");
+        data.previousHomeZ = tag.getInt("previousHomeZ");
+        data.guardianReturnTicks = tag.getInt("guardianReturnTicks");
         data.hasPetBed = tag.getBoolean("hasPetBed");
         data.petBedDimension = tag.contains("petBedDimension", Tag.TAG_STRING) ? tag.getString("petBedDimension") : "";
         data.petBedX = tag.getInt("petBedX");
@@ -333,19 +369,27 @@ public class TameData {
         data.defendAllies = tag.getBoolean("defendAllies");
         data.escapeMode = !tag.contains("escapeMode") || tag.getBoolean("escapeMode");
         data.escapeActive = tag.getBoolean("escapeActive");
+        data.skeletonMovement = tag.getBoolean("skeletonMovement");
+        data.closeMovement = tag.getBoolean("closeMovement");
         data.hasProtectionZone = tag.getBoolean("hasProtectionZone");
         data.protectionDimension = tag.getString("protectionDimension");
         data.protectionX = tag.getInt("protectionX");
         data.protectionY = tag.getInt("protectionY");
         data.protectionZ = tag.getInt("protectionZ");
         data.protectionRadius = tag.contains("protectionRadius") ? Math.max(4, tag.getInt("protectionRadius")) : 16;
+        data.guardianSetAnchors.clear();
+        if (tag.contains("guardianSetAnchors", Tag.TAG_COMPOUND)) {
+            CompoundTag guardianSetsTag = tag.getCompound("guardianSetAnchors");
+            for (String key : guardianSetsTag.getAllKeys()) {
+                CompoundTag anchorTag = guardianSetsTag.getCompound(key);
+                if (!anchorTag.isEmpty()) {
+                    data.guardianSetAnchors.put(key, anchorTag.copy());
+                }
+            }
+        }
 
         if (tag.contains("tameClass", Tag.TAG_STRING)) {
-            try {
-                data.tameClass = TameClass.valueOf(tag.getString("tameClass"));
-            } catch (IllegalArgumentException ignored) {
-                data.tameClass = null;
-            }
+            data.tameClass = TameClass.ensureRegistered(tag.getString("tameClass"));
         }
 
         if (tag.contains("abilities", Tag.TAG_LIST)) {

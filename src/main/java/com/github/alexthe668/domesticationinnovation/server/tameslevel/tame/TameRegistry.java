@@ -21,6 +21,7 @@ public class TameRegistry {
     public static final Map<UUID, TameDeathRecord> LAST_DEATHS = new HashMap<>();
     public static final List<TameDeathRecord> DEATH_HISTORY = new ArrayList<>();
     public static final Set<String> APPROVED_REINCARNATE_ITEMS = new HashSet<>();
+    private static final Map<UUID, String> OWNER_RESPAWN_ORDERS = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -54,6 +55,8 @@ public class TameRegistry {
         DEATH_HISTORY.addAll(savedData.getDeathHistory());
         APPROVED_REINCARNATE_ITEMS.clear();
         APPROVED_REINCARNATE_ITEMS.addAll(savedData.getApprovedReincarnateItems());
+        OWNER_RESPAWN_ORDERS.clear();
+        OWNER_RESPAWN_ORDERS.putAll(savedData.getRespawnOrders());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -174,7 +177,29 @@ public class TameRegistry {
         savedData.getDeathHistory().addAll(DEATH_HISTORY);
         savedData.getApprovedReincarnateItems().clear();
         savedData.getApprovedReincarnateItems().addAll(APPROVED_REINCARNATE_ITEMS);
+        savedData.setRespawnOrders(OWNER_RESPAWN_ORDERS);
         savedData.setDirty();
+    }
+
+    public static String getRespawnOrder(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return "default";
+        }
+        String order = OWNER_RESPAWN_ORDERS.get(ownerUuid);
+        return order == null || order.isBlank() ? "default" : order;
+    }
+
+    public static void setRespawnOrder(UUID ownerUuid, String order) {
+        if (ownerUuid == null) {
+            return;
+        }
+        String normalized = order == null || order.isBlank() ? "default" : order;
+        if ("default".equals(normalized)) {
+            OWNER_RESPAWN_ORDERS.remove(ownerUuid);
+        } else {
+            OWNER_RESPAWN_ORDERS.put(ownerUuid, normalized);
+        }
+        markDirty();
     }
 
     public static boolean isInitialized() {

@@ -2,12 +2,13 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.TamableAnimal;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -54,15 +55,19 @@ public final class TameDuelManager {
     }
 
     private static final Map<UUID, DuelBattle> BATTLE_BY_ID = new HashMap<>();
-    private static final Map<UUID, UUID> BATTLE_ID_BY_TAME = new HashMap<>();
-    private static final Map<UUID, Boolean> TEAM_A_BY_TAME = new HashMap<>();
+    private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
+    private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
 
     private TameDuelManager() {
     }
 
     public static synchronized void startGroupDuel(MinecraftServer server, UUID ownerA, Set<UUID> tamesA, UUID ownerB, Set<UUID> tamesB) {
+        startTeamDuel(server, ownerA, tamesA, ownerB, tamesB);
+    }
+
+    public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB) {
         if (server == null || ownerA == null || ownerB == null) return;
-        if (tamesA == null || tamesB == null || tamesA.isEmpty() || tamesB.isEmpty()) return;
+        if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
         endDuelsForOwner(server, ownerA);
         if (!ownerA.equals(ownerB)) {
@@ -71,58 +76,66 @@ public final class TameDuelManager {
 
         Set<UUID> cleanA = new HashSet<>();
         Set<UUID> cleanB = new HashSet<>();
-        for (UUID tameId : tamesA) {
-            if (tameId == null) continue;
-            if (tamesB.contains(tameId)) continue;
-            cleanA.add(tameId);
+        for (UUID participantId : teamA) {
+            if (participantId == null) continue;
+            if (teamB.contains(participantId)) continue;
+            cleanA.add(participantId);
         }
-        for (UUID tameId : tamesB) {
-            if (tameId == null) continue;
-            if (cleanA.contains(tameId)) continue;
-            cleanB.add(tameId);
+        for (UUID participantId : teamB) {
+            if (participantId == null) continue;
+            if (cleanA.contains(participantId)) continue;
+            cleanB.add(participantId);
         }
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
 
         UUID battleId = UUID.randomUUID();
         DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB);
         BATTLE_BY_ID.put(battleId, battle);
-        for (UUID tameId : cleanA) {
-            BATTLE_ID_BY_TAME.put(tameId, battleId);
-            TEAM_A_BY_TAME.put(tameId, true);
+        for (UUID participantId : cleanA) {
+            BATTLE_ID_BY_ENTITY.put(participantId, battleId);
+            TEAM_A_BY_ENTITY.put(participantId, true);
         }
-        for (UUID tameId : cleanB) {
-            BATTLE_ID_BY_TAME.put(tameId, battleId);
-            TEAM_A_BY_TAME.put(tameId, false);
+        for (UUID participantId : cleanB) {
+            BATTLE_ID_BY_ENTITY.put(participantId, battleId);
+            TEAM_A_BY_ENTITY.put(participantId, false);
         }
     }
 
-    public static synchronized boolean areDuelOpponents(UUID attackerTameId, UUID targetTameId) {
-        if (attackerTameId == null || targetTameId == null) return false;
-        UUID attackerBattleId = BATTLE_ID_BY_TAME.get(attackerTameId);
-        UUID targetBattleId = BATTLE_ID_BY_TAME.get(targetTameId);
+    public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
+        if (attackerId == null || targetId == null) return false;
+        UUID attackerBattleId = BATTLE_ID_BY_ENTITY.get(attackerId);
+        UUID targetBattleId = BATTLE_ID_BY_ENTITY.get(targetId);
         if (attackerBattleId == null || !attackerBattleId.equals(targetBattleId)) return false;
-        Boolean attackerTeamA = TEAM_A_BY_TAME.get(attackerTameId);
-        Boolean targetTeamA = TEAM_A_BY_TAME.get(targetTameId);
+        Boolean attackerTeamA = TEAM_A_BY_ENTITY.get(attackerId);
+        Boolean targetTeamA = TEAM_A_BY_ENTITY.get(targetId);
         if (attackerTeamA == null || targetTeamA == null) return false;
         return attackerTeamA != targetTeamA;
     }
 
+    public static synchronized boolean isEntityInDuel(UUID entityId) {
+        return entityId != null && BATTLE_ID_BY_ENTITY.containsKey(entityId);
+    }
+
     public static synchronized boolean isTameInDuel(UUID tameId) {
-        if (tameId == null) return false;
-        return BATTLE_ID_BY_TAME.containsKey(tameId);
+        return isEntityInDuel(tameId);
     }
 
     public static synchronized boolean endDuelForTame(MinecraftServer server, UUID tameId) {
-        if (server == null || tameId == null) return false;
-        UUID battleId = BATTLE_ID_BY_TAME.remove(tameId);
+        return endDuelForEntity(server, tameId);
+    }
+
+    public static synchronized boolean endDuelForEntity(MinecraftServer server, UUID entityId) {
+        if (server == null || entityId == null) return false;
+        UUID battleId = BATTLE_ID_BY_ENTITY.remove(entityId);
         if (battleId == null) return false;
         DuelBattle battle = BATTLE_BY_ID.get(battleId);
-        TEAM_A_BY_TAME.remove(tameId);
+        TEAM_A_BY_ENTITY.remove(entityId);
         if (battle == null) return true;
 
-        battle.teamA.remove(tameId);
-        battle.teamB.remove(tameId);
-        clearTargetForTame(server, tameId);
+        battle.teamA.remove(entityId);
+        battle.teamB.remove(entityId);
+        battle.participants.remove(entityId);
+        clearTargetForParticipant(server, entityId);
 
         if (battle.teamA.isEmpty() || battle.teamB.isEmpty()) {
             String reason = battle.teamA.isEmpty() ? "Team A eliminated." : "Team B eliminated.";
@@ -133,7 +146,7 @@ public final class TameDuelManager {
 
     public static synchronized void recordElimination(MinecraftServer server, UUID victimId, Set<UUID> contributors, UUID killerId) {
         if (server == null || victimId == null) return;
-        UUID battleId = BATTLE_ID_BY_TAME.get(victimId);
+        UUID battleId = BATTLE_ID_BY_ENTITY.get(victimId);
         if (battleId == null) return;
         DuelBattle battle = BATTLE_BY_ID.get(battleId);
         if (battle == null) return;
@@ -146,7 +159,7 @@ public final class TameDuelManager {
                 if (!battle.participants.contains(contributorId)) continue;
                 assisters.add(contributorId);
             }
-            assisters.sort(Comparator.comparing(id -> tameLabel(server, id)));
+            assisters.sort(Comparator.comparing(id -> entityLabel(server, id)));
         }
         UUID duelKiller = killerId != null && battle.participants.contains(killerId) ? killerId : null;
         battle.eliminations.add(new DuelElimination(victimId, duelKiller, assisters));
@@ -184,20 +197,19 @@ public final class TameDuelManager {
         for (UUID ownId : ownTeam) {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
-            // Duel tames are forced into non-sit roaming state.
             own.setOrderedToSit(false);
             if (own instanceof IComandableMob commandable) {
                 commandable.setCommand(0);
             }
-            TamableAnimal nearest = nearestLoadedOpponent(server, own, enemyTeam);
+            LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 own.setTarget(null);
                 own.getNavigation().stop();
                 continue;
             }
             if (own.getTarget() != null) {
-                var current = own.getTarget();
-                if (!(current instanceof TamableAnimal currentTame) || !areDuelOpponents(own.getUUID(), currentTame.getUUID())) {
+                LivingEntity current = own.getTarget();
+                if (current == null || !areDuelOpponents(own.getUUID(), current.getUUID())) {
                     own.setTarget(null);
                 }
             }
@@ -207,12 +219,12 @@ public final class TameDuelManager {
         }
     }
 
-    private static TamableAnimal nearestLoadedOpponent(MinecraftServer server, TamableAnimal from, Set<UUID> opponentIds) {
+    private static LivingEntity nearestLoadedOpponent(MinecraftServer server, TamableAnimal from, Set<UUID> opponentIds) {
         if (server == null || from == null || opponentIds == null || opponentIds.isEmpty()) return null;
-        TamableAnimal best = null;
+        LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         for (UUID opponentId : opponentIds) {
-            TamableAnimal candidate = findLoadedTame(server, opponentId);
+            LivingEntity candidate = findLoadedLivingParticipant(server, opponentId);
             if (candidate == null || !candidate.isAlive()) continue;
             if (candidate.level() != from.level()) continue;
             double dist = from.distanceToSqr(candidate);
@@ -231,14 +243,13 @@ public final class TameDuelManager {
         List<String> healthSummary = buildHealthSummary(server, battle);
         List<String> eliminationSummary = buildEliminationSummary(server, battle);
 
-        Set<UUID> allTames = new HashSet<>();
-        allTames.addAll(battle.participants);
+        Set<UUID> allParticipants = new HashSet<>(battle.participants);
         int resetCount = 0;
-        for (UUID tameId : allTames) {
-            BATTLE_ID_BY_TAME.remove(tameId);
-            TEAM_A_BY_TAME.remove(tameId);
-            clearTargetForTame(server, tameId);
-            if (TameCommands.resetDuelCombatState(server, tameId)) {
+        for (UUID participantId : allParticipants) {
+            BATTLE_ID_BY_ENTITY.remove(participantId);
+            TEAM_A_BY_ENTITY.remove(participantId);
+            clearTargetForParticipant(server, participantId);
+            if (TameCommands.resetDuelCombatState(server, participantId)) {
                 resetCount++;
             }
         }
@@ -252,8 +263,8 @@ public final class TameDuelManager {
         }
     }
 
-    private static void clearTargetForTame(MinecraftServer server, UUID tameId) {
-        TamableAnimal tame = findLoadedTame(server, tameId);
+    private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
+        TamableAnimal tame = findLoadedTame(server, participantId);
         if (tame == null) return;
         tame.setTarget(null);
         tame.getNavigation().stop();
@@ -280,11 +291,10 @@ public final class TameDuelManager {
         }
         lines.add("Final health:");
         List<UUID> ordered = new ArrayList<>(battle.participants);
-        ordered.sort(Comparator.comparing(id -> tameLabel(server, id)));
-        for (UUID tameId : ordered) {
-            TamableAnimal tame = findLoadedTame(server, tameId);
-            String line = " - " + tameLabel(server, tameId) + ": " + formatHealth(tame);
-            lines.add(line);
+        ordered.sort(Comparator.comparing(id -> entityLabel(server, id)));
+        for (UUID participantId : ordered) {
+            LivingEntity entity = findLoadedLivingParticipant(server, participantId);
+            lines.add(" - " + entityLabel(server, participantId) + ": " + formatHealth(entity));
         }
         return lines;
     }
@@ -298,9 +308,9 @@ public final class TameDuelManager {
         for (DuelElimination elimination : battle.eliminations) {
             if (elimination == null || elimination.victimId == null) continue;
             StringBuilder line = new StringBuilder();
-            line.append(" - ").append(tameLabel(server, elimination.victimId)).append(" was killed");
+            line.append(" - ").append(entityLabel(server, elimination.victimId)).append(" was killed");
             if (elimination.killerId != null) {
-                line.append(" by ").append(tameLabel(server, elimination.killerId));
+                line.append(" by ").append(entityLabel(server, elimination.killerId));
             }
             if (!elimination.assisterIds.isEmpty()) {
                 line.append(" | assists: ");
@@ -308,7 +318,7 @@ public final class TameDuelManager {
                     if (i > 0) {
                         line.append(", ");
                     }
-                    line.append(tameLabel(server, elimination.assisterIds.get(i)));
+                    line.append(entityLabel(server, elimination.assisterIds.get(i)));
                 }
             }
             lines.add(line.toString());
@@ -316,28 +326,32 @@ public final class TameDuelManager {
         return lines;
     }
 
-    private static String tameLabel(MinecraftServer server, UUID tameId) {
-        if (tameId == null) {
+    private static String entityLabel(MinecraftServer server, UUID entityId) {
+        if (entityId == null) {
             return "unknown";
         }
-        TameData data = TameRegistry.get(tameId);
+        ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(entityId);
+        if (player != null) {
+            return player.getName().getString();
+        }
+        TameData data = TameRegistry.get(entityId);
         if (data != null && data.name != null && !data.name.isBlank()) {
             return data.name;
         }
-        TamableAnimal tame = findLoadedTame(server, tameId);
-        if (tame != null) {
-            return tame.hasCustomName() && tame.getCustomName() != null
-                    ? tame.getCustomName().getString()
-                    : tame.getName().getString();
+        LivingEntity entity = findLoadedLivingParticipant(server, entityId);
+        if (entity != null) {
+            return entity.hasCustomName() && entity.getCustomName() != null
+                    ? entity.getCustomName().getString()
+                    : entity.getName().getString();
         }
-        return tameId.toString();
+        return entityId.toString();
     }
 
-    private static String formatHealth(TamableAnimal tame) {
-        if (tame == null) {
+    private static String formatHealth(LivingEntity entity) {
+        if (entity == null) {
             return "dead";
         }
-        return formatNumber(tame.getHealth()) + "/" + formatNumber(tame.getMaxHealth());
+        return formatNumber(entity.getHealth()) + "/" + formatNumber(entity.getMaxHealth());
     }
 
     private static String formatNumber(float value) {
@@ -345,11 +359,20 @@ public final class TameDuelManager {
     }
 
     private static TamableAnimal findLoadedTame(MinecraftServer server, UUID tameId) {
-        if (server == null || tameId == null) return null;
+        LivingEntity entity = findLoadedLivingParticipant(server, tameId);
+        return entity instanceof TamableAnimal tame && tame.isTame() ? tame : null;
+    }
+
+    private static LivingEntity findLoadedLivingParticipant(MinecraftServer server, UUID entityId) {
+        if (server == null || entityId == null) return null;
+        ServerPlayer player = server.getPlayerList().getPlayer(entityId);
+        if (player != null && player.isAlive()) {
+            return player;
+        }
         for (var level : server.getAllLevels()) {
-            Entity entity = level.getEntity(tameId);
-            if (entity instanceof TamableAnimal tame && tame.isTame()) {
-                return tame;
+            Entity entity = level.getEntity(entityId);
+            if (entity instanceof LivingEntity living) {
+                return living;
             }
         }
         return null;

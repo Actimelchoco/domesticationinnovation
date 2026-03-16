@@ -21,6 +21,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, TameDeathRecord> lastDeaths = new HashMap<>();
     private final List<TameDeathRecord> deathHistory = new ArrayList<>();
     private final Set<String> approvedReincarnateItems = new LinkedHashSet<>();
+    private final Map<UUID, String> respawnOrders = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -36,6 +37,17 @@ public class TameRegistrySavedData extends SavedData {
 
     public Set<String> getApprovedReincarnateItems() {
         return approvedReincarnateItems;
+    }
+
+    public Map<UUID, String> getRespawnOrders() {
+        return respawnOrders;
+    }
+
+    public void setRespawnOrders(Map<UUID, String> respawnOrders) {
+        this.respawnOrders.clear();
+        if (respawnOrders != null) {
+            this.respawnOrders.putAll(respawnOrders);
+        }
     }
 
     @Override
@@ -63,6 +75,17 @@ public class TameRegistrySavedData extends SavedData {
             approvedItemsTag.add(net.minecraft.nbt.StringTag.valueOf(itemId));
         }
         tag.put("approvedReincarnateItems", approvedItemsTag);
+        ListTag respawnOrdersTag = new ListTag();
+        for (Map.Entry<UUID, String> entry : respawnOrders.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putString("order", entry.getValue() == null ? "default" : entry.getValue());
+            respawnOrdersTag.add(row);
+        }
+        tag.put("respawnOrders", respawnOrdersTag);
         return tag;
     }
 
@@ -101,6 +124,15 @@ public class TameRegistrySavedData extends SavedData {
             ListTag approved = tag.getList("approvedReincarnateItems", Tag.TAG_STRING);
             for (Tag entry : approved) {
                 data.approvedReincarnateItems.add(entry.getAsString().trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        if (tag.contains("respawnOrders", Tag.TAG_LIST)) {
+            ListTag respawnOrderList = tag.getList("respawnOrders", Tag.TAG_COMPOUND);
+            for (Tag entry : respawnOrderList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.respawnOrders.put(row.getUUID("ownerUUID"), row.getString("order"));
             }
         }
         return data;

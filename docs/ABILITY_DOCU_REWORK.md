@@ -70,6 +70,11 @@ Recommended defaults:
 
 Support and heal abilities should usually not have meaningful direct-damage budgets.
 
+## Weighting Note
+- When ability rewards are rolled, current implementation also applies a global preferred-weight boost on top of class-specific preferred entries:
+  - preferred ability weights are multiplied by `x9.0`
+- This applies only to class-specific entries whose base class weight is already above `x1.0`.
+
 ## Proposed Attack Ability Profiles
 
 Assumptions in this section:
@@ -307,68 +312,238 @@ Assumptions in this section:
 These should not be ranked by single-target damage.
 
 ### `battle_strength`
-- support only
-- power should scale through buff uptime, radius, or amplifier
+- Trigger: `10%` proc when the tame is hurt
+- Effect: grants nearby friendly entities `Strength`
+- Radius: `8` blocks
+- Duration: `100 ticks` (`5.0s`)
+- Scaling:
+  - amplifier = `level - 1`
+  - level mostly increases the buff tier, not the radius
 
 ### `defensive_aura`
-- support only
-- power should scale through uptime, radius, or mitigation strength
+- Trigger: `10%` proc when the tame is hurt
+- Effect: grants nearby friendly entities `Resistance`
+- Radius: `8` blocks
+- Duration: `100 + 20 * (level - 1)` ticks
+- Scaling:
+  - amplifier = `level - 1`
+  - higher levels increase both duration and mitigation strength
 
 ### `ender_pearl_jump`
-- support only
-- power should scale through range, reliability, or cooldown
+- Trigger: when the current target is more than `5` blocks away and the cooldown is ready
+- Effect: teleports the tame toward the target
+- Max teleport distance: `4 + 2 * level` blocks
+- Cooldown: `100 ticks` (`5.0s`)
+- Purpose: gap-closing and repositioning, not direct damage
 
 ### `berserker`
-- support only
-- indirect damage via self-buff, not direct cast damage
+- Trigger: when the tame would drop to `<= 20%` HP and the cooldown is ready
+- Effect: grants the tame `Strength` and `Resistance`
+- Duration: `400 ticks` (`20.0s`)
+- Scaling:
+  - both amplifiers = `level - 1`
+- Cooldown: `400 ticks` (`20.0s`)
 
 ### `bloodlust`
-- support only
-- indirect damage via self-buff, not direct cast damage
+- Trigger: on kill, if the cooldown is ready
+- Effect: grants the tame `Strength` and `Resistance`
+- Duration: `400 ticks` (`20.0s`)
+- Scaling:
+  - both amplifiers = `level - 1`
+- Cooldown: `400 ticks` (`20.0s`)
 
 ### `retaliation_slow`
-- support only
-- strength should come from slowing/control and proc reliability
+- Trigger: on hurt, if the cooldown is ready
+- Proc chance: `20% + 4% * level`, capped at `85%`
+- Effect: applies an AoE `Slowness` pulse to nearby enemies around the tame
+- Cooldown: `60 ticks` (`3.0s`)
+- Scaling:
+  - duration = `40 + 10 * level` ticks
+  - slowness amplifier increases every 3rd level
+  - radius grows on the non-amplifier levels
+- Current radius formula: `2.0 + 0.35 * (level - floor(level / 3))`
 
 ### `immunity_frame`
-- support only
-- scale invulnerability window, but watch for hard-breakpoints
+- Trigger: reactive defensive passive
+- Effect: grants a short invulnerability window after the tame is hit
+- Duration: `20 + 20 * level` ticks
+- Notes:
+  - no active cast damage
+  - this is a breakpoint-sensitive defensive ability because extra invulnerability time is extremely strong
 
 ### `deflection`
-- support only
-- probably stays non-leveling or very lightly scaling
+- Trigger: passive projectile defense
+- Effect: reverses an incoming projectile and sends it back at `20%` speed
+- Leveling: effectively binary in the current runtime
+- Notes:
+  - no direct damage budget
+  - value comes from projectile cancel/reflect utility
 
 ### `defusal`
-- support only
-- scale cooldown and radius, not damage
+- Trigger: passively cancels nearby explosions when off cooldown
+- Radius: `10 + 10 * floor(level / 3)` blocks
+- Cooldown: `max(0, 100 - 20 * (level - 1))` ticks
+- Notes:
+  - no direct damage
+  - power comes from coverage and cooldown access
 
 ### `psychic_wall`
-- support only
-- scale width, lifespan, or cooldown
+- Trigger: active wall summon
+- Effect: creates a control/defense wall
+- Scaling:
+  - wall width = `level + 1`
+  - lifespan = `100 * level` ticks
+  - cooldown = `200 * level + 40` ticks
+- Notes:
+  - no direct damage
+  - value comes from space control, projectile/body blocking, and uptime
 
 ### `healing_aura`
-- heal only
-- scale healing output, radius, or uptime
+- Trigger: periodic healing cycle
+- Effect: applies `Regeneration` pulses during an active window
+- Active window: `200 ticks` (`10.0s`)
+- Downtime: random `600..1199` ticks (`30.0s..59.95s`) between cycles
+- Scaling:
+  - regeneration amplifier = `level - 1`
+- Notes:
+  - this is sustain over time, not burst healing
 
 ### `healing_bottle`
-- heal only
-- if any damage exists, it should be minimal and not part of its identity
+- Trigger: when the tame is injured and the cooldown is ready
+- Effect: throws a self-targeted splash healing potion
+- Potion payload:
+  - instant healing `I` up to level `3`
+  - instant healing `II` at level `4+`
+  - always adds `Regeneration`
+- Regeneration:
+  - duration = `60 + 40 * (level - 1)` ticks
+  - amplifier = `floor((level - 1) / 3)`, capped at `IV`
+- Cooldown: `max(60, 220 - 15 * (level - 1))` ticks
+- Notes:
+  - identity is self-sustain, not damage
 
 ### `guardian_repulse`
-- support only
-- scale radius and knockback/control strength
+- Trigger 1: regular support pulse around the tame
+- Tame pulse:
+  - retargets nearby monsters onto the tame
+  - radius = `6.0 + 0.6 * level`
+  - chance per monster = `12% + 4% * level`, capped at `90%`
+  - cooldown = `60 ticks` (`3.0s`)
+- Trigger 2: owner-protection pulse when the owner is hurt and the tame is within `3` blocks
+- Owner pulse:
+  - knocks nearby monsters away from the owner
+  - radius = `2.8 + 0.25 * level`
+  - cooldown = `max(20, 800 - 60 * (level - 1))` ticks
+- Notes:
+  - this is an aggro-control and peel tool, not a damage spell
 
 ### `last_stand_fury`
-- support only
-- indirect damage via buff conversion from owner danger state
+- Trigger: passive while the owner is injured
+- Effect: the tame gains scaling `Strength` and `Speed` based on owner missing HP
+- Refresh cadence: every `40 ticks` (`2.0s`)
+- Scaling:
+  - lower owner HP gives higher temporary buff amplifiers
+- Notes:
+  - indirect offensive/defensive value through owner danger response
 
 ### `shield_block`
-- support only
-- scale mitigation and cooldown
+- Trigger: when the tame is hurt and the cooldown is ready
+- Effect: reduces the triggering hit
+- Mitigation: `65% + 3% * (level - 1)`, capped at `95%`
+- Cooldown: `max(20, 200 - 20 * (level - 1))` ticks
+- Notes:
+  - applies to the tame itself, not an ally
 
 ### `sky_launch`
-- support only
-- scale launch strength and radius, not damage
+- Trigger 1: offensive proc against an enemy target
+- Offensive proc:
+  - chance = base `10%` on offense, `16%` on defensive retaliation
+  - extra chance = `+4% * level`
+  - cooldown = `70 ticks` (`3.5s`)
+  - deals its normal cast damage and launches the target upward
+- Trigger 2: owner-protection pulse when the owner is hurt and the tame is within `3` blocks
+- Owner pulse:
+  - launches nearby monsters upward and slightly outward
+  - radius = `2.5 + 0.20 * level`
+  - lift = `0.30 + 0.15 * level`
+  - cooldown = `240 ticks` (`12.0s`)
+- Notes:
+  - part damage/control on offense, pure peel/control on owner defense
+
+### `guardian_intercept`
+- Trigger: allied hurt response
+- Effect: redirects part of an ally's incoming hit to the supporter
+- Redirected share: `20% + 10% * level`, capped at `60%`
+- Cooldown: `max(40, 140 - 10 * level)` ticks
+- Notes:
+  - the ally takes less damage
+  - the supporter pays that redirected amount instead
+
+### `emergency_shield`
+- Trigger: allied hurt response when the hit would drop the ally below `35%` HP
+- Effect:
+  - reduces the triggering hit by `20% + 8% * level`, capped at `60%`
+  - grants `Absorption`
+  - grants short `Resistance`
+- Absorption duration: `80 + 20 * level` ticks
+- Resistance duration: `40 + 20 * level` ticks
+- Cooldown: `max(80, 240 - 20 * level)` ticks
+- Notes:
+  - intended as a clutch save, not a constant mitigation aura
+
+### `body_block`
+- Trigger: allied hurt response against projectile damage only
+- Effect: prevents part of the projectile hit
+- Prevention: `45% + 10% * level`, capped at `90%`
+- Cooldown: `max(40, 180 - 15 * level)` ticks
+- Notes:
+  - this is projectile-specific protection
+
+### `battlefield_medic`
+- Trigger: on kill or assist, if the cooldown is ready
+- Effect: heals nearby allies within `8` blocks
+- Heal amount:
+  - assist = `1.0 + 0.75 * level`
+  - kill = `2.0 + 0.75 * level`
+- Cooldown:
+  - assist = `120 ticks` (`6.0s`)
+  - kill = `80 ticks` (`4.0s`)
+
+### `triage_pulse`
+- Trigger: periodic support heal
+- Effect: heals the lowest-health ally within `10` blocks
+- Heal amount: `1.5 + 0.75 * level`
+- Cooldown: `max(40, 120 - 10 * (level - 1))` ticks
+
+### `revitalizing_presence`
+- Trigger: when an ally is healed and the cooldown is ready
+- Effect: mirrors part of that heal to another injured ally within `10` blocks
+- Mirrored share: `20% + 10% * level` of the original heal
+- Cooldown: `max(20, 80 - 5 * level)` ticks
+
+### `cleanse_touch`
+- Trigger: periodic support cleanse
+- Effect: removes one harmful effect from a debuffed ally within `10` blocks
+- Cooldown: `max(60, 180 - 15 * (level - 1))` ticks
+
+### `pack_guard`
+- Trigger: when an ally is hurt by a monster
+- Effect:
+  - applies `Weakness` to the attacker
+  - forces the attacker to retarget onto the supporter
+- Weakness duration: `60 + 20 * level` ticks
+- Weakness tier:
+  - `I` below level `4`
+  - `II` at level `4+`
+- Cooldown: `max(40, 140 - 10 * level)` ticks
+
+### `life_gift`
+- Trigger: lethal-save response for allied tames
+- Effect: transfers the supporter's own HP to prevent the ally from dying
+- Safety rule:
+  - the supporter will not spend below `5` HP
+- Desired post-save recovery: up to `2 + level` HP, capped by how much the supporter can spare
+- Cooldown: `max(100, 300 - 20 * level)` ticks
 
 ## Single-Target DPS Ranking
 

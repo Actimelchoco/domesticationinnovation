@@ -116,6 +116,7 @@ public class CommonProxy {
     private static final Pattern NUMERIC_SUFFIX = Pattern.compile("^(.*?)(?:\\s+(\\d+))?$");
     private static final UUID FROST_FANG_SLOW = UUID.fromString("1eaf83ff-7207-4596-b37a-d7a07b3ec4cf");
     private static final TargetingConditions ZOMBIE_TARGET = TargetingConditions.forCombat().range(32.0D);
+    private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE = 12.0D;
     // Pets queued for cross-dimension transfer. Entries stay queued until owner is in target dimension.
     public static List<PendingPetTeleport> teleportingPets = new ArrayList<>();
 
@@ -601,11 +602,12 @@ public class CommonProxy {
                         blocking = mob.getTarget();
                         blockingFrom = mob;
                     } else if (TameableUtils.getOwnerOf(mob) instanceof LivingEntity owner) {
-                        if (owner.getLastHurtByMob() != null && owner.getLastHurtByMob().isAlive() && !TameableUtils.hasSameOwnerAs(mob, owner.getLastHurtByMob())) {
+                        boolean ownerNearby = mob.distanceToSqr(owner) <= PSYCHIC_WALL_OWNER_PROTECT_RANGE * PSYCHIC_WALL_OWNER_PROTECT_RANGE;
+                        if (ownerNearby && owner.getLastHurtByMob() != null && owner.getLastHurtByMob().isAlive() && !TameableUtils.hasSameOwnerAs(mob, owner.getLastHurtByMob())) {
                             blocking = owner.getLastHurtByMob();
                             blockingFrom = owner;
                         }
-                        if (owner.getLastHurtMob() != null && owner.getLastHurtMob().isAlive() && !TameableUtils.hasSameOwnerAs(mob, owner.getLastHurtMob())) {
+                        if (ownerNearby && owner.getLastHurtMob() != null && owner.getLastHurtMob().isAlive() && !TameableUtils.hasSameOwnerAs(mob, owner.getLastHurtMob())) {
                             blocking = owner.getLastHurtMob();
                             blockingFrom = owner;
                         }

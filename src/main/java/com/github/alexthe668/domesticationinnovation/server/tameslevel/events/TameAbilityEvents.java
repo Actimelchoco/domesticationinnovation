@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
@@ -68,6 +69,9 @@ public class TameAbilityEvents {
 
     private static final int ABILITY_TICK_RATE = 5;
     private static final int HEAVY_ABILITY_STAGGER_TICKS = 20;
+    private static final int NAMED_EFFECT_TICK_RATE = 10;
+    private static final int OWNER_PROTECTION_TICK_RATE = 10;
+    private static final int GUARDIAN_REPULSE_CHECK_RATE = 40;
     private static final int GUARDIAN_LOCK_ON_PARTICLE_RATE = 10;
     private static final float LIGHTNING_DAMAGE_MULTIPLIER = 5.0F;
     private static final double LIGHTNING_PROC_CHANCE = 0.20D; // 5x less frequent
@@ -123,54 +127,61 @@ public class TameAbilityEvents {
                 LivingEntity target = tame.getTarget();
                 long now = level.getGameTime();
                 boolean heavyPass = shouldRunHeavyPass(tame, now);
+                boolean namedEffectsPass = shouldRunPeriodicPass(tame, now, NAMED_EFFECT_TICK_RATE);
+                boolean ownerProtectionPass = shouldRunPeriodicPass(tame, now, OWNER_PROTECTION_TICK_RATE);
+                boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, target);
-                renderGuardianLockOnBeam(level, tame, data, target, now);
+                TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, target, now));
 
-                handleNamedAttributeEffects(tame, data);
-                OwnerProtectionAbilityModule.onTick(tame, data);
-                handlePassiveHeal(tame, data, now);
-                handleComfort(tame, data, now);
-                handleAttributeRegeneration(tame, data, now);
-                handleRejuvenation(tame, data);
+                if (namedEffectsPass) {
+                    TamePerformanceProfiler.run("attribute.named_effects", () -> handleNamedAttributeEffects(tame, data));
+                }
+                if (ownerProtectionPass) {
+                    TamePerformanceProfiler.run("feature.owner_protection_tick", () -> OwnerProtectionAbilityModule.onTick(tame, data));
+                }
+                TamePerformanceProfiler.run("attribute.passive_heal", () -> handlePassiveHeal(tame, data, now));
+                TamePerformanceProfiler.run("attribute.comfort", () -> handleComfort(tame, data, now));
+                TamePerformanceProfiler.run("attribute.regeneration", () -> handleAttributeRegeneration(tame, data, now));
+                TamePerformanceProfiler.run("attribute.rejuvenation", () -> handleRejuvenation(tame, data));
                 if (needsNearbyAllySupportScan(data)) {
                     List<TamableAnimal> nearbySupportTames = collectOwnedNearbySupportTames(level, tame, tame.getOwnerUUID(), 10.0D, supportCache);
-                    handleTriagePulse(level, tame, data, now, nearbySupportTames);
-                    handleCleanseTouch(level, tame, data, now, nearbySupportTames);
+                    TamePerformanceProfiler.run("ability.triage_pulse", () -> handleTriagePulse(level, tame, data, now, nearbySupportTames));
+                    TamePerformanceProfiler.run("ability.cleanse_touch", () -> handleCleanseTouch(level, tame, data, now, nearbySupportTames));
                 }
-                if (heavyPass) {
-                    handleGuardianRepulse(level, tame, data, now);
+                if (heavyPass && guardianRepulsePass) {
+                    TamePerformanceProfiler.run("ability.guardian_repulse", () -> handleGuardianRepulse(level, tame, data, now));
                 }
                 if (allowOffensive && heavyPass) {
-                    handleCreeperExplosion(level, tame, data, target, now);
+                    TamePerformanceProfiler.run("ability.creeper_explosion", () -> handleCreeperExplosion(level, tame, data, target, now));
                 }
                 if (allowOffensive) {
-                    handleArrowShot(level, tame, data, target, now);
-                    handleFishing(level, tame, data, target, now);
-                    handleDash(level, tame, data, target, now);
+                    TamePerformanceProfiler.run("ability.arrow_shot", () -> handleArrowShot(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.fishing", () -> handleFishing(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.dash", () -> handleDash(level, tame, data, target, now));
                 }
                 if (allowOffensive && heavyPass) {
-                    handleHealingBottle(level, tame, data, now);
-                    handleGhastFireball(level, tame, data, target, now);
-                    handleWitherSkull(level, tame, data, target, now);
-                    handleBlazeAttack(level, tame, data, target, now);
-                    handleGuardianBeam(level, tame, data, target, now);
-                    handleElderGuardianBeam(level, tame, data, target, now);
-                    handleTrident(level, tame, data, target, now);
-                    handleCrossbow(level, tame, data, target, now);
-                    handleEvokerFangs(level, tame, data, target, now);
-                    handleDragonFireball(level, tame, data, target, now);
-                    handleLlamaSpit(level, tame, data, target, now);
-                    handleBerserker(tame, data, now);
-                    handleShulkerBullet(level, tame, data, target, now);
+                    TamePerformanceProfiler.run("ability.healing_bottle", () -> handleHealingBottle(level, tame, data, now));
+                    TamePerformanceProfiler.run("ability.ghast_fireball", () -> handleGhastFireball(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.wither_skull", () -> handleWitherSkull(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.blaze_attack", () -> handleBlazeAttack(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.guardian_beam", () -> handleGuardianBeam(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.elder_guardian_beam", () -> handleElderGuardianBeam(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.trident", () -> handleTrident(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.crossbow", () -> handleCrossbow(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.evoker_fangs", () -> handleEvokerFangs(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.dragon_fireball", () -> handleDragonFireball(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.llama_spit", () -> handleLlamaSpit(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.berserker", () -> handleBerserker(tame, data, now));
+                    TamePerformanceProfiler.run("ability.shulker_bullet", () -> handleShulkerBullet(level, tame, data, target, now));
                 }
                 if (allowOffensive) {
-                    handleSnowballShot(level, tame, data, target, now);
-                    handleEnderPearlJump(tame, data, target, now);
-                    handleSkyLaunchOnOffense(level, tame, data, target, now);
+                    TamePerformanceProfiler.run("ability.snowball_shot", () -> handleSnowballShot(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.ender_pearl_jump", () -> handleEnderPearlJump(tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.sky_launch_offense", () -> handleSkyLaunchOnOffense(level, tame, data, target, now));
                 }
                 if (allowOffensive && heavyPass) {
-                    handleLightningStrike(level, tame, data, target, now);
-                    handleWardenScream(level, tame, data, target, now);
+                    TamePerformanceProfiler.run("ability.lightning_strike", () -> handleLightningStrike(level, tame, data, target, now));
+                    TamePerformanceProfiler.run("ability.warden_scream", () -> handleWardenScream(level, tame, data, target, now));
                 }
             }
             if (revivedDeadEntry) {
@@ -186,9 +197,9 @@ public class TameAbilityEvents {
     public static void onHurt(LivingHurtEvent event) {
         try {
             if (event.getEntity() instanceof ServerPlayer owner && event.getAmount() > 0.0F) {
-                OwnerProtectionAbilityModule.onOwnerHurt(owner, event, OWNER_PROTECTION_HOOKS);
+                TamePerformanceProfiler.run("feature.owner_protection_owner_hurt", () -> OwnerProtectionAbilityModule.onOwnerHurt(owner, event, OWNER_PROTECTION_HOOKS));
                 if (!INTERNAL_SUPPORT_REDIRECT.get() && ownerHasNearbyReactiveSupport(owner)) {
-                    handleOwnerSupportResponses(owner, event);
+                    TamePerformanceProfiler.run("feature.owner_support_responses", () -> handleOwnerSupportResponses(owner, event));
                 }
             }
 
@@ -201,9 +212,9 @@ public class TameAbilityEvents {
                         && !INTERNAL_BONUS_DAMAGE.get()) {
                     float beforeDamage = event.getAmount();
                     DAMAGE_DEBUG_CONTRIBUTORS.get().clear();
-                    applyProjectileAbilityDamageScaling(event);
-                    applyAttributeDamageBonuses(attackerTame, attackerData, event);
-                    handleBattleStrength(attackerTame, attackerData, event);
+                    TamePerformanceProfiler.run("feature.projectile_ability_damage_scaling", () -> applyProjectileAbilityDamageScaling(event));
+                    TamePerformanceProfiler.run("attribute.damage_bonuses", () -> applyAttributeDamageBonuses(attackerTame, attackerData, event));
+                    TamePerformanceProfiler.run("ability.battle_strength", () -> handleBattleStrength(attackerTame, attackerData, event));
                     debugDamage(attackerTame, attackerData, event, beforeDamage, event.getAmount());
                     DAMAGE_DEBUG_CONTRIBUTORS.get().clear();
                 }
@@ -214,15 +225,15 @@ public class TameAbilityEvents {
             if (targetData == null) return;
 
             if (!INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
-                handleAllyTameSupportResponses(targetTame, targetData, event);
+                TamePerformanceProfiler.run("feature.ally_support_responses", () -> handleAllyTameSupportResponses(targetTame, targetData, event));
             }
 
-            handleRetaliationSlow(targetTame, targetData, event);
-            handleTotem(targetTame, targetData, event);
-            handleDefensiveAura(targetTame, targetData, event);
-            OwnerProtectionAbilityModule.onTameHurt(targetTame, targetData, event, OWNER_PROTECTION_HOOKS);
-            handleDefensiveAttributeMitigation(targetTame, targetData, event);
-            handleSkyLaunchOnDefend(targetTame, targetData, event);
+            TamePerformanceProfiler.run("ability.retaliation_slow", () -> handleRetaliationSlow(targetTame, targetData, event));
+            TamePerformanceProfiler.run("attribute.totem", () -> handleTotem(targetTame, targetData, event));
+            TamePerformanceProfiler.run("ability.defensive_aura", () -> handleDefensiveAura(targetTame, targetData, event));
+            TamePerformanceProfiler.run("feature.owner_protection_hurt", () -> OwnerProtectionAbilityModule.onTameHurt(targetTame, targetData, event, OWNER_PROTECTION_HOOKS));
+            TamePerformanceProfiler.run("attribute.defensive_mitigation", () -> handleDefensiveAttributeMitigation(targetTame, targetData, event));
+            TamePerformanceProfiler.run("ability.sky_launch_defend", () -> handleSkyLaunchOnDefend(targetTame, targetData, event));
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
@@ -242,7 +253,7 @@ public class TameAbilityEvents {
                 for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, owner, owner.getUUID(), 10.0D, supportCache)) {
                     TameData data = TameRegistry.get(supporter.getUUID());
                     if (data == null) continue;
-                    handleRevitalizingPresence(level, supporter, data, owner, event.getAmount(), level.getGameTime(), collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), 10.0D, supportCache));
+                    TamePerformanceProfiler.run("ability.revitalizing_presence", () -> handleRevitalizingPresence(level, supporter, data, owner, event.getAmount(), level.getGameTime(), collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), 10.0D, supportCache)));
                 }
                 return;
             }
@@ -252,7 +263,7 @@ public class TameAbilityEvents {
                     if (supporter == healedTame) continue;
                     TameData data = TameRegistry.get(supporter.getUUID());
                     if (data == null) continue;
-                    handleRevitalizingPresence(level, supporter, data, healedTame, event.getAmount(), level.getGameTime(), collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), 10.0D, supportCache));
+                    TamePerformanceProfiler.run("ability.revitalizing_presence", () -> handleRevitalizingPresence(level, supporter, data, healedTame, event.getAmount(), level.getGameTime(), collectOwnedNearbySupportTames(level, supporter, supporter.getOwnerUUID(), 10.0D, supportCache)));
                 }
             }
         } catch (Throwable t) {
@@ -1223,6 +1234,7 @@ public class TameAbilityEvents {
         applyNamedAttributeEffect(tame, data, "fire_resistance", MobEffects.FIRE_RESISTANCE);
         handlePoisonResistance(tame, data);
         applyNamedAttributeEffect(tame, data, "jump_boost", MobEffects.JUMP);
+        handleWallClimber(tame, data);
     }
 
     private static void applyNamedAttributeEffect(TamableAnimal tame, TameData data, String attribute, net.minecraft.world.effect.MobEffect effect) {
@@ -1242,6 +1254,22 @@ public class TameAbilityEvents {
         if (tame.hasEffect(MobEffects.POISON)) {
             tame.removeEffect(MobEffects.POISON);
             debugAbilityUse(tame, "poison_resistance");
+        }
+    }
+
+    private static void handleWallClimber(TamableAnimal tame, TameData data) {
+        int level = attributeLevel(data, "wall_climber");
+        if (level <= 0) return;
+        if (!tame.horizontalCollision || tame.onGround() || tame.isInWaterOrBubble() || tame.isPassenger()) return;
+
+        Vec3 motion = tame.getDeltaMovement();
+        boolean pushingIntoWall = motion.horizontalDistanceSqr() > 1.0E-4D || tame.getTarget() != null || !tame.getNavigation().isDone();
+        if (!pushingIntoWall) return;
+
+        double climbSpeed = Math.min(0.32D, 0.20D + Math.max(0, level - 1) * 0.03D);
+        if (motion.y < climbSpeed) {
+            tame.setDeltaMovement(motion.x, climbSpeed, motion.z);
+            tame.fallDistance = 0.0F;
         }
     }
 
@@ -1753,7 +1781,7 @@ public class TameAbilityEvents {
 
     public static float offensiveAbilityLevelMultiplier(int abilityLevel) {
         int level = Math.max(1, abilityLevel);
-        return (float) (1.0D + 0.25D * Math.max(0, level - 1));
+        return (float) (1.0D + (Math.max(0, level - 1) / 4.0D));
     }
 
     public static float offensiveDamageBonusMultiplier(TameData data, float scaling) {
@@ -2165,14 +2193,14 @@ public class TameAbilityEvents {
     private static boolean isFriendly(TamableAnimal tame, Entity entity) {
         if (entity == tame) return true;
         if (entity instanceof Player player) {
-            return true;
+            return !TameDuelManager.areDuelOpponents(tame.getUUID(), player.getUUID());
         }
         if (entity instanceof TamableAnimal otherTame && otherTame.isTame()) {
-            if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
-                return true;
-            }
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), otherTame.getUUID())) {
                 return false;
+            }
+            if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+                return true;
             }
             return true;
         }
@@ -2317,6 +2345,16 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
 
     private static boolean shouldRunHeavyPass(TamableAnimal tame, long now) {
         int buckets = Math.max(1, HEAVY_ABILITY_STAGGER_TICKS / ABILITY_TICK_RATE);
+        int phase = Math.floorMod(tame.getUUID().hashCode(), buckets);
+        long slice = now / ABILITY_TICK_RATE;
+        return (slice % buckets) == phase;
+    }
+
+    private static boolean shouldRunPeriodicPass(TamableAnimal tame, long now, int intervalTicks) {
+        if (tame == null || intervalTicks <= ABILITY_TICK_RATE) {
+            return true;
+        }
+        int buckets = Math.max(1, intervalTicks / ABILITY_TICK_RATE);
         int phase = Math.floorMod(tame.getUUID().hashCode(), buckets);
         long slice = now / ABILITY_TICK_RATE;
         return (slice % buckets) == phase;

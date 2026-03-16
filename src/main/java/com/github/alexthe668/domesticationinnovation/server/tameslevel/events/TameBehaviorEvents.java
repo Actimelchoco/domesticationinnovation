@@ -1,11 +1,13 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -26,26 +28,44 @@ public class TameBehaviorEvents {
         if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
         if (tame.level().isClientSide) return;
         if (!tame.isAlive()) return;
-        int scanInterval = getBehaviorScanInterval(tame);
-        if (tame.tickCount % scanInterval != 0) return;
-        if (tame.isOrderedToSit()) return;
-
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) return;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
 
+        if (data.closeMovement && tame.tickCount % 20 == 0) {
+            TamePerformanceProfiler.run("behavior.close_owner", () -> handleCloseOwner(tame, data));
+        }
+
+        if (data.hasHome) {
+            TamePerformanceProfiler.run("behavior.guardian_return_timer", () -> updateGuardianReturnTimer(tame, data));
+        }
+
+        int scanInterval = getBehaviorScanInterval(tame);
+        if (tame.tickCount % scanInterval != 0) return;
+        if (tame.isOrderedToSit()) return;
+
+        if (data.skeletonMovement && tame.getTarget() != null && tame.getTarget().isAlive() && tame.tickCount % 100 == 0) {
+            TamePerformanceProfiler.run("behavior.skeleton_spacing", () -> handleSkeletonSpacing(tame));
+        }
+
+        if (tame.tickCount % getGuardianReturnInterval(tame) == 0) {
+            TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianReturn(tame, data));
+        }
+
         TameMode mode = TameMode.byId(data.mode);
         if (mode == TameMode.MONSTER_HUNTER) {
-            LivingEntity nearest = findNearestMonster(tame, 10.0D);
-            if (nearest != null) {
-                tame.setTarget(nearest);
+            final LivingEntity[] nearest = new LivingEntity[1];
+            TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
+            if (nearest[0] != null) {
+                tame.setTarget(nearest[0]);
             }
             return;
         }
         if (mode == TameMode.AGGRESSIVE) {
-            LivingEntity nearest = findNearestAggressiveTarget(tame, 10.0D);
-            if (nearest != null) {
-                tame.setTarget(nearest);
+            final LivingEntity[] nearest = new LivingEntity[1];
+            TamePerformanceProfiler.run("behavior.find_nearest_aggressive_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 10.0D));
+            if (nearest[0] != null) {
+                tame.setTarget(nearest[0]);
             }
         }
     }
@@ -84,7 +104,7 @@ public class TameBehaviorEvents {
             if (!(raw instanceof TamableAnimal tame) || !tame.isTame()) continue;
             if (tame.level() != victim.level()) continue;
             if (tame.isOrderedToSit()) continue;
-            applyRetargetByMode(tame, data, victim, attacker);
+            TamePerformanceProfiler.run("behavior.retarget_on_owner_hurt", () -> applyRetargetByMode(tame, data, victim, attacker));
         }
     }
 
@@ -101,7 +121,7 @@ public class TameBehaviorEvents {
             if (!(raw instanceof TamableAnimal tame) || !tame.isTame()) continue;
             if (tame.level() != owner.level()) continue;
             if (tame.isOrderedToSit()) continue;
-            applyRetargetByMode(tame, data, owner, victim);
+            TamePerformanceProfiler.run("behavior.retarget_on_owner_attack", () -> applyRetargetByMode(tame, data, owner, victim));
         }
     }
 
@@ -201,6 +221,10 @@ public class TameBehaviorEvents {
         return isIdleOrSitting(tame) ? 60 : 20;
     }
 
+    private static int getGuardianReturnInterval(TamableAnimal tame) {
+        return isIdleOrSitting(tame) ? 80 : 40;
+    }
+
     private static boolean isIdleOrSitting(TamableAnimal tame) {
         if (tame.isOrderedToSit()) {
             return true;
@@ -212,5 +236,112 @@ public class TameBehaviorEvents {
                 && tame.getLastHurtMob() == null
                 && tame.tickCount - tame.getLastHurtByMobTimestamp() >= 100
                 && tame.tickCount - tame.getLastHurtMobTimestamp() >= 100;
+    }
+
+    private static void handleSkeletonSpacing(TamableAnimal tame) {
+        LivingEntity target = tame.getTarget();
+        if (target == null || !target.isAlive()) {
+            return;
+        }
+        double desiredDistance = 5.0D;
+        if (tame.distanceToSqr(target) > desiredDistance * desiredDistance) {
+            return;
+        }
+        double dx = tame.getX() - target.getX();
+        double dz = tame.getZ() - target.getZ();
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 0.001D) {
+            return;
+        }
+        double scale = desiredDistance / len;
+        double targetX = tame.getX() + dx * scale;
+        double targetZ = tame.getZ() + dz * scale;
+        tame.getNavigation().moveTo(targetX, tame.getY(), targetZ, 1.1D);
+    }
+
+    private static void handleGuardianReturn(TamableAnimal tame, TameData data) {
+        if (data == null || !data.hasHome) {
+            return;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            return;
+        }
+        if (data.homeDimension == null || data.homeDimension.isBlank()) {
+            return;
+        }
+        if (!tame.level().dimension().location().toString().equals(data.homeDimension)) {
+            return;
+        }
+        BlockPos home = new BlockPos(data.homeX, data.homeY, data.homeZ);
+        double distanceSqr = tame.distanceToSqr(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D);
+        if (distanceSqr <= 4.0D) {
+            tame.getNavigation().stop();
+            data.guardianReturnTicks = 0;
+            return;
+        }
+        tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
+    }
+
+    private static void handleCloseOwner(TamableAnimal tame, TameData data) {
+        if (data == null || !data.closeMovement || data.hasHome || tame.isOrderedToSit()) {
+            return;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            return;
+        }
+        if (!(tame.getOwner() instanceof ServerPlayer owner)) {
+            return;
+        }
+        if (owner.level() != tame.level()) {
+            return;
+        }
+        double distanceSqr = tame.distanceToSqr(owner);
+        if (distanceSqr <= 1.5D * 1.5D) {
+            tame.getNavigation().stop();
+            return;
+        }
+        if (distanceSqr > 2.5D * 2.5D) {
+            tame.getNavigation().moveTo(owner, 1.15D);
+        }
+    }
+
+    private static void updateGuardianReturnTimer(TamableAnimal tame, TameData data) {
+        if (data == null || !data.hasHome) {
+            return;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            data.guardianReturnTicks = 0;
+            return;
+        }
+        if (data.homeDimension == null || data.homeDimension.isBlank()) {
+            data.guardianReturnTicks = 0;
+            return;
+        }
+        if (!tame.level().dimension().location().toString().equals(data.homeDimension)) {
+            data.guardianReturnTicks++;
+        } else {
+            BlockPos home = new BlockPos(data.homeX, data.homeY, data.homeZ);
+            double distanceSqr = tame.distanceToSqr(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D);
+            if (distanceSqr <= 4.0D) {
+                data.guardianReturnTicks = 0;
+                return;
+            }
+            data.guardianReturnTicks++;
+        }
+        if (data.guardianReturnTicks < 1200) {
+            return;
+        }
+        if (data.homeDimension == null || data.homeDimension.isBlank()) {
+            data.guardianReturnTicks = 0;
+            return;
+        }
+        if (!tame.level().dimension().location().toString().equals(data.homeDimension)) {
+            data.guardianReturnTicks = 0;
+            return;
+        }
+        tame.teleportTo(data.homeX + 0.5D, data.homeY, data.homeZ + 0.5D);
+        tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        tame.getNavigation().stop();
+        data.guardianReturnTicks = 0;
     }
 }
