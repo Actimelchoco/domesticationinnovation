@@ -40,7 +40,9 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.projectile.DragonFireball;
 import net.minecraft.world.entity.projectile.EvokerFangs;
+import net.minecraft.world.entity.projectile.LlamaSpit;
 import net.minecraft.world.entity.projectile.ShulkerBullet;
 import net.minecraft.world.entity.projectile.Snowball;
 import net.minecraft.world.entity.projectile.SmallFireball;
@@ -73,6 +75,8 @@ public class TameAbilityEvents {
     private static final int OWNER_PROTECTION_TICK_RATE = 10;
     private static final int GUARDIAN_REPULSE_CHECK_RATE = 40;
     private static final int GUARDIAN_LOCK_ON_PARTICLE_RATE = 10;
+    private static final String PROJECTILE_DAMAGE_TAG = "TamesLevelProjectileDamage";
+    private static final String PROJECTILE_SOURCE_TAG = "TamesLevelProjectileSource";
     private static final float LIGHTNING_DAMAGE_MULTIPLIER = 5.0F;
     private static final double LIGHTNING_PROC_CHANCE = 0.20D; // 5x less frequent
     private static final int MAX_WARDEN_BEAM_PARTICLES = 64;
@@ -311,7 +315,7 @@ public class TameAbilityEvents {
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "arrow_shot"));
         float velocity = 1.6F + (levelValue - 1) * 0.1F;
 
-        Arrow arrow = new Arrow(level, tame);
+        Arrow arrow = new TimedTameArrow(level, tame);
         arrow.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
         arrow.setBaseDamage(offensiveAbilityCastDamage(data, "arrow_shot", levelValue));
         arrow.pickup = AbstractArrow.Pickup.DISALLOWED;
@@ -347,7 +351,7 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "wither_skull"));
         Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
-        WitherSkull skull = new WitherSkull(level, tame, direction.x, direction.y, direction.z);
+        WitherSkull skull = new TimedTameWitherSkull(level, tame, direction.x, direction.y, direction.z);
         skull.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
         // Keep pet wither skull non-griefing.
         skull.setDangerous(false);
@@ -363,11 +367,11 @@ public class TameAbilityEvents {
         if (!isReady(data, "blaze_attack_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "blaze_attack"));
-        float damage = offensiveAbilityCastDamage(data, "blaze_attack", levelValue);
-        LevelSystem.trackDamage(target, tame);
-        applyInternalBonusDamage(target, tame, damage);
-        target.setSecondsOnFire(2 + Math.max(0, levelValue - 1));
-        level.sendParticles(ParticleTypes.FLAME, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 8), 0.25D, 0.25D, 0.25D, 0.01D);
+        Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
+        SmallFireball fireball = new TimedTameSmallFireball(level, tame, direction.x, direction.y, direction.z);
+        fireball.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
+        setProjectileDamage(fireball, "blaze_attack", offensiveAbilityCastDamage(data, "blaze_attack", levelValue));
+        level.addFreshEntity(fireball);
         level.playSound(null, tame.blockPosition(), SoundEvents.BLAZE_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
 
         setAbilityCooldown(tame, data, "blaze_attack", "blaze_attack_tick", now, 40);
@@ -456,10 +460,13 @@ public class TameAbilityEvents {
         if (!isReady(data, "trident_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "trident"));
-        float damage = offensiveAbilityCastDamage(data, "trident", levelValue);
-        LevelSystem.trackDamage(target, tame);
-        applyInternalBonusDamage(target, tame, damage);
-        level.sendParticles(ParticleTypes.CRIT, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 8), 0.3D, 0.25D, 0.3D, 0.02D);
+        Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
+        ThrownTrident trident = new TimedTameTrident(level, tame, new ItemStack(Items.TRIDENT));
+        trident.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
+        trident.pickup = AbstractArrow.Pickup.DISALLOWED;
+        trident.setBaseDamage(offensiveAbilityCastDamage(data, "trident", levelValue));
+        trident.shoot(direction.x, direction.y, direction.z, 2.5F, 0.0F);
+        level.addFreshEntity(trident);
         level.playSound(null, tame.blockPosition(), SoundEvents.TRIDENT_THROW, SoundSource.HOSTILE, 1.0F, 1.0F);
 
         setAbilityCooldown(tame, data, "trident", "trident_tick", now, 90);
@@ -479,7 +486,7 @@ public class TameAbilityEvents {
         int center = (arrowCount - 1) / 2;
         for (int i = 0; i < arrowCount; i++) {
             int spreadIndex = i - center;
-            Arrow arrow = new Arrow(level, tame);
+            Arrow arrow = new TimedTameArrow(level, tame);
             arrow.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
             arrow.pickup = AbstractArrow.Pickup.DISALLOWED;
             arrow.setBaseDamage(perArrowDamage);
@@ -589,18 +596,12 @@ public class TameAbilityEvents {
         if (!isReady(data, "dragon_fireball_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dragon_fireball"));
-        float baseDamage = offensiveAbilityCastDamage(data, "dragon_fireball", levelValue);
-        double radius = 3.0D + levelValue * 0.35D;
-        for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, target.getBoundingBox().inflate(radius))) {
-            if (!nearby.isAlive()) continue;
-            if (nearby == tame) continue;
-            if (isFriendly(tame, nearby)) continue;
-            LevelSystem.trackDamage(nearby, tame);
-            nearby.hurt(tame.damageSources().mobAttack(tame), baseDamage);
-            nearby.addEffect(new MobEffectInstance(MobEffects.HARM, 1, 0));
-        }
-        level.sendParticles(ParticleTypes.DRAGON_BREATH, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 24), 1.0D, 0.6D, 1.0D, 0.02D);
-        level.playSound(null, target.blockPosition(), SoundEvents.ENDER_DRAGON_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
+        Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
+        DragonFireball fireball = new TimedTameDragonFireball(level, tame, direction.x, direction.y, direction.z);
+        fireball.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
+        setProjectileDamage(fireball, "dragon_fireball", offensiveAbilityCastDamage(data, "dragon_fireball", levelValue));
+        level.addFreshEntity(fireball);
+        level.playSound(null, tame.blockPosition(), SoundEvents.ENDER_DRAGON_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
 
         setAbilityCooldown(tame, data, "dragon_fireball", "dragon_fireball_tick", now, 140);
         debugAbilityUse(tame, "dragon_fireball");
@@ -612,9 +613,12 @@ public class TameAbilityEvents {
         if (!isReady(data, "llama_spit_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "llama_spit"));
-        LevelSystem.trackDamage(target, tame);
-        target.hurt(tame.damageSources().mobAttack(tame), offensiveAbilityCastDamage(data, "llama_spit", levelValue));
-        level.sendParticles(ParticleTypes.SPIT, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 8), 0.3D, 0.3D, 0.3D, 0.02D);
+        Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
+        LlamaSpit spit = new TimedTameLlamaSpit(level, tame);
+        spit.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
+        spit.shoot(direction.x, direction.y, direction.z, 1.5F, 0.0F);
+        setProjectileDamage(spit, "llama_spit", offensiveAbilityCastDamage(data, "llama_spit", levelValue));
+        level.addFreshEntity(spit);
 
         setAbilityCooldown(tame, data, "llama_spit", "llama_spit_tick", now, 50);
         debugAbilityUse(tame, "llama_spit");
@@ -643,7 +647,7 @@ public class TameAbilityEvents {
         Direction.Axis axis = Math.abs(target.getX() - tame.getX()) > Math.abs(target.getZ() - tame.getZ())
                 ? Direction.Axis.X
                 : Direction.Axis.Z;
-        ShulkerBullet bullet = new ShulkerBullet(level, tame, target, axis);
+        ShulkerBullet bullet = new TimedTameShulkerBullet(level, tame, target, axis);
         bullet.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
         level.addFreshEntity(bullet);
         // Only levitate targets up to 50 max HP.
@@ -663,7 +667,7 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "snowball_shot"));
         Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
-        Snowball snowball = new Snowball(level, tame);
+        Snowball snowball = new TimedTameSnowball(level, tame);
         snowball.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
         snowball.shoot(direction.x, direction.y, direction.z, 1.5F, 0.0F);
         level.addFreshEntity(snowball);
@@ -969,7 +973,7 @@ public class TameAbilityEvents {
         int regenerationAmplifier = Math.min(4, Math.max(0, (levelValue - 1) / 3));
         PotionUtils.setCustomEffects(potion, List.of(new MobEffectInstance(MobEffects.REGENERATION, regenerationDuration, regenerationAmplifier)));
 
-        ThrownPotion thrownPotion = new ThrownPotion(level, tame);
+        ThrownPotion thrownPotion = new TimedTameThrownPotion(level, tame);
         thrownPotion.setItem(potion);
         thrownPotion.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
         thrownPotion.setDeltaMovement(0.0D, 0.65D + (Math.min(6, levelValue) * 0.03D), 0.0D);
@@ -2244,6 +2248,9 @@ public class TameAbilityEvents {
         if (event == null || event.getSource() == null) return;
         Entity direct = event.getSource().getDirectEntity();
         if (direct == null) return;
+        if (applyTaggedProjectileDamage(direct, event)) {
+            return;
+        }
 
         if (direct instanceof NoGriefLargeFireball || direct instanceof WitherSkull || direct instanceof EvokerFangs) {
             if (direct instanceof NoGriefLargeFireball) noteDamageContributor("ghast_fireball");
@@ -2287,6 +2294,36 @@ public class TameAbilityEvents {
             owner = projectile.getOwner();
         }
         return owner instanceof TamableAnimal tame ? tame : null;
+    }
+
+    private static void setProjectileDamage(Entity projectile, String abilityId, float damage) {
+        if (projectile == null) {
+            return;
+        }
+        projectile.getPersistentData().putFloat(PROJECTILE_DAMAGE_TAG, damage);
+        projectile.getPersistentData().putString(PROJECTILE_SOURCE_TAG, abilityId == null ? "" : abilityId);
+    }
+
+    private static boolean applyTaggedProjectileDamage(Entity direct, LivingHurtEvent event) {
+        if (direct == null || event == null) {
+            return false;
+        }
+        if (!direct.getPersistentData().contains(PROJECTILE_DAMAGE_TAG)) {
+            return false;
+        }
+        float damage = direct.getPersistentData().getFloat(PROJECTILE_DAMAGE_TAG);
+        if (damage <= 0.0F) {
+            return false;
+        }
+        String source = direct.getPersistentData().getString(PROJECTILE_SOURCE_TAG);
+        noteDamageContributor(source);
+        TamableAnimal tame = resolveProjectileOwner(direct);
+        LivingEntity living = event.getEntity();
+        if (tame != null) {
+            LevelSystem.trackDamage(living, tame);
+        }
+        event.setAmount(damage);
+        return true;
     }
 
     private static float singleTargetDamage(float amount) {

@@ -16,11 +16,25 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.HitResult;
 
 public class NoGriefLargeFireball extends LargeFireball {
+    private static final int MAX_LIFETIME_TICKS = 80;
     private final int noGriefExplosionPower;
 
     public NoGriefLargeFireball(Level level, LivingEntity shooter, double offsetX, double offsetY, double offsetZ, int explosionPower) {
         super(level, shooter, offsetX, offsetY, offsetZ, explosionPower);
         this.noGriefExplosionPower = explosionPower;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!this.level().isClientSide && this.tickCount >= MAX_LIFETIME_TICKS) {
+            this.discard();
+        }
+    }
+
+    @Override
+    public boolean shouldBeSaved() {
+        return false;
     }
 
     @Override

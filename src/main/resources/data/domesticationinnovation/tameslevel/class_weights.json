@@ -637,18 +637,18 @@
         "speed": 10.0
       },
       "attributes": {
-        "amphibious": 4.0,
-        "chain_lightning": 3.0,
-        "emergency_cooldown_reduction": 4.0,
+        "amphibious": 20.0,
+        "chain_lightning": 30.0,
+        "emergency_cooldown_reduction": 30.0,
         "feather_falling": 4.0,
         "jump_boost": 4.0,
         "lightningfang": 2.0,
-        "speed": 7.0,
-        "void_cloud": 2.0,
-        "wall_climber": 2.0
+        "speed": 70.0,
+        "void_cloud": 4.0,
+        "wall_climber": 4.0
       },
       "abilities": {
-        "dash": 40.0
+        "dash": 300.0
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
