@@ -195,6 +195,26 @@ public final class TameDuelManager {
         }
     }
 
+    public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, TamableAnimal tame) {
+        if (server == null || tame == null) {
+            return null;
+        }
+        UUID battleId = BATTLE_ID_BY_ENTITY.get(tame.getUUID());
+        if (battleId == null) {
+            return null;
+        }
+        DuelBattle battle = BATTLE_BY_ID.get(battleId);
+        if (battle == null) {
+            return null;
+        }
+        Boolean tameTeamA = TEAM_A_BY_ENTITY.get(tame.getUUID());
+        if (tameTeamA == null) {
+            return null;
+        }
+        Set<UUID> opponents = tameTeamA ? battle.teamB : battle.teamA;
+        return nearestLoadedOpponent(server, tame, opponents);
+    }
+
     private static void maintainTargets(MinecraftServer server, Set<UUID> ownTeam, Set<UUID> enemyTeam) {
         if (ownTeam == null || ownTeam.isEmpty() || enemyTeam == null || enemyTeam.isEmpty()) return;
         for (UUID ownId : ownTeam) {

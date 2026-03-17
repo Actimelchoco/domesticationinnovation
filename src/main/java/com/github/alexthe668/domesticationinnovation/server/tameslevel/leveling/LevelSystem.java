@@ -41,7 +41,8 @@ public class LevelSystem {
         SUPPORT
     }
 
-    public static final double DEATH_XP_LOSS = 0.05D;
+    public static final double DEATH_XP_LOSS = 0.10D;
+    public static final double RECOVERY_XP_MULTIPLIER = 2.0D;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
     private static final double DPS_DAMAGE_REWARD_AMOUNT = 0.80D;
     private static volatile ClassWeightConfig CLASS_WEIGHT_CONFIG = ClassWeightConfig.loadOrThrow();
@@ -277,7 +278,7 @@ public class LevelSystem {
                 gainedXP = xpAmount * 0.25D;
             }
 
-            data.xp += (int) Math.round(gainedXP);
+            data.xp += scaleRecoveryXpGain(data, gainedXP);
 
             Entity entity = dead.level() instanceof ServerLevel serverLevel ? serverLevel.getEntity(tameId) : null;
             if (entity instanceof TamableAnimal tame) {
@@ -442,7 +443,8 @@ public class LevelSystem {
         if (amount == 0) {
             return;
         }
-        data.xp = Math.max(0, data.xp + amount);
+        int adjusted = amount > 0 ? scaleRecoveryXpGain(data, amount) : amount;
+        data.xp = Math.max(0, data.xp + adjusted);
         checkLevelUp(tame, data);
         TameRegistry.markDirty();
     }
@@ -485,6 +487,7 @@ public class LevelSystem {
 
         while (data.xp >= data.xpToNext) {
             leveled = true;
+            boolean regainingLevels = isRegainingLevels(data);
             data.xp -= data.xpToNext;
             data.level++;
             data.xpToNext = xpRequiredForLevel(data.level);
@@ -497,7 +500,7 @@ public class LevelSystem {
             String rewardSummary = reward.summary();
             updateTameName(tame, data);
 
-            if (tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
+            if (!regainingLevels && tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
                 owner.sendSystemMessage(Component.literal(
                         "§6Your pet §e" + data.name + " §6leveled up to §eLevel " + data.level + "§6."
                 ));
@@ -509,6 +512,18 @@ public class LevelSystem {
         if (leveled) {
             TameRegistry.markDirty();
         }
+    }
+
+    private static boolean isRegainingLevels(TameData data) {
+        return data != null && data.hasSavedProgress && data.level < Math.max(1, data.savedLevel);
+    }
+
+    private static int scaleRecoveryXpGain(TameData data, double baseAmount) {
+        if (baseAmount <= 0.0D) {
+            return 0;
+        }
+        double scaled = isRegainingLevels(data) ? baseAmount * RECOVERY_XP_MULTIPLIER : baseAmount;
+        return Math.max(1, (int) Math.round(scaled));
     }
 
     private static void recordLevelReward(TameData data, int level, LevelRewardResult reward, long gameTime) {

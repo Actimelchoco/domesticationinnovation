@@ -31,8 +31,11 @@ public class TameBehaviorEvents {
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) return;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
+        if (hasInvalidTarget(tame)) {
+            tame.setTarget(null);
+        }
 
-        if (data.closeMovement && tame.tickCount % 20 == 0) {
+        if (data.closeMovement && tame.tickCount % 10 == 0) {
             TamePerformanceProfiler.run("behavior.close_owner", () -> handleCloseOwner(tame, data));
         }
 
@@ -54,6 +57,9 @@ public class TameBehaviorEvents {
 
         TameMode mode = TameMode.byId(data.mode);
         if (mode == TameMode.MONSTER_HUNTER) {
+            if (hasValidCurrentTarget(tame)) {
+                return;
+            }
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
             if (nearest[0] != null) {
@@ -62,6 +68,9 @@ public class TameBehaviorEvents {
             return;
         }
         if (mode == TameMode.AGGRESSIVE) {
+            if (hasValidCurrentTarget(tame)) {
+                return;
+            }
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_aggressive_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 10.0D));
             if (nearest[0] != null) {
@@ -131,6 +140,7 @@ public class TameBehaviorEvents {
         if (ownerCombatTarget instanceof TamableAnimal otherTame && otherTame.isTame()) return;
         TameMode mode = TameMode.byId(data.mode);
         if (mode == TameMode.PASSIVE) return;
+        if (hasValidCurrentTarget(tame)) return;
 
         switch (mode) {
             case DEFAULT -> {
@@ -188,6 +198,7 @@ public class TameBehaviorEvents {
         double bestDist = Double.MAX_VALUE;
         AABB box = tame.getBoundingBox().inflate(radius);
         for (Monster monster : tame.level().getEntitiesOfClass(Monster.class, box)) {
+            if (!isValidCombatTarget(tame, monster)) continue;
             if (!monster.isAlive()) continue;
             double d2 = monster.distanceToSqr(tame);
             if (d2 < bestDist) {
@@ -203,11 +214,7 @@ public class TameBehaviorEvents {
         double bestDist = Double.MAX_VALUE;
         AABB box = tame.getBoundingBox().inflate(radius);
         for (LivingEntity entity : tame.level().getEntitiesOfClass(LivingEntity.class, box)) {
-            if (!entity.isAlive()) continue;
-            if (entity == tame) continue;
-            if (entity instanceof Player) continue;
-            if (entity instanceof TamableAnimal otherTame && otherTame.isTame()) continue;
-            if (entity instanceof TamableAnimal otherTame && otherTame.getOwnerUUID() != null && otherTame.getOwnerUUID().equals(tame.getOwnerUUID())) continue;
+            if (!isValidCombatTarget(tame, entity)) continue;
             double d2 = entity.distanceToSqr(tame);
             if (d2 < bestDist) {
                 bestDist = d2;
@@ -218,7 +225,10 @@ public class TameBehaviorEvents {
     }
 
     private static int getBehaviorScanInterval(TamableAnimal tame) {
-        return isIdleOrSitting(tame) ? 60 : 20;
+        if (isIdleOrSitting(tame)) {
+            return 40;
+        }
+        return hasValidCurrentTarget(tame) ? 15 : 8;
     }
 
     private static int getGuardianReturnInterval(TamableAnimal tame) {
@@ -303,6 +313,26 @@ public class TameBehaviorEvents {
         if (distanceSqr > 2.5D * 2.5D) {
             tame.getNavigation().moveTo(owner, 1.15D);
         }
+    }
+
+    private static boolean hasInvalidTarget(TamableAnimal tame) {
+        LivingEntity target = tame.getTarget();
+        return target != null && !isValidCombatTarget(tame, target);
+    }
+
+    private static boolean hasValidCurrentTarget(TamableAnimal tame) {
+        LivingEntity target = tame.getTarget();
+        return target != null && isValidCombatTarget(tame, target);
+    }
+
+    private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target) {
+        if (tame == null || target == null) return false;
+        if (!target.isAlive()) return false;
+        if (target == tame) return false;
+        if (target.level() != tame.level()) return false;
+        if (target instanceof Player) return false;
+        if (target instanceof TamableAnimal otherTame && otherTame.isTame()) return false;
+        return true;
     }
 
     private static void updateGuardianReturnTimer(TamableAnimal tame, TameData data) {

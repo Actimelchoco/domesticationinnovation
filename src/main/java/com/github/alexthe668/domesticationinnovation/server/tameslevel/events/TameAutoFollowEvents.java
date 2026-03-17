@@ -1,16 +1,21 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityTeleportEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
@@ -18,12 +23,13 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 public class TameAutoFollowEvents {
-    private static final boolean ENABLED = false;
-    private static final int DIMENSION_FOLLOW_DELAY_TICKS = 100;
+    private static final boolean ENABLED = true;
+    private static final int DIMENSION_FOLLOW_DELAY_TICKS = 20;
     private static final int COMMAND_TP_FOLLOW_DELAY_TICKS = 10;
     private static final int STABILIZE_RETRY_DELAY_TICKS = 20;
     private static final int STABILIZE_MAX_RETRIES = 20;
@@ -54,6 +60,14 @@ public class TameAutoFollowEvents {
     public static void onPlayerTeleportedByCommand(EntityTeleportEvent.TeleportCommand event) {
         if (!ENABLED) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        PENDING_FOLLOW.put(player.getUUID(), serverTick + COMMAND_TP_FOLLOW_DELAY_TICKS);
+    }
+
+    @SubscribeEvent
+    public static void onPlayerTeleported(EntityTeleportEvent event) {
+        if (!ENABLED) return;
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event instanceof EntityTeleportEvent.TeleportCommand) return;
         PENDING_FOLLOW.put(player.getUUID(), serverTick + COMMAND_TP_FOLLOW_DELAY_TICKS);
     }
 
@@ -116,11 +130,17 @@ public class TameAutoFollowEvents {
         for (TameData data : TameRegistry.getOwned(ownerId)) {
             if (data == null || data.uuid == null) continue;
             if (!ownerId.equals(data.ownerUUID)) continue;
+            if (!isFollowing(data)) continue;
+            if (data.dead) continue;
 
             TamableAnimal tame = findLoadedOwnedTame(owner, data.uuid);
-            if (tame == null) continue;
-            if (tame.isOrderedToSit()) continue;
-            teleportTameToPlayer(tame, owner);
+            if (tame != null) {
+                if (!isFollowing(tame)) continue;
+                teleportTameToPlayer(tame, owner);
+                continue;
+            }
+
+            summonUnloadedFollowingTame(data, owner);
         }
     }
 
@@ -156,6 +176,139 @@ public class TameAutoFollowEvents {
                     STABILIZE_MAX_RETRIES
             ));
         }
+    }
+
+    private static boolean isFollowing(TameData data) {
+        if (data == null) {
+            return false;
+        }
+        if (data.dead) {
+            return false;
+        }
+        CompoundTag snapshot = data.entitySnapshot;
+        if (snapshot != null) {
+            if (snapshot.contains("Sitting") && snapshot.getBoolean("Sitting")) {
+                return false;
+            }
+            if (snapshot.contains("orderedToSit") && snapshot.getBoolean("orderedToSit")) {
+                return false;
+            }
+            int command = extractCommand(snapshot);
+            if (command != Integer.MIN_VALUE) {
+                return command == 2;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isFollowing(TamableAnimal tame) {
+        if (tame instanceof IComandableMob commandable) {
+            return commandable.getCommand() == 2;
+        }
+        return !tame.isOrderedToSit();
+    }
+
+    private static int extractCommand(CompoundTag snapshot) {
+        if (snapshot == null) {
+            return Integer.MIN_VALUE;
+        }
+        String[] keys = {"Command", "command", "PetCommand", "petCommand", "Order", "order", "Mode", "mode"};
+        for (String key : keys) {
+            if (snapshot.contains(key)) {
+                try {
+                    return snapshot.getInt(key);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
+    private static void summonUnloadedFollowingTame(TameData data, ServerPlayer player) {
+        if (data == null || player == null || player.serverLevel() == null) {
+            return;
+        }
+        String typeId = recoverEntityTypeId(data);
+        if (typeId.isBlank()) {
+            return;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(typeId);
+        if (id == null) {
+            return;
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            return;
+        }
+        Entity spawned = entityType.create(player.serverLevel());
+        if (!(spawned instanceof TamableAnimal tame)) {
+            return;
+        }
+
+        CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
+        try {
+            if (!snapshot.isEmpty()) {
+                tame.load(snapshot);
+            }
+            tame.setUUID(data.uuid);
+            tame.moveTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
+            tame.setDeltaMovement(Vec3.ZERO);
+            enforceTamedOwnerPreserveCollar(tame, data.ownerUUID);
+            TameRegistry.bindEntityToData(tame, data);
+            tame.setTarget(null);
+            tame.getNavigation().stop();
+            tame.setOrderedToSit(false);
+            if (tame.isNoAi()) {
+                tame.setNoAi(false);
+            }
+            TameGoalInstaller.installIfMissing(tame);
+            if (!player.serverLevel().addFreshEntity(tame)) {
+                return;
+            }
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
+            stabilizeTameAfterDimensionFollow(tame, player);
+            data.lastKnownDimension = player.serverLevel().dimension().location().toString();
+            data.lastKnownX = tame.blockPosition().getX();
+            data.lastKnownY = tame.blockPosition().getY();
+            data.lastKnownZ = tame.blockPosition().getZ();
+            data.lastKnownGameTime = player.serverLevel().getGameTime();
+            CompoundTag refreshedSnapshot = new CompoundTag();
+            TameRegistry.bindEntityToData(tame, data);
+            tame.save(refreshedSnapshot);
+            data.entitySnapshot = refreshedSnapshot;
+            TameRegistry.markDirty();
+            STABILIZE_FOLLOW.put(tame.getUUID(), new StabilizeFollow(
+                    player.getUUID(),
+                    serverTick + STABILIZE_RETRY_DELAY_TICKS,
+                    STABILIZE_MAX_RETRIES
+            ));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String recoverEntityTypeId(TameData data) {
+        if (data != null && data.entitySnapshot != null && data.entitySnapshot.contains("id")) {
+            String fromSnapshot = data.entitySnapshot.getString("id");
+            if (fromSnapshot != null && !fromSnapshot.isBlank()) {
+                return fromSnapshot.trim().toLowerCase(Locale.ROOT);
+            }
+        }
+        String raw = data == null ? "" : data.type;
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String normalized = raw.trim();
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+            int firstDot = normalized.indexOf('.');
+            if (firstDot > 0 && !normalized.contains(":")) {
+                normalized = normalized.substring(0, firstDot) + ":" + normalized.substring(firstDot + 1);
+            }
+        }
+        if (!normalized.contains(":")) {
+            normalized = "minecraft:" + normalized;
+        }
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     private static TamableAnimal cloneAcrossDimension(TamableAnimal tame, ServerPlayer player) {

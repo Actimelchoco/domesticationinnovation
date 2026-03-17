@@ -13,9 +13,11 @@ import com.github.alexthe668.domesticationinnovation.server.misc.*;
 import com.github.alexthe668.domesticationinnovation.server.misc.trades.*;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProjectileTimeoutEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePortalStabilizeEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProtectionEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameRenameEvents;
@@ -116,7 +118,8 @@ public class CommonProxy {
     private static final Pattern NUMERIC_SUFFIX = Pattern.compile("^(.*?)(?:\\s+(\\d+))?$");
     private static final UUID FROST_FANG_SLOW = UUID.fromString("1eaf83ff-7207-4596-b37a-d7a07b3ec4cf");
     private static final TargetingConditions ZOMBIE_TARGET = TargetingConditions.forCombat().range(32.0D);
-    private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE = 12.0D;
+    private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_BASE = 5.0D;
+    private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_PER_LEVEL = 1.5D;
     // Pets queued for cross-dimension transfer. Entries stay queued until owner is in target dimension.
     public static List<PendingPetTeleport> teleportingPets = new ArrayList<>();
 
@@ -156,6 +159,7 @@ public class CommonProxy {
         DomesticationMod.LOGGER.info("Registering TL integration handlers in DomesticationMod.");
         MinecraftForge.EVENT_BUS.register(TameCombatEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
+        MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePersistenceEvents.class);
         MinecraftForge.EVENT_BUS.register(TameRenameEvents.class);
@@ -164,6 +168,7 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameCommands.class);
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
+        MinecraftForge.EVENT_BUS.register(TameProjectileTimeoutEvents.class);
     }
 
     public void serverInit() {
@@ -602,7 +607,8 @@ public class CommonProxy {
                         blocking = mob.getTarget();
                         blockingFrom = mob;
                     } else if (TameableUtils.getOwnerOf(mob) instanceof LivingEntity owner) {
-                        boolean ownerNearby = mob.distanceToSqr(owner) <= PSYCHIC_WALL_OWNER_PROTECT_RANGE * PSYCHIC_WALL_OWNER_PROTECT_RANGE;
+                        double ownerProtectRange = PSYCHIC_WALL_OWNER_PROTECT_RANGE_BASE + Math.max(0, psychicWallLevel - 1) * PSYCHIC_WALL_OWNER_PROTECT_RANGE_PER_LEVEL;
+                        boolean ownerNearby = mob.distanceToSqr(owner) <= ownerProtectRange * ownerProtectRange;
                         if (ownerNearby && owner.getLastHurtByMob() != null && owner.getLastHurtByMob().isAlive() && !TameableUtils.hasSameOwnerAs(mob, owner.getLastHurtByMob())) {
                             blocking = owner.getLastHurtByMob();
                             blockingFrom = owner;
@@ -628,7 +634,7 @@ public class CommonProxy {
                         wall.setLifespan(psychicWallLevel * 100);
                         wall.setWallDirection(dir);
                         mob.level().addFreshEntity(wall);
-                        TameableUtils.setPsychicWallCooldown(mob, psychicWallLevel * 200 + 40);
+                        TameableUtils.setPsychicWallCooldown(mob, psychicWallLevel * 260 + 60);
                         debugDiAbilityUse(mob, "psychic_wall");
                     }
                 }

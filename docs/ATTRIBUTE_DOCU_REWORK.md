@@ -11,7 +11,7 @@ It is a design document, not the current implementation.
   - fixed level-based values
   - percentages
   - proc chances
-  - durations
+  - edurations
   - caps
 - If an attribute still uses an offensive stat hook, it should prefer stored TamesLevel `damage bonus`, not actual live damage.
 
