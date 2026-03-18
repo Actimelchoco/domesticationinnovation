@@ -10,6 +10,7 @@ import java.util.UUID;
 public class DrumBlockEntity extends BlockEntity {
 
     private UUID placerUUID;
+    private String selectorName = "Drum";
 
     public DrumBlockEntity(BlockPos pos, BlockState state) {
         super(DITileEntityRegistry.DRUM.get(), pos, state);
@@ -23,11 +24,23 @@ public class DrumBlockEntity extends BlockEntity {
         this.placerUUID = placerUUID;
     }
 
+    public String getSelectorName() {
+        return selectorName == null || selectorName.isBlank() ? "Drum" : selectorName;
+    }
+
+    public void setSelectorName(String selectorName) {
+        this.selectorName = selectorName == null || selectorName.isBlank() ? "Drum" : selectorName;
+        setChanged();
+    }
+
     @Override
     public void load(CompoundTag compound) {
         super.load(compound);
         if (compound.contains("PlacerUUID")) {
             this.placerUUID = compound.getUUID("PlacerUUID");
+        }
+        if (compound.contains("SelectorName")) {
+            this.selectorName = compound.getString("SelectorName");
         }
     }
 
@@ -37,5 +50,6 @@ public class DrumBlockEntity extends BlockEntity {
         if (this.placerUUID != null) {
             compound.putUUID("PlacerUUID", placerUUID);
         }
+        compound.putString("SelectorName", getSelectorName());
     }
 }

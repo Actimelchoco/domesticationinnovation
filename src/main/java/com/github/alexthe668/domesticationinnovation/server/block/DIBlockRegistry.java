@@ -9,6 +9,7 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 import com.github.alexthe668.domesticationinnovation.server.item.DIBlockItem;
+import com.github.alexthe668.domesticationinnovation.server.item.DrumItem;
 
 import java.util.function.Supplier;
 
@@ -33,7 +34,7 @@ public class DIBlockRegistry {
     public static final RegistryObject<Block> RED_PET_BED = registerBlockAndItem("pet_bed_red", () -> new PetBedBlock("red", DyeColor.RED));
     public static final RegistryObject<Block> BLACK_PET_BED = registerBlockAndItem("pet_bed_black", () -> new PetBedBlock("black", DyeColor.BLACK));
 
-    public static final RegistryObject<Block> DRUM = registerBlockAndItem("drum", () -> new DrumBlock());
+    public static final RegistryObject<Block> DRUM = registerBlockAndCustomItem("drum", () -> new DrumBlock(), DrumItem::new);
 
     public static final RegistryObject<Block> WAYWARD_LANTERN = registerBlockAndItem("wayward_lantern", () -> new WaywardLanternBlock());
 
@@ -41,6 +42,18 @@ public class DIBlockRegistry {
     public static RegistryObject<Block> registerBlockAndItem(String name, Supplier<Block> block){
         RegistryObject<Block> blockObj = DEF_REG.register(name, block);
         DIItemRegistry.DEF_REG.register(name, () -> new DIBlockItem(blockObj, new Item.Properties()));
+        return blockObj;
+    }
+
+    public static RegistryObject<Block> registerBlockAndItem(String name, Supplier<Block> block, Supplier<Item> itemFactory){
+        RegistryObject<Block> blockObj = DEF_REG.register(name, block);
+        DIItemRegistry.DEF_REG.register(name, itemFactory);
+        return blockObj;
+    }
+
+    public static RegistryObject<Block> registerBlockAndCustomItem(String name, Supplier<Block> block, java.util.function.BiFunction<RegistryObject<Block>, Item.Properties, Item> itemFactory){
+        RegistryObject<Block> blockObj = DEF_REG.register(name, block);
+        DIItemRegistry.DEF_REG.register(name, () -> itemFactory.apply(blockObj, new Item.Properties()));
         return blockObj;
     }
 }

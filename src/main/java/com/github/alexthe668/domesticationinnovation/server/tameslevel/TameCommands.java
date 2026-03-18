@@ -446,6 +446,18 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                         .executes(ctx -> reincarnatePet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("reincarnation")
+                                .executes(ctx -> reincarnationOverview(ctx.getSource()))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> reincarnateBatchAll(ctx.getSource())))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> reincarnateBatchGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> reincarnateBatchType(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                         .then(Commands.literal("graveyard")
                                 .executes(ctx -> graveyard(ctx.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -886,6 +898,31 @@ public class TameCommands {
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .executes(ctx -> guardianDeploySet(ctx.getSource(), StringArgumentType.getString(ctx, "setName")))))
+                                .then(Commands.literal("capture")
+                                        .then(Commands.argument("setName", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> guardianCaptureCurrentAll(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), false))
+                                                        .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
+                                                                .executes(ctx -> guardianCaptureCurrentAll(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent")))))
+                                                .then(Commands.literal("group")
+                                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                                .executes(ctx -> guardianCaptureCurrentGroup(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
+                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
+                                                                        .executes(ctx -> guardianCaptureCurrentGroup(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))
+                                                .then(Commands.literal("type")
+                                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                                .executes(ctx -> guardianCaptureCurrentType(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
+                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
+                                                                        .executes(ctx -> guardianCaptureCurrentType(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))
+                                                .then(Commands.literal("state")
+                                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                                .executes(ctx -> guardianCaptureCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
+                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
+                                                                        .executes(ctx -> guardianCaptureCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))))
                                 .then(Commands.literal("info")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
@@ -1159,9 +1196,6 @@ public class TameCommands {
                                 .then(Commands.literal("enemyKilled")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                .then(Commands.literal("attributeUsed")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugAttributeUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
@@ -1227,6 +1261,9 @@ public class TameCommands {
                                         .then(Commands.literal("abilityUsed")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugAbilityUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("attributeUsed")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDebugAttributeUsed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                         .then(Commands.literal("perf")
                                                 .executes(ctx -> adminPerfStatus(ctx.getSource()))
                                                 .then(Commands.literal("start")
@@ -2553,6 +2590,109 @@ public class TameCommands {
                 "Reincarnated " + data.name + " from level " + fromLevel + " to level " + targetLevel + " for " + payment.label + "."
         ).withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int reincarnationOverview(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> eligible = eligibleReincarnationTames(player.getUUID());
+        if (eligible.isEmpty()) {
+            return error(player, "No reincarnation-eligible tames found.");
+        }
+        eligible.sort(Comparator
+                .comparingInt((TameData data) -> highestRecordedLevel(data)).reversed()
+                .thenComparing(data -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT)));
+        player.sendSystemMessage(Component.literal("---- Reincarnation Eligible (" + eligible.size() + ") ----").withStyle(ChatFormatting.GOLD));
+        for (TameData data : eligible) {
+            player.sendSystemMessage(Component.literal(
+                    data.name + "[" + data.level + "] -> " + highestRecordedLevel(data) + " (" + LevelSystem.reincarnationXpCost(data) + "xp)"
+            ).withStyle(ChatFormatting.AQUA));
+        }
+        return 1;
+    }
+
+    private static int reincarnateBatchAll(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedTames(player.getUUID())), "all");
+    }
+
+    private static int reincarnateBatchGroup(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedGroup(player.getUUID(), group)), "group " + group);
+    }
+
+    private static int reincarnateBatchType(CommandSourceStack source, String typeFilter) {
+        ServerPlayer player = source.getPlayer();
+        return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedType(player.getUUID(), typeFilter)), "type " + typeFilter);
+    }
+
+    private static int reincarnateBatch(CommandSourceStack source, List<TameData> requested, String label) {
+        ServerPlayer player = source.getPlayer();
+        if (requested.isEmpty()) {
+            return error(player, "No loaded reincarnation-eligible tames found for " + label + ".");
+        }
+        int totalXpCost = 0;
+        int totalApprovedItems = 0;
+        int totalLevelsRestored = 0;
+        List<TamableAnimal> loaded = new ArrayList<>();
+        List<TameData> applicable = new ArrayList<>();
+        for (TameData data : requested) {
+            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            loaded.add(tame);
+            applicable.add(data);
+            totalXpCost += LevelSystem.reincarnationXpCost(data);
+            int restoredLevels = Math.max(0, data.savedLevel - data.level);
+            totalApprovedItems += Math.max(1, restoredLevels);
+            totalLevelsRestored += restoredLevels;
+        }
+        if (loaded.isEmpty()) {
+            return error(player, "No loaded reincarnation-eligible tames found for " + label + ".");
+        }
+        PaymentResult preview = previewPayment(player, totalXpCost, totalApprovedItems, true, "reincarnation batch");
+        if (!preview.success) {
+            return error(player, preview.error);
+        }
+        PaymentResult payment = tryConsumePayment(player, totalXpCost, totalApprovedItems, true, "reincarnation batch");
+        if (!payment.success) {
+            return error(player, payment.error);
+        }
+        int restored = 0;
+        for (int i = 0; i < loaded.size(); i++) {
+            TamableAnimal tame = loaded.get(i);
+            TameData data = applicable.get(i);
+            if (LevelSystem.restoreHighestProgressWithoutXpCost(tame, data)) {
+                restored++;
+            }
+        }
+        player.sendSystemMessage(Component.literal(
+                "Reincarnated " + restored + " tame(s) for " + payment.label + " (" + totalLevelsRestored + " total level(s) restored)."
+        ).withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static List<TameData> eligibleReincarnationTames(UUID ownerUuid) {
+        List<TameData> eligible = new ArrayList<>();
+        for (TameData data : ownedTames(ownerUuid)) {
+            if (data == null || data.dead) continue;
+            if (!isReincarnationEligible(data)) continue;
+            eligible.add(data);
+        }
+        return eligible;
+    }
+
+    private static List<TameData> eligibleLoadedReincarnationTames(CommandSourceStack source, UUID ownerUuid, List<TameData> requested) {
+        List<TameData> eligible = new ArrayList<>();
+        for (TameData data : requested) {
+            if (data == null || data.dead) continue;
+            if (!ownerUuid.equals(data.ownerUUID)) continue;
+            if (!isReincarnationEligible(data)) continue;
+            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+            if (tame == null || !tame.isAlive()) continue;
+            eligible.add(data);
+        }
+        return eligible;
     }
 
     private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose) {
@@ -4050,6 +4190,70 @@ public class TameCommands {
         return 1;
     }
 
+    private static int guardianCaptureCurrentAll(CommandSourceStack source, String setName, boolean includeInactiveCurrent) {
+        ServerPlayer player = source.getPlayer();
+        return guardianCaptureCurrent(source, setName, ownedTames(player.getUUID()), includeInactiveCurrent, "all");
+    }
+
+    private static int guardianCaptureCurrentGroup(CommandSourceStack source, String setName, String group, boolean includeInactiveCurrent) {
+        ServerPlayer player = source.getPlayer();
+        return guardianCaptureCurrent(source, setName, ownedGroup(player.getUUID(), group), includeInactiveCurrent, "group '" + group + "'");
+    }
+
+    private static int guardianCaptureCurrentType(CommandSourceStack source, String setName, String typeFilter, boolean includeInactiveCurrent) {
+        ServerPlayer player = source.getPlayer();
+        return guardianCaptureCurrent(source, setName, ownedType(player.getUUID(), typeFilter), includeInactiveCurrent, "type '" + typeFilter + "'");
+    }
+
+    private static int guardianCaptureCurrentState(CommandSourceStack source, String setName, String stateName, boolean includeInactiveCurrent) {
+        ServerPlayer player = source.getPlayer();
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
+        List<TameData> selected = new ArrayList<>();
+        for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null) {
+                selected.add(data);
+            }
+        }
+        return guardianCaptureCurrent(source, setName, selected, includeInactiveCurrent, "loaded " + movementLabel(order));
+    }
+
+    private static int guardianCaptureCurrent(CommandSourceStack source, String setName, List<TameData> selected, boolean includeInactiveCurrent, String label) {
+        ServerPlayer player = source.getPlayer();
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
+        if (selected == null || selected.isEmpty()) return error(player, "No tames found for " + label + ".");
+
+        int captured = 0;
+        int skippedNoAnchor = 0;
+        int skippedInactive = 0;
+        for (TameData data : selected) {
+            if (data == null || data.dead || !data.hasHome) {
+                skippedNoAnchor++;
+                continue;
+            }
+            boolean loadedAlive = isTameLoadedAnywhere(source.getServer(), data);
+            if (!includeInactiveCurrent && !loadedAlive) {
+                skippedInactive++;
+                continue;
+            }
+            putGuardianSetAnchor(data, normalizedSet, data.homeDimension, data.homeX, data.homeY, data.homeZ);
+            captured++;
+        }
+        if (captured <= 0) {
+            return error(player, "No current guardian anchors captured for " + label + ".");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal(
+                "Captured " + captured + " current guardian anchor(s) into set '" + normalizedSet + "' from " + label
+                        + (includeInactiveCurrent ? " (including inactive current)." : ".")
+                        + (skippedInactive > 0 ? " Skipped inactive current: " + skippedInactive + "." : "")
+                        + (skippedNoAnchor > 0 ? " Skipped without current anchor: " + skippedNoAnchor + "." : "")
+        ).withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
     private static int guardianDeploySet(CommandSourceStack source, String setName) {
         ServerPlayer player = source.getPlayer();
         String normalizedSet = normalizeGuardianSetName(setName);
@@ -4158,6 +4362,353 @@ public class TameCommands {
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Removed " + d.name + " from all groups."));
         return 1;
+    }
+
+    public static int drumIssueMovementCommand(ServerPlayer player, ItemStack drum, int command) {
+        List<TamableAnimal> selected = drumSelectedLoadedTames(player, drum);
+        return drumApplyMovementCommand(player, selected, command);
+    }
+
+    public static int drumIssueMovementCommand(ServerPlayer player, String selectorName, int command) {
+        List<TamableAnimal> selected = drumSelectedLoadedTames(player, selectorName);
+        return drumApplyMovementCommand(player, selected, command);
+    }
+
+    private static int drumApplyMovementCommand(ServerPlayer player, List<TamableAnimal> selected, int command) {
+        MovementOrder order = switch (command) {
+            case 1 -> MovementOrder.SIT;
+            case 2 -> MovementOrder.FOLLOW;
+            default -> MovementOrder.WANDER;
+        };
+        int count = 0;
+        for (TamableAnimal tame : selected) {
+            if (tame == null || !tame.isAlive()) continue;
+            applyMovementOverride(tame, order);
+            count++;
+        }
+        return count;
+    }
+
+    public static int drumCyclePlacedMode(ServerPlayer player, String selectorName) {
+        List<TameData> selected = drumSelectedTameData(player, selectorName);
+        if (selected.isEmpty()) {
+            return 0;
+        }
+        int nextModeId = switch (TameMode.byId(selected.get(0).mode)) {
+            case DEFAULT -> TameMode.BODYGUARD.id();
+            case BODYGUARD -> TameMode.MONSTER_HUNTER.id();
+            case MONSTER_HUNTER -> TameMode.AGGRESSIVE.id();
+            case AGGRESSIVE -> TameMode.PASSIVE.id();
+            default -> TameMode.DEFAULT.id();
+        };
+        for (TameData data : selected) {
+            data.mode = nextModeId;
+        }
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Drum: mode -> " + TameMode.byId(nextModeId).key() + " (" + selected.size() + ")").withStyle(ChatFormatting.GREEN), true);
+        return selected.size();
+    }
+
+    public static int drumClearGroupSelector(ServerPlayer player, String selectorName) {
+        DrumSelector selector = parseDrumSelector(selectorName);
+        if (selector.kind != DrumSelectorKind.GROUP) {
+            return 0;
+        }
+        int count = 0;
+        for (TameData data : ownedGroup(player.getUUID(), selector.value)) {
+            data.group = "";
+            count++;
+        }
+        if (count > 0) {
+            TameRegistry.markDirty();
+            player.sendSystemMessage(Component.literal("Drum: removed " + count + " tame(s) from group " + selector.value + ".").withStyle(ChatFormatting.RED));
+        }
+        return count;
+    }
+
+    public static void drumReportSelector(ServerPlayer player, String selectorName) {
+        List<TameData> selected = drumSelectedTameData(player, selectorName);
+        player.sendSystemMessage(Component.literal("---- Drum Report: " + selectorName + " ----").withStyle(ChatFormatting.GOLD));
+        if (selected.isEmpty()) {
+            player.sendSystemMessage(Component.literal("No matching tames.").withStyle(ChatFormatting.GRAY));
+            return;
+        }
+        for (TameData data : selected) {
+            String guard = data.hasHome
+                    ? data.homeDimension + " " + data.homeX + " " + data.homeY + " " + data.homeZ
+                    : "-";
+            player.sendSystemMessage(Component.literal("[" + data.level + "] " + data.name
+                    + "  mode:" + TameMode.byId(data.mode).key()
+                    + "  group:" + (data.group == null || data.group.isBlank() ? "-" : data.group)
+                    + "  guard:" + guard).withStyle(ChatFormatting.AQUA));
+        }
+    }
+
+    public static int drumClearTargets(ServerPlayer player, ItemStack drum) {
+        int count = 0;
+        for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            tame.setTarget(null);
+            count++;
+        }
+        if (count > 0) {
+            player.displayClientMessage(Component.literal("Drum: cleared targets for " + count + " tame(s).").withStyle(ChatFormatting.YELLOW), true);
+        }
+        return count;
+    }
+
+    public static int drumSetTargets(ServerPlayer player, ItemStack drum, LivingEntity target) {
+        int count = 0;
+        for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            if (tame == target) continue;
+            tame.setTarget(target);
+            count++;
+        }
+        if (count > 0) {
+            player.displayClientMessage(Component.literal("Drum: targeted " + target.getName().getString() + " with " + count + " tame(s).").withStyle(ChatFormatting.RED), true);
+        }
+        return count;
+    }
+
+    public static boolean drumAddGroupTarget(ServerPlayer player, ItemStack drum, TamableAnimal tame) {
+        DrumSelector selector = parseDrumSelector(drum);
+        if (selector.kind != DrumSelectorKind.GROUP) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) return false;
+        data.group = selector.value;
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Drum: added " + data.name + " to group " + selector.value + ".").withStyle(ChatFormatting.GREEN), true);
+        return true;
+    }
+
+    public static boolean drumRemoveGroupTarget(ServerPlayer player, ItemStack drum, TamableAnimal tame) {
+        DrumSelector selector = parseDrumSelector(drum);
+        if (selector.kind != DrumSelectorKind.GROUP) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null || data.group == null || data.group.isBlank()) return false;
+        if (!data.group.equalsIgnoreCase(selector.value)) return false;
+        data.group = "";
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Drum: removed " + data.name + " from group " + selector.value + ".").withStyle(ChatFormatting.YELLOW), true);
+        return true;
+    }
+
+    public static String drumCommandLabel(int command) {
+        return switch (command) {
+            case 1 -> "Sit";
+            case 2 -> "Follow";
+            default -> "Wander";
+        };
+    }
+
+    public static int drumSetGuardianAnchor(ServerPlayer player, ItemStack drum, BlockPos pos) {
+        int count = 0;
+        String dimensionId = player.serverLevel().dimension().location().toString();
+        for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) continue;
+            rememberCurrentGuardianAnchor(data);
+            applyGuardianAnchor(dimensionId, pos.getX(), pos.getY(), pos.getZ(), tame, data);
+            count++;
+        }
+        if (count > 0) {
+            player.displayClientMessage(Component.literal("Drum: set guard location for " + count + " tame(s).").withStyle(ChatFormatting.DARK_AQUA), true);
+        }
+        return count;
+    }
+
+    public static List<UUID> drumStartMoveAndSitPassive(ServerPlayer player, ItemStack drum, BlockPos pos) {
+        List<UUID> moved = new ArrayList<>();
+        for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) continue;
+            data.mode = TameMode.PASSIVE.id();
+            tame.setOrderedToSit(false);
+            tame.setTarget(null);
+            tame.getNavigation().stop();
+            clearGuardianAnchor(data);
+            clearExternalWanderingState(tame, MovementOrder.FOLLOW);
+            tame.getNavigation().moveTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 1.15D);
+            moved.add(tame.getUUID());
+        }
+        if (!moved.isEmpty()) {
+            TameRegistry.markDirty();
+            player.displayClientMessage(Component.literal("Drum: moving " + moved.size() + " tame(s) to sit there passively.").withStyle(ChatFormatting.AQUA), true);
+        }
+        return moved;
+    }
+
+    public static void drumFinalizePassiveSit(TamableAnimal tame) {
+        if (tame == null) return;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data != null) {
+            data.mode = TameMode.PASSIVE.id();
+        }
+        applyMovementOverride(tame, MovementOrder.SIT);
+        if (data != null) {
+            TameRegistry.markDirty();
+        }
+    }
+
+    public static int drumTeleportToBlock(ServerPlayer player, ItemStack drum, BlockPos pos) {
+        SpawnTarget target = new SpawnTarget(player.serverLevel(), new Vec3(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D), player.getYRot(), player.getXRot());
+        return drumTeleportBatchToTarget(player, drumSelectedTameData(player, drum), target, "Drum TP");
+    }
+
+    public static int drumTeleportHome(ServerPlayer player, ItemStack drum) {
+        return teleportHomeBatch(player.createCommandSourceStack(), player, drumSelectedTameData(player, drum), "Drum TPHome", 0);
+    }
+
+    private static int drumTeleportBatchToTarget(ServerPlayer player, List<TameData> requested, SpawnTarget target, String label) {
+        CommandSourceStack source = player.createCommandSourceStack();
+        List<TamableAnimal> loadedTargets = new ArrayList<>();
+        List<SpawnTarget> loadedDestinations = new ArrayList<>();
+        List<TameData> unloadedTargets = new ArrayList<>();
+        List<SpawnTarget> unloadedDestinations = new ArrayList<>();
+        int queued = 0;
+        int queueFailed = 0;
+        int cost = 0;
+        int crossDimension = 0;
+        List<String> failedNames = new ArrayList<>();
+
+        for (TameData data : requested) {
+            if (data == null || data.uuid == null || data.dead) continue;
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+            if (tame == null) {
+                String queueError = validateUnloadedHomeTeleport(source, player, data, target);
+                if (queueError != null) {
+                    queueFailed++;
+                    failedNames.add((data.name == null ? "unknown" : data.name) + " (" + queueError + ")");
+                    continue;
+                }
+                unloadedTargets.add(data);
+                unloadedDestinations.add(target);
+                boolean cross = data.lastKnownDimension != null
+                        && !data.lastKnownDimension.isBlank()
+                        && !target.level.dimension().location().toString().equals(data.lastKnownDimension);
+                cost += teleportCostFor(data, cross);
+                if (cross) crossDimension++;
+                continue;
+            }
+            boolean cross = !tame.level().dimension().equals(target.level.dimension());
+            loadedTargets.add(tame);
+            loadedDestinations.add(target);
+            cost += teleportCostFor(data, cross);
+            if (cross) crossDimension++;
+        }
+
+        if (!payTeleportXp(player, cost)) return 0;
+        for (int i = 0; i < loadedTargets.size(); i++) {
+            teleportTameToLocation(loadedTargets.get(i), loadedDestinations.get(i));
+        }
+        for (int i = 0; i < unloadedTargets.size(); i++) {
+            UnloadedTpResult unloaded = tpUnloadedHomeViaLanternOrRecover(source, player, unloadedTargets.get(i), unloadedDestinations.get(i));
+            if (unloaded.success) {
+                queued++;
+            } else {
+                queueFailed++;
+                failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
+            }
+        }
+        sendTeleportSummary(player, label, loadedTargets.size(), queued, 0, queueFailed, cost, crossDimension);
+        if (!failedNames.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Drum tp failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
+        }
+        return 1;
+    }
+
+    private enum DrumSelectorKind {
+        ALL,
+        SINGLE,
+        GROUP,
+        TYPE
+    }
+
+    private record DrumSelector(DrumSelectorKind kind, String value) {
+    }
+
+    private static DrumSelector parseDrumSelector(ItemStack drum) {
+        if (drum == null || drum.isEmpty() || !drum.hasCustomHoverName()) {
+            return new DrumSelector(DrumSelectorKind.ALL, "");
+        }
+        return parseDrumSelector(drum.getHoverName().getString());
+    }
+
+    private static DrumSelector parseDrumSelector(String rawText) {
+        String raw = rawText == null ? "" : rawText.trim();
+        if (raw.isBlank() || raw.equalsIgnoreCase("Drum")) {
+            return new DrumSelector(DrumSelectorKind.ALL, "");
+        }
+        String lower = raw.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("group ")) {
+            String value = raw.substring("group ".length()).trim();
+            return value.isBlank() ? new DrumSelector(DrumSelectorKind.ALL, "") : new DrumSelector(DrumSelectorKind.GROUP, value);
+        }
+        if (lower.startsWith("type ")) {
+            String value = raw.substring("type ".length()).trim();
+            return value.isBlank() ? new DrumSelector(DrumSelectorKind.ALL, "") : new DrumSelector(DrumSelectorKind.TYPE, value);
+        }
+        return new DrumSelector(DrumSelectorKind.SINGLE, raw);
+    }
+
+    private static List<TamableAnimal> drumSelectedLoadedTames(ServerPlayer player, ItemStack drum) {
+        CommandSourceStack source = player.createCommandSourceStack();
+        DrumSelector selector = parseDrumSelector(drum);
+        return drumSelectedLoadedTames(player, source, selector);
+    }
+
+    private static List<TamableAnimal> drumSelectedLoadedTames(ServerPlayer player, String selectorName) {
+        CommandSourceStack source = player.createCommandSourceStack();
+        DrumSelector selector = parseDrumSelector(selectorName);
+        return drumSelectedLoadedTames(player, source, selector);
+    }
+
+    private static List<TamableAnimal> drumSelectedLoadedTames(ServerPlayer player, CommandSourceStack source, DrumSelector selector) {
+        return switch (selector.kind) {
+            case ALL -> loadedOwnedAllTames(source, player.getUUID());
+            case GROUP -> loadedOwnedGroupTames(source, player.getUUID(), selector.value);
+            case TYPE -> {
+                List<TamableAnimal> list = new ArrayList<>();
+                for (TameData data : ownedType(player.getUUID(), selector.value)) {
+                    TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+                    if (tame != null && tame.isAlive()) {
+                        list.add(tame);
+                    }
+                }
+                yield list;
+            }
+            case SINGLE -> {
+                TameData data = findOwnedTame(player.getUUID(), selector.value);
+                if (data == null) {
+                    yield List.of();
+                }
+                TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+                yield tame == null || !tame.isAlive() ? List.of() : List.of(tame);
+            }
+        };
+    }
+
+    private static List<TameData> drumSelectedTameData(ServerPlayer player, ItemStack drum) {
+        DrumSelector selector = parseDrumSelector(drum);
+        return drumSelectedTameData(player, selector);
+    }
+
+    private static List<TameData> drumSelectedTameData(ServerPlayer player, String selectorName) {
+        DrumSelector selector = parseDrumSelector(selectorName);
+        return drumSelectedTameData(player, selector);
+    }
+
+    private static List<TameData> drumSelectedTameData(ServerPlayer player, DrumSelector selector) {
+        return switch (selector.kind) {
+            case ALL -> ownedTames(player.getUUID());
+            case GROUP -> ownedGroup(player.getUUID(), selector.value);
+            case TYPE -> ownedType(player.getUUID(), selector.value);
+            case SINGLE -> {
+                TameData data = findOwnedTame(player.getUUID(), selector.value);
+                yield data == null ? List.of() : List.of(data);
+            }
+        };
     }
 
     private static int groupTames(CommandSourceStack source, String group) {
