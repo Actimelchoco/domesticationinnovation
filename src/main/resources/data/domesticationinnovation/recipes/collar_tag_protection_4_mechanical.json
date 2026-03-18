@@ -1,62 +1,29 @@
 {
-  "type": "create:mechanical_crafting",
-  "acceptMirrored": false,
+  "type": "minecraft:crafting_shaped",
   "pattern": [
-    "NKBPU",
-    "WMGTW",
-    "PSYSP",
-    "WDSTW",
-    "CKOPX"
+    "CNC",
+    "HPH",
+    "CEC"
   ],
   "key": {
-    "Y": {
-      "type": "forge:nbt",
-      "item": "domesticationinnovation:collar_tag",
-      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:3s}]}"
-    },
-    "B": {
-      "type": "forge:nbt",
-      "item": "minecraft:enchanted_book",
-      "nbt": "{StoredEnchantments:[{id:\"minecraft:protection\",lvl:4s}]}"
-    },
-    "O": {
-      "item": "born_in_chaos_v1:orbofthe_summoner"
+    "C": {
+      "item": "minecraft:crying_obsidian"
     },
     "N": {
       "item": "minecraft:netherite_ingot"
     },
-    "K": {
-      "item": "dungeonnowloading:skull_of_chaos"
+    "H": {
+      "tag": "domesticationinnovation:any_horse_armor"
     },
     "P": {
-      "item": "create:precision_mechanism"
+      "type": "forge:nbt",
+      "item": "domesticationinnovation:collar_tag",
+      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:3s}]}"
     },
-    "U": {
-      "item": "minecraft:netherite_upgrade_smithing_template"
-    },
-    "W": {
-      "item": "minecraft:wither_skeleton_skull"
-    },
-    "M": {
-      "item": "farmersdelight:pasta_with_meatballs"
-    },
-    "G": {
-      "item": "minecraft:ghast_tear"
-    },
-    "T": {
-      "item": "minecraft:totem_of_undying"
-    },
-    "D": {
-      "item": "create:sturdy_sheet"
-    },
-    "S": {
-      "item": "minecraft:slime_block"
-    },
-    "X": {
-      "item": "undergarden:utherium_block"
-    },
-    "C": {
-      "item": "deeperdarker:warden_carapace"
+    "E": {
+      "type": "forge:nbt",
+      "item": "minecraft:enchanted_book",
+      "nbt": "{StoredEnchantments:[{id:\"minecraft:protection\",lvl:4s}]}"
     }
   },
   "result": {

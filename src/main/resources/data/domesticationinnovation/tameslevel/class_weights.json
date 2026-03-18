@@ -17,6 +17,7 @@
   },
   "classes": {
     "assassin": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -74,6 +75,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "blaze": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -98,6 +100,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "bee": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -118,6 +121,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "creeper": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -146,6 +150,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "disco": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -164,6 +169,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "dps": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 96.0,
         "attribute": 3.0,
@@ -194,6 +200,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "enderman": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -220,6 +227,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "dolphin": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -241,6 +249,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "evoker": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -258,6 +267,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "fisher": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -293,6 +303,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "guardian": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -323,6 +334,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "ghast": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -341,6 +353,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "healer": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -374,6 +387,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "mage": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -404,6 +418,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "iron_golem": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -437,6 +452,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "protector": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -472,6 +488,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "phantom": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -494,6 +511,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "piglin": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -511,6 +529,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "shooter": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -547,6 +566,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "shulker": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -573,6 +593,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "slime": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -595,6 +616,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "skeleton": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -627,6 +649,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "speedster": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -654,6 +677,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "spider": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -675,6 +699,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "supporter": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -709,6 +734,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "tanker": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -746,6 +772,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "witch": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 85.0,
         "attribute": 10.0,
@@ -767,6 +794,7 @@
       "preferredAbilityWeightMultiplier": 1.0
     },
     "warden": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -797,6 +825,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "wither": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,
@@ -815,6 +844,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "zombie": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 90.0,
         "attribute": 10.0,

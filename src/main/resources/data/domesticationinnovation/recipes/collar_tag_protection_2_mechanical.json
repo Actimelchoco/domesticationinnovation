@@ -1,50 +1,32 @@
 {
-  "type": "create:mechanical_crafting",
-  "acceptMirrored": false,
+  "type": "minecraft:crafting_shaped",
   "pattern": [
-    "RSBSR",
-    "RAQDR",
-    "NRCRN",
-    "RMSFR",
-    "RRORR"
+    "SLS",
+    "ACA",
+    "QEQ"
   ],
   "key": {
+    "S": {
+      "item": "minecraft:slime_block"
+    },
+    "L": {
+      "item": "minecraft:leather"
+    },
+    "A": {
+      "tag": "domesticationinnovation:any_anvil_state"
+    },
     "C": {
       "type": "forge:nbt",
       "item": "domesticationinnovation:collar_tag",
       "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:1s}]}"
     },
-    "B": {
+    "Q": {
+      "item": "minecraft:quartz_block"
+    },
+    "E": {
       "type": "forge:nbt",
       "item": "minecraft:enchanted_book",
       "nbt": "{StoredEnchantments:[{id:\"minecraft:protection\",lvl:2s}]}"
-    },
-    "O": {
-      "item": "born_in_chaos_v1:orbofthe_summoner"
-    },
-    "R": {
-      "item": "additionaladditions:rose_gold_alloy"
-    },
-    "S": {
-      "item": "create:sturdy_sheet"
-    },
-    "N": {
-      "item": "minecraft:nether_quartz"
-    },
-    "A": {
-      "item": "born_in_chaos_v1:soul_star"
-    },
-    "Q": {
-      "item": "minecraft:slime_block"
-    },
-    "D": {
-      "tag": "domesticationinnovation:any_music_disc"
-    },
-    "F": {
-      "item": "farmersdelight:safety_net"
-    },
-    "M": {
-      "item": "create:sturdy_sheet"
     }
   },
   "result": {

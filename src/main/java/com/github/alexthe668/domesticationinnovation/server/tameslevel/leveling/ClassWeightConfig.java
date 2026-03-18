@@ -28,19 +28,22 @@ final class ClassWeightConfig {
         private final Map<String, Double> abilities;
         private final Double preferredAttributeWeightMultiplier;
         private final Double preferredAbilityWeightMultiplier;
+        private final Boolean autoPreferredWeightBalance;
 
         private ClassWeights(CategoryWeights category,
                              Map<String, Double> baseStats,
                              Map<String, Double> attributes,
                              Map<String, Double> abilities,
                              Double preferredAttributeWeightMultiplier,
-                             Double preferredAbilityWeightMultiplier) {
+                             Double preferredAbilityWeightMultiplier,
+                             Boolean autoPreferredWeightBalance) {
             this.category = category;
             this.baseStats = baseStats;
             this.attributes = attributes;
             this.abilities = abilities;
             this.preferredAttributeWeightMultiplier = preferredAttributeWeightMultiplier;
             this.preferredAbilityWeightMultiplier = preferredAbilityWeightMultiplier;
+            this.autoPreferredWeightBalance = autoPreferredWeightBalance;
         }
     }
 
@@ -117,13 +120,17 @@ final class ClassWeightConfig {
             Double classPreferredAbilityWeightMultiplier = classObject.has("preferredAbilityWeightMultiplier")
                     ? classObject.get("preferredAbilityWeightMultiplier").getAsDouble()
                     : null;
+            Boolean autoPreferredWeightBalance = classObject.has("autoPreferredWeightBalance")
+                    ? classObject.get("autoPreferredWeightBalance").getAsBoolean()
+                    : null;
             classes.put(tameClass, new ClassWeights(
                     category,
                     baseStats,
                     attributes,
                     abilities,
                     classPreferredAttributeWeightMultiplier,
-                    classPreferredAbilityWeightMultiplier
+                    classPreferredAbilityWeightMultiplier,
+                    autoPreferredWeightBalance
             ));
         }
 
@@ -222,6 +229,14 @@ final class ClassWeightConfig {
 
     double preferredAbilityWeightMultiplier() {
         return preferredAbilityWeightMultiplier;
+    }
+
+    boolean autoPreferredWeightBalance(TameClass tameClass) {
+        if (tameClass == null) {
+            return false;
+        }
+        ClassWeights weights = classes.get(tameClass);
+        return weights != null && Boolean.TRUE.equals(weights.autoPreferredWeightBalance);
     }
 
     private double classWeight(TameClass tameClass, String rewardId, java.util.function.Function<ClassWeights, Map<String, Double>> mapGetter) {

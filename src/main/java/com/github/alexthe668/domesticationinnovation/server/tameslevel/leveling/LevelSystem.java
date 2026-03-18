@@ -798,6 +798,9 @@ public class LevelSystem {
         if (weight <= 1.0D) {
             return weight;
         }
+        if (CLASS_WEIGHT_CONFIG.autoPreferredWeightBalance(tameClass)) {
+            return weight * automaticPreferredAttributeMultiplier(tameClass);
+        }
         return weight * CLASS_WEIGHT_CONFIG.preferredAttributeWeightMultiplier(tameClass);
     }
 
@@ -805,7 +808,84 @@ public class LevelSystem {
         if (weight <= 1.0D) {
             return weight;
         }
+        if (CLASS_WEIGHT_CONFIG.autoPreferredWeightBalance(tameClass)) {
+            return weight * automaticPreferredAbilityMultiplier(tameClass);
+        }
         return weight * CLASS_WEIGHT_CONFIG.preferredAbilityWeightMultiplier(tameClass);
+    }
+
+    private static double automaticPreferredAttributeMultiplier(TameClass tameClass) {
+        return automaticPreferredMultiplier(
+                tameClass,
+                CLASS_WEIGHT_CONFIG.categoryWeights(tameClass).attribute(),
+                attributePreferredWeightSums(tameClass)
+        );
+    }
+
+    private static double automaticPreferredAbilityMultiplier(TameClass tameClass) {
+        return automaticPreferredMultiplier(
+                tameClass,
+                CLASS_WEIGHT_CONFIG.categoryWeights(tameClass).ability(),
+                abilityPreferredWeightSums(tameClass)
+        );
+    }
+
+    private static double automaticPreferredMultiplier(TameClass tameClass, double categoryWeight, double[] preferredAndNonPreferred) {
+        if (tameClass == null) {
+            return 1.0D;
+        }
+        double preferred = preferredAndNonPreferred[0];
+        double nonPreferred = preferredAndNonPreferred[1];
+        if (preferred <= 0.0D || nonPreferred <= 0.0D || categoryWeight <= 0.0D) {
+            return 1.0D;
+        }
+        double totalCategory = CLASS_WEIGHT_CONFIG.categoryWeights(tameClass).base()
+                + CLASS_WEIGHT_CONFIG.categoryWeights(tameClass).attribute()
+                + CLASS_WEIGHT_CONFIG.categoryWeights(tameClass).ability();
+        if (totalCategory <= 0.0D) {
+            return 1.0D;
+        }
+        double expectedRollsByLevel100 = 99.0D * (categoryWeight / totalCategory);
+        if (expectedRollsByLevel100 <= 0.0D) {
+            return 1.0D;
+        }
+        double targetNonPreferredPerRoll = 1.0D - Math.pow(0.90D, 1.0D / expectedRollsByLevel100);
+        if (targetNonPreferredPerRoll <= 0.0D || targetNonPreferredPerRoll >= 1.0D) {
+            return 1.0D;
+        }
+        double multiplier = (nonPreferred * (1.0D - targetNonPreferredPerRoll)) / (targetNonPreferredPerRoll * preferred);
+        if (Double.isNaN(multiplier) || Double.isInfinite(multiplier) || multiplier <= 0.0D) {
+            return 1.0D;
+        }
+        return multiplier;
+    }
+
+    private static double[] attributePreferredWeightSums(TameClass tameClass) {
+        double preferred = 0.0D;
+        double nonPreferred = 0.0D;
+        for (AttributeReward reward : AttributeReward.values()) {
+            double weight = CLASS_WEIGHT_CONFIG.attributeWeight(tameClass, reward.id);
+            if (weight > 1.0D) {
+                preferred += weight;
+            } else {
+                nonPreferred += Math.max(0.0D, weight);
+            }
+        }
+        return new double[]{preferred, nonPreferred};
+    }
+
+    private static double[] abilityPreferredWeightSums(TameClass tameClass) {
+        double preferred = 0.0D;
+        double nonPreferred = 0.0D;
+        for (AbilityReward reward : AbilityReward.values()) {
+            double weight = CLASS_WEIGHT_CONFIG.abilityWeight(tameClass, reward.id);
+            if (weight > 1.0D) {
+                preferred += weight;
+            } else {
+                nonPreferred += Math.max(0.0D, weight);
+            }
+        }
+        return new double[]{preferred, nonPreferred};
     }
 
     public static void reloadClassWeightConfig() {
