@@ -41,6 +41,7 @@ public class TameBehaviorEvents {
 
         if (data.hasHome) {
             TamePerformanceProfiler.run("behavior.guardian_return_timer", () -> updateGuardianReturnTimer(tame, data));
+            TamePerformanceProfiler.run("behavior.guardian_target_timeout", () -> updateGuardianTargetTimeout(tame, data));
         }
 
         int scanInterval = getBehaviorScanInterval(tame);
@@ -52,7 +53,7 @@ public class TameBehaviorEvents {
         }
 
         if (tame.tickCount % getGuardianReturnInterval(tame) == 0) {
-            TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianReturn(tame, data));
+            TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, data));
         }
 
         TameMode mode = TameMode.byId(data.mode);
@@ -269,6 +270,15 @@ public class TameBehaviorEvents {
         tame.getNavigation().moveTo(targetX, tame.getY(), targetZ, 1.1D);
     }
 
+    private static void handleGuardianMovement(TamableAnimal tame, TameData data) {
+        updateGuardianPhase(tame, data);
+        if (data.guardianRelaxing) {
+            handleGuardianRelaxedWander(tame, data);
+        } else {
+            handleGuardianReturn(tame, data);
+        }
+    }
+
     private static void handleGuardianReturn(TamableAnimal tame, TameData data) {
         if (data == null || !data.hasHome) {
             return;
@@ -290,6 +300,39 @@ public class TameBehaviorEvents {
             return;
         }
         tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
+    }
+
+    private static void handleGuardianRelaxedWander(TamableAnimal tame, TameData data) {
+        if (data == null || !data.hasHome) {
+            return;
+        }
+        if (tame.getTarget() != null && tame.getTarget().isAlive()) {
+            return;
+        }
+        if (data.homeDimension == null || data.homeDimension.isBlank()) {
+            return;
+        }
+        if (!tame.level().dimension().location().toString().equals(data.homeDimension)) {
+            return;
+        }
+        BlockPos home = new BlockPos(data.homeX, data.homeY, data.homeZ);
+        double distanceSqr = tame.distanceToSqr(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D);
+        if (distanceSqr > 12.0D * 12.0D) {
+            tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
+            return;
+        }
+        if (!tame.getNavigation().isDone()) {
+            return;
+        }
+        if (tame.tickCount % 80 != 0) {
+            return;
+        }
+        int radius = 3 + tame.getRandom().nextInt(4);
+        int offsetX = tame.getRandom().nextInt(radius * 2 + 1) - radius;
+        int offsetZ = tame.getRandom().nextInt(radius * 2 + 1) - radius;
+        double targetX = home.getX() + 0.5D + offsetX;
+        double targetZ = home.getZ() + 0.5D + offsetZ;
+        tame.getNavigation().moveTo(targetX, home.getY(), targetZ, 0.95D);
     }
 
     private static void handleCloseOwner(TamableAnimal tame, TameData data) {
@@ -339,6 +382,7 @@ public class TameBehaviorEvents {
         if (data == null || !data.hasHome) {
             return;
         }
+        updateGuardianPhase(tame, data);
         if (tame.getTarget() != null && tame.getTarget().isAlive()) {
             data.guardianReturnTicks = 0;
             return;
@@ -352,7 +396,8 @@ public class TameBehaviorEvents {
         } else {
             BlockPos home = new BlockPos(data.homeX, data.homeY, data.homeZ);
             double distanceSqr = tame.distanceToSqr(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D);
-            if (distanceSqr <= 4.0D) {
+            double allowedRadius = data.guardianRelaxing ? 12.0D : 2.0D;
+            if (distanceSqr <= allowedRadius * allowedRadius) {
                 data.guardianReturnTicks = 0;
                 return;
             }
@@ -373,5 +418,80 @@ public class TameBehaviorEvents {
         tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
         tame.getNavigation().stop();
         data.guardianReturnTicks = 0;
+    }
+
+    private static void updateGuardianTargetTimeout(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !data.hasHome) {
+            return;
+        }
+        LivingEntity target = tame.getTarget();
+        if (target == null || !target.isAlive() || target.level() != tame.level()) {
+            resetGuardianTargetTimeout(data);
+            return;
+        }
+        double distanceSq = tame.distanceToSqr(target);
+        if (data.guardianTargetUuid == null || !data.guardianTargetUuid.equals(target.getUUID())) {
+            data.guardianTargetUuid = target.getUUID();
+            data.guardianTargetStuckTicks = 0;
+            data.guardianTargetBestDistanceSq = distanceSq;
+            TameRegistry.markDirty();
+            return;
+        }
+        if (distanceSq <= 16.0D) {
+            data.guardianTargetStuckTicks = 0;
+            data.guardianTargetBestDistanceSq = distanceSq;
+            return;
+        }
+        if (distanceSq + 4.0D < data.guardianTargetBestDistanceSq) {
+            data.guardianTargetBestDistanceSq = distanceSq;
+            data.guardianTargetStuckTicks = 0;
+            return;
+        }
+        data.guardianTargetStuckTicks++;
+        if (data.guardianTargetStuckTicks < 1200) {
+            return;
+        }
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        data.guardianReturnTicks = 0;
+        resetGuardianTargetTimeout(data);
+        TameRegistry.markDirty();
+    }
+
+    private static void resetGuardianTargetTimeout(TameData data) {
+        if (data == null) {
+            return;
+        }
+        data.guardianTargetUuid = null;
+        data.guardianTargetStuckTicks = 0;
+        data.guardianTargetBestDistanceSq = 0.0D;
+    }
+
+    private static void updateGuardianPhase(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !data.hasHome || tame.level().isClientSide) {
+            return;
+        }
+        long now = tame.level().getGameTime();
+        if (data.guardianNextPhaseTick <= 0L) {
+            data.guardianRelaxing = false;
+            data.guardianNextPhaseTick = now + randomGuardianStrictDuration(tame);
+            TameRegistry.markDirty();
+            return;
+        }
+        if (now < data.guardianNextPhaseTick) {
+            return;
+        }
+        data.guardianRelaxing = !data.guardianRelaxing;
+        data.guardianNextPhaseTick = now + (data.guardianRelaxing ? randomGuardianRelaxDuration(tame) : randomGuardianStrictDuration(tame));
+        data.guardianReturnTicks = 0;
+        TameRegistry.markDirty();
+    }
+
+    private static int randomGuardianStrictDuration(TamableAnimal tame) {
+        return 2400 + tame.getRandom().nextInt(2401);
+    }
+
+    private static int randomGuardianRelaxDuration(TamableAnimal tame) {
+        return 600 + tame.getRandom().nextInt(1801);
     }
 }

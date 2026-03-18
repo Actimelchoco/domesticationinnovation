@@ -1083,7 +1083,7 @@ public class TameAbilityEvents {
         LevelSystem.trackDamage(target, tame);
         applyInternalBonusDamage(target, tame, damage);
         Vec3 motion = target.getDeltaMovement();
-        double launchY = Math.min(2.1D, 0.55D + levelValue * 0.12D);
+        double launchY = scaledSkyLaunchVelocity(levelValue, target);
         target.setDeltaMovement(motion.x * 0.6D, launchY, motion.z * 0.6D);
         target.fallDistance = 0.0F;
         target.hurtMarked = true;
@@ -1091,6 +1091,17 @@ public class TameAbilityEvents {
         level.playSound(null, target.blockPosition(), SoundEvents.PHANTOM_FLAP, SoundSource.HOSTILE, 0.7F, 1.2F);
         setAbilityCooldown(tame, data, "sky_launch", "sky_launch_tick", now, 70L);
         debugAbilityUse(tame, "sky_launch");
+    }
+
+    public static double scaledSkyLaunchVelocity(int levelValue, LivingEntity target) {
+        int safeLevel = Math.max(1, levelValue);
+        double baseLaunch = Math.min(2.1D, 0.55D + safeLevel * 0.12D);
+        if (target == null) {
+            return baseLaunch;
+        }
+        double maxHealth = Math.max(1.0D, target.getMaxHealth());
+        double healthPenalty = 1.0D + (maxHealth / 55.0D);
+        return Math.max(0.03D, baseLaunch / healthPenalty);
     }
 
     private static void applyAttributeDamageBonuses(TamableAnimal tame, TameData data, LivingHurtEvent event) {

@@ -110,14 +110,8 @@ public class TamePersistenceEvents {
     private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean saveLocationTick, boolean saveSnapshotTick) {
         boolean changed = false;
         if (data.dead) {
-            data.dead = false;
-            data.deadGameTime = 0L;
-            data.deadUnixMillis = 0L;
-            data.deathDimension = "";
-            data.deathX = 0;
-            data.deathY = 0;
-            data.deathZ = 0;
-            changed = true;
+            tame.remove(Entity.RemovalReason.DISCARDED);
+            return false;
         }
         if (data.bornDayTime <= 0L) {
             data.bornDayTime = level.getDayTime();

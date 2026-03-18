@@ -61,6 +61,11 @@ public class TameData {
     public int previousHomeY = 0;
     public int previousHomeZ = 0;
     public int guardianReturnTicks = 0;
+    public boolean guardianRelaxing = false;
+    public long guardianNextPhaseTick = 0L;
+    public UUID guardianTargetUuid = null;
+    public int guardianTargetStuckTicks = 0;
+    public double guardianTargetBestDistanceSq = 0.0D;
     public boolean hasPetBed = false;
     public String petBedDimension = "";
     public int petBedX = 0;
@@ -202,6 +207,13 @@ public class TameData {
         tag.putInt("previousHomeY", previousHomeY);
         tag.putInt("previousHomeZ", previousHomeZ);
         tag.putInt("guardianReturnTicks", guardianReturnTicks);
+        tag.putBoolean("guardianRelaxing", guardianRelaxing);
+        tag.putLong("guardianNextPhaseTick", guardianNextPhaseTick);
+        if (guardianTargetUuid != null) {
+            tag.putUUID("guardianTargetUuid", guardianTargetUuid);
+        }
+        tag.putInt("guardianTargetStuckTicks", guardianTargetStuckTicks);
+        tag.putDouble("guardianTargetBestDistanceSq", guardianTargetBestDistanceSq);
         tag.putBoolean("hasPetBed", hasPetBed);
         tag.putString("petBedDimension", petBedDimension == null ? "" : petBedDimension);
         tag.putInt("petBedX", petBedX);
@@ -351,6 +363,11 @@ public class TameData {
         data.previousHomeY = tag.getInt("previousHomeY");
         data.previousHomeZ = tag.getInt("previousHomeZ");
         data.guardianReturnTicks = tag.getInt("guardianReturnTicks");
+        data.guardianRelaxing = tag.getBoolean("guardianRelaxing");
+        data.guardianNextPhaseTick = tag.contains("guardianNextPhaseTick", Tag.TAG_LONG) ? tag.getLong("guardianNextPhaseTick") : 0L;
+        data.guardianTargetUuid = tag.hasUUID("guardianTargetUuid") ? tag.getUUID("guardianTargetUuid") : null;
+        data.guardianTargetStuckTicks = Math.max(0, tag.getInt("guardianTargetStuckTicks"));
+        data.guardianTargetBestDistanceSq = tag.contains("guardianTargetBestDistanceSq", Tag.TAG_DOUBLE) ? Math.max(0.0D, tag.getDouble("guardianTargetBestDistanceSq")) : 0.0D;
         data.hasPetBed = tag.getBoolean("hasPetBed");
         data.petBedDimension = tag.contains("petBedDimension", Tag.TAG_STRING) ? tag.getString("petBedDimension") : "";
         data.petBedX = tag.getInt("petBedX");

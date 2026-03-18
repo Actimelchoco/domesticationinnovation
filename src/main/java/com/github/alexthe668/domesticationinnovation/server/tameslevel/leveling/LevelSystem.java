@@ -632,6 +632,7 @@ public class LevelSystem {
         }
 
         if (unlocked != null) {
+            unlockAbility(data, unlocked);
             return new LevelRewardResult(RewardCategory.ABILITY, unlocked.id, 1.0D, "Unlocked " + unlocked.id + " I");
         }
         if (upgraded != null) {

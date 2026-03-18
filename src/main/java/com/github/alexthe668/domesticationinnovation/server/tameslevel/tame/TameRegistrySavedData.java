@@ -22,6 +22,7 @@ public class TameRegistrySavedData extends SavedData {
     private final List<TameDeathRecord> deathHistory = new ArrayList<>();
     private final Set<String> approvedReincarnateItems = new LinkedHashSet<>();
     private final Map<UUID, String> respawnOrders = new HashMap<>();
+    private final Map<UUID, Boolean> autoReincarnation = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -47,6 +48,17 @@ public class TameRegistrySavedData extends SavedData {
         this.respawnOrders.clear();
         if (respawnOrders != null) {
             this.respawnOrders.putAll(respawnOrders);
+        }
+    }
+
+    public Map<UUID, Boolean> getAutoReincarnation() {
+        return autoReincarnation;
+    }
+
+    public void setAutoReincarnation(Map<UUID, Boolean> autoReincarnation) {
+        this.autoReincarnation.clear();
+        if (autoReincarnation != null) {
+            this.autoReincarnation.putAll(autoReincarnation);
         }
     }
 
@@ -86,6 +98,17 @@ public class TameRegistrySavedData extends SavedData {
             respawnOrdersTag.add(row);
         }
         tag.put("respawnOrders", respawnOrdersTag);
+        ListTag autoReincarnationTag = new ListTag();
+        for (Map.Entry<UUID, Boolean> entry : autoReincarnation.entrySet()) {
+            if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putBoolean("enabled", true);
+            autoReincarnationTag.add(row);
+        }
+        tag.put("autoReincarnation", autoReincarnationTag);
         return tag;
     }
 
@@ -133,6 +156,15 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.respawnOrders.put(row.getUUID("ownerUUID"), row.getString("order"));
+            }
+        }
+        if (tag.contains("autoReincarnation", Tag.TAG_LIST)) {
+            ListTag autoReincarnationList = tag.getList("autoReincarnation", Tag.TAG_COMPOUND);
+            for (Tag entry : autoReincarnationList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.autoReincarnation.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
             }
         }
         return data;

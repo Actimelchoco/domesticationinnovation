@@ -22,6 +22,7 @@ public class TameRegistry {
     public static final List<TameDeathRecord> DEATH_HISTORY = new ArrayList<>();
     public static final Set<String> APPROVED_REINCARNATE_ITEMS = new HashSet<>();
     private static final Map<UUID, String> OWNER_RESPAWN_ORDERS = new HashMap<>();
+    private static final Map<UUID, Boolean> OWNER_AUTO_REINCARNATION = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -57,6 +58,8 @@ public class TameRegistry {
         APPROVED_REINCARNATE_ITEMS.addAll(savedData.getApprovedReincarnateItems());
         OWNER_RESPAWN_ORDERS.clear();
         OWNER_RESPAWN_ORDERS.putAll(savedData.getRespawnOrders());
+        OWNER_AUTO_REINCARNATION.clear();
+        OWNER_AUTO_REINCARNATION.putAll(savedData.getAutoReincarnation());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -178,6 +181,7 @@ public class TameRegistry {
         savedData.getApprovedReincarnateItems().clear();
         savedData.getApprovedReincarnateItems().addAll(APPROVED_REINCARNATE_ITEMS);
         savedData.setRespawnOrders(OWNER_RESPAWN_ORDERS);
+        savedData.setAutoReincarnation(OWNER_AUTO_REINCARNATION);
         savedData.setDirty();
     }
 
@@ -198,6 +202,25 @@ public class TameRegistry {
             OWNER_RESPAWN_ORDERS.remove(ownerUuid);
         } else {
             OWNER_RESPAWN_ORDERS.put(ownerUuid, normalized);
+        }
+        markDirty();
+    }
+
+    public static boolean isAutoReincarnationEnabled(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return false;
+        }
+        return OWNER_AUTO_REINCARNATION.getOrDefault(ownerUuid, false);
+    }
+
+    public static void setAutoReincarnation(UUID ownerUuid, boolean enabled) {
+        if (ownerUuid == null) {
+            return;
+        }
+        if (enabled) {
+            OWNER_AUTO_REINCARNATION.put(ownerUuid, true);
+        } else {
+            OWNER_AUTO_REINCARNATION.remove(ownerUuid);
         }
         markDirty();
     }
