@@ -163,6 +163,9 @@ public class TameAbilityEvents {
                 TamePerformanceProfiler.run("attribute.comfort", () -> handleComfort(tame, data, now));
                 TamePerformanceProfiler.run("attribute.regeneration", () -> handleAttributeRegeneration(tame, data, now));
                 TamePerformanceProfiler.run("attribute.rejuvenation", () -> handleRejuvenation(tame, data));
+                if (tame.isOrderedToSit()) {
+                    continue;
+                }
                 if (!abilitiesBlocked && needsNearbyAllySupportScan(data)) {
                     List<TamableAnimal> nearbySupportTames = collectOwnedNearbySupportTames(level, tame, tame.getOwnerUUID(), 10.0D, supportCache);
                     TamePerformanceProfiler.run("ability.triage_pulse", () -> handleTriagePulse(level, tame, data, now, nearbySupportTames));
@@ -233,9 +236,13 @@ public class TameAbilityEvents {
                         && !INTERNAL_BONUS_DAMAGE.get()) {
                     float beforeDamage = event.getAmount();
                     DAMAGE_DEBUG_CONTRIBUTORS.get().clear();
-                    TamePerformanceProfiler.run("feature.projectile_ability_damage_scaling", () -> applyProjectileAbilityDamageScaling(event));
+                    if (!attackerTame.isOrderedToSit()) {
+                        TamePerformanceProfiler.run("feature.projectile_ability_damage_scaling", () -> applyProjectileAbilityDamageScaling(event));
+                    }
                     TamePerformanceProfiler.run("attribute.damage_bonuses", () -> applyAttributeDamageBonuses(attackerTame, attackerData, event));
-                    TamePerformanceProfiler.run("ability.battle_strength", () -> handleBattleStrength(attackerTame, attackerData, event));
+                    if (!attackerTame.isOrderedToSit()) {
+                        TamePerformanceProfiler.run("ability.battle_strength", () -> handleBattleStrength(attackerTame, attackerData, event));
+                    }
                     debugDamage(attackerTame, attackerData, event, beforeDamage, event.getAmount());
                     DAMAGE_DEBUG_CONTRIBUTORS.get().clear();
                 }
@@ -245,16 +252,18 @@ public class TameAbilityEvents {
             TameData targetData = TameRegistry.get(targetTame.getUUID());
             if (targetData == null) return;
 
-            if (!INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
+            if (!targetTame.isOrderedToSit() && !INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
                 TamePerformanceProfiler.run("feature.ally_support_responses", () -> handleAllyTameSupportResponses(targetTame, targetData, event));
             }
 
-            TamePerformanceProfiler.run("ability.retaliation_slow", () -> handleRetaliationSlow(targetTame, targetData, event));
             TamePerformanceProfiler.run("attribute.totem", () -> handleTotem(targetTame, targetData, event));
-            TamePerformanceProfiler.run("ability.defensive_aura", () -> handleDefensiveAura(targetTame, targetData, event));
-            TamePerformanceProfiler.run("feature.owner_protection_hurt", () -> OwnerProtectionAbilityModule.onTameHurt(targetTame, targetData, event, OWNER_PROTECTION_HOOKS));
             TamePerformanceProfiler.run("attribute.defensive_mitigation", () -> handleDefensiveAttributeMitigation(targetTame, targetData, event));
-            TamePerformanceProfiler.run("ability.sky_launch_defend", () -> handleSkyLaunchOnDefend(targetTame, targetData, event));
+            if (!targetTame.isOrderedToSit()) {
+                TamePerformanceProfiler.run("ability.retaliation_slow", () -> handleRetaliationSlow(targetTame, targetData, event));
+                TamePerformanceProfiler.run("ability.defensive_aura", () -> handleDefensiveAura(targetTame, targetData, event));
+                TamePerformanceProfiler.run("feature.owner_protection_hurt", () -> OwnerProtectionAbilityModule.onTameHurt(targetTame, targetData, event, OWNER_PROTECTION_HOOKS));
+                TamePerformanceProfiler.run("ability.sky_launch_defend", () -> handleSkyLaunchOnDefend(targetTame, targetData, event));
+            }
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
@@ -1488,7 +1497,7 @@ public class TameAbilityEvents {
         if (tame == null || data == null || dead == null) return;
         long now = tame.level().getGameTime();
 
-        if (LevelSystem.hasAbility(data, "bloodlust") && wasKiller && isReady(data, "bloodlust_tick", now)) {
+        if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "bloodlust") && wasKiller && isReady(data, "bloodlust_tick", now)) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "bloodlust"));
             tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 400, Math.max(0, levelValue - 1)));
             tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 400, Math.max(0, levelValue - 1)));
@@ -1525,7 +1534,7 @@ public class TameAbilityEvents {
             }
         }
 
-        if (LevelSystem.hasAbility(data, "battlefield_medic") && isReady(data, "battlefield_medic_tick", now) && tame.level() instanceof ServerLevel level) {
+        if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "battlefield_medic") && isReady(data, "battlefield_medic_tick", now) && tame.level() instanceof ServerLevel level) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battlefield_medic"));
             float heal = (wasKiller ? 2.0F : 1.0F) + 0.75F * levelValue;
             int healed = healNearbyAllies(level, tame, 8.0D, heal, true);
@@ -1574,6 +1583,7 @@ public class TameAbilityEvents {
 
     private static boolean handleGuardianInterceptSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "guardian_intercept")) return false;
+        if (supporter.isOrderedToSit()) return false;
         if (ally == supporter || event.getAmount() <= 0.0F) return false;
         if (!isReady(data, "guardian_intercept_tick", now)) return false;
 
@@ -1592,6 +1602,7 @@ public class TameAbilityEvents {
 
     private static boolean handleBodyBlockSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "body_block")) return false;
+        if (supporter.isOrderedToSit()) return false;
         if (ally == supporter || event.getAmount() <= 0.0F) return false;
         if (!isProjectileDamage(event)) return false;
         if (!isReady(data, "body_block_tick", now)) return false;
@@ -1611,6 +1622,7 @@ public class TameAbilityEvents {
 
     private static void handleEmergencyShieldSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "emergency_shield")) return;
+        if (supporter.isOrderedToSit()) return;
         if (event.getAmount() <= 0.0F) return;
         if (supporter.distanceToSqr(ally) > 25.0D) return;
         if (!isReady(data, "emergency_shield_tick", now)) return;
@@ -1632,6 +1644,7 @@ public class TameAbilityEvents {
 
     private static void handlePackGuardSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "pack_guard")) return;
+        if (supporter.isOrderedToSit()) return;
         if (!isReady(data, "pack_guard_tick", now)) return;
         LivingEntity attacker = resolveLivingAttacker(event);
         if (!(attacker instanceof Monster monster) || !monster.isAlive()) return;
@@ -1647,6 +1660,7 @@ public class TameAbilityEvents {
 
     private static boolean handleLifeGiftSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "life_gift")) return false;
+        if (supporter.isOrderedToSit()) return false;
         if (!(ally instanceof TamableAnimal)) return false;
         if (!isReady(data, "life_gift_tick", now)) return false;
         float lethalOverflow = event.getAmount() - ally.getHealth();
@@ -1673,6 +1687,7 @@ public class TameAbilityEvents {
 
     private static void handleRevitalizingPresence(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity healed, float amount, long now, List<TamableAnimal> nearbySupportTames) {
         if (!LevelSystem.hasAbility(data, "revitalizing_presence")) return;
+        if (supporter.isOrderedToSit()) return;
         if (!isReady(data, "revitalizing_presence_tick", now)) return;
         if (amount <= 0.0F) return;
 

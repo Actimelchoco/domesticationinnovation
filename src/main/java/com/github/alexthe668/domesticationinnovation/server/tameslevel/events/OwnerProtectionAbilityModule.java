@@ -163,6 +163,7 @@ public final class OwnerProtectionAbilityModule {
         List<TamableAnimal> tames = level.getEntitiesOfClass(TamableAnimal.class, box, tame ->
                 tame.isTame()
                         && tame.isAlive()
+                        && !tame.isOrderedToSit()
                         && owner.getUUID().equals(tame.getOwnerUUID())
                         && TameRegistry.get(tame.getUUID()) != null
         );

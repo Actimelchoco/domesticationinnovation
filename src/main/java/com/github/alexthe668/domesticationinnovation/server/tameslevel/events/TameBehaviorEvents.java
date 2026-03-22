@@ -137,7 +137,11 @@ public class TameBehaviorEvents {
 
     @SubscribeEvent
     public static void onTameHurt(LivingHurtEvent event) {
-        // Stamina/tiredness has been removed; tame hurt no longer drives fatigue.
+        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
+        if (!tame.isAlive() || !tame.isOrderedToSit()) return;
+        if (!(event.getSource().getEntity() instanceof LivingEntity attacker)) return;
+        if (!isValidCombatTarget(tame, attacker)) return;
+        tame.setTarget(attacker);
     }
 
     private static void applyRetargetByMode(TamableAnimal tame, TameData data, ServerPlayer owner, LivingEntity ownerCombatTarget) {
