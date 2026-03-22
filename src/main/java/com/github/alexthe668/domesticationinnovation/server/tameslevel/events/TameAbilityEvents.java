@@ -32,10 +32,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobType;
+import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
@@ -226,6 +229,7 @@ public class TameAbilityEvents {
                 if (attackerData != null
                         && TameMode.byId(attackerData.mode) != TameMode.PASSIVE
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
+                        && !isProtectedPassiveWildlife(event.getEntity())
                         && !INTERNAL_BONUS_DAMAGE.get()) {
                     float beforeDamage = event.getAmount();
                     DAMAGE_DEBUG_CONTRIBUTORS.get().clear();
@@ -2252,6 +2256,32 @@ public class TameAbilityEvents {
             return true;
         }
         return false;
+    }
+
+    private static boolean isProtectedPassiveWildlife(LivingEntity entity) {
+        if (entity == null || !entity.isAlive()) {
+            return false;
+        }
+        if (entity instanceof Player) {
+            return false;
+        }
+        if (entity instanceof TamableAnimal tame && tame.isTame()) {
+            return false;
+        }
+        if (!(entity instanceof Mob mob)) {
+            return false;
+        }
+        if (!entity.getType().getCategory().isFriendly()) {
+            return false;
+        }
+        if (mob instanceof Enemy) {
+            return false;
+        }
+        if (mob instanceof NeutralMob neutral && neutral.getRemainingPersistentAngerTime() > 0) {
+            return false;
+        }
+        LivingEntity target = mob.getTarget();
+        return target == null || !target.isAlive();
     }
 
     private static boolean isReady(TameData data, String key, long now) {

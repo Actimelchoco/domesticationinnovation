@@ -10145,6 +10145,7 @@ public class TameCommands {
         }
         // Best-effort compatibility with Domesticated Innovation wandering/order state.
         clearExternalWanderingState(tame, order);
+        refreshRegistrySnapshotFor(tame);
     }
 
     private static void clearExternalWanderingState(TamableAnimal tame, MovementOrder order) {

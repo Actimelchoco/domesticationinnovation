@@ -592,6 +592,16 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
+    "none": {
+      "autoPreferredWeightBalance": false,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
     "phantom": {
       "autoPreferredWeightBalance": true,
       "category": {
