@@ -17,10 +17,15 @@ final class BodyguardModeGoal extends AbstractModeGoal {
     }
 
     @Override
+    protected int tickInterval() {
+        return 10;
+    }
+
+    @Override
     protected void tickMode(ServerLevel level, TameData data) {
         ServerPlayer owner = TameGoalSupport.owner(tame);
         if (owner != null) {
-            TameGoalSupport.setBodyguardTarget(level, tame, owner, 16.0D, 36.0D);
+            TameGoalSupport.setBodyguardTarget(level, tame, owner, 16.0D, Math.max(1.0D, data.bodyguardRange));
         }
     }
 }

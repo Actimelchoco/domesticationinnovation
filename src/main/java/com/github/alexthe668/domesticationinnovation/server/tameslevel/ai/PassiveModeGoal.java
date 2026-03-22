@@ -16,6 +16,11 @@ final class PassiveModeGoal extends AbstractModeGoal {
     }
 
     @Override
+    protected boolean retainLiveTarget() {
+        return false;
+    }
+
+    @Override
     protected void tickMode(ServerLevel level, TameData data) {
         tame.setTarget(null);
     }

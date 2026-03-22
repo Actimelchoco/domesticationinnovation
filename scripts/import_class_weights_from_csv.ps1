@@ -10,7 +10,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    python scripts/export_class_weights_overview.py export
+    python scripts/export_class_weights_overview.py export --skip-risk
     exit $LASTEXITCODE
 }
 
@@ -19,7 +19,7 @@ if (Get-Command py -ErrorAction SilentlyContinue) {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    py -3 scripts/export_class_weights_overview.py export
+    py -3 scripts/export_class_weights_overview.py export --skip-risk
     exit $LASTEXITCODE
 }
 

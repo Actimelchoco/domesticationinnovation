@@ -42,7 +42,6 @@ public final class OwnerProtectionAbilityModule {
         for (TamableAnimal tame : nearbyTames) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-
             handleGuardianRepulse(owner, tame, data, now, hooks);
             handleSkyLaunch(owner, tame, data, now, hooks);
         }
@@ -93,7 +92,7 @@ public final class OwnerProtectionAbilityModule {
             affected++;
         }
 
-        long cooldownTicks = Math.max(20L, 800L - (long) Math.max(0, levelValue - 1) * 60L);
+        long cooldownTicks = 400L;
         setCooldown(data, "guardian_repulse_tick", now + cooldownTicks);
         if (affected > 0 && tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, owner, now, affected * (1.0F + 0.25F * levelValue), 0.5F);

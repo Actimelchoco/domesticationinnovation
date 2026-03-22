@@ -66,6 +66,7 @@ public class TameData {
     public UUID guardianTargetUuid = null;
     public int guardianTargetStuckTicks = 0;
     public double guardianTargetBestDistanceSq = 0.0D;
+    public int bodyguardRange = 12;
     public boolean hasPetBed = false;
     public String petBedDimension = "";
     public int petBedX = 0;
@@ -82,6 +83,7 @@ public class TameData {
     public double bonusKnockbackResist;
 
     public TameClass tameClass;
+    public int classRerollsUsed = 0;
     public int mode = 0;
     public String group = "";
     public boolean defendAllies = false;
@@ -214,6 +216,7 @@ public class TameData {
         }
         tag.putInt("guardianTargetStuckTicks", guardianTargetStuckTicks);
         tag.putDouble("guardianTargetBestDistanceSq", guardianTargetBestDistanceSq);
+        tag.putInt("bodyguardRange", bodyguardRange);
         tag.putBoolean("hasPetBed", hasPetBed);
         tag.putString("petBedDimension", petBedDimension == null ? "" : petBedDimension);
         tag.putInt("petBedX", petBedX);
@@ -230,6 +233,7 @@ public class TameData {
         if (tameClass != null) {
             tag.putString("tameClass", tameClass.name());
         }
+        tag.putInt("classRerollsUsed", Math.max(0, classRerollsUsed));
         tag.putInt("mode", mode);
         tag.putString("group", group == null ? "" : group);
         tag.putBoolean("defendAllies", defendAllies);
@@ -368,6 +372,7 @@ public class TameData {
         data.guardianTargetUuid = tag.hasUUID("guardianTargetUuid") ? tag.getUUID("guardianTargetUuid") : null;
         data.guardianTargetStuckTicks = Math.max(0, tag.getInt("guardianTargetStuckTicks"));
         data.guardianTargetBestDistanceSq = tag.contains("guardianTargetBestDistanceSq", Tag.TAG_DOUBLE) ? Math.max(0.0D, tag.getDouble("guardianTargetBestDistanceSq")) : 0.0D;
+        data.bodyguardRange = tag.contains("bodyguardRange", Tag.TAG_INT) ? Math.max(1, tag.getInt("bodyguardRange")) : 12;
         data.hasPetBed = tag.getBoolean("hasPetBed");
         data.petBedDimension = tag.contains("petBedDimension", Tag.TAG_STRING) ? tag.getString("petBedDimension") : "";
         data.petBedX = tag.getInt("petBedX");
@@ -408,6 +413,7 @@ public class TameData {
         if (tag.contains("tameClass", Tag.TAG_STRING)) {
             data.tameClass = TameClass.ensureRegistered(tag.getString("tameClass"));
         }
+        data.classRerollsUsed = Math.max(0, tag.getInt("classRerollsUsed"));
 
         if (tag.contains("abilities", Tag.TAG_LIST)) {
             ListTag abilitiesTag = tag.getList("abilities", Tag.TAG_STRING);

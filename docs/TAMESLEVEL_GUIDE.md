@@ -419,6 +419,7 @@ Use:
 ```text
 /tames mode <pet> <mode>
 /tames mode <all|group|type|state> ... <mode>
+/tames mode ... bodyguard <range>
 ```
 
 Current modes include:
@@ -431,6 +432,14 @@ Current modes include:
 - `passive`
 
 Mode changes how the tame behaves in combat.
+
+For `bodyguard`, you can append a leash distance:
+
+```text
+/tames mode <pet> bodyguard 5
+```
+
+That range is saved per tame. If the tame moves farther than that many blocks from its owner, it drops its target and returns to the owner.
 
 ### 6.2 `/tames follow`
 

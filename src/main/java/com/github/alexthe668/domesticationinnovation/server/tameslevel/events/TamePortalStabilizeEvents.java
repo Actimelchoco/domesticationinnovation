@@ -3,11 +3,8 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
-import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -64,7 +61,6 @@ public class TamePortalStabilizeEvents {
             ServerPlayer player = event.getServer().getPlayerList().getPlayer(entry.getKey());
             if (player != null) {
                 stabilizeOwnerTamesInCurrentDimension(player);
-                reconcileOwnedTeleportersAcrossDimensions(player);
             }
             state.retriesLeft--;
             if (state.retriesLeft <= 0) {
@@ -109,30 +105,5 @@ public class TamePortalStabilizeEvents {
         return null;
     }
 
-    private static void reconcileOwnedTeleportersAcrossDimensions(ServerPlayer owner) {
-        if (owner == null || owner.server == null) return;
-        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
-            if (data == null || data.uuid == null) continue;
-            if (!owner.getUUID().equals(data.ownerUUID)) continue;
-
-            TamableAnimal tame = findLoadedOwnedTame(owner, data.uuid);
-            if (tame == null || !tame.isAlive()) continue;
-            if (tame.level().dimension().equals(owner.level().dimension())) continue;
-            Mob mob = tame;
-            if (!TameableUtils.isValidTeleporter(owner, mob)) continue;
-
-            TameTransferService.TransferResult result = TameTransferService.transferToPlayer(tame, owner, data);
-            if (result.success() && result.entity() != null) {
-                TamableAnimal moved = result.entity();
-                if (moved.isNoAi()) moved.setNoAi(false);
-                moved.setTarget(null);
-                moved.setDeltaMovement(Vec3.ZERO);
-                moved.getNavigation().stop();
-                if (!moved.isOrderedToSit()) {
-                    moved.getNavigation().moveTo(owner, 1.0D);
-                }
-            }
-        }
-    }
 }
 

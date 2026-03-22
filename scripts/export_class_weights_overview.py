@@ -424,6 +424,7 @@ def build_category_rows(classes):
             category.get("ability", ""),
             payload.get("preferredAttributeWeightMultiplier", ""),
             payload.get("preferredAbilityWeightMultiplier", ""),
+            payload.get("autoPreferredWeightBalance", ""),
         ])
     return rows
 
@@ -469,6 +470,19 @@ def parse_optional_weight(raw):
     return float(text.replace(",", "."))
 
 
+def parse_optional_bool(raw):
+    if raw is None:
+        return None
+    text = str(raw).strip().lower()
+    if not text:
+        return None
+    if text in ("true", "1", "-1", "yes", "y"):
+        return True
+    if text in ("false", "0", "no", "n"):
+        return False
+    raise ValueError(f"Invalid boolean value '{raw}'.")
+
+
 def load_weight_map(path, section_name):
     rows = read_csv(path)
     loaded = {}
@@ -489,33 +503,15 @@ def load_weight_map(path, section_name):
     return loaded
 
 
-def export_overview():
-    data = read_source()
-    classes = data.get("classes", {})
-
-    base_stat_keys = BASE_STAT_KEYS
-    attribute_keys = ATTRIBUTE_KEYS
-    ability_keys = ABILITY_KEYS
-
-    write_csv(OUTPUT_DIR / "meta.csv", ["key", "value"], build_meta_rows(data))
-    write_csv(
-        OUTPUT_DIR / "categories.csv",
-        ["class", "base", "attribute", "ability", "preferredAttributeWeightMultiplier", "preferredAbilityWeightMultiplier"],
-        build_category_rows(classes)
-    )
-    write_csv(OUTPUT_DIR / "base_stats.csv", ["class", *base_stat_keys], build_weight_rows(classes, "baseStats", base_stat_keys))
-    write_csv(OUTPUT_DIR / "attributes.csv", ["class", *attribute_keys], build_weight_rows(classes, "attributes", attribute_keys))
-    write_csv(OUTPUT_DIR / "abilities.csv", ["class", *ability_keys], build_weight_rows(classes, "abilities", ability_keys))
-    write_csv(
-        OUTPUT_DIR / "class_risk.csv",
-        ["class", "ability_nonpreferred_100", "ability_nonpreferred_200", "attribute_nonpreferred_100", "attribute_nonpreferred_200"],
-        build_risk_rows(data, classes),
-    )
-
-
-def import_overview():
-    data = read_source()
-    classes = data.setdefault("classes", {})
+def load_overview_data():
+    data = {
+        "preferredAttributeWeightMultiplier": 1.0,
+        "preferredAbilityWeightMultiplier": 1.0,
+        "defaultCategoryWeights": {},
+        "defaultBaseStatWeights": {},
+        "classes": {},
+    }
+    classes = data["classes"]
 
     meta_rows = read_csv(OUTPUT_DIR / "meta.csv")
     meta = {}
@@ -555,14 +551,13 @@ def import_overview():
         }
         preferred_attribute_multiplier = parse_optional_weight(row.get("preferredAttributeWeightMultiplier"))
         preferred_ability_multiplier = parse_optional_weight(row.get("preferredAbilityWeightMultiplier"))
+        auto_balance = parse_optional_bool(row.get("autoPreferredWeightBalance"))
         if preferred_attribute_multiplier is not None:
             class_entry["preferredAttributeWeightMultiplier"] = preferred_attribute_multiplier
-        else:
-            class_entry.pop("preferredAttributeWeightMultiplier", None)
         if preferred_ability_multiplier is not None:
             class_entry["preferredAbilityWeightMultiplier"] = preferred_ability_multiplier
-        else:
-            class_entry.pop("preferredAbilityWeightMultiplier", None)
+        if auto_balance is not None:
+            class_entry["autoPreferredWeightBalance"] = auto_balance
 
     for section, file_name in (
         ("baseStats", "base_stats.csv"),
@@ -574,10 +569,38 @@ def import_overview():
             class_entry = classes.setdefault(tame_class, {})
             if weights:
                 class_entry[section] = dict(sorted(weights.items()))
-            else:
-                class_entry.pop(section, None)
 
     data["classes"] = dict(sorted(classes.items()))
+    return data
+
+
+def export_overview(include_risk=True):
+    data = read_source()
+    classes = data.get("classes", {})
+
+    base_stat_keys = BASE_STAT_KEYS
+    attribute_keys = ATTRIBUTE_KEYS
+    ability_keys = ABILITY_KEYS
+
+    write_csv(OUTPUT_DIR / "meta.csv", ["key", "value"], build_meta_rows(data))
+    write_csv(
+        OUTPUT_DIR / "categories.csv",
+        ["class", "base", "attribute", "ability", "preferredAttributeWeightMultiplier", "preferredAbilityWeightMultiplier", "autoPreferredWeightBalance"],
+        build_category_rows(classes)
+    )
+    write_csv(OUTPUT_DIR / "base_stats.csv", ["class", *base_stat_keys], build_weight_rows(classes, "baseStats", base_stat_keys))
+    write_csv(OUTPUT_DIR / "attributes.csv", ["class", *attribute_keys], build_weight_rows(classes, "attributes", attribute_keys))
+    write_csv(OUTPUT_DIR / "abilities.csv", ["class", *ability_keys], build_weight_rows(classes, "abilities", ability_keys))
+    if include_risk:
+        write_csv(
+            OUTPUT_DIR / "class_risk.csv",
+            ["class", "ability_nonpreferred_100", "ability_nonpreferred_200", "attribute_nonpreferred_100", "attribute_nonpreferred_200"],
+            build_risk_rows(data, classes),
+        )
+
+
+def import_overview():
+    data = load_overview_data()
     write_source(data)
 
 
@@ -590,13 +613,18 @@ def main():
         default="export",
         help="export CSV overview files or import edited CSV files back into class_weights.json",
     )
+    parser.add_argument(
+        "--skip-risk",
+        action="store_true",
+        help="skip regenerating class_risk.csv during export",
+    )
     args = parser.parse_args()
 
     if args.mode == "import":
         import_overview()
         return
 
-    export_overview()
+    export_overview(include_risk=not args.skip_risk)
 
 
 if __name__ == "__main__":

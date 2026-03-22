@@ -66,6 +66,7 @@
       "preferredAbilityWeightMultiplier": 0.0
     },
     "attributer": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 63.6,
         "attribute": 34.2,
@@ -73,6 +74,27 @@
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
+    },
+    "bee": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 5.0
+      },
+      "attributes": {
+        "charisma": 4.0,
+        "poison_fang": 35.0,
+        "speed": 16.0
+      },
+      "abilities": {
+        "dash": 35.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
     },
     "blaze": {
       "autoPreferredWeightBalance": true,
@@ -99,26 +121,32 @@
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0
     },
-    "bee": {
-      "autoPreferredWeightBalance": true,
+    "crackhead": {
       "category": {
         "base": 90.0,
         "attribute": 10.0,
         "ability": 10.0
       },
-      "baseStats": {
-        "speed": 5.0
-      },
+      "preferredAttributeWeightMultiplier": 30.0,
+      "preferredAbilityWeightMultiplier": 9.0,
+      "autoPreferredWeightBalance": false,
       "attributes": {
-        "charisma": 4.0,
-        "poison_fang": 35.0,
-        "speed": 16.0
+        "amphibious": 3.0,
+        "bane_of_arthropods": 5.0,
+        "disc_jockey": 5.0,
+        "emergency_cooldown_reduction": 20.0,
+        "firefang": 3.0,
+        "lifesteal": 2.0,
+        "negative_effect_transfer": 30.0,
+        "poison_fang": 40.0,
+        "positive_effect_steal": 3.0,
+        "rejuvenation": 5.0,
+        "witherfang": 20.0
       },
       "abilities": {
-        "dash": 35.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
+        "llama_spit": 40.0,
+        "pack_guard": 3.0
+      }
     },
     "creeper": {
       "autoPreferredWeightBalance": true,
@@ -149,6 +177,65 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
+    "defuser": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 30.0,
+      "preferredAbilityWeightMultiplier": 9.0,
+      "autoPreferredWeightBalance": false,
+      "baseStats": {
+        "knockback_resist": 10.0
+      },
+      "attributes": {
+        "charisma": 2.0,
+        "feather_falling": 20.0,
+        "magnetic": 20.0,
+        "totem": 20.0
+      },
+      "abilities": {
+        "defusal": 100.0
+      }
+    },
+    "desmond doss": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 30.0,
+      "preferredAbilityWeightMultiplier": 9.0,
+      "autoPreferredWeightBalance": true,
+      "baseStats": {
+        "damage": 0.0,
+        "knockback_resist": 50.0,
+        "speed": 50.0
+      },
+      "attributes": {
+        "charisma": 10.0,
+        "disc_jockey": 2.0,
+        "explosion_resistance": 3.0,
+        "feather_falling": 30.0,
+        "pacifist": 3.0,
+        "positive_effect_steal": 3.0,
+        "totem": 3.0
+      },
+      "abilities": {
+        "battlefield_medic": 20.0,
+        "cleanse_touch": 20.0,
+        "defusal": 10.0,
+        "emergency_shield": 5.0,
+        "healing_aura": 40.0,
+        "healing_bottle": 20.0,
+        "immunity_frame": 10.0,
+        "life_gift": 20.0,
+        "psychic_wall": 10.0,
+        "shield_block": 10.0,
+        "triage_pulse": 20.0
+      }
+    },
     "disco": {
       "autoPreferredWeightBalance": true,
       "category": {
@@ -164,6 +251,28 @@
       "abilities": {
         "battle_strength": 18.0,
         "defensive_aura": 18.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "dolphin": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "speed": 4.0
+      },
+      "attributes": {
+        "amphibious": 40.0,
+        "bubbling": 18.0,
+        "speed": 14.0
+      },
+      "abilities": {
+        "dash": 12.0,
+        "trident": 28.0
       },
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0
@@ -226,28 +335,6 @@
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0
     },
-    "dolphin": {
-      "autoPreferredWeightBalance": true,
-      "category": {
-        "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
-      },
-      "baseStats": {
-        "speed": 4.0
-      },
-      "attributes": {
-        "amphibious": 40.0,
-        "bubbling": 18.0,
-        "speed": 14.0
-      },
-      "abilities": {
-        "dash": 12.0,
-        "trident": 28.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
-    },
     "evoker": {
       "autoPreferredWeightBalance": true,
       "category": {
@@ -302,6 +389,45 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
+    "frost": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 30.0,
+      "preferredAbilityWeightMultiplier": 9.0,
+      "autoPreferredWeightBalance": false,
+      "baseStats": {
+        "knockback_resist": 4.0
+      },
+      "attributes": {
+        "frost_fang": 40.0,
+        "pierce": 3.0
+      },
+      "abilities": {
+        "snowball_shot": 50.0
+      }
+    },
+    "ghast": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "ability_power": 18.0,
+        "feather_falling": 10.0,
+        "fire_resistance": 22.0,
+        "firefang": 18.0
+      },
+      "abilities": {
+        "ghast_fireball": 55.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
     "guardian": {
       "autoPreferredWeightBalance": true,
       "category": {
@@ -332,25 +458,6 @@
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
-    },
-    "ghast": {
-      "autoPreferredWeightBalance": true,
-      "category": {
-        "base": 85.0,
-        "attribute": 10.0,
-        "ability": 15.0
-      },
-      "attributes": {
-        "ability_power": 18.0,
-        "feather_falling": 10.0,
-        "fire_resistance": 22.0,
-        "firefang": 18.0
-      },
-      "abilities": {
-        "ghast_fireball": 55.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
     },
     "healer": {
       "autoPreferredWeightBalance": true,
@@ -386,6 +493,64 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
+    "iron_golem": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 6.0,
+        "hp": 6.0,
+        "knockback": 5.0,
+        "knockback_resist": 5.0
+      },
+      "attributes": {
+        "resistance": 16.0
+      },
+      "abilities": {
+        "body_block": 26.0,
+        "defusal": 50.0,
+        "guardian_intercept": 24.0,
+        "shield_block": 24.0,
+        "sky_launch": 24.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
+    },
+    "knight": {
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0,
+      "autoPreferredWeightBalance": true,
+      "baseStats": {
+        "armor": 15.0,
+        "armor_toughness": 10.0,
+        "damage": 3.0,
+        "knockback_resist": 10.0,
+        "speed": 3.0
+      },
+      "attributes": {
+        "bosskiller": 2.0,
+        "charisma": 2.0,
+        "pacifist": 2.0,
+        "pierce": 2.0,
+        "resistance": 2.0,
+        "smite": 2.0
+      },
+      "abilities": {
+        "battle_strength": 2.0,
+        "dash": 6.0,
+        "immunity_frame": 2.0,
+        "shield_block": 6.0,
+        "sky_launch": 2.0
+      }
+    },
     "mage": {
       "autoPreferredWeightBalance": true,
       "category": {
@@ -417,72 +582,12 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
-    "iron_golem": {
-      "autoPreferredWeightBalance": true,
-      "category": {
-        "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
-      },
-      "baseStats": {
-        "armor": 6.0,
-        "hp": 6.0,
-        "knockback": 5.0,
-        "knockback_resist": 5.0
-      },
-      "attributes": {
-        "resistance": 16.0
-      },
-      "abilities": {
-        "body_block": 26.0,
-        "guardian_intercept": 24.0,
-        "shield_block": 24.0,
-        "sky_launch": 24.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
-    },
     "maniac": {
+      "autoPreferredWeightBalance": true,
       "category": {
         "base": 65.0,
         "attribute": 5.0,
         "ability": 30.0
-      },
-      "preferredAttributeWeightMultiplier": 0.0,
-      "preferredAbilityWeightMultiplier": 0.0
-    },
-    "protector": {
-      "autoPreferredWeightBalance": true,
-      "category": {
-        "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
-      },
-      "baseStats": {
-        "armor": 2.0,
-        "armor_toughness": 2.0,
-        "knockback": 2.0,
-        "knockback_resist": 2.0,
-        "speed": 2.0
-      },
-      "attributes": {
-        "charisma": 3.0,
-        "emergency_cooldown_reduction": 3.0,
-        "feather_falling": 2.0,
-        "fire_resistance": 2.0,
-        "pacifist": 2.0
-      },
-      "abilities": {
-        "defensive_aura": 7.0,
-        "deflection": 5.0,
-        "emergency_shield": 10.0,
-        "guardian_intercept": 5.0,
-        "guardian_repulse": 5.0,
-        "immunity_frame": 3.0,
-        "pack_guard": 7.0,
-        "psychic_wall": 7.0,
-        "shield_block": 10.0,
-        "sky_launch": 7.0
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
@@ -527,6 +632,42 @@
       },
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0
+    },
+    "protector": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "armor": 2.0,
+        "armor_toughness": 2.0,
+        "knockback": 2.0,
+        "knockback_resist": 2.0,
+        "speed": 2.0
+      },
+      "attributes": {
+        "charisma": 3.0,
+        "emergency_cooldown_reduction": 3.0,
+        "feather_falling": 2.0,
+        "fire_resistance": 2.0,
+        "pacifist": 2.0
+      },
+      "abilities": {
+        "defensive_aura": 7.0,
+        "deflection": 5.0,
+        "emergency_shield": 10.0,
+        "guardian_intercept": 5.0,
+        "guardian_repulse": 5.0,
+        "immunity_frame": 3.0,
+        "pack_guard": 7.0,
+        "psychic_wall": 7.0,
+        "shield_block": 10.0,
+        "sky_launch": 7.0
+      },
+      "preferredAttributeWeightMultiplier": 0.0,
+      "preferredAbilityWeightMultiplier": 0.0
     },
     "shooter": {
       "autoPreferredWeightBalance": true,
@@ -592,29 +733,6 @@
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0
     },
-    "slime": {
-      "autoPreferredWeightBalance": true,
-      "category": {
-        "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
-      },
-      "baseStats": {
-        "hp": 5.0,
-        "knockback_resist": 4.0
-      },
-      "attributes": {
-        "bubbling": 22.0,
-        "jump_boost": 18.0,
-        "resistance": 16.0
-      },
-      "abilities": {
-        "body_block": 26.0,
-        "sky_launch": 20.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
-    },
     "skeleton": {
       "autoPreferredWeightBalance": true,
       "category": {
@@ -647,6 +765,29 @@
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
+    },
+    "slime": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 90.0,
+        "attribute": 10.0,
+        "ability": 10.0
+      },
+      "baseStats": {
+        "hp": 5.0,
+        "knockback_resist": 4.0
+      },
+      "attributes": {
+        "bubbling": 22.0,
+        "jump_boost": 18.0,
+        "resistance": 16.0
+      },
+      "abilities": {
+        "body_block": 26.0,
+        "sky_launch": 20.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
     },
     "speedster": {
       "autoPreferredWeightBalance": true,
@@ -771,27 +912,23 @@
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
     },
-    "witch": {
-      "autoPreferredWeightBalance": true,
+    "thor": {
       "category": {
-        "base": 85.0,
-        "attribute": 10.0,
-        "ability": 15.0
+        "base": 50.0,
+        "attribute": 25.0,
+        "ability": 25.0
       },
+      "preferredAttributeWeightMultiplier": 30.0,
+      "preferredAbilityWeightMultiplier": 9.0,
+      "autoPreferredWeightBalance": true,
       "attributes": {
-        "negative_effect_transfer": 18.0,
-        "poison_resistance": 12.0,
-        "positive_effect_steal": 18.0,
-        "regeneration": 14.0,
-        "rejuvenation": 14.0
+        "chain_lightning": 4.0,
+        "lightningfang": 10.0,
+        "magnetic": 3.0
       },
       "abilities": {
-        "cleanse_touch": 14.0,
-        "healing_bottle": 28.0,
-        "retaliation_slow": 18.0
-      },
-      "preferredAttributeWeightMultiplier": 1.0,
-      "preferredAbilityWeightMultiplier": 1.0
+        "lightning_strike": 10.0
+      }
     },
     "warden": {
       "autoPreferredWeightBalance": true,
@@ -823,6 +960,28 @@
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0
+    },
+    "witch": {
+      "autoPreferredWeightBalance": true,
+      "category": {
+        "base": 85.0,
+        "attribute": 10.0,
+        "ability": 15.0
+      },
+      "attributes": {
+        "negative_effect_transfer": 18.0,
+        "poison_resistance": 12.0,
+        "positive_effect_steal": 18.0,
+        "regeneration": 14.0,
+        "rejuvenation": 14.0
+      },
+      "abilities": {
+        "cleanse_touch": 14.0,
+        "healing_bottle": 28.0,
+        "retaliation_slow": 18.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0
     },
     "wither": {
       "autoPreferredWeightBalance": true,

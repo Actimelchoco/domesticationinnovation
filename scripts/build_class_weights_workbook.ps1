@@ -73,6 +73,7 @@ function Add-ClassViewSheet {
     $sheet.Range("A8").Value2 = "ability"
     $sheet.Range("A9").Value2 = "pref attr mult"
     $sheet.Range("A10").Value2 = "pref ability mult"
+    $sheet.Range("A11").Value2 = "auto pref balance"
     $sheet.Range("B6:B8").NumberFormat = "0.0\%"
 
     $baseSheet = $Workbook.Worksheets.Item("base_stats")
@@ -140,10 +141,10 @@ function Add-ClassViewSheet {
     $sheet.Range("O12").Value2 = "non-pref ability by 200"
     $sheet.Range("O13").Value2 = "non-pref attribute by 100"
     $sheet.Range("O14").Value2 = "non-pref attribute by 200"
-    $sheet.Range("P11").Formula = '=IFERROR(RoughRisk($B$8,$B$6:$B$8,$L$6:$L$' + (5 + $abilityDataRows) + ',$B$10,99),0)'
-    $sheet.Range("P12").Formula = '=IFERROR(RoughRisk($B$8,$B$6:$B$8,$L$6:$L$' + (5 + $abilityDataRows) + ',$B$10,199),0)'
-    $sheet.Range("P13").Formula = '=IFERROR(RoughRisk($B$7,$B$6:$B$8,$H$6:$H$' + (5 + $attrDataRows) + ',$B$9,99),0)'
-    $sheet.Range("P14").Formula = '=IFERROR(RoughRisk($B$7,$B$6:$B$8,$H$6:$H$' + (5 + $attrDataRows) + ',$B$9,199),0)'
+    $sheet.Range("P11").Formula = '=IFERROR(RoughRisk($B$8,$B$6:$B$8,$L$6:$L$' + (5 + $abilityDataRows) + ',$B$10,$B$11,99),0)'
+    $sheet.Range("P12").Formula = '=IFERROR(RoughRisk($B$8,$B$6:$B$8,$L$6:$L$' + (5 + $abilityDataRows) + ',$B$10,$B$11,199),0)'
+    $sheet.Range("P13").Formula = '=IFERROR(RoughRisk($B$7,$B$6:$B$8,$H$6:$H$' + (5 + $attrDataRows) + ',$B$9,$B$11,99),0)'
+    $sheet.Range("P14").Formula = '=IFERROR(RoughRisk($B$7,$B$6:$B$8,$H$6:$H$' + (5 + $attrDataRows) + ',$B$9,$B$11,199),0)'
 
     $defaultClass = "tanker"
     for ($row = 2; $row -le $Workbook.Worksheets.Item("categories").UsedRange.Rows.Count; $row++) {
@@ -153,6 +154,7 @@ function Add-ClassViewSheet {
             $sheet.Range("B8").Value2 = $Workbook.Worksheets.Item("categories").Cells.Item($row, 4).Value2
             $sheet.Range("B9").Value2 = $Workbook.Worksheets.Item("categories").Cells.Item($row, 5).Value2
             $sheet.Range("B10").Value2 = $Workbook.Worksheets.Item("categories").Cells.Item($row, 6).Value2
+            $sheet.Range("B11").Value2 = $Workbook.Worksheets.Item("categories").Cells.Item($row, 7).Value2
             break
         }
     }
@@ -165,17 +167,17 @@ function Add-ClassViewSheet {
         $sourceCol = 2 + $i
         $sheet.Cells.Item(6 + $i, 8).Formula = '=INDEX(attributes!$A$2:$' + $attrLastCol + '$' + $attrLastRow + ',MATCH($B$3,attributes!$A$2:$A$' + $attrLastRow + ',0),' + $sourceCol + ')'
         $attrEndRow = 5 + $attrDataRows
-        $sheet.Cells.Item(6 + $i, 9).Formula = '=IF($H' + (6 + $i) + '="","",IFERROR((($H' + (6 + $i) + '/10)*(1+($H' + (6 + $i) + '>10)*($B$9-1)))/SUMPRODUCT(($H$6:$H$' + $attrEndRow + '/10)*(1+($H$6:$H$' + $attrEndRow + '>10)*($B$9-1))),0))'
+        $sheet.Cells.Item(6 + $i, 9).Formula = '=IF($H' + (6 + $i) + '="","",IFERROR(FirstRollShare($H' + (6 + $i) + ',$H$6:$H$' + $attrEndRow + ',$B$9,$B$11,$B$7,$B$6:$B$8),0))'
     }
     for ($i = 0; $i -lt $abilityDataRows; $i++) {
         $sourceCol = 2 + $i
         $sheet.Cells.Item(6 + $i, 12).Formula = '=INDEX(abilities!$A$2:$' + $abilityLastCol + '$' + $abilityLastRow + ',MATCH($B$3,abilities!$A$2:$A$' + $abilityLastRow + ',0),' + $sourceCol + ')'
         $abilityEndRow = 5 + $abilityDataRows
-        $sheet.Cells.Item(6 + $i, 13).Formula = '=IF($L' + (6 + $i) + '="","",IFERROR((($L' + (6 + $i) + '/10)*(1+($L' + (6 + $i) + '>10)*($B$10-1)))/SUMPRODUCT(($L$6:$L$' + $abilityEndRow + '/10)*(1+($L$6:$L$' + $abilityEndRow + '>10)*($B$10-1))),0))'
+        $sheet.Cells.Item(6 + $i, 13).Formula = '=IF($L' + (6 + $i) + '="","",IFERROR(FirstRollShare($L' + (6 + $i) + ',$L$6:$L$' + $abilityEndRow + ',$B$10,$B$11,$B$8,$B$6:$B$8),0))'
     }
 
     $sheet.Range("A3:B3").Interior.Color = 0xFFF2CC
-    $sheet.Range("A5:B10").Borders.LineStyle = 1
+    $sheet.Range("A5:B11").Borders.LineStyle = 1
     $sheet.Range("D5:E40").Borders.LineStyle = 1
     $sheet.Range("G5:I120").Borders.LineStyle = 1
     $sheet.Range("K5:M120").Borders.LineStyle = 1
@@ -212,6 +214,13 @@ function Add-ClassViewSheet {
     $validation.IgnoreBlank = $true
     $validation.InCellDropdown = $true
     $validation.ShowError = $false
+
+    $boolValidation = $sheet.Range("B11").Validation
+    $boolValidation.Delete()
+    $boolValidation.Add(3, 1, 1, 'TRUE,FALSE')
+    $boolValidation.IgnoreBlank = $true
+    $boolValidation.InCellDropdown = $true
+    $boolValidation.ShowError = $false
 
     $sortValidationAttributes = $sheet.Range("H3").Validation
     $sortValidationAttributes.Delete()
@@ -374,11 +383,79 @@ Private Function WantsWeightSort(cellValue As Variant, Optional defaultWeight As
     WantsWeightSort = (normalized <> "name")
 End Function
 
-Private Function PreferredShare(weightRange As Range, preferredMultiplier As Double) As Double
+Private Function BoolCellValue(rawValue As Variant) As Boolean
+    Dim normalized As String
+    If VarType(rawValue) = vbBoolean Then
+        BoolCellValue = CBool(rawValue)
+        Exit Function
+    End If
+    normalized = LCase$(Trim$(CStr(rawValue)))
+    BoolCellValue = (normalized = "true" Or normalized = "1" Or normalized = "yes" Or normalized = "y")
+End Function
+
+Private Function EffectivePreferredMultiplier(weightRange As Range, preferredMultiplier As Double, autoBalance As Variant, categoryWeight As Double, categoryRange As Range) As Double
+    Dim cell As Range
+    Dim rawWeight As Double
+    Dim preferredWeight As Double, nonPreferredWeight As Double
+    Dim totalCategory As Double, expectedRolls As Double
+    Dim targetNonPreferredPerRoll As Double, multiplier As Double
+
+    If Not BoolCellValue(autoBalance) Then
+        EffectivePreferredMultiplier = preferredMultiplier
+        Exit Function
+    End If
+
+    preferredWeight = 0#
+    nonPreferredWeight = 0#
+    For Each cell In weightRange.Cells
+        If IsNumeric(cell.Value2) Then
+            rawWeight = CDbl(cell.Value2) / 10#
+            If rawWeight > 1# Then
+                preferredWeight = preferredWeight + rawWeight
+            Else
+                nonPreferredWeight = nonPreferredWeight + rawWeight
+            End If
+        End If
+    Next cell
+
+    If preferredWeight <= 0# Or nonPreferredWeight <= 0# Or categoryWeight <= 0# Then
+        EffectivePreferredMultiplier = 1#
+        Exit Function
+    End If
+
+    totalCategory = Application.WorksheetFunction.Sum(categoryRange)
+    If totalCategory <= 0# Then
+        EffectivePreferredMultiplier = 1#
+        Exit Function
+    End If
+
+    expectedRolls = 99# * (categoryWeight / totalCategory)
+    If expectedRolls <= 0# Then
+        EffectivePreferredMultiplier = 1#
+        Exit Function
+    End If
+
+    targetNonPreferredPerRoll = 1# - (0.9# ^ (1# / expectedRolls))
+    If targetNonPreferredPerRoll <= 0# Or targetNonPreferredPerRoll >= 1# Then
+        EffectivePreferredMultiplier = 1#
+        Exit Function
+    End If
+
+    multiplier = (nonPreferredWeight * (1# - targetNonPreferredPerRoll)) / (targetNonPreferredPerRoll * preferredWeight)
+    If multiplier <= 0# Then
+        EffectivePreferredMultiplier = 1#
+    Else
+        EffectivePreferredMultiplier = multiplier
+    End If
+End Function
+
+Private Function PreferredShare(weightRange As Range, preferredMultiplier As Double, autoBalance As Variant, categoryWeight As Double, categoryRange As Range) As Double
     Dim cell As Range
     Dim rawWeight As Double, effectiveWeight As Double
     Dim preferredWeight As Double, totalWeight As Double
+    Dim effectiveMultiplier As Double
 
+    effectiveMultiplier = EffectivePreferredMultiplier(weightRange, preferredMultiplier, autoBalance, categoryWeight, categoryRange)
     preferredWeight = 0#
     totalWeight = 0#
     For Each cell In weightRange.Cells
@@ -386,7 +463,7 @@ Private Function PreferredShare(weightRange As Range, preferredMultiplier As Dou
             rawWeight = CDbl(cell.Value2) / 10#
             effectiveWeight = rawWeight
             If rawWeight > 1# Then
-                effectiveWeight = rawWeight * preferredMultiplier
+                effectiveWeight = rawWeight * effectiveMultiplier
                 preferredWeight = preferredWeight + effectiveWeight
             End If
             totalWeight = totalWeight + effectiveWeight
@@ -400,7 +477,43 @@ Private Function PreferredShare(weightRange As Range, preferredMultiplier As Dou
     End If
 End Function
 
-Public Function RoughRisk(categoryWeight As Double, categoryRange As Range, weightRange As Range, preferredMultiplier As Double, rolls As Long) As Double
+Public Function FirstRollShare(cellWeight As Variant, weightRange As Range, preferredMultiplier As Double, autoBalance As Variant, categoryWeight As Double, categoryRange As Range) As Double
+    Dim rawWeight As Double
+    Dim totalWeight As Double
+    Dim cell As Range
+    Dim otherRawWeight As Double
+    Dim effectiveMultiplier As Double
+
+    If Not IsNumeric(cellWeight) Then
+        FirstRollShare = 0#
+        Exit Function
+    End If
+
+    effectiveMultiplier = EffectivePreferredMultiplier(weightRange, preferredMultiplier, autoBalance, categoryWeight, categoryRange)
+    rawWeight = CDbl(cellWeight) / 10#
+    If rawWeight > 1# Then
+        rawWeight = rawWeight * effectiveMultiplier
+    End If
+
+    totalWeight = 0#
+    For Each cell In weightRange.Cells
+        If IsNumeric(cell.Value2) Then
+            otherRawWeight = CDbl(cell.Value2) / 10#
+            If otherRawWeight > 1# Then
+                otherRawWeight = otherRawWeight * effectiveMultiplier
+            End If
+            totalWeight = totalWeight + otherRawWeight
+        End If
+    Next cell
+
+    If totalWeight <= 0# Then
+        FirstRollShare = 0#
+    Else
+        FirstRollShare = rawWeight / totalWeight
+    End If
+End Function
+
+Public Function RoughRisk(categoryWeight As Double, categoryRange As Range, weightRange As Range, preferredMultiplier As Double, autoBalance As Variant, rolls As Long) As Double
     Dim totalCategory As Double
     Dim categoryChance As Double
     Dim preferredShareValue As Double
@@ -414,7 +527,7 @@ Public Function RoughRisk(categoryWeight As Double, categoryRange As Range, weig
     End If
 
     categoryChance = categoryWeight / totalCategory
-    preferredShareValue = PreferredShare(weightRange, preferredMultiplier)
+    preferredShareValue = PreferredShare(weightRange, preferredMultiplier, autoBalance, categoryWeight, categoryRange)
     nonPreferredPerRoll = categoryChance * (1# - preferredShareValue)
     If nonPreferredPerRoll <= 0# Then
         RoughRisk = 0#
@@ -452,6 +565,7 @@ Public Sub LoadSelectedClassView()
         Else
             wsView.Range("B10").Value2 = MetaValue(ThisWorkbook.Worksheets("meta"), "preferredAbilityWeightMultiplier", 1)
         End If
+        wsView.Range("B11").Value2 = BoolCellValue(wsCategories.Cells(classRow, 7).Value2)
     End If
 
     r = 6
@@ -504,6 +618,7 @@ Public Sub NewClassView()
     wsView.Range("B8").Value2 = MetaValue(wsMeta, "defaultCategory.ability", 10)
     wsView.Range("B9").Value2 = MetaValue(wsMeta, "preferredAttributeWeightMultiplier", 1)
     wsView.Range("B10").Value2 = MetaValue(wsMeta, "preferredAbilityWeightMultiplier", 1)
+    wsView.Range("B11").Value2 = False
 
     r = 6
     Do While Trim$(CStr(wsView.Cells(r, 4).Value2)) <> ""
@@ -589,18 +704,55 @@ Private Sub ExportSheetCsv(ws As Worksheet, outPath As String)
     stream.Close
 End Sub
 
-Public Sub ApplyClassViewEdits()
-    Dim wsView As Worksheet, wsCategories As Worksheet, wsBase As Worksheet, wsAttr As Worksheet, wsAbilities As Worksheet, wsMeta As Worksheet
+Private Sub WriteClassViewToSheets()
+    Dim wsView As Worksheet, wsCategories As Worksheet, wsBase As Worksheet, wsAttr As Worksheet, wsAbilities As Worksheet
     Dim className As String, classRow As Long
-    Dim csvDir As String, repoRoot As String, command As String
-    Dim shell As Object, exitCode As Long
 
     Set wsView = ThisWorkbook.Worksheets("class_view")
     Set wsCategories = ThisWorkbook.Worksheets("categories")
     Set wsBase = ThisWorkbook.Worksheets("base_stats")
     Set wsAttr = ThisWorkbook.Worksheets("attributes")
     Set wsAbilities = ThisWorkbook.Worksheets("abilities")
-    Set wsMeta = ThisWorkbook.Worksheets("meta")
+
+    className = Trim$(CStr(wsView.Range("B3").Value2))
+    If className = "" Then
+        Err.Raise vbObjectError + 2000, "WriteClassViewToSheets", "Select a class first."
+    End If
+
+    classRow = EnsureClassRow(wsCategories, className, 0)
+    wsCategories.Cells(classRow, 2).Value2 = wsView.Range("B6").Value2
+    wsCategories.Cells(classRow, 3).Value2 = wsView.Range("B7").Value2
+    wsCategories.Cells(classRow, 4).Value2 = wsView.Range("B8").Value2
+    wsCategories.Cells(classRow, 5).Value2 = wsView.Range("B9").Value2
+    wsCategories.Cells(classRow, 6).Value2 = wsView.Range("B10").Value2
+    wsCategories.Cells(classRow, 7).Value2 = BoolCellValue(wsView.Range("B11").Value2)
+
+    WriteClassValues wsView, wsBase, 4, 5, className
+    WriteClassValues wsView, wsAttr, 7, 8, className
+    WriteClassValues wsView, wsAbilities, 11, 12, className
+End Sub
+
+Private Sub ExportOverviewCsvs(csvDir As String)
+    ExportSheetCsv ThisWorkbook.Worksheets("categories"), csvDir & "\categories.csv"
+    ExportSheetCsv ThisWorkbook.Worksheets("base_stats"), csvDir & "\base_stats.csv"
+    ExportSheetCsv ThisWorkbook.Worksheets("attributes"), csvDir & "\attributes.csv"
+    ExportSheetCsv ThisWorkbook.Worksheets("abilities"), csvDir & "\abilities.csv"
+    ExportSheetCsv ThisWorkbook.Worksheets("meta"), csvDir & "\meta.csv"
+End Sub
+
+Private Function RepoRootFromWorkbookPath(csvDir As String) As String
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    RepoRootFromWorkbookPath = fso.GetParentFolderName(fso.GetParentFolderName(csvDir))
+End Function
+
+Public Sub ApplyClassViewEdits()
+    Dim wsView As Worksheet, wsCategories As Worksheet, wsBase As Worksheet, wsAttr As Worksheet, wsAbilities As Worksheet, wsMeta As Worksheet
+    Dim className As String
+    Dim csvDir As String, repoRoot As String, command As String
+    Dim shell As Object, exitCode As Long
+
+    Set wsView = ThisWorkbook.Worksheets("class_view")
 
     className = Trim$(CStr(wsView.Range("B3").Value2))
     If className = "" Then
@@ -608,26 +760,11 @@ Public Sub ApplyClassViewEdits()
         Exit Sub
     End If
 
-    classRow = EnsureClassRow(wsCategories, className, 0)
-
-    wsCategories.Cells(classRow, 2).Value2 = wsView.Range("B6").Value2
-    wsCategories.Cells(classRow, 3).Value2 = wsView.Range("B7").Value2
-    wsCategories.Cells(classRow, 4).Value2 = wsView.Range("B8").Value2
-    wsCategories.Cells(classRow, 5).Value2 = wsView.Range("B9").Value2
-    wsCategories.Cells(classRow, 6).Value2 = wsView.Range("B10").Value2
-
-    WriteClassValues wsView, wsBase, 4, 5, className
-    WriteClassValues wsView, wsAttr, 7, 8, className
-    WriteClassValues wsView, wsAbilities, 11, 12, className
-
     csvDir = ThisWorkbook.Path
-    ExportSheetCsv wsCategories, csvDir & "\categories.csv"
-    ExportSheetCsv wsBase, csvDir & "\base_stats.csv"
-    ExportSheetCsv wsAttr, csvDir & "\attributes.csv"
-    ExportSheetCsv wsAbilities, csvDir & "\abilities.csv"
-    ExportSheetCsv wsMeta, csvDir & "\meta.csv"
+    WriteClassViewToSheets
+    ExportOverviewCsvs csvDir
 
-    repoRoot = CreateObject("Scripting.FileSystemObject").GetParentFolderName(CreateObject("Scripting.FileSystemObject").GetParentFolderName(csvDir))
+    repoRoot = RepoRootFromWorkbookPath(csvDir)
     command = "powershell -NoProfile -ExecutionPolicy Bypass -File " & _
         Chr(34) & repoRoot & "\scripts\import_class_weights_from_csv.ps1" & Chr(34) & _
         " -ProjectRoot " & Chr(34) & repoRoot & Chr(34)
@@ -785,6 +922,9 @@ function Format-Worksheet {
         $Worksheet.Columns.Item(2).ColumnWidth = 12
         $Worksheet.Columns.Item(3).ColumnWidth = 12
         $Worksheet.Columns.Item(4).ColumnWidth = 12
+        $Worksheet.Columns.Item(5).ColumnWidth = 16
+        $Worksheet.Columns.Item(6).ColumnWidth = 16
+        $Worksheet.Columns.Item(7).ColumnWidth = 16
 
         if ($rowCount -ge 2) {
             $classRange = $Worksheet.Range($Worksheet.Cells.Item(2, 1), $Worksheet.Cells.Item($rowCount, 1))

@@ -147,35 +147,36 @@ public class TameAbilityEvents {
                 boolean ownerProtectionPass = shouldRunPeriodicPass(tame, now, OWNER_PROTECTION_TICK_RATE);
                 boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, currentTarget);
+                boolean abilitiesBlocked = false;
                 TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, currentTarget, now));
 
                 if (namedEffectsPass) {
                     TamePerformanceProfiler.run("attribute.named_effects", () -> handleNamedAttributeEffects(tame, data));
                 }
-                if (ownerProtectionPass) {
+                if (!abilitiesBlocked && ownerProtectionPass) {
                     TamePerformanceProfiler.run("feature.owner_protection_tick", () -> OwnerProtectionAbilityModule.onTick(tame, data));
                 }
                 TamePerformanceProfiler.run("attribute.passive_heal", () -> handlePassiveHeal(tame, data, now));
                 TamePerformanceProfiler.run("attribute.comfort", () -> handleComfort(tame, data, now));
                 TamePerformanceProfiler.run("attribute.regeneration", () -> handleAttributeRegeneration(tame, data, now));
                 TamePerformanceProfiler.run("attribute.rejuvenation", () -> handleRejuvenation(tame, data));
-                if (needsNearbyAllySupportScan(data)) {
+                if (!abilitiesBlocked && needsNearbyAllySupportScan(data)) {
                     List<TamableAnimal> nearbySupportTames = collectOwnedNearbySupportTames(level, tame, tame.getOwnerUUID(), 10.0D, supportCache);
                     TamePerformanceProfiler.run("ability.triage_pulse", () -> handleTriagePulse(level, tame, data, now, nearbySupportTames));
                     TamePerformanceProfiler.run("ability.cleanse_touch", () -> handleCleanseTouch(level, tame, data, now, nearbySupportTames));
                 }
-                if (heavyPass && guardianRepulsePass) {
+                if (!abilitiesBlocked && heavyPass && guardianRepulsePass) {
                     TamePerformanceProfiler.run("ability.guardian_repulse", () -> handleGuardianRepulse(level, tame, data, now));
                 }
-                if (allowOffensive && heavyPass) {
+                if (!abilitiesBlocked && allowOffensive && heavyPass) {
                     TamePerformanceProfiler.run("ability.creeper_explosion", () -> handleCreeperExplosion(level, tame, data, currentTarget, now));
                 }
-                if (allowOffensive) {
+                if (!abilitiesBlocked && allowOffensive) {
                     TamePerformanceProfiler.run("ability.arrow_shot", () -> handleArrowShot(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.fishing", () -> handleFishing(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.dash", () -> handleDash(level, tame, data, currentTarget, now));
                 }
-                if (allowOffensive && heavyPass) {
+                if (!abilitiesBlocked && allowOffensive && heavyPass) {
                     TamePerformanceProfiler.run("ability.healing_bottle", () -> handleHealingBottle(level, tame, data, now));
                     TamePerformanceProfiler.run("ability.ghast_fireball", () -> handleGhastFireball(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.wither_skull", () -> handleWitherSkull(level, tame, data, currentTarget, now));
@@ -190,12 +191,12 @@ public class TameAbilityEvents {
                     TamePerformanceProfiler.run("ability.berserker", () -> handleBerserker(tame, data, now));
                     TamePerformanceProfiler.run("ability.shulker_bullet", () -> handleShulkerBullet(level, tame, data, currentTarget, now));
                 }
-                if (allowOffensive) {
+                if (!abilitiesBlocked && allowOffensive) {
                     TamePerformanceProfiler.run("ability.snowball_shot", () -> handleSnowballShot(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.ender_pearl_jump", () -> handleEnderPearlJump(tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.sky_launch_offense", () -> handleSkyLaunchOnOffense(level, tame, data, currentTarget, now));
                 }
-                if (allowOffensive && heavyPass) {
+                if (!abilitiesBlocked && allowOffensive && heavyPass) {
                     TamePerformanceProfiler.run("ability.lightning_strike", () -> handleLightningStrike(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.warden_scream", () -> handleWardenScream(level, tame, data, currentTarget, now));
                 }
@@ -905,7 +906,7 @@ public class TameAbilityEvents {
             level.playSound(null, tame.blockPosition(), SoundEvents.IRON_GOLEM_HURT, SoundSource.NEUTRAL, 0.7F, 1.0F);
             debugAbilityUse(tame, "guardian_repulse");
         }
-        setAbilityCooldown(tame, data, "guardian_repulse", "guardian_repulse_tick", now, 60L);
+        setAbilityCooldown(tame, data, "guardian_repulse", "guardian_repulse_tick", now, 400L);
     }
 
     private static void spawnEvokerFangLine(ServerLevel level, TamableAnimal tame, LivingEntity target) {
@@ -1577,7 +1578,7 @@ public class TameAbilityEvents {
         if (redirected <= 0.0F) return false;
         event.setAmount(Math.max(0.0F, event.getAmount() - redirected));
         applyRedirectDamage(supporter, event, redirected);
-        setAbilityCooldown(supporter, data, "guardian_intercept", "guardian_intercept_tick", now, Math.max(40L, 140L - levelValue * 10L));
+        setAbilityCooldown(supporter, data, "guardian_intercept", "guardian_intercept_tick", now, Math.max(40L, 410L - levelValue * 10L));
         grantSupportXp(supporter, data, ally, now, redirected, 0.75F);
         applySupportActivationVisual(supporter, "guardian_intercept");
         level.sendParticles(ParticleTypes.CRIT, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
@@ -1593,8 +1594,10 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "body_block"));
         float prevented = event.getAmount() * (float) Math.min(0.90D, 0.45D + 0.10D * levelValue);
+        float backlash = prevented * 0.50F;
         event.setAmount(Math.max(0.0F, event.getAmount() - prevented));
-        setAbilityCooldown(supporter, data, "body_block", "body_block_tick", now, Math.max(40L, 180L - levelValue * 15L));
+        applyRedirectDamage(supporter, event, backlash);
+        setAbilityCooldown(supporter, data, "body_block", "body_block_tick", now, Math.max(40L, 415L - levelValue * 15L));
         grantSupportXp(supporter, data, ally, now, prevented, 0.75F);
         applySupportActivationVisual(supporter, "body_block");
         level.playSound(null, supporter.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
@@ -1605,6 +1608,7 @@ public class TameAbilityEvents {
     private static void handleEmergencyShieldSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "emergency_shield")) return;
         if (event.getAmount() <= 0.0F) return;
+        if (supporter.distanceToSqr(ally) > 25.0D) return;
         if (!isReady(data, "emergency_shield_tick", now)) return;
         float postDamageHealth = ally.getHealth() - event.getAmount();
         float threshold = ally.getMaxHealth() * 0.35F;

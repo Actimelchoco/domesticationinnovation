@@ -16,7 +16,12 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
     }
 
     @Override
+    protected int tickInterval() {
+        return 10;
+    }
+
+    @Override
     protected void tickMode(ServerLevel level, TameData data) {
-        TameGoalSupport.setHunterTarget(level, tame, 7.0D);
+        TameGoalSupport.setHunterTarget(level, tame, 10.0D);
     }
 }

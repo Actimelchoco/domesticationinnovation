@@ -428,12 +428,12 @@ These should not be ranked by single-target damage.
   - retargets nearby monsters onto the tame
   - radius = `6.0 + 0.6 * level`
   - chance per monster = `12% + 4% * level`, capped at `90%`
-  - cooldown = `60 ticks` (`3.0s`)
+  - cooldown = `400 ticks` (`20.0s`)
 - Trigger 2: owner-protection pulse when the owner is hurt and the tame is within `3` blocks
 - Owner pulse:
   - knocks nearby monsters away from the owner
   - radius = `2.8 + 0.25 * level`
-  - cooldown = `max(20, 800 - 60 * (level - 1))` ticks
+  - cooldown = `400 ticks` (`20.0s`)
 - Notes:
   - this is an aggro-control and peel tool, not a damage spell
 
@@ -474,7 +474,7 @@ These should not be ranked by single-target damage.
 - Trigger: allied hurt response
 - Effect: redirects part of an ally's incoming hit to the supporter
 - Redirected share: `20% + 10% * level`, capped at `60%`
-- Cooldown: `max(40, 140 - 10 * level)` ticks
+- Cooldown: `max(40, 410 - 10 * level)` ticks
 - Notes:
   - the ally takes less damage
   - the supporter pays that redirected amount instead
@@ -485,6 +485,7 @@ These should not be ranked by single-target damage.
   - reduces the triggering hit by `20% + 8% * level`, capped at `60%`
   - grants `Absorption`
   - grants short `Resistance`
+- Reach: supporter must be within `5` blocks of the ally
 - Absorption duration: `80 + 20 * level` ticks
 - Resistance duration: `40 + 20 * level` ticks
 - Cooldown: `max(80, 240 - 20 * level)` ticks
@@ -495,7 +496,8 @@ These should not be ranked by single-target damage.
 - Trigger: allied hurt response against projectile damage only
 - Effect: prevents part of the projectile hit
 - Prevention: `45% + 10% * level`, capped at `90%`
-- Cooldown: `max(40, 180 - 15 * level)` ticks
+- Support backlash: supporter takes `50%` of the prevented damage
+- Cooldown: `max(40, 415 - 15 * level)` ticks
 - Notes:
   - this is projectile-specific protection
 

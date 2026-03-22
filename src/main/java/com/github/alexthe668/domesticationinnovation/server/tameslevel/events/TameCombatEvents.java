@@ -97,6 +97,7 @@ public class TameCombatEvents {
                 String deathMessage = event.getSource().getLocalizedDeathMessage(tame).getString();
                 TameDeathRecord deathRecord = TameDeathRecord.fromTame(data, tame, tame.level().getGameTime());
                 TameRegistry.archiveDeath(deathRecord);
+                notifyOwnerOfDeath(tame, data, deathMessage);
                 CompoundTag deathRow = new CompoundTag();
                 deathRow.putLong("gameTime", data.deadGameTime);
                 deathRow.putLong("unixMillis", data.deadUnixMillis);
@@ -119,6 +120,14 @@ public class TameCombatEvents {
             }
             TameBedRegistrySync.syncFromEntity(tame, data);
             TameRegistry.markDirty();
+        }
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        if (!tame.isRemoved()) {
+            tame.remove(net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
+        }
+        if (!tame.isRemoved()) {
+            tame.discard();
         }
     }
 
@@ -177,6 +186,25 @@ public class TameCombatEvents {
             return tame.getUUID();
         }
         return null;
+    }
+
+    private static void notifyOwnerOfDeath(TamableAnimal tame, TameData data, String deathMessage) {
+        if (!(tame.level() instanceof ServerLevel serverLevel) || data == null || data.ownerUUID == null) {
+            return;
+        }
+        ServerPlayer owner = serverLevel.getServer().getPlayerList().getPlayer(data.ownerUUID);
+        if (owner == null) {
+            return;
+        }
+        String tameName = data.name == null || data.name.isBlank() ? "Your tame" : data.name;
+        owner.sendSystemMessage(
+                Component.literal("[Tames] ").withStyle(ChatFormatting.DARK_RED)
+                        .append(Component.literal(tameName).withStyle(ChatFormatting.GOLD))
+                        .append(Component.literal(" died.").withStyle(ChatFormatting.RED))
+        );
+        if (deathMessage != null && !deathMessage.isBlank()) {
+            owner.sendSystemMessage(Component.literal(deathMessage).withStyle(ChatFormatting.GRAY));
+        }
     }
 
     private static void enqueueAndDrainDeaths(PendingDeath death) {

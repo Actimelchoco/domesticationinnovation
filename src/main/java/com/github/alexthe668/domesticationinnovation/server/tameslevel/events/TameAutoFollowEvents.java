@@ -2,9 +2,11 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
@@ -90,6 +92,14 @@ public class TameAutoFollowEvents {
             }
         }
 
+        if (serverTick % 40L == 0L) {
+            for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
+                if (player != null && player.isAlive()) {
+                    pullUnloadedFollowingTamesToOwner(player);
+                }
+            }
+        }
+
         if (!STABILIZE_FOLLOW.isEmpty()) {
             Iterator<Map.Entry<UUID, StabilizeFollow>> stabilizeIt = STABILIZE_FOLLOW.entrySet().iterator();
             while (stabilizeIt.hasNext()) {
@@ -130,17 +140,30 @@ public class TameAutoFollowEvents {
         for (TameData data : TameRegistry.getOwned(ownerId)) {
             if (data == null || data.uuid == null) continue;
             if (!ownerId.equals(data.ownerUUID)) continue;
-            if (!isFollowing(data)) continue;
+            if (!isAutoFollowEligible(data)) continue;
             if (data.dead) continue;
 
             TamableAnimal tame = findLoadedOwnedTame(owner, data.uuid);
             if (tame != null) {
-                if (!isFollowing(tame)) continue;
-                teleportTameToPlayer(tame, owner);
+                if (!isAutoFollowEligible(owner, tame, data)) continue;
+                TameCommands.autoFollowTeleportLoadedToOwner(tame, owner);
                 continue;
             }
 
-            summonUnloadedFollowingTame(data, owner);
+            TameCommands.autoFollowTeleportUnloadedToOwner(owner, data);
+        }
+    }
+
+    private static void pullUnloadedFollowingTamesToOwner(ServerPlayer owner) {
+        if (owner == null || owner.server == null) return;
+        UUID ownerId = owner.getUUID();
+        for (TameData data : TameRegistry.getOwned(ownerId)) {
+            if (data == null || data.uuid == null || data.dead) continue;
+            if (!ownerId.equals(data.ownerUUID)) continue;
+            if (!isAutoFollowEligible(data)) continue;
+            if (TameCommands.hasPendingImmediateChunkTeleport(data)) continue;
+            if (findLoadedOwnedTame(owner, data.uuid) != null) continue;
+            TameCommands.autoFollowTeleportUnloadedToOwner(owner, data);
         }
     }
 
@@ -199,6 +222,28 @@ public class TameAutoFollowEvents {
             }
         }
         return true;
+    }
+
+    private static boolean isAutoFollowEligible(TameData data) {
+        return isFollowing(data) && hasTeleportCapability(data);
+    }
+
+    private static boolean isAutoFollowEligible(ServerPlayer owner, TamableAnimal tame, TameData data) {
+        return tame != null
+                && tame.isAlive()
+                && isFollowing(tame)
+                && tame.level() instanceof ServerLevel
+                && TameableUtils.isValidTeleporter(owner, tame);
+    }
+
+    private static boolean hasTeleportCapability(TameData data) {
+        if (data == null) {
+            return false;
+        }
+        if (data.attributeLevels.getOrDefault("tethered_teleport", 0) > 0) {
+            return true;
+        }
+        return data.entitySnapshot != null && data.entitySnapshot.toString().contains("tethered_teleport");
     }
 
     private static boolean isFollowing(TamableAnimal tame) {

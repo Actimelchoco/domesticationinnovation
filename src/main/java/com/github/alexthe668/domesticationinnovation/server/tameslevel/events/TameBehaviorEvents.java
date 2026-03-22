@@ -5,15 +5,16 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
@@ -22,7 +23,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
 public class TameBehaviorEvents {
-
     @SubscribeEvent
     public static void onTameTick(LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
@@ -135,6 +135,11 @@ public class TameBehaviorEvents {
         }
     }
 
+    @SubscribeEvent
+    public static void onTameHurt(LivingHurtEvent event) {
+        // Stamina/tiredness has been removed; tame hurt no longer drives fatigue.
+    }
+
     private static void applyRetargetByMode(TamableAnimal tame, TameData data, ServerPlayer owner, LivingEntity ownerCombatTarget) {
         if (ownerCombatTarget == null || !ownerCombatTarget.isAlive()) return;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
@@ -194,6 +199,21 @@ public class TameBehaviorEvents {
         return null;
     }
 
+    private static LivingEntity findNearestAggressiveTarget(TamableAnimal tame, double radius) {
+        LivingEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        AABB box = tame.getBoundingBox().inflate(radius);
+        for (LivingEntity entity : tame.level().getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!isValidCombatTarget(tame, entity)) continue;
+            double d2 = entity.distanceToSqr(tame);
+            if (d2 < bestDist) {
+                bestDist = d2;
+                best = entity;
+            }
+        }
+        return best;
+    }
+
     private static LivingEntity findNearestMonster(TamableAnimal tame, double radius) {
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
@@ -205,21 +225,6 @@ public class TameBehaviorEvents {
             if (d2 < bestDist) {
                 bestDist = d2;
                 best = monster;
-            }
-        }
-        return best;
-    }
-
-    private static LivingEntity findNearestAggressiveTarget(TamableAnimal tame, double radius) {
-        LivingEntity best = null;
-        double bestDist = Double.MAX_VALUE;
-        AABB box = tame.getBoundingBox().inflate(radius);
-        for (LivingEntity entity : tame.level().getEntitiesOfClass(LivingEntity.class, box)) {
-            if (!isValidCombatTarget(tame, entity)) continue;
-            double d2 = entity.distanceToSqr(tame);
-            if (d2 < bestDist) {
-                bestDist = d2;
-                best = entity;
             }
         }
         return best;

@@ -83,6 +83,10 @@ final class TameGoalSupport {
     }
 
     static void setBossTarget(ServerLevel level, TamableAnimal tame, ServerPlayer owner) {
+        LivingEntity current = tame.getTarget();
+        if (current != null && current.isAlive()) {
+            return;
+        }
         double x = owner != null ? owner.getX() : tame.getX();
         double y = owner != null ? owner.getY() : tame.getY();
         double z = owner != null ? owner.getZ() : tame.getZ();
@@ -94,6 +98,11 @@ final class TameGoalSupport {
         if (tame.distanceTo(owner) > leashDistance) {
             tame.setTarget(null);
             tame.getNavigation().moveTo(owner, 1.25D);
+            return;
+        }
+
+        LivingEntity current = tame.getTarget();
+        if (current != null && current.isAlive()) {
             return;
         }
 
@@ -133,11 +142,19 @@ final class TameGoalSupport {
     }
 
     static void setHunterTarget(ServerLevel level, TamableAnimal tame, double huntRadius) {
+        LivingEntity current = tame.getTarget();
+        if (current != null && current.isAlive()) {
+            return;
+        }
         LivingEntity target = findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);
         if (target != null) tame.setTarget(target);
     }
 
     static void setAggressiveTarget(ServerLevel level, TamableAnimal tame, double huntRadius) {
+        LivingEntity current = tame.getTarget();
+        if (current != null && current.isAlive()) {
+            return;
+        }
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         AABB box = new AABB(
