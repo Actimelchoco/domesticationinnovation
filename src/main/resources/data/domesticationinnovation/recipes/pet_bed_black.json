@@ -1,18 +1,31 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    "WWW",
-    "PBP"
+    "TDR",
+    "WBW",
+    "CEC"
   ],
   "key": {
+    "T": {
+      "item": "minecraft:totem_of_undying"
+    },
+    "D": {
+      "item": "domesticationinnovation:deed_of_ownership"
+    },
+    "R": {
+      "item": "minecraft:wither_rose"
+    },
     "W": {
       "item": "minecraft:black_wool"
     },
-    "P": {
-      "tag": "minecraft:planks"
-    },
     "B": {
-      "item": "minecraft:bone"
+      "tag": "domesticationinnovation:colored_pet_beds"
+    },
+    "C": {
+      "item": "minecraft:crying_obsidian"
+    },
+    "E": {
+      "item": "minecraft:enchanting_table"
     }
   },
   "result": {

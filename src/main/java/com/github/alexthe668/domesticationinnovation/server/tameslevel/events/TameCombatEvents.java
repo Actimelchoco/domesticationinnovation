@@ -115,9 +115,6 @@ public class TameCombatEvents {
                     data.deathHistory.remove(0);
                 }
             }
-            if (diedInDuel) {
-                data.escapeActive = false;
-            }
             TameBedRegistrySync.syncFromEntity(tame, data);
             TameRegistry.markDirty();
         }

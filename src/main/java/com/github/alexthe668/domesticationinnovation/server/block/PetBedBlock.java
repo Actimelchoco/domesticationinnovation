@@ -4,11 +4,17 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITagRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -27,6 +33,7 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.material.PushReaction;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -50,6 +57,11 @@ public class PetBedBlock extends BaseEntityBlock {
         if(TameableUtils.isTamed(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
            if((entity.tickCount + entity.getId()) % 10 == 0 && random.nextInt(6) == 0){
                String currentDimension = level.dimension().toString();
+               TameData claimedBy = TameRegistry.getTameByPetBed(currentDimension, pos);
+               if (claimedBy != null && claimedBy.uuid != null && !claimedBy.uuid.equals(entity.getUUID())) {
+                   super.entityInside(state, level, pos, entity);
+                   return;
+               }
                TameableUtils.setPetBedPos((LivingEntity) entity, pos);
                TameableUtils.setPetBedDimension((LivingEntity) entity, currentDimension);
                Vec3 look = new Vec3(0, 0, -entity.getBbWidth()).yRot((float)Math.toRadians(180f - entity.getYHeadRot()));
@@ -65,6 +77,21 @@ public class PetBedBlock extends BaseEntityBlock {
            }
         }
         super.entityInside(state, level, pos, entity);
+    }
+
+    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+        if (player.isShiftKeyDown()) {
+            if (!level.isClientSide) {
+                TameData claimedBy = TameRegistry.getTameByPetBed(level.dimension().toString(), pos);
+                if (claimedBy == null || claimedBy.name == null || claimedBy.name.isBlank()) {
+                    player.displayClientMessage(Component.literal("This pet bed is unclaimed."), true);
+                } else {
+                    player.displayClientMessage(Component.literal("This pet bed belongs to " + claimedBy.name + "."), true);
+                }
+            }
+            return InteractionResult.sidedSuccess(level.isClientSide);
+        }
+        return InteractionResult.PASS;
     }
 
     public BlockState getStateForPlacement(BlockPlaceContext context) {

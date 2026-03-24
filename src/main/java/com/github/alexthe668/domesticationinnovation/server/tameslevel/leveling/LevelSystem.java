@@ -498,6 +498,10 @@ public class LevelSystem {
                 recordLevelReward(data, data.level, reward, tame.level().getGameTime());
             }
             String rewardSummary = reward.summary();
+            String milestoneSummary = grantMissingMilestoneAttributes(data);
+            if (!milestoneSummary.isEmpty()) {
+                rewardSummary = rewardSummary.isEmpty() ? milestoneSummary : rewardSummary + " + " + milestoneSummary;
+            }
             updateTameName(tame, data);
 
             if (!regainingLevels && tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
@@ -512,6 +516,26 @@ public class LevelSystem {
         if (leveled) {
             TameRegistry.markDirty();
         }
+    }
+
+    public static String grantMissingMilestoneAttributes(TameData data) {
+        if (data == null) {
+            return "";
+        }
+        List<String> granted = new ArrayList<>();
+        if (data.level >= 10 && data.attributeLevels.getOrDefault("tethered_teleport", 0) <= 0) {
+            data.attributeLevels.put("tethered_teleport", 1);
+            granted.add("tethered_teleport I");
+        }
+        if (data.level >= 30 && data.attributeLevels.getOrDefault("gluttonous", 0) <= 0) {
+            data.attributeLevels.put("gluttonous", 1);
+            granted.add("gluttonous I");
+        }
+        if (granted.isEmpty()) {
+            return "";
+        }
+        TameRegistry.markDirty();
+        return String.join(", ", granted);
     }
 
     private static boolean isRegainingLevels(TameData data) {

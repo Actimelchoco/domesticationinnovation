@@ -2,17 +2,21 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     "WWW",
-    "PBP"
+    "BCB",
+    "QQQ"
   ],
   "key": {
     "W": {
       "item": "minecraft:green_wool"
     },
-    "P": {
-      "tag": "minecraft:planks"
-    },
     "B": {
-      "item": "minecraft:bone"
+      "item": "minecraft:bone_block"
+    },
+    "C": {
+      "item": "domesticationinnovation:collar_tag"
+    },
+    "Q": {
+      "item": "minecraft:quartz_block"
     }
   },
   "result": {

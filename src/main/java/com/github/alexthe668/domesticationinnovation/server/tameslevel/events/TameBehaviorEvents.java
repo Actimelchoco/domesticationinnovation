@@ -166,11 +166,7 @@ public class TameBehaviorEvents {
                     tame.setTarget(ownerCombatTarget);
                 }
             }
-            case MONSTER_HUNTER, AGGRESSIVE -> {
-                if (tame.distanceTo(ownerCombatTarget) <= 7.0D) {
-                    tame.setTarget(ownerCombatTarget);
-                }
-            }
+            case MONSTER_HUNTER, AGGRESSIVE -> tame.setTarget(ownerCombatTarget);
         }
     }
 
@@ -362,6 +358,12 @@ public class TameBehaviorEvents {
             tame.getNavigation().stop();
             return;
         }
+        if (distanceSqr >= 12.0D * 12.0D) {
+            tame.teleportTo(owner.getX(), owner.getY(), owner.getZ());
+            tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
+            tame.getNavigation().stop();
+            return;
+        }
         if (distanceSqr > 2.5D * 2.5D) {
             tame.getNavigation().moveTo(owner, 1.15D);
         }
@@ -384,6 +386,7 @@ public class TameBehaviorEvents {
         if (target.level() != tame.level()) return false;
         if (target instanceof Player) return false;
         if (target instanceof TamableAnimal otherTame && otherTame.isTame()) return false;
+        if (TameRegistry.isProtectedAttackTarget(tame, target)) return false;
         return true;
     }
 

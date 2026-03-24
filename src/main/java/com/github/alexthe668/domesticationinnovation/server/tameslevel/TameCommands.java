@@ -481,6 +481,8 @@ public class TameCommands {
                                         .executes(ctx -> requestRerollClass(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("reincarnation")
                                 .executes(ctx -> reincarnationOverview(ctx.getSource()))
+                                .then(Commands.literal("approvedItems")
+                                        .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                                 .then(Commands.literal("auto")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setAutoReincarnation(
@@ -497,6 +499,25 @@ public class TameCommands {
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> reincarnateBatchType(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                        .then(Commands.literal("doNotAttack")
+                                .executes(ctx -> listDoNotAttack(ctx.getSource()))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("mobtype", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestCurrentPlayerDoNotAttackTypes(ctx.getSource(), b))
+                                                .executes(ctx -> removeDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                                .then(Commands.argument("mobtype", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestEntityTypes(b))
+                                        .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                        .then(Commands.literal("bed")
+                                .executes(ctx -> listOwnedBeds(ctx.getSource()))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesWithBeds(ctx.getSource(), b))
+                                                .executes(ctx -> removeOwnedBed(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                        .then(Commands.literal("doNotAttackAnimals")
+                                .executes(ctx -> listDoNotAttack(ctx.getSource()))
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("graveyard")
                                 .executes(ctx -> graveyard(ctx.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -1123,21 +1144,6 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("tpGuardian")
-                                .executes(ctx -> teleportGuardianAll(ctx.getSource()))
-                                .then(Commands.literal("all")
-                                        .executes(ctx -> teleportGuardianAll(ctx.getSource())))
-                                .then(Commands.literal("group")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                .executes(ctx -> teleportGuardianGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                .then(Commands.literal("type")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> teleportGuardianType(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> teleportGuardianPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("tphome")
                                 .then(Commands.literal("all")
                                         .executes(ctx -> teleportAllHome(ctx.getSource())))
@@ -1286,6 +1292,8 @@ public class TameCommands {
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
                                 .then(Commands.literal("reloadTames")
                                         .executes(ctx -> adminReloadTames(ctx.getSource())))
+                                .then(Commands.literal("grantMissingMilestoneAttributes")
+                                        .executes(ctx -> adminGrantMissingMilestoneAttributes(ctx.getSource())))
                                 .then(Commands.literal("reloadClassWeights")
                                         .executes(ctx -> adminReloadClassWeights(ctx.getSource())))
                                 .then(Commands.literal("normalizeBonuses")
@@ -1472,7 +1480,16 @@ public class TameCommands {
                                                         )))))
                                 .then(Commands.literal("approve")
                                         .then(Commands.literal("item")
-                                                .executes(ctx -> adminApproveHeldItem(ctx.getSource()))))
+                                                .executes(ctx -> adminApproveHeldItem(ctx.getSource())))
+                                        .then(Commands.literal("list")
+                                                .executes(ctx -> adminListApprovedItems(ctx.getSource())))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestApprovedReincarnationItems(b))
+                                                        .executes(ctx -> adminRemoveApprovedItem(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "item")
+                                                        )))))
                                 .then(Commands.literal("collar")
                                         .then(Commands.literal("stripDiEnchants")
                                                 .executes(ctx -> adminStripDiEnchantsFromHeldCollar(ctx.getSource())))
@@ -1858,6 +1875,9 @@ public class TameCommands {
             if (findLoadedTameByIdentity(server, data.uuid, data.tlId) != null) {
                 continue;
             }
+            if (!hasEligibleAutomaticRespawnBed(server, data)) {
+                continue;
+            }
             dead.add(data);
         }
         dead.sort(respawnQueueComparator(ownerUuid));
@@ -1930,34 +1950,72 @@ public class TameCommands {
         if (server == null || data == null) {
             return null;
         }
-        if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
-            ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
-            if (bedDimId != null) {
-                ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
-                if (bedLevel != null) {
-                    BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
-                    bedLevel.getChunk(bedPos);
-                    if (bedLevel.getBlockEntity(bedPos) instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity) {
-                        Direction facing = bedLevel.getBlockState(bedPos).hasProperty(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
-                                ? bedLevel.getBlockState(bedPos).getValue(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
-                                : Direction.NORTH;
-                        return new SpawnTarget(bedLevel, Vec3.upFromBottomCenterOf(bedPos, 0.8F), yawFromDirection(facing), 0.0F);
-                    }
-                }
-            }
+        return resolveAutomaticRespawnBedTarget(server, data);
+    }
+
+    private static boolean hasEligibleAutomaticRespawnBed(MinecraftServer server, TameData data) {
+        return resolveAutomaticRespawnBedTarget(server, data) != null;
+    }
+
+    private static SpawnTarget resolveAutomaticRespawnBedTarget(MinecraftServer server, TameData data) {
+        if (server == null || data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
+            return null;
         }
-        SpawnTarget ownerBedTarget = resolveOwnerBedTarget(server, data.ownerUUID);
-        if (ownerBedTarget != null) {
-            return ownerBedTarget;
+        ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
+        if (bedDimId == null) {
+            return null;
         }
-        if (data.ownerUUID != null) {
-            ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-            if (owner != null) {
-                return new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
-            }
+        ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
+        if (bedLevel == null) {
+            return null;
         }
-        ServerLevel overworld = server.overworld();
-        return new SpawnTarget(overworld, Vec3.atCenterOf(overworld.getSharedSpawnPos()), 0.0F, 0.0F);
+        BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
+        bedLevel.getChunk(bedPos);
+        if (!(bedLevel.getBlockEntity(bedPos) instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity)) {
+            return null;
+        }
+        ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(bedLevel.getBlockState(bedPos).getBlock());
+        if (!isColoredPetBedBlock(blockId)) {
+            return null;
+        }
+        Direction facing = bedLevel.getBlockState(bedPos).hasProperty(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
+                ? bedLevel.getBlockState(bedPos).getValue(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
+                : Direction.NORTH;
+        return new SpawnTarget(bedLevel, Vec3.upFromBottomCenterOf(bedPos, 0.8F), yawFromDirection(facing), 0.0F);
+    }
+
+    private static boolean isColoredPetBedBlock(ResourceLocation blockId) {
+        if (blockId == null || !"domesticationinnovation".equals(blockId.getNamespace())) {
+            return false;
+        }
+        return blockId.getPath().startsWith("pet_bed_") && !"pet_bed_white".equals(blockId.getPath());
+    }
+
+    private static boolean isBlackPetBedBlock(ResourceLocation blockId) {
+        return blockId != null
+                && "domesticationinnovation".equals(blockId.getNamespace())
+                && "pet_bed_black".equals(blockId.getPath());
+    }
+
+    private static boolean hasBlackAutoReincarnationBed(MinecraftServer server, TameData data) {
+        if (server == null || data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
+            return false;
+        }
+        ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
+        if (bedDimId == null) {
+            return false;
+        }
+        ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
+        if (bedLevel == null) {
+            return false;
+        }
+        BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
+        bedLevel.getChunk(bedPos);
+        if (!(bedLevel.getBlockEntity(bedPos) instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity)) {
+            return false;
+        }
+        ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(bedLevel.getBlockState(bedPos).getBlock());
+        return isBlackPetBedBlock(blockId);
     }
 
     private static void scheduleMorningWaywardLanternRecalls(MinecraftServer server, long now) {
@@ -2266,7 +2324,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, respawn, arise, graveyard, reincarnate, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info respawn, /tames info movement, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -2300,7 +2358,8 @@ public class TameCommands {
             sendInfoPage(p, "Stat",
                     "/tames stat <pet>",
                     "/tames stats <pet>",
-                    "Shows the tame sheet: level, class, record, days, active survival days, bonuses, abilities, and attributes."
+                    "Shows the tame sheet: level, class, record, days, active survival days, bonuses, abilities, and attributes.",
+                    "Bed info is shown as: BedType Dimension [x, y, z]."
             );
         }
         else if (key.equals("group")) {
@@ -2365,8 +2424,17 @@ public class TameCommands {
                     "/tames tphome <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>",
                     "Teleports tames to the same target the respawn system would use.",
                     "Target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
-                    "Cost is the same as /tames tp.",
+                    "TPHome is free.",
                     "Teleporting clears the current guardian anchor."
+            );
+        }
+        else if (key.equals("bed")) {
+            sendInfoPage(p, "Bed",
+                    "/tames bed",
+                    "/tames bed remove <pet>",
+                    "Shows your tames with assigned beds.",
+                    "Each row is formatted as: Tame: BedType, Dimension [x, y, z].",
+                    "Removing a bed clears that tame's stored bed assignment."
             );
         }
         else if (key.equals("respawn")) {
@@ -2377,7 +2445,8 @@ public class TameCommands {
                     "Respawn works only on dead tames and does not apply an extra death penalty.",
                     "Respawn target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
                     "Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 totem in main hand.",
-                    "Morning auto-respawn is separate: up to 1 dead tame per owner each morning, ordered by that owner's respawn order."
+                    "Morning auto-respawn is separate: up to 1 dead tame per owner each morning, ordered by that owner's respawn order.",
+                    "Automatic morning respawn requires a colored pet bed. White beds do not auto-respawn."
             );
         }
         else if (key.equals("arise")) {
@@ -2399,11 +2468,12 @@ public class TameCommands {
                     "/tames reincarnate <pet>",
                     "/tames reincarnation",
                     "/tames reincarnation <all|group <name>|type <name>>",
+                    "/tames reincarnation approvedItems",
                     "/tames reincarnation auto <true|false>",
                     "Reincarnation is command-only. The tame must already be alive and loaded.",
                     "It restores the saved highest progress snapshot for that tame.",
                     "Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 totem in main hand.",
-                    "Auto reincarnation only works if you have a player bed. On tame respawn, it checks inventories touching that bed for a totem or enough approved items."
+                    "Auto reincarnation uses the player bed material check by default. Tames with a black pet bed auto reincarnate for free on respawn."
             );
         }
         else if (key.equals("inspect")) {
@@ -2881,6 +2951,211 @@ public class TameCommands {
         return 1;
     }
 
+    private static int listDoNotAttack(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        Set<String> blocked = new LinkedHashSet<>(TameRegistry.getDoNotAttackTypes(player.getUUID()));
+        List<String> sorted = new ArrayList<>(blocked);
+        sorted.sort(String::compareToIgnoreCase);
+        boolean animals = TameRegistry.isDoNotAttackAnimals(player.getUUID());
+        player.sendSystemMessage(Component.literal("---- Do Not Attack ----").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Animals protected: " + animals).withStyle(animals ? ChatFormatting.GREEN : ChatFormatting.GRAY));
+        if (sorted.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Protected mob types: none").withStyle(ChatFormatting.GRAY));
+        } else {
+            player.sendSystemMessage(Component.literal("Protected mob types (" + sorted.size() + "):").withStyle(ChatFormatting.GREEN));
+            for (String id : sorted) {
+                player.sendSystemMessage(Component.literal("- " + id).withStyle(ChatFormatting.AQUA));
+            }
+        }
+        return sorted.size();
+    }
+
+    private static int toggleDoNotAttackType(CommandSourceStack source, String rawMobType) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        ResourceLocation id = normalizeEntityTypeId(rawMobType);
+        if (id == null) {
+            return error(player, "Unknown mob type: " + rawMobType);
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            return error(player, "Unknown mob type: " + id);
+        }
+        boolean added = TameRegistry.toggleDoNotAttackType(player.getUUID(), id.toString());
+        player.sendSystemMessage(Component.literal((added ? "Protected " : "Removed protection for ") + id + ".")
+                .withStyle(added ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int removeDoNotAttackType(CommandSourceStack source, String rawMobType) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        ResourceLocation id = normalizeEntityTypeId(rawMobType);
+        if (id == null) {
+            return error(player, "Unknown mob type: " + rawMobType);
+        }
+        boolean removed = TameRegistry.removeDoNotAttackType(player.getUUID(), id.toString());
+        if (!removed) {
+            return error(player, "You do not have do-not-attack protection for " + id + ".");
+        }
+        player.sendSystemMessage(Component.literal("Removed protection for " + id + ".")
+                .withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setDoNotAttackAnimals(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameRegistry.setDoNotAttackAnimals(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Do-not-attack animals " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int listOwnedBeds(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<TameData> withBeds = new ArrayList<>();
+        for (TameData data : ownedTames(player.getUUID())) {
+            if (data != null && data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
+                withBeds.add(data);
+            }
+        }
+        if (withBeds.isEmpty()) {
+            return error(player, "None of your tames currently have a bed.");
+        }
+        withBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
+        player.sendSystemMessage(Component.literal("---- Your Tame Beds ----").withStyle(ChatFormatting.GOLD));
+        for (TameData data : withBeds) {
+            player.sendSystemMessage(Component.literal(formatBedEntry(source.getServer(), data)).withStyle(bedEntryColor(source.getServer(), data)));
+        }
+        return withBeds.size();
+    }
+
+    private static int removeOwnedBed(CommandSourceStack source, String petName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), petName);
+        if (data == null) {
+            return error(player, "Tame not found.");
+        }
+        if (!data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
+            return error(player, tameDisplayName(data) + " does not have a bed assigned.");
+        }
+        clearTameBedAssignment(source.getServer(), data);
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Removed bed assignment for " + tameDisplayName(data) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static void clearTameBedAssignment(MinecraftServer server, TameData data) {
+        if (data == null) {
+            return;
+        }
+        data.hasPetBed = false;
+        data.petBedDimension = "";
+        data.petBedX = 0;
+        data.petBedY = 0;
+        data.petBedZ = 0;
+        TamableAnimal loaded = server == null ? null : findLoadedTameByUuid(server, data.uuid);
+        if (loaded != null) {
+            TameableUtils.removePetBedPos(loaded);
+            TameableUtils.setPetBedDimension(loaded, "");
+        }
+    }
+
+    private static String formatBedEntry(MinecraftServer server, TameData data) {
+        if (data == null) {
+            return "unknown";
+        }
+        ResourceLocation dimensionId = ResourceLocation.tryParse(data.petBedDimension);
+        String dimensionName = shortDimensionName(dimensionId, data.petBedDimension);
+        String bedType = shortBedType(petBedBlockId(server, data));
+        return tameDisplayName(data) + ": " + bedType + ", " + dimensionName + " [" + data.petBedX + ", " + data.petBedY + ", " + data.petBedZ + "]";
+    }
+
+    private static ChatFormatting bedEntryColor(MinecraftServer server, TameData data) {
+        ResourceLocation blockId = petBedBlockId(server, data);
+        if (blockId == null) {
+            return ChatFormatting.GRAY;
+        }
+        return switch (blockId.getPath()) {
+            case "pet_bed_black" -> ChatFormatting.DARK_GRAY;
+            case "pet_bed_blue" -> ChatFormatting.BLUE;
+            case "pet_bed_brown" -> ChatFormatting.GOLD;
+            case "pet_bed_cyan" -> ChatFormatting.DARK_AQUA;
+            case "pet_bed_gray" -> ChatFormatting.GRAY;
+            case "pet_bed_green" -> ChatFormatting.DARK_GREEN;
+            case "pet_bed_light_blue" -> ChatFormatting.AQUA;
+            case "pet_bed_light_gray" -> ChatFormatting.WHITE;
+            case "pet_bed_lime" -> ChatFormatting.GREEN;
+            case "pet_bed_magenta" -> ChatFormatting.LIGHT_PURPLE;
+            case "pet_bed_orange" -> ChatFormatting.GOLD;
+            case "pet_bed_pink" -> ChatFormatting.LIGHT_PURPLE;
+            case "pet_bed_purple" -> ChatFormatting.DARK_PURPLE;
+            case "pet_bed_red" -> ChatFormatting.RED;
+            case "pet_bed_white" -> ChatFormatting.WHITE;
+            case "pet_bed_yellow" -> ChatFormatting.YELLOW;
+            default -> ChatFormatting.GRAY;
+        };
+    }
+
+    private static ResourceLocation petBedBlockId(MinecraftServer server, TameData data) {
+        if (server == null || data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
+            return null;
+        }
+        ResourceLocation bedDimId = ResourceLocation.tryParse(data.petBedDimension);
+        if (bedDimId == null) {
+            return null;
+        }
+        ServerLevel bedLevel = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimId));
+        if (bedLevel == null) {
+            return null;
+        }
+        BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
+        bedLevel.getChunk(bedPos);
+        return ForgeRegistries.BLOCKS.getKey(bedLevel.getBlockState(bedPos).getBlock());
+    }
+
+    private static ResourceLocation normalizeEntityTypeId(String rawMobType) {
+        if (rawMobType == null || rawMobType.isBlank()) {
+            return null;
+        }
+        String normalized = rawMobType.trim().toLowerCase(Locale.ROOT);
+        ResourceLocation parsed = ResourceLocation.tryParse(normalized);
+        if (parsed != null && ForgeRegistries.ENTITY_TYPES.containsKey(parsed)) {
+            return parsed;
+        }
+        ResourceLocation minecraftDefault = ResourceLocation.tryParse("minecraft:" + normalized);
+        if (minecraftDefault != null && ForgeRegistries.ENTITY_TYPES.containsKey(minecraftDefault)) {
+            return minecraftDefault;
+        }
+        return null;
+    }
+
+    private static CompletableFuture<Suggestions> suggestCurrentPlayerDoNotAttackTypes(CommandSourceStack source, SuggestionsBuilder builder) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return builder.buildFuture();
+        }
+        List<String> protectedTypes = new ArrayList<>(TameRegistry.getDoNotAttackTypes(player.getUUID()));
+        protectedTypes.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(protectedTypes, builder);
+    }
+
     private static int reincarnateBatchAll(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedTames(player.getUUID())), "all");
@@ -2995,21 +3270,12 @@ public class TameCommands {
         int normalizedItems = Math.max(1, approvedItemCost);
         List<String> parts = new ArrayList<>();
         if (allowXp) {
-            parts.add(normalizedXp + " XP points");
+            parts.add(normalizedXp + " XP");
         }
         if (approvedItemCost > 0) {
-            StringBuilder items = new StringBuilder()
-                    .append(normalizedItems)
-                    .append(" approved item")
-                    .append(normalizedItems == 1 ? "" : "s")
-                    .append(" in main hand");
-            String approvedNames = approvedItemNamesDisplay();
-            if (!approvedNames.isBlank()) {
-                items.append(" (").append(approvedNames).append(")");
-            }
-            parts.add(items.toString());
+            parts.add(normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s"));
         }
-        parts.add("1 totem in main hand");
+        parts.add("1 totem");
         return String.join(" or ", parts);
     }
 
@@ -3058,32 +3324,24 @@ public class TameCommands {
     }
 
     private static String describePaymentRequirement(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose, int currentXp) {
-        String approvedNames = approvedItemNamesDisplay();
         StringBuilder builder = new StringBuilder();
         builder.append("Cannot afford ").append(purpose == null || purpose.isBlank() ? "this" : purpose).append(". Need ");
         boolean appended = false;
         if (allowXp) {
-            builder.append(xpCost).append(" XP points");
+            builder.append(xpCost).append(" XP");
             appended = true;
         }
         if (approvedItemCost > 0) {
             if (appended) {
                 builder.append(" or ");
             }
-            builder.append(approvedItemCost).append(" approved item").append(approvedItemCost == 1 ? "" : "s")
-                    .append(" in main hand");
-            if (!approvedNames.isBlank()) {
-                builder.append(" (").append(approvedNames).append(")");
-            }
+            builder.append(approvedItemCost).append(" approved item").append(approvedItemCost == 1 ? "" : "s");
             appended = true;
         }
         if (appended) {
-            builder.append(", or hold 1 totem in your main hand.");
+            builder.append(" or 1 totem.");
         } else {
-            builder.append("1 totem in your main hand.");
-        }
-        if (allowXp) {
-            builder.append(" You have ").append(currentXp).append(" XP points.");
+            builder.append("1 totem.");
         }
         return builder.toString();
     }
@@ -3572,7 +3830,7 @@ public class TameCommands {
         receiver.sendSystemMessage(Component.literal("K " + d.kills + "  A " + d.assists + "  D " + d.deaths + "  Days " + days + "  ActiveDays " + Math.max(0, d.activeSurvivalDays)).withStyle(ChatFormatting.AQUA));
         receiver.sendSystemMessage(Component.literal("Mode " + TameMode.byId(d.mode).key() + "  Class " + (d.tameClass == null ? "-" : d.tameClass.id())).withStyle(ChatFormatting.GREEN));
         receiver.sendSystemMessage(Component.literal("Group " + (d.group == null || d.group.isBlank() ? "-" : d.group)).withStyle(ChatFormatting.DARK_GREEN));
-        receiver.sendSystemMessage(Component.literal("Bed " + formatBedLocation(d)).withStyle(ChatFormatting.DARK_AQUA));
+        receiver.sendSystemMessage(Component.literal("Bed " + formatBedLocation(source.getServer(), d)).withStyle(ChatFormatting.DARK_AQUA));
         if (!detailed) {
             return;
         }
@@ -4061,13 +4319,61 @@ public class TameCommands {
         return count;
     }
 
-    private static String formatBedLocation(TameData data) {
+    private static String formatBedLocation(MinecraftServer server, TameData data) {
         if (data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
             return "-";
         }
         ResourceLocation dimensionId = ResourceLocation.tryParse(data.petBedDimension);
-        String dimensionName = dimensionId == null ? data.petBedDimension : dimensionId.getPath();
-        return dimensionName + ": " + data.petBedX + " " + data.petBedY + " " + data.petBedZ;
+        String dimensionName = shortDimensionName(dimensionId, data.petBedDimension);
+        String bedType = shortBedType(petBedBlockId(server, data));
+        return bedType + " " + dimensionName + " [" + data.petBedX + ", " + data.petBedY + ", " + data.petBedZ + "]";
+    }
+
+    private static String shortDimensionName(ResourceLocation dimensionId, String fallback) {
+        if (dimensionId == null) {
+            return fallback == null || fallback.isBlank() ? "unknown" : fallback;
+        }
+        String path = dimensionId.getPath();
+        if (path == null || path.isBlank()) {
+            return dimensionId.toString();
+        }
+        return Arrays.stream(path.split("/"))
+                .filter(part -> part != null && !part.isBlank())
+                .map(TameCommands::capitalizeWords)
+                .reduce((left, right) -> left + " / " + right)
+                .orElse(path);
+    }
+
+    private static String shortBedType(ResourceLocation blockId) {
+        if (blockId == null || !"domesticationinnovation".equals(blockId.getNamespace())) {
+            return "Bed";
+        }
+        String path = blockId.getPath();
+        if ("pet_bed_white".equals(path)) {
+            return "White";
+        }
+        if ("pet_bed_black".equals(path)) {
+            return "Black";
+        }
+        if (path != null && path.startsWith("pet_bed_")) {
+            return "Colored";
+        }
+        return "Bed";
+    }
+
+    private static String capitalizeWords(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String[] parts = raw.split("_");
+        List<String> words = new ArrayList<>();
+        for (String part : parts) {
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+            words.add(Character.toUpperCase(part.charAt(0)) + part.substring(1));
+        }
+        return String.join(" ", words);
     }
 
     private static double getBaseAttributeValue(TamableAnimal tame, Attribute attribute) {
@@ -6385,8 +6691,6 @@ public class TameCommands {
         List<TameData> requested = ownedTames(player.getUUID());
         int queued = 0;
         int failed = 0;
-        int spent = 0;
-        int crossDimension = 0;
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : requested) {
@@ -6399,32 +6703,16 @@ public class TameCommands {
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (invalid respawn home)");
                 continue;
             }
-            boolean cross = data.lastKnownDimension != null
-                    && !data.lastKnownDimension.isBlank()
-                    && !target.level.dimension().location().toString().equals(data.lastKnownDimension);
-            int cost = teleportCostFor(data, cross);
-            if (cost > 0 && currentXpPoints(player) < cost) {
-                failed++;
-                failedNames.add((data.name == null ? "unknown" : data.name) + " (needs " + cost + " XP)");
-                continue;
-            }
             UnloadedTpResult result = tpUnloadedHomeViaLanternOrRecover(source, player, data, target);
             if (!result.success) {
                 failed++;
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (" + result.error + ")");
                 continue;
             }
-            if (cost > 0) {
-                player.giveExperiencePoints(-cost);
-            }
-            spent += cost;
             queued++;
-            if (cross) {
-                crossDimension++;
-            }
         }
 
-        sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTames(player.getUUID()).size(), failed, spent, crossDimension);
+        sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTames(player.getUUID()).size(), failed, 0, 0);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Unloaded tphome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -6643,12 +6931,6 @@ public class TameCommands {
         if (lastKnown == null) {
             return "invalid last known dimension";
         }
-        if (!source.getLevel().dimension().location().equals(lastKnown)) {
-            return "cross-dimension unloaded tp disabled";
-        }
-        if (!target.level.dimension().location().equals(lastKnown)) {
-            return "cross-dimension unloaded tp disabled";
-        }
         return null;
     }
 
@@ -6725,14 +7007,8 @@ public class TameCommands {
         if (lastKnown == null) {
             return "invalid last known dimension";
         }
-        if (!source.getLevel().dimension().location().equals(lastKnown)) {
-            return "cross-dimension unloaded tp disabled";
-        }
         ResourceKey<Level> sourceDimension = ResourceKey.create(Registries.DIMENSION, lastKnown);
         ResourceKey<Level> targetDimension = target.level.dimension();
-        if (!sourceDimension.equals(targetDimension)) {
-            return "cross-dimension unloaded tp disabled";
-        }
         ServerLevel sourceLevel = source.getServer().getLevel(sourceDimension);
         if (sourceLevel == null) {
             return "source level unavailable";
@@ -6989,11 +7265,7 @@ public class TameCommands {
         List<SpawnTarget> unloadedDestinations = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
-        int cost = 0;
-        int crossDimension = 0;
         List<String> failedNames = new ArrayList<>();
-        List<String> unaffordable = new ArrayList<>();
-        int xpBudget = currentXpPoints(player);
 
         for (TameData data : requested) {
             if (data == null || data.uuid == null) {
@@ -7018,39 +7290,11 @@ public class TameCommands {
                 }
                 unloadedTargets.add(data);
                 unloadedDestinations.add(target);
-                boolean cross = data.lastKnownDimension != null
-                        && !data.lastKnownDimension.isBlank()
-                        && !target.level.dimension().location().toString().equals(data.lastKnownDimension);
-                int tameCost = teleportCostFor(data, cross);
-                if (tameCost > xpBudget) {
-                    unaffordable.add(pricedTameLabel(data, teleportPriceLabel(tameCost)));
-                    unloadedTargets.remove(unloadedTargets.size() - 1);
-                    unloadedDestinations.remove(unloadedDestinations.size() - 1);
-                    continue;
-                }
-                xpBudget -= tameCost;
-                cost += tameCost;
-                if (cross) {
-                    crossDimension++;
-                }
-                continue;
-            }
-            boolean cross = !tame.level().dimension().equals(target.level.dimension());
-            int tameCost = teleportCostFor(data, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(data, teleportPriceLabel(tameCost)));
                 continue;
             }
             loadedTargets.add(tame);
             loadedDestinations.add(target);
-            xpBudget -= tameCost;
-            cost += tameCost;
-            if (cross) {
-                crossDimension++;
-            }
         }
-
-        if (!payTeleportXp(player, cost)) return 0;
         for (int i = 0; i < loadedTargets.size(); i++) {
             teleportTameToLocation(loadedTargets.get(i), loadedDestinations.get(i));
         }
@@ -7063,8 +7307,7 @@ public class TameCommands {
                 failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
-        sendAffordabilityFailures(player, "Could not afford tphome for", unaffordable);
+        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, 0, 0);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("TPHome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -7076,11 +7319,14 @@ public class TameCommands {
     private static int teleportByMovementState(CommandSourceStack source, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         List<TameData> requested = ownedTames(p.getUUID());
-        List<TamableAnimal> targets = new ArrayList<>();
+        List<TamableAnimal> loadedTargets = new ArrayList<>();
+        List<TameData> unloadedTargets = new ArrayList<>();
         int cost = 0;
-        int skipped = 0;
+        int failed = 0;
+        int queued = 0;
         int crossDimension = 0;
         List<String> unaffordable = new ArrayList<>();
+        List<String> failedNames = new ArrayList<>();
         int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
@@ -7088,7 +7334,25 @@ public class TameCommands {
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (ta == null) {
-                skipped++;
+                if (!matchesMovementOrderSnapshot(d, order)) {
+                    continue;
+                }
+                String queueError = validateUnloadedTeleportForPlayer(source, p, d);
+                if (queueError != null) {
+                    failed++;
+                    failedNames.add(tameDisplayName(d) + " (" + queueError + ")");
+                    continue;
+                }
+                boolean cross = isCrossDimension(d, p);
+                int tameCost = teleportCostFor(d, cross);
+                if (tameCost > xpBudget) {
+                    unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
+                    continue;
+                }
+                unloadedTargets.add(d);
+                xpBudget -= tameCost;
+                cost += tameCost;
+                if (cross) crossDimension++;
                 continue;
             }
             if (!matchesMovementOrder(ta, order)) continue;
@@ -7098,15 +7362,27 @@ public class TameCommands {
                 unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
                 continue;
             }
-            targets.add(ta);
+            loadedTargets.add(ta);
             xpBudget -= tameCost;
             cost += tameCost;
             if (cross) crossDimension++;
         }
         if (!payTeleportXp(p, cost)) return 0;
-        for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
-        sendTeleportSummary(p, "TP " + movementLabel(order), targets.size(), 0, 0, skipped, cost, crossDimension);
+        for (TamableAnimal ta : loadedTargets) teleportTameToPlayer(ta, p);
+        for (TameData data : unloadedTargets) {
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, data);
+            if (unloaded.success) {
+                queued++;
+            } else {
+                failed++;
+                failedNames.add(tameDisplayName(data) + " (" + unloaded.error + ")");
+            }
+        }
+        sendTeleportSummary(p, "TP " + movementLabel(order), loadedTargets.size(), queued, 0, failed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        if (!failedNames.isEmpty()) {
+            p.sendSystemMessage(Component.literal("TP " + movementLabel(order) + " failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
+        }
         return 1;
     }
 
@@ -7188,6 +7464,26 @@ public class TameCommands {
 
     private static boolean isCrossDimension(TamableAnimal tame, ServerPlayer player) {
         return tame != null && player != null && !tame.level().dimension().equals(player.level().dimension());
+    }
+
+    private static boolean isCrossDimension(TameData data, ServerPlayer player) {
+        if (data == null || player == null || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            return false;
+        }
+        ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+        return lastKnown != null && !player.level().dimension().location().equals(lastKnown);
+    }
+
+    private static String validateUnloadedTeleportForPlayer(CommandSourceStack source, ServerPlayer owner, TameData data) {
+        if (source == null || owner == null || data == null) {
+            return "invalid context";
+        }
+        SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        String validationError = validateUnloadedHomeTeleport(source, owner, data, target);
+        if (validationError != null && (data.entitySnapshot == null || data.entitySnapshot.isEmpty())) {
+            return validationError;
+        }
+        return null;
     }
 
     private static int recoverCostFor(TameData data) {
@@ -7572,24 +7868,6 @@ public class TameCommands {
         }
         if (count > 0) TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Set " + count + " nearby tames to monster_hunter mode."));
-        return 1;
-    }
-
-    private static int emergencyRun(CommandSourceStack source) {
-        ServerPlayer p = source.getPlayer();
-        int count = 0;
-        for (TamableAnimal ta : p.level().getEntitiesOfClass(TamableAnimal.class, p.getBoundingBox().inflate(32))) {
-            if (!ta.isTame() || !p.getUUID().equals(ta.getOwnerUUID())) continue;
-            TameData d = TameRegistry.get(ta.getUUID());
-            if (d == null) continue;
-            d.escapeMode = true;
-            d.escapeActive = true;
-            ta.setTarget(null);
-            ta.getNavigation().moveTo(p, 1.45D);
-            count++;
-        }
-        if (count > 0) TameRegistry.markDirty();
-        p.sendSystemMessage(Component.literal("Marked " + count + " nearby tames as runaway."));
         return 1;
     }
 
@@ -8634,6 +8912,71 @@ public class TameCommands {
         return 1;
     }
 
+    private static int listApprovedReincarnationItems(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
+        approved.sort(String::compareToIgnoreCase);
+        if (approved.isEmpty()) {
+            return error(player, "No approved reincarnation items are configured.");
+        }
+        player.sendSystemMessage(Component.literal("Approved reincarnation items (" + approved.size() + "):").withStyle(ChatFormatting.GOLD));
+        for (String id : approved) {
+            String label = approvedItemDisplayLabel(id);
+            player.sendSystemMessage(Component.literal("- " + label + " [" + id + "]").withStyle(ChatFormatting.GRAY));
+        }
+        return approved.size();
+    }
+
+    private static int adminListApprovedItems(CommandSourceStack source) {
+        return listApprovedReincarnationItems(source);
+    }
+
+    private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String itemId = normalizeItemId(rawItemId);
+        if (itemId.isBlank()) {
+            return error(player, "Provide an item id to remove.");
+        }
+        boolean removed = TameRegistry.APPROVED_REINCARNATE_ITEMS.remove(itemId);
+        if (!removed) {
+            return error(player, "Item is not approved: " + itemId);
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Removed approved reincarnation item: " + itemId).withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static CompletableFuture<Suggestions> suggestApprovedReincarnationItems(SuggestionsBuilder builder) {
+        List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
+        approved.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(approved, builder);
+    }
+
+    private static String normalizeItemId(String rawItemId) {
+        if (rawItemId == null) {
+            return "";
+        }
+        return rawItemId.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String approvedItemDisplayLabel(String itemId) {
+        ResourceLocation key = ResourceLocation.tryParse(itemId);
+        if (key == null) {
+            return itemId;
+        }
+        var item = ForgeRegistries.ITEMS.getValue(key);
+        if (item == null) {
+            return itemId;
+        }
+        return item.getDefaultInstance().getHoverName().getString();
+    }
+
     private static void backfillLegacyDeathRecordsForName(UUID owner, String name, UUID tlId) {
         if (owner == null || name == null || name.isBlank()) {
             return;
@@ -8812,6 +9155,40 @@ public class TameCommands {
 
         p.sendSystemMessage(Component.literal("Reload tames complete: scanned " + scanned + ", added " + added + ".").withStyle(ChatFormatting.GREEN));
         return added > 0 ? 1 : 0;
+    }
+
+    private static int adminGrantMissingMilestoneAttributes(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        MinecraftServer server = source.getServer();
+        if (player == null || server == null) {
+            return 0;
+        }
+
+        int updatedEntries = 0;
+        int refreshedLoaded = 0;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null) {
+                continue;
+            }
+            String granted = LevelSystem.grantMissingMilestoneAttributes(data);
+            if (granted.isEmpty()) {
+                continue;
+            }
+            updatedEntries++;
+            TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            if (loaded != null && loaded.isAlive()) {
+                refreshRegistrySnapshotFor(loaded);
+                refreshedLoaded++;
+            }
+        }
+
+        if (updatedEntries <= 0) {
+            player.sendSystemMessage(Component.literal("No tames were missing milestone attributes.").withStyle(ChatFormatting.YELLOW));
+            return 0;
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Granted missing milestone attributes to " + updatedEntries + " tame registry entries; refreshed " + refreshedLoaded + " loaded tames.").withStyle(ChatFormatting.GREEN));
+        return 1;
     }
 
     private static int adminDoubleHpBonus(CommandSourceStack source) {
@@ -9451,6 +9828,36 @@ public class TameCommands {
             }
         }
         return null;
+    }
+
+    private static boolean matchesMovementOrderSnapshot(TameData data, MovementOrder order) {
+        if (data == null) {
+            return false;
+        }
+        CompoundTag snapshot = data.entitySnapshot;
+        Integer command = findSnapshotCommand(snapshot);
+        if (command != null) {
+            return switch (order) {
+                case FOLLOW -> command == 2;
+                case SIT -> command == 1;
+                case WANDER, GUARDIAN -> command == 0;
+            };
+        }
+        boolean sitting = false;
+        if (snapshot != null && !snapshot.isEmpty()) {
+            if (snapshot.contains("Sitting", Tag.TAG_BYTE)) {
+                sitting = snapshot.getBoolean("Sitting");
+            } else if (snapshot.contains("orderedToSit", Tag.TAG_BYTE)) {
+                sitting = snapshot.getBoolean("orderedToSit");
+            } else if (snapshot.contains("OrderedToSit", Tag.TAG_BYTE)) {
+                sitting = snapshot.getBoolean("OrderedToSit");
+            }
+        }
+        return switch (order) {
+            case FOLLOW -> !sitting;
+            case SIT -> sitting;
+            case WANDER, GUARDIAN -> false;
+        };
     }
 
     private static BlockPos findNearestWaywardLantern(ServerPlayer owner) {
@@ -10477,8 +10884,15 @@ public class TameCommands {
         if (!result.success()) {
             return false;
         }
+        applyMovementOverride(tame, MovementOrder.GUARDIAN);
+        refreshRegistrySnapshotFor(tame);
         tame.getNavigation().stop();
         data.guardianReturnTicks = 0;
+        data.guardianRelaxing = false;
+        data.guardianNextPhaseTick = 0L;
+        data.guardianTargetUuid = null;
+        data.guardianTargetStuckTicks = 0;
+        data.guardianTargetBestDistanceSq = 0.0D;
         TameRegistry.markDirty();
         return true;
     }
@@ -10606,7 +11020,11 @@ public class TameCommands {
     }
 
     private static void prepareAutoReincarnationOnRespawn(MinecraftServer server, TameData data) {
-        if (server == null || data == null || data.ownerUUID == null || !TameRegistry.isAutoReincarnationEnabled(data.ownerUUID)) {
+        if (server == null || data == null || data.ownerUUID == null) {
+            return;
+        }
+        boolean freeBlackBed = hasBlackAutoReincarnationBed(server, data);
+        if (!freeBlackBed && !TameRegistry.isAutoReincarnationEnabled(data.ownerUUID)) {
             return;
         }
         if (!(data.hasSavedProgress && data.level < highestRecordedLevel(data))) {
@@ -10614,6 +11032,11 @@ public class TameCommands {
         }
         TameDeathRecord record = latestAvailableDeathForTame(data.ownerUUID, data.uuid, data.tlId, data.name);
         if (record == null || record.reincarnated || record.snapshot == null || record.snapshot.isEmpty()) {
+            return;
+        }
+        if (freeBlackBed) {
+            record.autoReincarnateOnRespawn = true;
+            TameRegistry.markDirty();
             return;
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
@@ -10698,8 +11121,8 @@ public class TameCommands {
                                 continue;
                             }
                             int shrink = Math.min(toConsume, consumeStack.getCount());
-                            ItemStack remainder = consumeInventory.remove(consumeSlot, shrink);
-                            toConsume -= (shrink - remainder.getCount());
+                            ItemStack removed = consumeInventory.remove(consumeSlot, shrink);
+                            toConsume -= Math.min(shrink, removed.getCount());
                         }
                     }
                     return true;
@@ -10789,7 +11212,7 @@ public class TameCommands {
             if (!extracted.isEmpty()) {
                 blockEntity.setChanged();
             }
-            return ItemStack.EMPTY;
+            return extracted;
         }
 
         @Override
@@ -11449,6 +11872,18 @@ public class TameCommands {
         return b.buildFuture();
     }
 
+    private static CompletableFuture<Suggestions> suggestOwnedPetNamesWithBeds(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer p = source.getPlayer();
+        if (p == null) return b.buildFuture();
+        for (TameData d : TameRegistry.TAMES.values()) {
+            if (!p.getUUID().equals(d.ownerUUID)) continue;
+            if (isDeadEntry(d.uuid)) continue;
+            if (!d.hasPetBed || d.petBedDimension == null || d.petBedDimension.isBlank()) continue;
+            suggestCommandString(b, d.name);
+        }
+        return b.buildFuture();
+    }
+
     private static CompletableFuture<Suggestions> suggestOwnedUnloadedPetNames(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
@@ -11537,6 +11972,16 @@ public class TameCommands {
             int sep = full.indexOf(':');
             String path = sep >= 0 ? full.substring(sep + 1) : full;
             if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestEntityTypes(SuggestionsBuilder b) {
+        for (ResourceLocation id : ForgeRegistries.ENTITY_TYPES.getKeys()) {
+            suggestCommandString(b, id.toString());
+            if ("minecraft".equals(id.getNamespace())) {
+                suggestCommandString(b, id.getPath());
+            }
         }
         return b.buildFuture();
     }

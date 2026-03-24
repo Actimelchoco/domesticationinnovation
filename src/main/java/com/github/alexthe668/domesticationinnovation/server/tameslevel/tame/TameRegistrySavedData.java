@@ -23,6 +23,8 @@ public class TameRegistrySavedData extends SavedData {
     private final Set<String> approvedReincarnateItems = new LinkedHashSet<>();
     private final Map<UUID, String> respawnOrders = new HashMap<>();
     private final Map<UUID, Boolean> autoReincarnation = new HashMap<>();
+    private final Map<UUID, Set<String>> doNotAttackTypes = new HashMap<>();
+    private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -59,6 +61,45 @@ public class TameRegistrySavedData extends SavedData {
         this.autoReincarnation.clear();
         if (autoReincarnation != null) {
             this.autoReincarnation.putAll(autoReincarnation);
+        }
+    }
+
+    public Map<UUID, Set<String>> getDoNotAttackTypes() {
+        return doNotAttackTypes;
+    }
+
+    public void setDoNotAttackTypes(Map<UUID, Set<String>> doNotAttackTypes) {
+        this.doNotAttackTypes.clear();
+        if (doNotAttackTypes == null) {
+            return;
+        }
+        for (Map.Entry<UUID, Set<String>> entry : doNotAttackTypes.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            Set<String> ids = new LinkedHashSet<>();
+            if (entry.getValue() != null) {
+                for (String id : entry.getValue()) {
+                    if (id == null || id.isBlank()) {
+                        continue;
+                    }
+                    ids.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+            if (!ids.isEmpty()) {
+                this.doNotAttackTypes.put(entry.getKey(), ids);
+            }
+        }
+    }
+
+    public Map<UUID, Boolean> getDoNotAttackAnimals() {
+        return doNotAttackAnimals;
+    }
+
+    public void setDoNotAttackAnimals(Map<UUID, Boolean> doNotAttackAnimals) {
+        this.doNotAttackAnimals.clear();
+        if (doNotAttackAnimals != null) {
+            this.doNotAttackAnimals.putAll(doNotAttackAnimals);
         }
     }
 
@@ -109,6 +150,35 @@ public class TameRegistrySavedData extends SavedData {
             autoReincarnationTag.add(row);
         }
         tag.put("autoReincarnation", autoReincarnationTag);
+        ListTag doNotAttackTypesTag = new ListTag();
+        for (Map.Entry<UUID, Set<String>> entry : doNotAttackTypes.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            ListTag ids = new ListTag();
+            for (String id : entry.getValue()) {
+                if (id == null || id.isBlank()) {
+                    continue;
+                }
+                ids.add(net.minecraft.nbt.StringTag.valueOf(id));
+            }
+            row.put("mobTypes", ids);
+            doNotAttackTypesTag.add(row);
+        }
+        tag.put("doNotAttackTypes", doNotAttackTypesTag);
+        ListTag doNotAttackAnimalsTag = new ListTag();
+        for (Map.Entry<UUID, Boolean> entry : doNotAttackAnimals.entrySet()) {
+            if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putBoolean("enabled", true);
+            doNotAttackAnimalsTag.add(row);
+        }
+        tag.put("doNotAttackAnimals", doNotAttackAnimalsTag);
         return tag;
     }
 
@@ -165,6 +235,36 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.autoReincarnation.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
+            }
+        }
+        if (tag.contains("doNotAttackTypes", Tag.TAG_LIST)) {
+            ListTag doNotAttackTypesList = tag.getList("doNotAttackTypes", Tag.TAG_COMPOUND);
+            for (Tag entry : doNotAttackTypesList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                Set<String> ids = new LinkedHashSet<>();
+                if (row.contains("mobTypes", Tag.TAG_LIST)) {
+                    ListTag types = row.getList("mobTypes", Tag.TAG_STRING);
+                    for (Tag typeEntry : types) {
+                        String id = typeEntry.getAsString();
+                        if (id != null && !id.isBlank()) {
+                            ids.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                        }
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    data.doNotAttackTypes.put(row.getUUID("ownerUUID"), ids);
+                }
+            }
+        }
+        if (tag.contains("doNotAttackAnimals", Tag.TAG_LIST)) {
+            ListTag doNotAttackAnimalsList = tag.getList("doNotAttackAnimals", Tag.TAG_COMPOUND);
+            for (Tag entry : doNotAttackAnimalsList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.doNotAttackAnimals.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
             }
         }
         return data;

@@ -28,6 +28,8 @@ public class ChainLightningEntity extends Entity {
     private static final EntityDataAccessor<Integer> TARGET_COUNT = SynchedEntityData.defineId(ChainLightningEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> CURRENT_TARGET_ID = SynchedEntityData.defineId(ChainLightningEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DIES_IN = SynchedEntityData.defineId(ChainLightningEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> SHOCK_DAMAGE = SynchedEntityData.defineId(ChainLightningEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> SHOCK_CURRENT_TARGET = SynchedEntityData.defineId(ChainLightningEntity.class, EntityDataSerializers.BOOLEAN);
     private List<Entity> previouslyShocked = new ArrayList<>();
     private boolean hasShocked = false;
     private boolean hasChained = false;
@@ -52,6 +54,8 @@ public class ChainLightningEntity extends Entity {
         this.entityData.define(TARGET_COUNT, 1);
         this.entityData.define(CURRENT_TARGET_ID, -1);
         this.entityData.define(DIES_IN, 5);
+        this.entityData.define(SHOCK_DAMAGE, 3.0F);
+        this.entityData.define(SHOCK_CURRENT_TARGET, true);
     }
 
     @Override
@@ -65,7 +69,10 @@ public class ChainLightningEntity extends Entity {
                 if(!level().isClientSide){
                     if(!hasShocked){
                         hasShocked = true;
-                        current.hurt(current.damageSources().lightningBolt(), 3);
+                        float damage = getShockDamage();
+                        if (shouldShockCurrentTarget() && damage > 0.0F && current instanceof LivingEntity living) {
+                            living.hurt(living.damageSources().lightningBolt(), damage);
+                        }
                     }
                 }
             }
@@ -118,6 +125,8 @@ public class ChainLightningEntity extends Entity {
         child.setToEntityID(closestValid.getId());
         child.copyPosition(closestValid);
         child.setChainsLeft(this.getChainsLeft() - 1);
+        child.setShockDamage(this.getShockDamage());
+        child.setShockCurrentTarget(true);
         this.level().addFreshEntity(child);
     }
 
@@ -171,6 +180,22 @@ public class ChainLightningEntity extends Entity {
 
     public void setDiesInTicks(int i) {
         this.entityData.set(DIES_IN, i);
+    }
+
+    public float getShockDamage() {
+        return this.entityData.get(SHOCK_DAMAGE);
+    }
+
+    public void setShockDamage(float damage) {
+        this.entityData.set(SHOCK_DAMAGE, Math.max(0.0F, damage));
+    }
+
+    public boolean shouldShockCurrentTarget() {
+        return this.entityData.get(SHOCK_CURRENT_TARGET);
+    }
+
+    public void setShockCurrentTarget(boolean shockCurrentTarget) {
+        this.entityData.set(SHOCK_CURRENT_TARGET, shockCurrentTarget);
     }
 
     @Override

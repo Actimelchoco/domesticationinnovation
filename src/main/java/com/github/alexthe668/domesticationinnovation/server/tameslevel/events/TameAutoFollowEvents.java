@@ -6,7 +6,6 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
-import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
@@ -145,7 +144,7 @@ public class TameAutoFollowEvents {
 
             TamableAnimal tame = findLoadedOwnedTame(owner, data.uuid);
             if (tame != null) {
-                if (!isAutoFollowEligible(owner, tame, data)) continue;
+                if (!isAutoFollowEligible(tame, data)) continue;
                 TameCommands.autoFollowTeleportLoadedToOwner(tame, owner);
                 continue;
             }
@@ -225,15 +224,17 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isAutoFollowEligible(TameData data) {
-        return isFollowing(data) && hasTeleportCapability(data);
+        return data != null && !data.hasHome && isFollowing(data) && hasTeleportCapability(data);
     }
 
-    private static boolean isAutoFollowEligible(ServerPlayer owner, TamableAnimal tame, TameData data) {
+    private static boolean isAutoFollowEligible(TamableAnimal tame, TameData data) {
         return tame != null
                 && tame.isAlive()
+                && data != null
+                && !data.hasHome
                 && isFollowing(tame)
                 && tame.level() instanceof ServerLevel
-                && TameableUtils.isValidTeleporter(owner, tame);
+                && hasTeleportCapability(data);
     }
 
     private static boolean hasTeleportCapability(TameData data) {
@@ -256,6 +257,15 @@ public class TameAutoFollowEvents {
     private static int extractCommand(CompoundTag snapshot) {
         if (snapshot == null) {
             return Integer.MIN_VALUE;
+        }
+        for (String key : snapshot.getAllKeys()) {
+            if (!key.endsWith("Command")) {
+                continue;
+            }
+            try {
+                return snapshot.getInt(key);
+            } catch (Throwable ignored) {
+            }
         }
         String[] keys = {"Command", "command", "PetCommand", "petCommand", "Order", "order", "Mode", "mode"};
         for (String key : keys) {

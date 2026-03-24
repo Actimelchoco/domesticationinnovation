@@ -3,6 +3,9 @@ package com.github.alexthe668.domesticationinnovation.server.entity.ai;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.google.common.collect.ImmutableMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -20,6 +23,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
 
     private static final float START_DISTANCE = 10F;
     private static final float STOP_DISTANCE = 2F;
+    private static final int TELEPORT_CHECK_DELAY_TICKS = 40;
     private float baseSpeedLand = 1.0F;
     private float baseSpeedWater = 1.0F;
     private LivingEntity owner;
@@ -53,7 +57,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
     }
 
     protected void tick(ServerLevel p_23503_, T axolotl, long gameTime) {
-        if (axolotl.distanceToSqr(this.owner) >= 144.0D) {
+        if (gameTime % TELEPORT_CHECK_DELAY_TICKS == 0 && shouldTeleportToOwner(axolotl)) {
             this.teleportToOwner(axolotl);
         } else{
             int speedsterLevel = TameableUtils.getEnchantLevel(axolotl, DIEnchantmentRegistry.SPEEDSTER);
@@ -61,6 +65,22 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
             BehaviorUtils.lookAtEntity(axolotl, owner);
             BehaviorUtils.setWalkAndLookTargetMemories(axolotl, owner, speed, (int)STOP_DISTANCE);
         }
+    }
+
+    private boolean shouldTeleportToOwner(T axolotl) {
+        TameData data = TameRegistry.get(axolotl.getUUID());
+        if (data != null) {
+            TameMode mode = TameMode.byId(data.mode);
+            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BOSS) && axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
+                return false;
+            }
+            double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
+            if (mode == TameMode.BODYGUARD) {
+                teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
+            }
+            return axolotl.distanceToSqr(this.owner) >= teleportDistance * teleportDistance;
+        }
+        return axolotl.distanceToSqr(this.owner) >= 24.0D * 24.0D;
     }
 
 

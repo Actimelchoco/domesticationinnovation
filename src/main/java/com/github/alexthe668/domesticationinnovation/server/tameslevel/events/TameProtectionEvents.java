@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -39,6 +40,11 @@ public class TameProtectionEvents {
 
         TamableAnimal tameAttacker = resolveTameAttacker(attacker, direct);
         if (tameAttacker == null || !tameAttacker.isTame()) {
+            return;
+        }
+
+        if (TameRegistry.isProtectedAttackTarget(tameAttacker, victim)) {
+            event.setCanceled(true);
             return;
         }
 
@@ -104,6 +110,10 @@ public class TameProtectionEvents {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), targetTame.getUUID())) {
                 return;
             }
+            tame.setTarget(null);
+            return;
+        }
+        if (TameRegistry.isProtectedAttackTarget(tame, target)) {
             tame.setTarget(null);
         }
     }

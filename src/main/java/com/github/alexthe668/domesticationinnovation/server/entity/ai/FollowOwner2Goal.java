@@ -5,6 +5,9 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -19,6 +22,7 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import java.util.EnumSet;
 
 public class FollowOwner2Goal extends Goal {
+    private static final int TELEPORT_CHECK_DELAY_TICKS = 40;
 
     private final Animal tamable;
     private final LevelReader level;
@@ -90,9 +94,9 @@ public class FollowOwner2Goal extends Goal {
         }
         this.tamable.getLookControl().setLookAt(this.owner, 10.0F, (float) this.tamable.getMaxHeadXRot());
         if (--this.timeToRecalcPath <= 0) {
-            this.timeToRecalcPath = this.adjustedTickDelay(10);
+            this.timeToRecalcPath = TELEPORT_CHECK_DELAY_TICKS;
             if (!this.tamable.isLeashed() && !this.tamable.isPassenger()) {
-                if (this.tamable.distanceToSqr(this.owner) >= 144.0D) {
+                if (shouldTeleportToOwner()) {
                     this.teleportToOwner();
                 } else {
                     this.navigation.moveTo(this.owner, this.speedModifier);
@@ -100,6 +104,22 @@ public class FollowOwner2Goal extends Goal {
 
             }
         }
+    }
+
+    private boolean shouldTeleportToOwner() {
+        TameData data = TameRegistry.get(this.tamable.getUUID());
+        if (data != null) {
+            TameMode mode = TameMode.byId(data.mode);
+            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BOSS) && this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
+                return false;
+            }
+            double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
+            if (mode == TameMode.BODYGUARD) {
+                teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
+            }
+            return this.tamable.distanceToSqr(this.owner) >= teleportDistance * teleportDistance;
+        }
+        return this.tamable.distanceToSqr(this.owner) >= 24.0D * 24.0D;
     }
 
     private void teleportToOwner() {

@@ -1,6 +1,5 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.ai;
 
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerLevel;
@@ -22,41 +21,6 @@ final class TameGoalSupport {
 
     static ServerPlayer owner(TamableAnimal tame) {
         return tame.getOwner() instanceof ServerPlayer p ? p : null;
-    }
-
-    static void refreshEscapeState(TamableAnimal tame, TameData data) {
-        if (!data.escapeMode) {
-            if (data.escapeActive) {
-                data.escapeActive = false;
-                TameRegistry.markDirty();
-            }
-            return;
-        }
-
-        double hp = tame.getHealth() / Math.max(1.0F, tame.getMaxHealth());
-        if (!data.escapeActive && hp <= 0.05D) {
-            data.escapeActive = true;
-            TameRegistry.markDirty();
-            return;
-        }
-        if (data.escapeActive && hp >= 0.30D) {
-            data.escapeActive = false;
-            TameRegistry.markDirty();
-        }
-    }
-
-    static void handleEscapeMode(TamableAnimal tame, ServerPlayer owner, TameData data) {
-        boolean hasRangedAbility =
-                LevelSystem.hasAbility(data, "arrow_shot")
-                        || LevelSystem.hasAbility(data, "ghast_fireball")
-                        || LevelSystem.hasAbility(data, "snowball_shot")
-                        || LevelSystem.hasAbility(data, "warden_scream");
-
-        LivingEntity current = tame.getTarget();
-        if (!hasRangedAbility || current == null || !current.isAlive() || tame.distanceTo(current) < 6.0F) {
-            tame.setTarget(null);
-            tame.getNavigation().moveTo(owner, 1.45D);
-        }
     }
 
     static boolean handleProtectionZone(ServerLevel level, TamableAnimal tame, TameData data) {

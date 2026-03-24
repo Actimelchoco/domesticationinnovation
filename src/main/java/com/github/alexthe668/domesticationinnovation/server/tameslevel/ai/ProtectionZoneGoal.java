@@ -22,8 +22,7 @@ final class ProtectionZoneGoal extends Goal {
         if (!tame.isTame()) return false;
         TameData data = TameGoalSupport.data(tame);
         if (data == null) return false;
-        TameGoalSupport.refreshEscapeState(tame, data);
-        return !data.escapeActive && data.hasProtectionZone;
+        return data.hasProtectionZone;
     }
 
     @Override

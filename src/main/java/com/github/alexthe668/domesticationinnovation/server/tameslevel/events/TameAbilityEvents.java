@@ -1,6 +1,9 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.entity.ChainLightningEntity;
+import com.github.alexthe668.domesticationinnovation.server.entity.DIEntityRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
+import com.github.alexthe668.domesticationinnovation.server.misc.DISoundRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
@@ -990,11 +993,7 @@ public class TameAbilityEvents {
     }
 
     private static void handleRejuvenation(TamableAnimal tame, TameData data) {
-        int rejuvenationLevel = attributeLevel(data, "rejuvenation");
-        if (rejuvenationLevel <= 0) {
-            return;
-        }
-        TameableUtils.absorbExpOrbs(tame, rejuvenationLevel);
+        // Rejuvenation now uses the legacy DI server-side runtime path in CommonProxy.
     }
 
     private static void handleHealingBottle(ServerLevel level, TamableAnimal tame, TameData data, long now) {
@@ -1204,31 +1203,6 @@ public class TameAbilityEvents {
             debugAbilityUse(tame, "witherfang");
         }
 
-        int frostFangLevel = attributeLevel(data, "frost_fang");
-        if (frostFangLevel > 0) {
-            double chance = Math.min(0.45D, 0.15D + Math.max(0, frostFangLevel - 1) * 0.075D);
-            if (tame.getRandom().nextDouble() < chance) {
-                int slownessAmp = frostFangLevel >= 5 ? 2 : frostFangLevel >= 3 ? 1 : 0;
-                int duration = 40 + frostFangLevel * 20;
-                target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, duration, slownessAmp));
-                debugAbilityUse(tame, "frost_fang");
-            }
-        }
-
-        int magneticLevel = attributeLevel(data, "magnetic");
-        if (magneticLevel > 0) {
-            applyMagneticPull(tame, target, magneticLevel);
-        }
-
-        int chainLightningLevel = attributeLevel(data, "chain_lightning");
-        if (chainLightningLevel > 0 && tame.level() instanceof ServerLevel serverLevel) {
-            double chance = Math.min(0.28D, 0.12D + Math.max(0, chainLightningLevel - 1) * 0.04D);
-            if (tame.getRandom().nextDouble() < chance) {
-                noteDamageContributor("chain_lightning");
-                applyChainLightning(serverLevel, tame, data, target, event.getAmount(), chainLightningLevel);
-            }
-        }
-
         int smiteLevel = attributeLevel(data, "smite");
         if (smiteLevel > 0 && target.getMobType() == MobType.UNDEAD) {
             float extra = event.getAmount() * (0.15F + 0.10F * smiteLevel);
@@ -1431,6 +1405,7 @@ public class TameAbilityEvents {
         int maxChains = 1 + levelValue;
         double chainRadius = 4.0D + Math.max(0, levelValue - 1) * 0.25D;
         float chainDamage = aoeDamage(attributeDamageFromLevelOneBase(2.0F + levelValue, 3.0F, data, 0.50F));
+        spawnChainLightningVisual(level, tame, firstTarget, maxChains, chainDamage);
 
         Set<Integer> hitIds = new HashSet<>();
         hitIds.add(firstTarget.getId());
@@ -1451,9 +1426,28 @@ public class TameAbilityEvents {
         }
 
         if (chainsApplied > 0) {
-            level.playSound(null, firstTarget.blockPosition(), SoundEvents.TRIDENT_THUNDER, SoundSource.HOSTILE, 0.35F, 1.4F);
+            level.playSound(null, firstTarget.blockPosition(), DISoundRegistry.CHAIN_LIGHTNING.get(), SoundSource.HOSTILE, 0.9F, 1.0F);
             debugAbilityUse(tame, "chain_lightning");
         }
+    }
+
+    private static void spawnChainLightningVisual(ServerLevel level, TamableAnimal tame, LivingEntity firstTarget, int maxChains, float chainDamage) {
+        if (level == null || tame == null || firstTarget == null || !firstTarget.isAlive()) {
+            return;
+        }
+        ChainLightningEntity lightning = DIEntityRegistry.CHAIN_LIGHTNING.get().create(level);
+        if (lightning == null) {
+            return;
+        }
+        lightning.setCreatorEntityID(tame.getId());
+        lightning.setFromEntityID(tame.getId());
+        lightning.setToEntityID(firstTarget.getId());
+        lightning.setShockDamage(chainDamage);
+        lightning.setShockCurrentTarget(false);
+        lightning.setChainsLeft(maxChains);
+        lightning.copyPosition(firstTarget);
+        level.addFreshEntity(lightning);
+        level.playSound(null, firstTarget.blockPosition(), DISoundRegistry.CHAIN_LIGHTNING.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
     }
 
     private static LivingEntity findNearestChainTarget(ServerLevel level, TamableAnimal tame, LivingEntity origin, Set<Integer> excludeIds, double radius) {

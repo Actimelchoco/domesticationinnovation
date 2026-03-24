@@ -2,7 +2,12 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,6 +28,8 @@ public class TameRegistry {
     public static final Set<String> APPROVED_REINCARNATE_ITEMS = new HashSet<>();
     private static final Map<UUID, String> OWNER_RESPAWN_ORDERS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_AUTO_REINCARNATION = new HashMap<>();
+    private static final Map<UUID, Set<String>> OWNER_DO_NOT_ATTACK_TYPES = new HashMap<>();
+    private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -60,6 +67,10 @@ public class TameRegistry {
         OWNER_RESPAWN_ORDERS.putAll(savedData.getRespawnOrders());
         OWNER_AUTO_REINCARNATION.clear();
         OWNER_AUTO_REINCARNATION.putAll(savedData.getAutoReincarnation());
+        OWNER_DO_NOT_ATTACK_TYPES.clear();
+        OWNER_DO_NOT_ATTACK_TYPES.putAll(savedData.getDoNotAttackTypes());
+        OWNER_DO_NOT_ATTACK_ANIMALS.clear();
+        OWNER_DO_NOT_ATTACK_ANIMALS.putAll(savedData.getDoNotAttackAnimals());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -153,6 +164,24 @@ public class TameRegistry {
         return out;
     }
 
+    public static TameData getTameByPetBed(String dimensionId, BlockPos bedPos) {
+        if (dimensionId == null || dimensionId.isBlank() || bedPos == null) {
+            return null;
+        }
+        for (TameData data : TAMES.values()) {
+            if (data == null || !data.hasPetBed) {
+                continue;
+            }
+            if (!dimensionId.equals(data.petBedDimension)) {
+                continue;
+            }
+            if (data.petBedX == bedPos.getX() && data.petBedY == bedPos.getY() && data.petBedZ == bedPos.getZ()) {
+                return data;
+            }
+        }
+        return null;
+    }
+
     public static void archiveDeath(TameDeathRecord record) {
         if (record == null || record.uuid == null) {
             return;
@@ -182,6 +211,8 @@ public class TameRegistry {
         savedData.getApprovedReincarnateItems().addAll(APPROVED_REINCARNATE_ITEMS);
         savedData.setRespawnOrders(OWNER_RESPAWN_ORDERS);
         savedData.setAutoReincarnation(OWNER_AUTO_REINCARNATION);
+        savedData.setDoNotAttackTypes(OWNER_DO_NOT_ATTACK_TYPES);
+        savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
         savedData.setDirty();
     }
 
@@ -223,6 +254,104 @@ public class TameRegistry {
             OWNER_AUTO_REINCARNATION.remove(ownerUuid);
         }
         markDirty();
+    }
+
+    public static Set<String> getDoNotAttackTypes(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return Set.of();
+        }
+        Set<String> values = OWNER_DO_NOT_ATTACK_TYPES.get(ownerUuid);
+        return values == null || values.isEmpty() ? Set.of() : Set.copyOf(values);
+    }
+
+    public static boolean toggleDoNotAttackType(UUID ownerUuid, String entityTypeId) {
+        if (ownerUuid == null || entityTypeId == null || entityTypeId.isBlank()) {
+            return false;
+        }
+        String normalized = entityTypeId.trim().toLowerCase(java.util.Locale.ROOT);
+        Set<String> values = OWNER_DO_NOT_ATTACK_TYPES.computeIfAbsent(ownerUuid, ignored -> new HashSet<>());
+        boolean added;
+        if (values.contains(normalized)) {
+            values.remove(normalized);
+            added = false;
+        } else {
+            values.add(normalized);
+            added = true;
+        }
+        if (values.isEmpty()) {
+            OWNER_DO_NOT_ATTACK_TYPES.remove(ownerUuid);
+        }
+        markDirty();
+        return added;
+    }
+
+    public static boolean removeDoNotAttackType(UUID ownerUuid, String entityTypeId) {
+        if (ownerUuid == null || entityTypeId == null || entityTypeId.isBlank()) {
+            return false;
+        }
+        String normalized = entityTypeId.trim().toLowerCase(java.util.Locale.ROOT);
+        Set<String> values = OWNER_DO_NOT_ATTACK_TYPES.get(ownerUuid);
+        if (values == null || values.isEmpty() || !values.remove(normalized)) {
+            return false;
+        }
+        if (values.isEmpty()) {
+            OWNER_DO_NOT_ATTACK_TYPES.remove(ownerUuid);
+        }
+        markDirty();
+        return true;
+    }
+
+    public static boolean isDoNotAttackAnimals(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return false;
+        }
+        return OWNER_DO_NOT_ATTACK_ANIMALS.getOrDefault(ownerUuid, false);
+    }
+
+    public static void setDoNotAttackAnimals(UUID ownerUuid, boolean enabled) {
+        if (ownerUuid == null) {
+            return;
+        }
+        if (enabled) {
+            OWNER_DO_NOT_ATTACK_ANIMALS.put(ownerUuid, true);
+        } else {
+            OWNER_DO_NOT_ATTACK_ANIMALS.remove(ownerUuid);
+        }
+        markDirty();
+    }
+
+    public static boolean isProtectedAttackTarget(TamableAnimal tame, Entity target) {
+        if (tame == null || target == null) {
+            return false;
+        }
+        TameData data = get(tame.getUUID());
+        return data != null && isProtectedAttackTarget(data.ownerUUID, target);
+    }
+
+    public static boolean isProtectedAttackTarget(UUID ownerUuid, Entity target) {
+        if (target == null) {
+            return false;
+        }
+        if (matchesProtectedTargetRules(ownerUuid, target)) {
+            return true;
+        }
+        UUID claimOwner = OpenPartiesClaimsCompat.getClaimOwner(target);
+        return claimOwner != null && !claimOwner.equals(ownerUuid) && matchesProtectedTargetRules(claimOwner, target);
+    }
+
+    private static boolean matchesProtectedTargetRules(UUID ownerUuid, Entity target) {
+        if (ownerUuid == null || target == null) {
+            return false;
+        }
+        if (isDoNotAttackAnimals(ownerUuid) && target instanceof Animal) {
+            return true;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(target.getType());
+        if (key == null) {
+            return false;
+        }
+        Set<String> blocked = OWNER_DO_NOT_ATTACK_TYPES.get(ownerUuid);
+        return blocked != null && blocked.contains(key.toString().toLowerCase(java.util.Locale.ROOT));
     }
 
     public static boolean isInitialized() {
