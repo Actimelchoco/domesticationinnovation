@@ -395,6 +395,9 @@ public class CommonProxy {
     public void onLivingUpdate(LivingEvent.LivingTickEvent event) {
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
+            if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {
+                TameableUtils.syncVisualCollarEnchants(event.getEntity());
+            }
             if (getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame") > 0 && !event.getEntity().level().isClientSide) {
                 int i = TameableUtils.getImmuneTime(event.getEntity());
                 if (i > 0) {
@@ -440,7 +443,11 @@ public class CommonProxy {
                     }
                     mob.setDeltaMovement(mob.getDeltaMovement().multiply(0.88D, 1.0D, 0.88D));
                     Vec3 move = new Vec3(mob.getX() - sucking.getX(), mob.getY() - (double) sucking.getEyeHeight() / 2.0D - sucking.getY(), mob.getZ() - sucking.getZ());
-                    sucking.setDeltaMovement(sucking.getDeltaMovement().add(move.normalize().scale(magneticPullStrength(magneticLevel, mob.onGround()))));
+                    double resistanceMultiplier = sucking instanceof LivingEntity living ? magneticResistanceMultiplier(living) : 1.0D;
+                    double pullStrength = magneticPullStrength(magneticLevel, mob.onGround()) * resistanceMultiplier;
+                    if (pullStrength > 0.0D) {
+                        sucking.setDeltaMovement(sucking.getDeltaMovement().add(move.normalize().scale(pullStrength)));
+                    }
                 }
             }
             int shadowHandsLevel = getAbilityOrEnchantLevel(event.getEntity(), "shadow_hands");
@@ -696,12 +703,15 @@ public class CommonProxy {
 
         if (frozenTime > 0) {
             TameableUtils.setFrozenTimeTag(event.getEntity(), frozenTime - 1);
+            int frozenLevel = Math.max(1, TameableUtils.getFrozenLevel(event.getEntity()));
             AttributeInstance instance = event.getEntity().getAttribute(Attributes.MOVEMENT_SPEED);
             if (instance != null) {
-                float f = -0.1F * event.getEntity().getPercentFrozen();
+                float scale = (float) ((1.0F + Math.max(0, frozenLevel - 1) * 0.08F) * frostFangResistanceMultiplier(event.getEntity()));
+                float f = Math.max(-0.35F, -0.06F * event.getEntity().getPercentFrozen() * scale);
                 if (frozenTime > 1) {
                     AttributeModifier fangModifier = new AttributeModifier(FROST_FANG_SLOW, "Frost fang slow", f, AttributeModifier.Operation.ADDITION);
                     if (!instance.hasModifier(fangModifier)) {
+                        instance.removeModifier(FROST_FANG_SLOW);
                         instance.addTransientModifier(fangModifier);
                     }
                 } else {
@@ -710,6 +720,14 @@ public class CommonProxy {
             }
             for (int i = 0; i < 1 + event.getEntity().getRandom().nextInt(2); i++) {
                 event.getEntity().level().addParticle(ParticleTypes.SNOWFLAKE, event.getEntity().getRandomX(0.7F), event.getEntity().getRandomY(), event.getEntity().getRandomZ(0.7F), 0.0F, 0.0F, 0.0F);
+            }
+        } else {
+            AttributeInstance instance = event.getEntity().getAttribute(Attributes.MOVEMENT_SPEED);
+            if (instance != null) {
+                instance.removeModifier(FROST_FANG_SLOW);
+            }
+            if (TameableUtils.getFrozenLevel(event.getEntity()) != 0) {
+                TameableUtils.setFrozenLevel(event.getEntity(), 0);
             }
         }
     }
@@ -813,7 +831,11 @@ public class CommonProxy {
             }
             int frostFangLevel = getDiEffectLevel(attacker, "frost_fang");
             if (shouldApplyLegacyFrostFang(attacker, frostFangLevel)) {
-                event.getEntity().setTicksFrozen(event.getEntity().getTicksRequiredToFreeze() + 200);
+                int safeLevel = Math.max(1, frostFangLevel);
+                double resistanceMultiplier = frostFangResistanceMultiplier(event.getEntity());
+                int frozenTicks = Math.max(10, Mth.floor((100 + Math.max(0, safeLevel - 1) * 20) * resistanceMultiplier));
+                int frozenTimeApplied = Math.max(5, Mth.floor((30 + Math.max(0, safeLevel - 1) * 4) * resistanceMultiplier));
+                event.getEntity().setTicksFrozen(event.getEntity().getTicksRequiredToFreeze() + frozenTicks);
                 Vec3 vec3 = event.getEntity().getEyePosition().subtract(attacker.getEyePosition()).normalize().scale(attacker.getBbWidth() + 0.5F);
                 Vec3 vec32 = attacker.getEyePosition().add(vec3);
                 for (int i = 0; i < 3 + attacker.getRandom().nextInt(3); i++) {
@@ -822,9 +844,10 @@ public class CommonProxy {
                     float f3 = 0.2F * (attacker.getRandom().nextFloat() - 1.0F);
                     attacker.level().addParticle(ParticleTypes.SNOWFLAKE, vec32.x + f1, vec32.y + f2, vec32.z + f3, 0.0F, 0.0F, 0.0F);
                 }
-                TameableUtils.setFrozenTimeTag(event.getEntity(), 60);
+                TameableUtils.setFrozenTimeTag(event.getEntity(), frozenTimeApplied);
+                TameableUtils.setFrozenLevel(event.getEntity(), safeLevel);
             }
-            if (bubblingLevel > 0) {
+            if (bubblingLevel > 0 && attacker.getRandom().nextDouble() < bubblingProcChance(bubblingLevel, event.getEntity())) {
                 if (!(event.getEntity().getRootVehicle() instanceof GiantBubbleEntity) && (event.getEntity().onGround() || event.getEntity().isInWaterOrBubble() || event.getEntity().isInLava())) {
                     GiantBubbleEntity bubble = DIEntityRegistry.GIANT_BUBBLE.get().create(event.getEntity().level());
                     bubble.copyPosition(event.getEntity());
@@ -851,7 +874,7 @@ public class CommonProxy {
                 }
             }
             int warpingBiteLevel = getDiEffectLevel(attacker, "warping_bite");
-            if (!event.getEntity().level().isClientSide && warpingBiteLevel > 0) {
+            if (!event.getEntity().level().isClientSide && warpingBiteLevel > 0 && attacker.getRandom().nextDouble() < warpingBiteProcChance(warpingBiteLevel, event.getEntity())) {
                 int attempts = warpingBiteAttempts(warpingBiteLevel);
                 double horizontalRange = warpingBiteHorizontalRange(warpingBiteLevel);
                 int verticalRange = warpingBiteVerticalRange(warpingBiteLevel);
@@ -1978,6 +2001,32 @@ public class CommonProxy {
         int safeLevel = Math.max(1, level);
         double base = onGround ? 0.12D : 0.04D;
         return Math.min(onGround ? 0.32D : 0.14D, base + Math.max(0, safeLevel - 1) * (onGround ? 0.03D : 0.015D));
+    }
+
+    private static double bubblingProcChance(int level, LivingEntity target) {
+        double baseChance = Math.min(0.75D, 0.20D + Math.max(0, level - 1) * 0.05D);
+        return TameableUtils.scaleMinorEnemyProcChance(baseChance, level, target);
+    }
+
+    private static double warpingBiteProcChance(int level, LivingEntity target) {
+        double baseChance = Math.min(0.65D, 0.18D + Math.max(0, level - 1) * 0.04D);
+        return TameableUtils.scaleMinorEnemyProcChance(baseChance, level, target);
+    }
+
+    private static double magneticResistanceMultiplier(LivingEntity target) {
+        double knockbackResistance = Mth.clamp(target.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE), 0.0D, 1.0D);
+        return Math.max(0.15D, 1.0D - knockbackResistance);
+    }
+
+    private static double frostFangResistanceMultiplier(LivingEntity target) {
+        double knockbackResistance = Mth.clamp(target.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE), 0.0D, 1.0D);
+        if (knockbackResistance <= 0.0D) {
+            return 1.0D;
+        }
+        if (knockbackResistance >= 1.0D) {
+            return 0.01D;
+        }
+        return 0.01D + 0.99D * Math.pow(1.0D - knockbackResistance, 2.7224660245D);
     }
 
     private static double healthSiphonRange(int level) {

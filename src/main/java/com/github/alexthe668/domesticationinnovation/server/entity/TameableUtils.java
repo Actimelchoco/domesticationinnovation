@@ -49,9 +49,11 @@ import java.util.function.Predicate;
 public class TameableUtils {
 
     private static final String ENCHANTMENT_TAG = "StoredPetEnchantments";
+    private static final String FAKE_VISUAL_ENCHANT_TAG = "TLFakeVisualEnchant";
     private static final String COLLAR_TAG = "HasPetCollar";
     private static final String IMMUNITY_TIME_TAG = "PetImmunityTimer";
     private static final String FROZEN_TIME_TAG = "PetFrozenTime";
+    private static final String FROZEN_LEVEL_TAG = "PetFrozenLevel";
     private static final String ATTACK_TARGET_ENTITY = "PetAttackTarget";
     private static final String SHADOW_PUNCH_TIMES = "PetShadowPunchTimes";
     private static final String SHADOW_PUNCH_COOLDOWN = "PetShadowPunchCooldown";
@@ -82,6 +84,12 @@ public class TameableUtils {
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
 
     private static final UUID SPEED_BOOST_AQUATIC_LAND_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31745");
+    private static final Map<String, Enchantment> VISUAL_FAKE_ENCHANTMENTS = Map.of(
+            "magnetic", DIEnchantmentRegistry.MAGNETIC,
+            "health_siphon", DIEnchantmentRegistry.HEALTH_SIPHON,
+            "void_cloud", DIEnchantmentRegistry.VOID_CLOUD,
+            "blazing_protection", DIEnchantmentRegistry.BLAZING_PROTECTION
+    );
 
     public static boolean hasSameOwnerAs(LivingEntity tameable, Entity target) {
         return hasSameOwnerAsOneWay(tameable, target) || hasSameOwnerAsOneWay(target, tameable);
@@ -329,6 +337,9 @@ public class TameableUtils {
         if (listtag != null && DomesticationMod.CONFIG.isEnchantEnabled(enchantment)) {
             for (int i = 0; i < listtag.size(); ++i) {
                 CompoundTag compoundtag = listtag.getCompound(i);
+                if (isServerSideVisualFakeEnchant(entity, compoundtag)) {
+                    continue;
+                }
                 ResourceLocation res = EnchantmentHelper.getEnchantmentId(compoundtag);
                 if (res != null && res.equals(ForgeRegistries.ENCHANTMENTS.getKey(enchantment))) {
                     return EnchantmentHelper.getEnchantmentLevel(compoundtag);
@@ -351,6 +362,9 @@ public class TameableUtils {
         Map<ResourceLocation, Integer> enchants = new HashMap<>();
         for (int i = 0; i < listtag.size(); ++i) {
             CompoundTag compoundtag = listtag.getCompound(i);
+            if (isVisualFakeEnchant(compoundtag)) {
+                continue;
+            }
             ResourceLocation res = EnchantmentHelper.getEnchantmentId(compoundtag);
             if (DomesticationMod.CONFIG.isEnchantEnabled(res.getPath())) {
                 enchants.put(res, EnchantmentHelper.getEnchantmentLevel(compoundtag));
@@ -375,8 +389,8 @@ public class TameableUtils {
     }
 
     public static boolean hasAnyEnchants(LivingEntity entity) {
-        ListTag listtag = getEnchantmentList(entity);
-        return listtag != null && !listtag.isEmpty();
+        Map<ResourceLocation, Integer> enchants = getEnchants(entity);
+        return enchants != null && !enchants.isEmpty();
     }
 
     public static boolean hasAnyAbilityOrAttributeProgress(LivingEntity entity) {
@@ -464,6 +478,7 @@ public class TameableUtils {
         tag.put(TL_ATTRIBUTE_LEVELS_SYNC, attr);
         tag.put(TL_ABILITY_LEVELS_SYNC, abil);
         sync(entity, tag);
+        syncVisualCollarEnchants(entity);
     }
 
     public static void addEnchant(LivingEntity entity, EnchantmentInstance enchantment) {
@@ -505,11 +520,83 @@ public class TameableUtils {
         tag.putBoolean(COLLAR_TAG, collar);
         sync(enchanted, tag);
         onUpdateEnchants(prevEnchants, enchanted);
+        syncVisualCollarEnchants(enchanted);
     }
 
     public static boolean hasCollar(LivingEntity enchanted) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
         return tag.contains(COLLAR_TAG) && tag.getBoolean(COLLAR_TAG);
+    }
+
+    public static void syncVisualCollarEnchants(LivingEntity entity) {
+        if (entity == null || entity.level().isClientSide) {
+            return;
+        }
+        ListTag current = getEnchantmentList(entity);
+        ListTag updated = new ListTag();
+        if (current != null) {
+            for (int i = 0; i < current.size(); ++i) {
+                CompoundTag enchantTag = current.getCompound(i).copy();
+                if (!isVisualFakeEnchant(enchantTag)) {
+                    updated.add(enchantTag);
+                }
+            }
+        }
+        if (hasCollar(entity)) {
+            for (Map.Entry<String, Enchantment> entry : VISUAL_FAKE_ENCHANTMENTS.entrySet()) {
+                int level = getVisualFakeEnchantLevel(entity, entry.getKey(), entry.getValue());
+                if (level > 0) {
+                    CompoundTag stored = EnchantmentHelper.storeEnchantment(ForgeRegistries.ENCHANTMENTS.getKey(entry.getValue()), level);
+                    stored.putBoolean(FAKE_VISUAL_ENCHANT_TAG, true);
+                    updated.add(stored);
+                }
+            }
+        }
+        if (!listTagEquals(current, updated)) {
+            setEnchantmentTag(entity, updated);
+        }
+    }
+
+    private static int getVisualFakeEnchantLevel(LivingEntity entity, String effectId, Enchantment enchantment) {
+        int level = getProgressOnlyLevel(entity, effectId);
+        if (level <= 0) {
+            return 0;
+        }
+        return Mth.clamp(level, 1, enchantment.getMaxLevel());
+    }
+
+    private static int getProgressOnlyLevel(LivingEntity entity, String id) {
+        TameData data = TameRegistry.get(entity.getUUID());
+        if (data != null) {
+            int ability = data.abilityLevels == null ? 0 : data.abilityLevels.getOrDefault(id, 0);
+            int attribute = data.attributeLevels == null ? 0 : data.attributeLevels.getOrDefault(id, 0);
+            return Math.max(ability, attribute);
+        }
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        return Math.max(levelFromSyncTag(tag, TL_ABILITY_LEVELS_SYNC, id), levelFromSyncTag(tag, TL_ATTRIBUTE_LEVELS_SYNC, id));
+    }
+
+    private static int levelFromSyncTag(CompoundTag tag, String key, String id) {
+        if (!tag.contains(key, Tag.TAG_COMPOUND)) {
+            return 0;
+        }
+        CompoundTag levels = tag.getCompound(key);
+        return levels.contains(id, Tag.TAG_INT) ? levels.getInt(id) : 0;
+    }
+
+    private static boolean listTagEquals(@Nullable ListTag first, ListTag second) {
+        if (first == null) {
+            return second.isEmpty();
+        }
+        return first.equals(second);
+    }
+
+    private static boolean isVisualFakeEnchant(CompoundTag compoundTag) {
+        return compoundTag.getBoolean(FAKE_VISUAL_ENCHANT_TAG);
+    }
+
+    private static boolean isServerSideVisualFakeEnchant(LivingEntity entity, CompoundTag compoundTag) {
+        return !entity.level().isClientSide && isVisualFakeEnchant(compoundTag);
     }
 
     @Nullable
@@ -590,6 +677,17 @@ public class TameableUtils {
     public static void setFrozenTimeTag(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
         tag.putInt(FROZEN_TIME_TAG, time);
+        sync(enchanted, tag);
+    }
+
+    public static int getFrozenLevel(LivingEntity enchanted) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        return Math.max(0, tag.getInt(FROZEN_LEVEL_TAG));
+    }
+
+    public static void setFrozenLevel(LivingEntity enchanted, int level) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putInt(FROZEN_LEVEL_TAG, Math.max(0, level));
         sync(enchanted, tag);
     }
 
@@ -859,33 +957,66 @@ public class TameableUtils {
     }
 
     public static void scareRandomMonsters(LivingEntity scary, int level) {
-        boolean interval = (scary.tickCount + scary.getId()) % Math.max(140, 600 - level * 200) == 0;
-        if (interval || scary.hurtTime == 4 || getIntimidationCooldown(scary) > 0) {
-            Predicate<Entity> notOnTeamAndMonster = (animal) -> animal instanceof Monster && !hasSameOwnerAs((LivingEntity) animal, scary) && animal.distanceTo(scary) > 3 + scary.getBbWidth() * 1.6F;
-            List<PathfinderMob> list = scary.level().getEntitiesOfClass(PathfinderMob.class, scary.getBoundingBox().inflate(10 * level, 8 * level, 10 * level), EntitySelector.NO_SPECTATORS.and(notOnTeamAndMonster));
-            list.sort(Comparator.comparingDouble(scary::distanceToSqr));
-            if (!list.isEmpty()) {
-                if (getIntimidationCooldown(scary) > 0 && !interval) {
-                    setIntimidationCooldown(scary, getIntimidationCooldown(scary) - 1);
-                } else {
-                    Vec3 rots = list.get(0).getEyePosition().subtract(scary.getEyePosition()).normalize();
-                    float f = Mth.sqrt((float) (rots.x * rots.x + rots.z * rots.z));
-                    double yRot = Math.atan2(-rots.z, -rots.x) * (double) (180F / (float) Math.PI) + 90F;
-                    double xRot = Math.atan2(-rots.y, f) * (double) (180F / (float) Math.PI);
-                    scary.level().addParticle(DIParticleRegistry.INTIMIDATION.get(), scary.getX(), scary.getY(), scary.getZ(), scary.getId(), xRot, yRot);
-                    setIntimidationCooldown(scary, 70 * level);
-                    if (scary instanceof Mob) {
-                        ((Mob) scary).playAmbientSound();
-                    }
-                }
-                for (PathfinderMob monster : list) {
-                    Vec3 vec = LandRandomPos.getPosAway(monster, 11 * level, 7, scary.position());
-                    if (vec != null) {
-                        monster.getNavigation().moveTo(vec.x, vec.y, vec.z, 1.5D);
-                    }
+        int cooldown = getIntimidationCooldown(scary);
+        if (cooldown > 0) {
+            setIntimidationCooldown(scary, cooldown - 1);
+            return;
+        }
+        if (!(scary instanceof Mob mob) || mob.getTarget() == null || !mob.getTarget().isAlive()) {
+            return;
+        }
+        Predicate<Entity> notOnTeamAndMonster = (animal) -> animal instanceof Monster && !hasSameOwnerAs((LivingEntity) animal, scary) && animal.distanceTo(scary) > 3 + scary.getBbWidth() * 1.6F;
+        List<PathfinderMob> list = scary.level().getEntitiesOfClass(PathfinderMob.class, scary.getBoundingBox().inflate(10 * level, 8 * level, 10 * level), EntitySelector.NO_SPECTATORS.and(notOnTeamAndMonster));
+        list.sort(Comparator.comparingDouble(scary::distanceToSqr));
+        if (!list.isEmpty()) {
+            List<PathfinderMob> affected = list.stream().filter(monster -> scary.getRandom().nextDouble() < intimidationProcChance(level, monster)).toList();
+            if (affected.isEmpty()) {
+                return;
+            }
+            Vec3 rots = affected.get(0).getEyePosition().subtract(scary.getEyePosition()).normalize();
+            float f = Mth.sqrt((float) (rots.x * rots.x + rots.z * rots.z));
+            double yRot = Math.atan2(-rots.z, -rots.x) * (double) (180F / (float) Math.PI) + 90F;
+            double xRot = Math.atan2(-rots.y, f) * (double) (180F / (float) Math.PI);
+            scary.level().addParticle(DIParticleRegistry.INTIMIDATION.get(), scary.getX(), scary.getY(), scary.getZ(), scary.getId(), xRot, yRot);
+            setIntimidationCooldown(scary, 1200);
+            mob.playAmbientSound();
+            for (PathfinderMob monster : affected) {
+                Vec3 vec = LandRandomPos.getPosAway(monster, 11 * level, 7, scary.position());
+                if (vec != null) {
+                    monster.getNavigation().moveTo(vec.x, vec.y, vec.z, 1.5D);
                 }
             }
         }
+    }
+
+    private static double intimidationProcChance(int level, LivingEntity target) {
+        double baseChance = Math.min(0.80D, 0.22D + Math.max(0, level - 1) * 0.05D);
+        return scaleMinorEnemyProcChance(baseChance, level, target);
+    }
+
+    public static double scaleMinorEnemyProcChance(double baseChance, int level, LivingEntity target) {
+        double maxHealth = Math.max(1.0D, target.getMaxHealth());
+        if (maxHealth <= 20.0D) {
+            return baseChance;
+        }
+        double capAt100 = minorEnemyProcCapAt100(level);
+        double allowedChance;
+        if (maxHealth <= 100.0D) {
+            double progress = (maxHealth - 20.0D) / 80.0D;
+            allowedChance = Mth.lerp(progress, baseChance, capAt100);
+        } else {
+            double over100Scale = Math.pow(100.0D / maxHealth, 3.0D);
+            allowedChance = capAt100 * over100Scale;
+        }
+        return Math.min(baseChance, allowedChance);
+    }
+
+    private static double minorEnemyProcCapAt100(int level) {
+        int safeLevel = Math.max(1, level);
+        if (safeLevel <= 5) {
+            return 0.007D + (safeLevel - 1) * 0.00075D;
+        }
+        return Math.min(0.05D, 0.010D + (safeLevel - 5) * 0.008D);
     }
 
     public static void detectRandomOres(LivingEntity attractor, int interval, int range, int effectLength, int maxOres) {
