@@ -224,7 +224,7 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isAutoFollowEligible(TameData data) {
-        return data != null && !data.hasHome && isFollowing(data) && hasTeleportCapability(data);
+        return data != null && !data.hasHome && !data.wanderLock && isFollowing(data) && hasTeleportCapability(data);
     }
 
     private static boolean isAutoFollowEligible(TamableAnimal tame, TameData data) {
@@ -232,6 +232,7 @@ public class TameAutoFollowEvents {
                 && tame.isAlive()
                 && data != null
                 && !data.hasHome
+                && !data.wanderLock
                 && isFollowing(tame)
                 && tame.level() instanceof ServerLevel
                 && hasTeleportCapability(data);

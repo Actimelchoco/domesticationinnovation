@@ -542,15 +542,12 @@ public class TameAbilityEvents {
         Vec3 fromTargetToTame = tame.position().subtract(target.position());
         if (fromTargetToTame.lengthSqr() < 0.001D) return;
 
-        Vec3 pull = fromTargetToTame.normalize().scale(0.35D + levelValue * 0.04D);
-        double up = 0.45D + levelValue * 0.05D;
+        double resistanceScale = magneticResistanceMultiplier(target);
+        Vec3 pull = fromTargetToTame.normalize().scale((0.35D + levelValue * 0.04D) * resistanceScale);
+        double up = (0.45D + levelValue * 0.05D) * resistanceScale;
         Vec3 newMotion = target.getDeltaMovement().scale(0.35D).add(pull.x, up, pull.z);
         target.setDeltaMovement(newMotion);
         target.hurtMarked = true;
-
-        float damage = offensiveAbilityCastDamage(data, "fishing", levelValue);
-        LevelSystem.trackDamage(target, tame);
-        applyInternalBonusDamage(target, tame, damage);
 
         level.sendParticles(ParticleTypes.SPLASH, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 10), 0.3D, 0.2D, 0.3D, 0.02D);
         level.playSound(null, target.blockPosition(), SoundEvents.FISHING_BOBBER_RETRIEVE, SoundSource.HOSTILE, 0.9F, 1.0F);
@@ -1402,6 +1399,11 @@ public class TameAbilityEvents {
         target.setDeltaMovement(motion);
         target.hurtMarked = true;
         debugAbilityUse(tame, "magnetic");
+    }
+
+    private static double magneticResistanceMultiplier(LivingEntity target) {
+        double knockbackResistance = Mth.clamp(target.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE), 0.0D, 1.0D);
+        return Math.max(0.15D, 1.0D - knockbackResistance);
     }
 
     private static void applyChainLightning(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity firstTarget, float hitDamage, int levelValue) {

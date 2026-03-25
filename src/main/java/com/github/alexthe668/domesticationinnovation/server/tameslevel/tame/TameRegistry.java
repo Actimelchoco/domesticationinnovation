@@ -30,6 +30,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_AUTO_REINCARNATION = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_DO_NOT_ATTACK_TYPES = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
+    private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -71,6 +72,8 @@ public class TameRegistry {
         OWNER_DO_NOT_ATTACK_TYPES.putAll(savedData.getDoNotAttackTypes());
         OWNER_DO_NOT_ATTACK_ANIMALS.clear();
         OWNER_DO_NOT_ATTACK_ANIMALS.putAll(savedData.getDoNotAttackAnimals());
+        OWNER_HEALTH_SIPHON.clear();
+        OWNER_HEALTH_SIPHON.putAll(savedData.getHealthSiphon());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -213,6 +216,7 @@ public class TameRegistry {
         savedData.setAutoReincarnation(OWNER_AUTO_REINCARNATION);
         savedData.setDoNotAttackTypes(OWNER_DO_NOT_ATTACK_TYPES);
         savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
+        savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
         savedData.setDirty();
     }
 
@@ -316,6 +320,25 @@ public class TameRegistry {
             OWNER_DO_NOT_ATTACK_ANIMALS.put(ownerUuid, true);
         } else {
             OWNER_DO_NOT_ATTACK_ANIMALS.remove(ownerUuid);
+        }
+        markDirty();
+    }
+
+    public static boolean isHealthSiphonEnabled(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return true;
+        }
+        return OWNER_HEALTH_SIPHON.getOrDefault(ownerUuid, true);
+    }
+
+    public static void setHealthSiphonEnabled(UUID ownerUuid, boolean enabled) {
+        if (ownerUuid == null) {
+            return;
+        }
+        if (enabled) {
+            OWNER_HEALTH_SIPHON.remove(ownerUuid);
+        } else {
+            OWNER_HEALTH_SIPHON.put(ownerUuid, false);
         }
         markDirty();
     }

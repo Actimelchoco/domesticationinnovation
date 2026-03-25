@@ -29,6 +29,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Play
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.brigadier.Command;
@@ -788,7 +789,7 @@ public class CommonProxy {
                 flag = true;
             }
             int healthSiphonLevel = getDiEffectLevel(event.getEntity(), "health_siphon");
-            if (!flag && healthSiphonLevel > 0) {
+            if (!flag && healthSiphonLevel > 0 && TameRegistry.isHealthSiphonEnabled(TameableUtils.getOwnerUUIDOf(event.getEntity()))) {
                 Entity owner = TameableUtils.getOwnerOf(event.getEntity());
                 if (owner != null && owner.isAlive() && owner.distanceTo(event.getEntity()) < healthSiphonRange(healthSiphonLevel) && owner != event.getEntity()) {
                     owner.hurt(event.getSource(), event.getAmount());

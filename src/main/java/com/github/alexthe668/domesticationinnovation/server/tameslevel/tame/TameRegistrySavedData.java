@@ -25,6 +25,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> autoReincarnation = new HashMap<>();
     private final Map<UUID, Set<String>> doNotAttackTypes = new HashMap<>();
     private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
+    private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -100,6 +101,17 @@ public class TameRegistrySavedData extends SavedData {
         this.doNotAttackAnimals.clear();
         if (doNotAttackAnimals != null) {
             this.doNotAttackAnimals.putAll(doNotAttackAnimals);
+        }
+    }
+
+    public Map<UUID, Boolean> getHealthSiphon() {
+        return healthSiphon;
+    }
+
+    public void setHealthSiphon(Map<UUID, Boolean> healthSiphon) {
+        this.healthSiphon.clear();
+        if (healthSiphon != null) {
+            this.healthSiphon.putAll(healthSiphon);
         }
     }
 
@@ -179,6 +191,17 @@ public class TameRegistrySavedData extends SavedData {
             doNotAttackAnimalsTag.add(row);
         }
         tag.put("doNotAttackAnimals", doNotAttackAnimalsTag);
+        ListTag healthSiphonTag = new ListTag();
+        for (Map.Entry<UUID, Boolean> entry : healthSiphon.entrySet()) {
+            if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putBoolean("enabled", true);
+            healthSiphonTag.add(row);
+        }
+        tag.put("healthSiphon", healthSiphonTag);
         return tag;
     }
 
@@ -265,6 +288,15 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.doNotAttackAnimals.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
+            }
+        }
+        if (tag.contains("healthSiphon", Tag.TAG_LIST)) {
+            ListTag healthSiphonList = tag.getList("healthSiphon", Tag.TAG_COMPOUND);
+            for (Tag entry : healthSiphonList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.healthSiphon.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
             }
         }
         return data;

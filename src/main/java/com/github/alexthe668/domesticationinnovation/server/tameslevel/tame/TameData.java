@@ -89,6 +89,7 @@ public class TameData {
     public boolean defendAllies = false;
     public boolean escapeMode = true;
     public boolean escapeActive = false;
+    public boolean wanderLock = false;
     public boolean skeletonMovement = false;
     public boolean closeMovement = false;
     public boolean hasProtectionZone = false;
@@ -239,6 +240,7 @@ public class TameData {
         tag.putBoolean("defendAllies", defendAllies);
         tag.putBoolean("escapeMode", escapeMode);
         tag.putBoolean("escapeActive", escapeActive);
+        tag.putBoolean("wanderLock", wanderLock);
         tag.putBoolean("skeletonMovement", skeletonMovement);
         tag.putBoolean("closeMovement", closeMovement);
         tag.putBoolean("hasProtectionZone", hasProtectionZone);
@@ -391,6 +393,7 @@ public class TameData {
         data.defendAllies = tag.getBoolean("defendAllies");
         data.escapeMode = !tag.contains("escapeMode") || tag.getBoolean("escapeMode");
         data.escapeActive = tag.getBoolean("escapeActive");
+        data.wanderLock = tag.getBoolean("wanderLock");
         data.skeletonMovement = tag.getBoolean("skeletonMovement");
         data.closeMovement = tag.getBoolean("closeMovement");
         data.hasProtectionZone = tag.getBoolean("hasProtectionZone");

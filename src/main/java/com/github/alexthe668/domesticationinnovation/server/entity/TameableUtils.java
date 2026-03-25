@@ -964,6 +964,18 @@ public class TameableUtils {
         sync(enchanted, tag);
     }
 
+    public static void normalizeLegacyHealthBoostState(LivingEntity enchanted) {
+        if (enchanted == null) {
+            return;
+        }
+        AttributeInstance health = enchanted.getAttribute(Attributes.MAX_HEALTH);
+        if (health != null && !hasEnchant(enchanted, DIEnchantmentRegistry.HEALTH_BOOST)) {
+            health.removePermanentModifier(HEALTH_BOOST_UUID);
+        }
+        double clampedHealth = Mth.clamp(enchanted.getHealth(), 0.0F, enchanted.getMaxHealth());
+        setSafePetHealth(enchanted, clampedHealth);
+    }
+
     public static void attractAnimals(LivingEntity attractor, int max) {
         if ((attractor.tickCount + attractor.getId()) % 8 == 0) {
             Predicate<Entity> notOnTeam = (animal) -> !hasSameOwnerAs((LivingEntity) animal, attractor) && animal.distanceTo(attractor) > 3 + attractor.getBbWidth() * 1.6F;

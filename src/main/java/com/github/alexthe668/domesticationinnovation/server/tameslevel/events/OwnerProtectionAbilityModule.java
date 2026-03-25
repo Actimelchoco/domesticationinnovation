@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -19,8 +20,12 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 
 import java.util.List;
+import java.lang.reflect.Method;
 
 public final class OwnerProtectionAbilityModule {
+    private static final String SHIELD_BLOCK_RESTORE_TICK = "shield_block_restore_tick";
+    private static final String SHIELD_BLOCK_RESTORE_ORDER = "shield_block_restore_order";
+    private static final long SHIELD_BLOCK_SIT_TICKS = 20L;
 
     public interface Hooks {
         void debugAbilityUse(TamableAnimal tame, String ability);
@@ -48,6 +53,7 @@ public final class OwnerProtectionAbilityModule {
     }
 
     public static void onTick(TamableAnimal tame, TameData data) {
+        restoreShieldBlockOrderIfReady(tame, data);
         if (!LevelSystem.hasAbility(data, "last_stand_fury")) return;
         LivingEntity owner = tame.getOwner();
         if (owner == null || !owner.isAlive()) return;
@@ -145,8 +151,11 @@ public final class OwnerProtectionAbilityModule {
         float before = event.getAmount();
         event.setAmount(event.getAmount() * (1.0F - reduction));
 
-        long cooldownTicks = Math.max(20L, 200L - (long) Math.max(0, levelValue - 1) * 20L);
+        long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
         setCooldown(data, "shield_block_tick", now + cooldownTicks);
+        data.cooldowns.put(SHIELD_BLOCK_RESTORE_ORDER, (long) resolveMovementOrderCode(tame, data));
+        data.cooldowns.put(SHIELD_BLOCK_RESTORE_TICK, now + SHIELD_BLOCK_SIT_TICKS);
+        applyMovementOrder(tame, 1, data);
         if (tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, tame, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
             level.sendParticles(ParticleTypes.CRIT, tame.getX(), tame.getY(0.6D), tame.getZ(), 8, 0.3D, 0.3D, 0.3D, 0.02D);
@@ -176,5 +185,100 @@ public final class OwnerProtectionAbilityModule {
 
     private static void setCooldown(TameData data, String key, long tick) {
         data.cooldowns.put(key, tick);
+    }
+
+    private static void restoreShieldBlockOrderIfReady(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return;
+        }
+        long restoreTick = data.cooldowns.getOrDefault(SHIELD_BLOCK_RESTORE_TICK, 0L);
+        if (restoreTick <= 0L || tame.level().getGameTime() < restoreTick) {
+            return;
+        }
+        int order = (int) data.cooldowns.getOrDefault(SHIELD_BLOCK_RESTORE_ORDER, 0L).longValue();
+        applyMovementOrder(tame, order, data);
+        data.cooldowns.remove(SHIELD_BLOCK_RESTORE_TICK);
+        data.cooldowns.remove(SHIELD_BLOCK_RESTORE_ORDER);
+    }
+
+    private static int resolveMovementOrderCode(TamableAnimal tame, TameData data) {
+        if (tame.isOrderedToSit()) {
+            return 1;
+        }
+        if (tame instanceof IComandableMob commandable) {
+            int command = commandable.getCommand();
+            if (command == 2) {
+                return 0;
+            }
+            if (command == 0) {
+                return data != null && data.hasHome ? 3 : 2;
+            }
+            if (command == 1) {
+                return 1;
+            }
+        }
+        return data != null && data.hasHome ? 3 : 0;
+    }
+
+    private static void applyMovementOrder(TamableAnimal tame, int orderCode, TameData data) {
+        boolean sit = orderCode == 1;
+        boolean follow = orderCode == 0;
+        boolean wander = orderCode == 2 || orderCode == 3;
+        tame.setOrderedToSit(sit);
+        if (sit || wander) {
+            tame.setTarget(null);
+        }
+        tame.getNavigation().stop();
+        tryInvokeBooleanSetter(tame, "setWandering", wander);
+        tryInvokeBooleanSetter(tame, "setWander", wander);
+        tryInvokeBooleanSetter(tame, "setDrumWandering", wander);
+        tryInvokeBooleanSetter(tame, "setCommandWander", wander);
+        tryInvokeBooleanSetter(tame, "setFollowing", follow);
+        tryInvokeBooleanSetter(tame, "setFollow", follow);
+        tryInvokeBooleanSetter(tame, "setSitting", sit);
+        tryInvokeBooleanSetter(tame, "setSit", sit);
+        tryInvokeIntSetter(tame, "setCommand", preferredCommandInt(orderCode));
+        tryInvokeIntSetter(tame, "setPetCommand", preferredCommandInt(orderCode));
+        tryInvokeIntSetter(tame, "setOrder", preferredCommandInt(orderCode));
+        tryInvokeIntSetter(tame, "setMode", preferredCommandInt(orderCode));
+        if (tame instanceof IComandableMob commandable) {
+            commandable.setCommand(preferredCommandInt(orderCode));
+        }
+        if (data != null && orderCode == 3) {
+            data.guardianReturnTicks = 0;
+            data.guardianRelaxing = false;
+        }
+    }
+
+    private static int preferredCommandInt(int orderCode) {
+        return switch (orderCode) {
+            case 1 -> 1;
+            case 2, 3 -> 0;
+            default -> 2;
+        };
+    }
+
+    private static void tryInvokeBooleanSetter(TamableAnimal tame, String methodName, boolean value) {
+        try {
+            Method method = tame.getClass().getMethod(methodName, boolean.class);
+            method.setAccessible(true);
+            method.invoke(tame, value);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void tryInvokeIntSetter(TamableAnimal tame, String methodName, int value) {
+        try {
+            Method method = tame.getClass().getMethod(methodName, int.class);
+            method.setAccessible(true);
+            method.invoke(tame, value);
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method method = tame.getClass().getMethod(methodName, Integer.class);
+            method.setAccessible(true);
+            method.invoke(tame, Integer.valueOf(value));
+        } catch (Throwable ignored) {
+        }
     }
 }

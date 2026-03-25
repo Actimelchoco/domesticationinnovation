@@ -259,7 +259,8 @@
 ### `shield_block`
 - Trigger: when tame is hurt and cooldown is ready.
 - Effect: reduces incoming hit by `65% + 3% * (level - 1)`, capped at `95%`.
-- Cooldown: `10s - 1s * (level - 1)`, minimum `1s`.
+- Extra behavior: tame sits for `1s`, then returns to its previous follow/sit/wander/guardian state.
+- Cooldown: `15s - 1s * (level - 1)`, minimum `1.5s`.
 
 ### `sky_launch`
 - Trigger: when owner is hurt and tame is within `3` blocks of owner.
@@ -353,11 +354,66 @@
 - Class weight: high chance for `PROTECTOR` (`SUPPORTER`)
 - Leveling: infinite
 - Effect scaling (current runtime):
-  - Applies Regeneration with amplifier `level - 1`
+  - Applies Regeneration with amplifier `floor(level / 4)`
   - Active pulse window = `200 ticks` (`10s`)
   - Inactive downtime = `600..1199 ticks` (`30.0s..59.95s`) before next cycle
 - DPS example:
   - L1: `0.00 DPS`
 - Numeric example:
   - L1: Regeneration I for `10s` active window, then `30-60s` downtime cycle
-  - L3: Regeneration III for `10s` active window, then `30-60s` downtime cycle
+  - L4: Regeneration II for `10s` active window, then `30-60s` downtime cycle
+  - L8: Regeneration III for `10s` active window, then `30-60s` downtime cycle
+
+### `healing_bottle`
+- Type: heal
+- Trigger: periodic self-support cast when cooldown is ready.
+- Effect: throws an instant-heal splash potion at the tame.
+- Scaling:
+  - Levels `1-3`: Instant Health I
+  - Levels `4+`: Instant Health II
+  - No regeneration effect.
+- Cooldown: `11s - 0.75s * (level - 1)` until level `4`, then no further strength gain.
+- Numeric example:
+  - L1: Instant Health I
+  - L4: Instant Health II
+  - L8: still Instant Health II
+
+### `battlefield_medic`
+- Type: support
+- Trigger: on kill only.
+- Effect: throws the same instant-heal bottle used by `healing_bottle`.
+- Proc chance: `30% + 10% * (level - 1)`, capped at `100%`.
+- Cap: proc chance stops improving at level `8`.
+- Numeric example:
+  - L1: `30%`
+  - L5: `70%`
+  - L8+: `100%`
+
+### `triage_pulse`
+- Type: support
+- Trigger: periodic support cast.
+- Effect: heals the lowest-health allied tame/owner within `10` blocks.
+- Heal amount: `1.5 + 0.75 * level`.
+- Cooldown: fixed `120 ticks` (`6s`).
+
+### `revitalizing_presence`
+- Type: support
+- Trigger: passive aura.
+- Effect: allied tames within `2` blocks gain `+1 HP * level` on each of their passive self-heal ticks.
+- Works in and out of battle.
+- Does not buff its own passive-heal tick.
+
+### `life_gift`
+- Type: support
+- Trigger: lethal-save support effect for allied tames.
+- Effect: transfers health from supporter so the target survives, while leaving the supporter at `>= 5 HP`.
+- Desired recovery HP target: `min(5, 2 + level)`.
+- Cooldown: `max(2000, 10000 - 200 * level)` ticks.
+
+### `fishing`
+- Type: attack / control
+- Trigger: offensive cast on current target.
+- Effect: pulls the target toward the tame and pops it upward.
+- Damage: none.
+- Target resistance: pull strength is reduced by the target's knockback resistance.
+- Cooldown: `90 ticks` (`4.5s`).

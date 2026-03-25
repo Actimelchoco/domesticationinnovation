@@ -7,6 +7,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
 import com.github.alexthe668.domesticationinnovation.server.misc.LanternRequest;
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
@@ -518,6 +519,9 @@ public class TameCommands {
                                 .executes(ctx -> listDoNotAttack(ctx.getSource()))
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("healthSiphon")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("graveyard")
                                 .executes(ctx -> graveyard(ctx.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -934,7 +938,13 @@ public class TameCommands {
                                         .executes(ctx -> setMovementStateAllLoaded(ctx.getSource(), MovementOrder.WANDER)))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> setPetMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))
+                                        .executes(ctx -> setPetMovementState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER))
+                                        .then(Commands.literal("lock")
+                                                .executes(ctx -> setPetWanderLock(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true))
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setPetWanderLock(ctx.getSource(), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("unlock")
+                                                .executes(ctx -> setPetWanderLock(ctx.getSource(), StringArgumentType.getString(ctx, "name"), false))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -1810,6 +1820,7 @@ public class TameCommands {
             worldData.clearLanternRequestsByMode(LanternRequest.MODE_FIXED_TARGET_TP);
         }
         processMorningPetBedRespawns(server);
+        processMorningGuardianWanderLocks(server);
         scheduleMorningWaywardLanternRecalls(server, overworld.getGameTime());
     }
 
@@ -1864,6 +1875,46 @@ public class TameCommands {
                 break;
             }
         }
+    }
+
+    private static void processMorningGuardianWanderLocks(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || data.dead || !data.hasHome || !data.wanderLock) {
+                continue;
+            }
+            SpawnTarget target = spawnTargetFromGuardianHome(server, data);
+            if (target == null) {
+                continue;
+            }
+            TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            if (loaded != null) {
+                if (loaded.getTarget() != null && loaded.getTarget().isAlive()) {
+                    continue;
+                }
+                teleportTameToLocation(loaded, target);
+                continue;
+            }
+            ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
+            if (owner == null) {
+                continue;
+            }
+            tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target);
+        }
+    }
+
+    private static SpawnTarget spawnTargetFromGuardianHome(MinecraftServer server, TameData data) {
+        if (server == null || data == null || !data.hasHome || data.homeDimension == null || data.homeDimension.isBlank()) {
+            return null;
+        }
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, new ResourceLocation(data.homeDimension));
+        ServerLevel level = server.getLevel(key);
+        if (level == null) {
+            return null;
+        }
+        return new SpawnTarget(level, new Vec3(data.homeX + 0.5D, data.homeY, data.homeZ + 0.5D), 0.0F, 0.0F);
     }
 
     private static List<TameData> morningRespawnCandidates(MinecraftServer server, UUID ownerUuid) {
@@ -2327,7 +2378,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info respawn, /tames info movement, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -2386,7 +2437,8 @@ public class TameCommands {
             sendInfoPage(p, capitalizeAscii(key),
                     "/tames " + key + " [<name>|all|group <group>|type <type>|state <follow|wander|sit>]",
                     "These are the main movement-state selectors for batch commands.",
-                    "Changing a tame to follow, sit, or wander clears its current guardian anchor."
+                    "Changing a tame to follow, sit, or wander clears its current guardian anchor.",
+                    "Use /tames wander <name> lock [true|false] for modded tames that ignore normal follow/sit/wander state but should not auto-teleport back to the owner when unloaded."
             );
         }
         else if (key.equals("guardian")) {
@@ -2477,6 +2529,13 @@ public class TameCommands {
                     "It restores the saved highest progress snapshot for that tame.",
                     "Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 totem in main hand.",
                     "Auto reincarnation uses the player bed material check by default. Tames with a black pet bed auto reincarnate for free on respawn."
+            );
+        }
+        else if (key.equals("healthsiphon") || key.equals("health_siphon")) {
+            sendInfoPage(p, "HealthSiphon",
+                    "/tames healthSiphon <true|false>",
+                    "Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.",
+                    "This is owner-local and persists for your tame registry."
             );
         }
         else if (key.equals("inspect")) {
@@ -3020,6 +3079,17 @@ public class TameCommands {
         }
         TameRegistry.setDoNotAttackAnimals(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Do-not-attack animals " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setHealthSiphonEnabled(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameRegistry.setHealthSiphonEnabled(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Health siphon " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -4065,20 +4135,20 @@ public class TameCommands {
             case "deflection" -> id + " L" + level + ": projectile deflect; reverses incoming projectile to 20% speed; passive reactive trigger";
             case "defusal" -> id + " L" + level + ": cancels nearby explosions; range " + fmt(10.0D + (level / 3) * 10.0D) + ", cooldown " + fmtSeconds(Math.max(0L, 100L - Math.max(0, level - 1) * 20L));
             case "psychic_wall" -> id + " L" + level + ": wall width " + (level + 1) + ", owner protect range " + fmt(5.0D + Math.max(0, level - 1) * 1.5D) + ", lifespan " + fmtSeconds(100L * level) + ", cooldown " + fmtSeconds(260L * level + 60L);
-            case "healing_aura" -> id + " L" + level + ": regeneration pulse window " + fmtSeconds(200L) + " with Regeneration " + romanAmp(level - 1) + "; downtime 30-60s between cycles";
-            case "healing_bottle" -> id + " L" + level + ": self-heal splash potion; instant heal " + (level >= 4 ? "II" : "I") + ", Regeneration " + romanAmp((level - 1) / 3) + " for " + fmtSeconds(60L + Math.max(0, level - 1) * 40L) + "; cooldown " + fmtSeconds(Math.max(60L, 220L - Math.max(0, level - 1) * 15L));
+            case "healing_aura" -> id + " L" + level + ": regeneration pulse window " + fmtSeconds(200L) + " with Regeneration " + romanAmp(level / 4) + "; downtime 30-60s between cycles";
+            case "healing_bottle" -> id + " L" + level + ": self-heal splash potion; instant heal " + (level >= 4 ? "II" : "I") + "; no regeneration; cooldown " + fmtSeconds(Math.max(60L, 220L - Math.max(0, Math.min(level, 4) - 1) * 15L));
             case "guardian_repulse" -> id + " L" + level + ": retarget aura radius " + fmt(6.0D + level * 0.6D) + ", " + fmt(Math.min(0.90D, 0.12D + level * 0.04D) * 100.0D) + "% chance per monster; cooldown " + fmtSeconds(60L);
             case "last_stand_fury" -> id + " L" + level + ": passive; as owner HP drops, tame gains scaling Strength/Speed buffs, refreshed every " + fmtSeconds(40L);
-            case "shield_block" -> id + " L" + level + ": on hurt, reduces hit by " + fmt(Math.min(0.95D, 0.65D + (level - 1) * 0.03D) * 100.0D) + "%; cooldown " + fmtSeconds(Math.max(20L, 200L - Math.max(0, level - 1) * 20L));
+            case "shield_block" -> id + " L" + level + ": on hurt, reduces hit by " + fmt(Math.min(0.95D, 0.65D + (level - 1) * 0.03D) * 100.0D) + "%, sits for 1.0s, then restores previous order; cooldown " + fmtSeconds(Math.max(30L, 300L - Math.max(0, level - 1) * 20L));
             case "guardian_intercept" -> id + " L" + level + ": redirects " + fmt(Math.min(0.60D, 0.20D + 0.10D * level) * 100.0D) + "% of ally hit damage to supporter; cooldown " + fmtSeconds(Math.max(40L, 140L - level * 10L));
             case "emergency_shield" -> id + " L" + level + ": triggers if ally would fall below 35% HP; reduces triggering hit by " + fmt(Math.min(0.60D, 0.20D + level * 0.08D) * 100.0D) + "%, grants Absorption " + romanAmp((level - 1) / 2) + " for " + fmtSeconds(80L + level * 20L) + " and Resistance " + (level >= 4 ? "II" : "I") + " for " + fmtSeconds(40L + level * 20L) + "; cooldown " + fmtSeconds(Math.max(80L, 240L - level * 20L));
             case "body_block" -> id + " L" + level + ": projectile-only ally protection; prevents " + fmt(Math.min(0.90D, 0.45D + 0.10D * level) * 100.0D) + "% of hit; cooldown " + fmtSeconds(Math.max(40L, 180L - level * 15L));
-            case "battlefield_medic" -> id + " L" + level + ": on kill/assist heals allies within 8 for " + fmt(1.0D + 0.75D * level) + " assist / " + fmt(2.0D + 0.75D * level) + " kill; cooldown " + fmtSeconds(120L) + " assist / " + fmtSeconds(80L) + " kill";
-            case "triage_pulse" -> id + " L" + level + ": heals lowest ally in 10 blocks for " + fmt(1.5D + 0.75D * level) + "; cooldown " + fmtSeconds(Math.max(40L, 120L - Math.max(0, level - 1) * 10L));
-            case "revitalizing_presence" -> id + " L" + level + ": when an ally is healed, mirrors " + fmt((0.20D + 0.10D * level) * 100.0D) + "% of that heal to another injured ally within 10; cooldown " + fmtSeconds(Math.max(20L, 80L - level * 5L));
+            case "battlefield_medic" -> id + " L" + level + ": on kill, " + fmt(Math.min(1.0D, 0.30D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "% chance to throw the same instant-heal bottle as healing_bottle";
+            case "triage_pulse" -> id + " L" + level + ": heals lowest ally in 10 blocks for " + fmt(1.5D + 0.75D * level) + "; cooldown " + fmtSeconds(120L);
+            case "revitalizing_presence" -> id + " L" + level + ": nearby allied tames within 2 blocks gain +" + level + " passive self-heal on each passive healing tick";
             case "cleanse_touch" -> id + " L" + level + ": removes 1 harmful effect from an ally within 10; cooldown " + fmtSeconds(Math.max(60L, 180L - Math.max(0, level - 1) * 15L));
             case "pack_guard" -> id + " L" + level + ": when ally is hurt by a monster, applies Weakness " + (level >= 4 ? "II" : "I") + " for " + fmtSeconds(60L + level * 20L) + " and retargets attacker; cooldown " + fmtSeconds(Math.max(40L, 140L - level * 10L));
-            case "life_gift" -> id + " L" + level + ": lethal-save for allied tames; transfers up to " + fmt(2.0D + level) + " desired recovery HP from supporter while leaving supporter at >=5 HP; cooldown " + fmtSeconds(Math.max(100L, 300L - level * 20L));
+            case "life_gift" -> id + " L" + level + ": lethal-save for allied tames; transfers up to " + fmt(2.0D + level) + " desired recovery HP from supporter while leaving supporter at >=5 HP; cooldown " + fmtSeconds(Math.max(2000L, 10000L - level * 200L));
             default -> id + " L" + level + ": utility/support ability, no fixed direct DPS";
         };
     }
@@ -4121,7 +4191,7 @@ public class TameCommands {
             case "warden_scream" -> " per target in beam";
             case "elder_guardian_beam" -> " + mining fatigue";
             case "lightning_strike" -> " + visual lightning";
-            case "fishing" -> " + pull";
+            case "fishing" -> " + pull only";
             case "dash" -> " per target hit in sweep";
             case "crossbow" -> " total cast damage assuming all " + Math.max(1, level) + " arrows hit";
             case "shulker_bullet" -> " + levitation utility";
@@ -4150,7 +4220,7 @@ public class TameCommands {
             case "sky_launch" -> "single target launch; heavy targets resist lift";
             case "crossbow" -> "multi-shot x" + safeLevel;
             case "shulker_bullet" -> "single target homing";
-            case "fishing" -> "single target pull";
+            case "fishing" -> "single target pull; no damage";
             case "trident" -> "single target projectile";
             case "arrow_shot" -> "single target projectile";
             case "snowball_shot" -> "single target projectile";
@@ -4196,7 +4266,7 @@ public class TameCommands {
             case "negative_effect_transfer" -> id + " L" + level + ": transfers harmful effects with x" + fmt(inspectAttributeLevelMultiplier(level)) + " duration";
             case "feather_falling" -> id + " L" + level + ": reduces fall damage by " + fmt(Math.min(0.70D, 0.20D + Math.max(0, level - 1) * 0.125D) * 100.0D) + "%";
             case "explosion_resistance" -> id + " L" + level + ": reduces explosion damage by " + fmt(Math.min(0.55D, 0.15D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "%";
-            case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt(level >= 5 ? 1.0D : level >= 3 ? 1.5D : 2.0D) + "s while damaged";
+            case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt((Math.max(20L, (level >= 5 ? 20L : level >= 3 ? 30L : 40L) + 40L)) / 20.0D) + "s while damaged";
             case "ability_power" -> id + " L" + level + ": +" + fmt(level * 25.0D) + "% level-1 ability damage";
             case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
             case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
@@ -4205,7 +4275,8 @@ public class TameCommands {
             case "fire_resistance", "poison_resistance" -> id + " L" + level + ": binary resistance effect";
             case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "wall_climber" -> id + ": spider-style wall climbing while pressing into vertical surfaces";
-            case "health_siphon", "bubbling", "herding", "amphibious", "void_cloud", "charisma", "disc_jockey", "warping_bite", "ore_scenting", "gluttonous", "tethered_teleport", "muffled", "blazing_protection", "rejuvenation", "linked_inventory" ->
+            case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
+            case "bubbling", "herding", "amphibious", "void_cloud", "charisma", "disc_jockey", "warping_bite", "ore_scenting", "gluttonous", "tethered_teleport", "muffled", "blazing_protection", "rejuvenation", "linked_inventory" ->
                     id + " L" + level + ": utility/survival attribute; inspect is situational rather than fixed DPS";
             default -> id + " L" + level + ": no inspect profile";
         };
@@ -5741,6 +5812,17 @@ public class TameCommands {
         if (!(e instanceof TamableAnimal ta) || !ta.isTame()) return error(p, "Pet is not loaded.");
         applyMovementOverride(ta, order);
         p.sendSystemMessage(Component.literal("Set " + d.name + " to " + movementLabel(order) + "."));
+        return 1;
+    }
+
+    private static int setPetWanderLock(CommandSourceStack source, String pet, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        data.wanderLock = enabled;
+        TameRegistry.markDirty();
+        String state = enabled ? "enabled" : "disabled";
+        player.sendSystemMessage(Component.literal("Wander lock " + state + " for " + data.name + "."));
         return 1;
     }
 
@@ -8605,6 +8687,14 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminSetHealthSiphon(CommandSourceStack source, boolean enabled) {
+        TLAdminRuntimeSettings.setHealthSiphonEnabled(enabled);
+        source.sendSuccess(() -> Component.literal(
+                "Temporary admin setting: health siphon is now " + (enabled ? "ENABLED" : "DISABLED") + "."
+        ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private static int adminAbilityDamageNerfStatus(CommandSourceStack source) {
         source.sendSuccess(() -> Component.literal(
                 "Ability damage nerfs -> single: "
@@ -9214,13 +9304,22 @@ public class TameCommands {
         if (tame == null || data == null) {
             return false;
         }
+        CompoundTag beforeData = data.toTag();
         MovementOrder intendedOrder = resolveRepairMovementOrder(tame, data);
         CompoundTag before = new CompoundTag();
         tame.save(before);
+        data.cooldowns.clear();
+        tame.setNoAi(false);
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        TameGoalInstaller.installIfMissing(tame);
+        LevelSystem.ensureClassAssigned(tame, data, false);
+        LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
         applyMovementOverride(tame, intendedOrder);
         CompoundTag after = new CompoundTag();
         tame.save(after);
-        return !after.equals(before);
+        CompoundTag afterData = data.toTag();
+        return !after.equals(before) || !afterData.equals(beforeData);
     }
 
     private static MovementOrder resolveRepairMovementOrder(TamableAnimal tame, TameData data) {

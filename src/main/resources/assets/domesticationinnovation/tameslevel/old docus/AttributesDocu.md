@@ -110,7 +110,12 @@
 ## Utility/Survival Attributes
 - `regeneration`
   - Activation chance: periodic while damaged and off cooldown.
-  - Level scaling: heal per tick cycle = `0.6 * level`.
+  - Heal per trigger: `0.5 + 0.5 * level`.
+  - Cooldown: old regeneration cadence plus `40` extra ticks.
+  - Numeric example:
+    - L1: `1.0 HP` every `4.0s`
+    - L4: `2.5 HP` every `3.5s`
+    - L5: `3.0 HP` every `3.0s`
 
 - `rejuvenation`
   - Effect: absorbs nearby XP orbs for the tame (same gameplay behavior as DI rejuvenation enchant).
@@ -189,12 +194,13 @@
 - `health_siphon`
   - Source: `health_siphon` enchantment becomes this attribute.
   - DI class weight: mid chance for `TANKER`.
-  - Scaling: as level increases, owner receives less damage.
+  - Scaling: as level increases, the owner-link range increases.
+  - Owner control: only works while the owner has enabled it with `/tames healthSiphon true`.
   - Leveling: infinite.
-  - Numeric example (target balancing, owner damage taken):
-    - L1: owner takes `85%` of incoming damage
-    - L3: owner takes `65%`
-    - L5: owner takes `45%`
+  - Numeric example (owner-link range):
+    - L1: `32` blocks
+    - L3: `64` blocks
+    - L5: `96` blocks
 
 - `bubbling`
   - Source: `bubbling` enchantment becomes this attribute.

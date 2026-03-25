@@ -5,7 +5,10 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
@@ -193,10 +196,21 @@ public class TameSpawnEvents {
         TameBedRegistrySync.syncFromEntity(tame, data);
         TameRegistry.register(data);
         TameRegistry.bindEntityToData(tame, data);
-        LevelSystem.ensureClassAssigned(tame, data, notifyClassIfNew);
+        notifyNewTameFound(tame, data);
+        LevelSystem.ensureClassAssigned(tame, data, true);
         LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
         System.out.println("[TamesLevel] Registered tame: " + data.name);
         return data;
+    }
+
+    private static void notifyNewTameFound(TamableAnimal tame, TameData data) {
+        if (!(tame.getOwner() instanceof ServerPlayer owner)) {
+            return;
+        }
+        String name = data == null || data.name == null || data.name.isBlank()
+                ? tame.getName().getString()
+                : data.name;
+        owner.sendSystemMessage(Component.literal("Found new tame: " + name + ".").withStyle(ChatFormatting.AQUA));
     }
 
     private static TameData trySyncFromLeveledNameMatch(TamableAnimal tame, ParsedName parsed) {
