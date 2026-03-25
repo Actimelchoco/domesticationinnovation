@@ -59,23 +59,17 @@ public class TameBehaviorEvents {
 
         TameMode mode = TameMode.byId(data.mode);
         if (mode == TameMode.MONSTER_HUNTER) {
-            if (hasValidCurrentTarget(tame)) {
-                return;
-            }
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
-            if (nearest[0] != null) {
+            if (nearest[0] != null && tame.getTarget() != nearest[0]) {
                 tame.setTarget(nearest[0]);
             }
             return;
         }
         if (mode == TameMode.AGGRESSIVE) {
-            if (hasValidCurrentTarget(tame)) {
-                return;
-            }
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_aggressive_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 10.0D));
-            if (nearest[0] != null) {
+            if (nearest[0] != null && tame.getTarget() != nearest[0]) {
                 tame.setTarget(nearest[0]);
             }
         }
@@ -171,16 +165,12 @@ public class TameBehaviorEvents {
                 LivingEntity nearest = findNearestMonster(tame, 10.0D);
                 if (nearest != null) {
                     tame.setTarget(nearest);
-                } else {
-                    tame.setTarget(ownerCombatTarget);
                 }
             }
             case AGGRESSIVE -> {
                 LivingEntity nearest = findNearestAggressiveTarget(tame, 10.0D);
                 if (nearest != null) {
                     tame.setTarget(nearest);
-                } else {
-                    tame.setTarget(ownerCombatTarget);
                 }
             }
         }

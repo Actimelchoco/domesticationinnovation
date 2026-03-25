@@ -454,8 +454,12 @@ public class LevelSystem {
     // ===============================
 
     public static TameClass rollClass() {
-        TameClass[] values = TameClass.values();
-        return values[RANDOM.nextInt(values.length)];
+        List<WeightedOption<TameClass>> options = new ArrayList<>();
+        for (TameClass tameClass : TameClass.values()) {
+            options.add(new WeightedOption<>(tameClass, tameClass.rarity().weight()));
+        }
+        TameClass rolled = pickWeighted(options);
+        return rolled == null ? TameClass.ORDINARY : rolled;
     }
 
     public static void ensureClassAssigned(TamableAnimal tame, TameData data, boolean notifyOwner) {
@@ -1219,7 +1223,11 @@ public class LevelSystem {
         }
 
         scrubLegacyManagedModifiers(tame);
-        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth);
+        Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
+        double maxHealthBase = forcedMaxHealth != null
+                ? forcedMaxHealth
+                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
         setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
         setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
@@ -1253,10 +1261,26 @@ public class LevelSystem {
 
     private static Double resolveForcedTypeBaseValue(TameData data, Attribute attribute) {
         if (data == null || attribute != Attributes.MAX_HEALTH || data.type == null) {
-            return null;
+            return resolveForcedClassBaseValue(data, attribute);
         }
         if ("crittersandcompanions:dragonfly".equals(data.type)) {
             return 4.0D;
+        }
+        return resolveForcedClassBaseValue(data, attribute);
+    }
+
+    private static Double resolveForcedClassBaseValue(TameData data, Attribute attribute) {
+        if (data == null || attribute != Attributes.MAX_HEALTH || data.tameClass == null) {
+            return null;
+        }
+        if (data.tameClass == TameClass.UNSTABLE_GOD || data.tameClass == TameClass.GANDALF) {
+            return 1.0D;
+        }
+        if (data.tameClass == TameClass.VORGOTTENLUNCHBOX) {
+            return 3.0D;
+        }
+        if (data.tameClass == TameClass.STRIKER) {
+            return 5.0D;
         }
         return null;
     }

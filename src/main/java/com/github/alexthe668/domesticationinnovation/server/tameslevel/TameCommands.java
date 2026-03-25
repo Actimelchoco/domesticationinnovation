@@ -63,11 +63,13 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -2653,7 +2655,7 @@ public class TameCommands {
             return;
         }
         player.sendSystemMessage(Component.literal(
-                "Live runtime scaling: cast damage = level-1 base * (1 + (level - 1) / 4 + 0.05 * bonusDamage * scaling + 0.25 * ability_power)."
+                "Live runtime scaling: cast damage = level-1 base * (1 + 0.20 * (level - 1) + 0.05 * bonusDamage * scaling + 0.15 * ability_power)."
         ).withStyle(ChatFormatting.DARK_AQUA));
         player.sendSystemMessage(Component.literal(
                 "Live runtime cooldown nerf: attack cooldown x(1 + " + fmt(TLAdminRuntimeSettings.abilityCountCooldownNerfPercent()) + "% * log2(owned attack abilities))."
@@ -2689,7 +2691,7 @@ public class TameCommands {
         Map<String, Double> attributes = LevelSystem.classAttributeWeights(tameClass);
         Map<String, Double> abilities = LevelSystem.classAbilityWeights(tameClass);
 
-        p.sendSystemMessage(Component.literal("Class info: " + tameClass.name()).withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("Class info: " + tameClass.name() + " (" + tameClass.rarity().name().toLowerCase(java.util.Locale.ROOT) + ")").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal(
                 "Category chances: base " + fmt(category.base()) + "%  attribute " + fmt(category.attribute()) + "%  ability " + fmt(category.ability()) + "%"
         ).withStyle(ChatFormatting.GRAY));
@@ -3962,7 +3964,7 @@ public class TameCommands {
             if (data.tameClass != null) {
                 LevelSystem.ClassCategoryView category = LevelSystem.classCategoryWeights(data.tameClass);
                 player.sendSystemMessage(Component.literal(
-                        "Class " + data.tameClass.id() + ": base " + fmt(category.base()) + "%  attribute " + fmt(category.attribute()) + "%  ability " + fmt(category.ability()) + "%"
+                        "Class " + data.tameClass.id() + " (" + data.tameClass.rarity().name().toLowerCase(java.util.Locale.ROOT) + "): base " + fmt(category.base()) + "%  attribute " + fmt(category.attribute()) + "%  ability " + fmt(category.ability()) + "%"
                 ).withStyle(ChatFormatting.DARK_AQUA));
                 player.sendSystemMessage(Component.literal(
                         "Class prefs: attr " + formatWeightMapCompact(LevelSystem.classAttributeWeights(data.tameClass), 6)
@@ -4129,11 +4131,11 @@ public class TameCommands {
 
     private static String inspectSupportAbilityLine(String id, int level) {
         return switch (id) {
-            case "battle_strength" -> id + " L" + level + ": 10% proc on hurt; allies within 8 get Strength " + romanAmp(level - 1) + " for " + fmtSeconds(100L);
-            case "defensive_aura" -> id + " L" + level + ": 10% proc on hurt; allies within 8 get Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(100L + Math.max(0, level - 1) * 20L);
+            case "battle_strength" -> id + " L" + level + ": 10% proc on hurt; allies within 3 get Strength " + romanAmp(level - 1) + " for " + fmtSeconds(100L);
+            case "defensive_aura" -> id + " L" + level + ": 10% proc on hurt; allies within 3 get Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(100L) + "; caps at level 30";
             case "ender_pearl_jump" -> id + " L" + level + ": if target is >5 blocks away, teleports up to " + fmt(4.0D + level * 2.0D) + " blocks toward target; cooldown " + fmtSeconds(100L);
-            case "berserker" -> id + " L" + level + ": at <=20% HP, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(400L);
-            case "bloodlust" -> id + " L" + level + ": on kill, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(level - 1) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(400L);
+            case "berserker" -> id + " L" + level + ": at <=20% HP, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(2000L);
+            case "bloodlust" -> id + " L" + level + ": on kill, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(200L) + "; no cooldown";
             case "retaliation_slow" -> id + " L" + level + ": on hurt, " + fmt(Math.min(0.85D, 0.20D + level * 0.04D) * 100.0D) + "% proc; radius " + fmt(2.0D + Math.max(0, level - (level / 3)) * 0.35D) + ", Slowness " + romanAmp(level / 3) + " for " + fmtSeconds(40L + level * 10L) + "; cooldown " + fmtSeconds(60L);
             case "immunity_frame" -> id + " L" + level + ": reactive invulnerability window " + fmtSeconds(20L + 20L * level) + "; passive/no active cast DPS";
             case "deflection" -> id + " L" + level + ": projectile deflect; reverses incoming projectile to 20% speed; passive reactive trigger";
@@ -4145,7 +4147,7 @@ public class TameCommands {
             case "last_stand_fury" -> id + " L" + level + ": passive; as owner HP drops, tame gains scaling Strength/Speed buffs, refreshed every " + fmtSeconds(40L);
             case "shield_block" -> id + " L" + level + ": on hurt, reduces hit by " + fmt(Math.min(0.95D, 0.65D + (level - 1) * 0.03D) * 100.0D) + "%, sits for 1.0s, then restores previous order; cooldown " + fmtSeconds(Math.max(30L, 300L - Math.max(0, level - 1) * 20L));
             case "guardian_intercept" -> id + " L" + level + ": redirects " + fmt(Math.min(0.60D, 0.20D + 0.10D * level) * 100.0D) + "% of ally hit damage to supporter; cooldown " + fmtSeconds(Math.max(40L, 140L - level * 10L));
-            case "emergency_shield" -> id + " L" + level + ": triggers if ally would fall below 35% HP; reduces triggering hit by " + fmt(Math.min(0.60D, 0.20D + level * 0.08D) * 100.0D) + "%, grants Absorption " + romanAmp((level - 1) / 2) + " for " + fmtSeconds(80L + level * 20L) + " and Resistance " + (level >= 4 ? "II" : "I") + " for " + fmtSeconds(40L + level * 20L) + "; cooldown " + fmtSeconds(Math.max(80L, 240L - level * 20L));
+            case "emergency_shield" -> id + " L" + level + ": triggers if ally would fall below 35% HP; reduces triggering hit by " + fmt(Math.min(0.60D, 0.20D + level * 0.08D) * 100.0D) + "%, grants Absorption " + romanAmp((level - 1) / 2) + " for " + fmtSeconds(80L + level * 20L) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(40L + level * 5L) + "; cooldown " + fmtSeconds(200L);
             case "body_block" -> id + " L" + level + ": projectile-only ally protection; prevents " + fmt(Math.min(0.90D, 0.45D + 0.10D * level) * 100.0D) + "% of hit; cooldown " + fmtSeconds(Math.max(40L, 180L - level * 15L));
             case "battlefield_medic" -> id + " L" + level + ": on kill, " + fmt(Math.min(1.0D, 0.30D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "% chance to throw the same instant-heal bottle as healing_bottle";
             case "triage_pulse" -> id + " L" + level + ": heals lowest ally in 10 blocks for " + fmt(1.5D + 0.75D * level) + "; cooldown " + fmtSeconds(120L);
@@ -4271,11 +4273,12 @@ public class TameCommands {
             case "feather_falling" -> id + " L" + level + ": reduces fall damage by " + fmt(Math.min(0.70D, 0.20D + Math.max(0, level - 1) * 0.125D) * 100.0D) + "%";
             case "explosion_resistance" -> id + " L" + level + ": reduces explosion damage by " + fmt(Math.min(0.55D, 0.15D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "%";
             case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt((Math.max(20L, (level >= 5 ? 20L : level >= 3 ? 30L : 40L) + 40L)) / 20.0D) + "s while damaged";
-            case "ability_power" -> id + " L" + level + ": +" + fmt(level * 25.0D) + "% level-1 ability damage";
+            case "ability_power" -> id + " L" + level + ": +" + fmt(level * 15.0D) + "% level-1 ability damage";
             case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
             case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
             case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";
-            case "speed", "strength", "resistance", "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "speed", "strength", "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "resistance" -> id + " L" + level + ": self Resistance " + romanAmp(defensiveAuraInfoAmplifier(Math.min(level, 30))) + "; caps at level 30";
             case "fire_resistance", "poison_resistance" -> id + " L" + level + ": binary resistance effect";
             case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "wall_climber" -> id + ": spider-style wall climbing while pressing into vertical surfaces";
@@ -4292,7 +4295,7 @@ public class TameCommands {
     }
 
     private static double inspectAbilityPowerBaseBonus(TameData data) {
-        return LevelSystem.getAttributeLevel(data, "ability_power") * 0.25D;
+        return LevelSystem.getAttributeLevel(data, "ability_power") * 0.15D;
     }
 
     private static double inspectAbilityAttributeExtraDamage(TameData data, String abilityId) {
@@ -4486,6 +4489,20 @@ public class TameCommands {
             case 5 -> "V";
             default -> Integer.toString(tier);
         };
+    }
+
+    private static int defensiveAuraInfoAmplifier(int levelValue) {
+        int displayedResistance = 1;
+        int threshold = 1;
+        while (displayedResistance < 4) {
+            int nextLevel = displayedResistance + 1;
+            threshold += nextLevel * nextLevel;
+            if (levelValue < threshold) {
+                break;
+            }
+            displayedResistance = nextLevel;
+        }
+        return displayedResistance - 1;
     }
 
     private record ModeSpec(TameMode mode, Integer bodyguardRange) {
@@ -10774,20 +10791,46 @@ public class TameCommands {
         if (order != MovementOrder.GUARDIAN) {
             clearGuardianAnchor(data);
         }
-        boolean sit = order == MovementOrder.SIT;
+        tame.setTarget(null);
+        tame.getNavigation().stop();
         if (tame instanceof IComandableMob commandableMob) {
-            commandableMob.setCommand(preferredCommandInt(order));
-        }
-        tame.setOrderedToSit(sit);
-        if (sit || order == MovementOrder.WANDER) {
-            tame.setTarget(null);
-            tame.getNavigation().stop();
+            syncCommandableMovementState(tame, commandableMob, order);
+            boolean sit = commandableMob.getCommand() == 1;
+            tame.setOrderedToSit(sit);
+            tame.setInSittingPose(sit);
+            if (sit || commandableMob.getCommand() == 0) {
+                tame.setTarget(null);
+            }
         } else {
-            tame.getNavigation().stop();
+            boolean sit = order == MovementOrder.SIT;
+            tame.setOrderedToSit(sit);
+            tame.setInSittingPose(sit);
+            if (sit || order == MovementOrder.WANDER) {
+                tame.setTarget(null);
+            }
+            // Best-effort compatibility with non-DI wandering/order state.
+            clearExternalWanderingState(tame, order);
         }
-        // Best-effort compatibility with Domesticated Innovation wandering/order state.
-        clearExternalWanderingState(tame, order);
+        if (order == MovementOrder.SIT) {
+            tame.setTarget(null);
+        }
         refreshRegistrySnapshotFor(tame);
+    }
+
+    private static void syncCommandableMovementState(TamableAnimal tame, IComandableMob commandableMob, MovementOrder order) {
+        int desired = preferredCommandInt(order);
+        if (commandableMob.getCommand() == desired) {
+            return;
+        }
+        if (tame.getOwner() instanceof Player owner) {
+            Animal animal = tame;
+            for (int i = 0; i < 3 && commandableMob.getCommand() != desired; i++) {
+                commandableMob.playerSetCommand(owner, animal);
+            }
+        }
+        if (commandableMob.getCommand() != desired) {
+            commandableMob.setCommand(desired);
+        }
     }
 
     private static void clearExternalWanderingState(TamableAnimal tame, MovementOrder order) {

@@ -651,6 +651,84 @@
       "preferredAbilityWeightMultiplier": 1.0,
       "autoPreferredWeightBalance": false
     },
+    "ordinary": {
+      "category": {
+        "base": 100.0,
+        "attribute": 0.0,
+        "ability": 0.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false
+    },
+    "sponge": {
+      "category": {
+        "base": 98.0,
+        "attribute": 1.0,
+        "ability": 1.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false,
+      "baseStats": {
+        "armor": 0.0,
+        "armor_toughness": 0.0,
+        "damage": 0.0,
+        "hp": 1.0,
+        "knockback": 0.0,
+        "knockback_resist": 0.0,
+        "speed": 0.0
+      }
+    },
+    "striker": {
+      "category": {
+        "base": 98.0,
+        "attribute": 1.0,
+        "ability": 1.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false,
+      "baseStats": {
+        "armor": 0.0,
+        "armor_toughness": 0.0,
+        "damage": 1.0,
+        "hp": 0.0,
+        "knockback": 0.0,
+        "knockback_resist": 0.0,
+        "speed": 0.0
+      }
+    },
+    "unstable_god": {
+      "category": {
+        "base": 0.0,
+        "attribute": 50.0,
+        "ability": 50.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false
+    },
+    "gandalf": {
+      "category": {
+        "base": 0.0,
+        "attribute": 0.0,
+        "ability": 100.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false
+    },
+    "vorgottenlunchbox": {
+      "category": {
+        "base": 0.0,
+        "attribute": 100.0,
+        "ability": 0.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false
+    },
     "phantom": {
       "category": {
         "base": 90.0,

@@ -684,8 +684,8 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "berserker"));
         tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 400, Math.max(0, levelValue - 1)));
-        tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 400, Math.max(0, levelValue - 1)));
-        setAbilityCooldown(tame, data, "berserker", "berserker_tick", now, 400);
+        tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 400, defensiveAuraAmplifier(levelValue)));
+        setAbilityCooldown(tame, data, "berserker", "berserker_tick", now, 2000);
         grantSupportUtilityXp(tame, data, tame, now, 1, 2.0F + levelValue, 0.5F);
         debugAbilityUse(tame, "berserker");
     }
@@ -795,7 +795,7 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "defensive_aura"));
         int amplifier = defensiveAuraAmplifier(levelValue);
-        int duration = 100 + (Math.max(0, levelValue - 1) * 20);
+        int duration = 100;
         int affected = 0;
         for (LivingEntity nearby : targetTame.level().getEntitiesOfClass(LivingEntity.class, targetTame.getBoundingBox().inflate(3))) {
             if (!isFriendly(targetTame, nearby)) continue;
@@ -1301,7 +1301,7 @@ public class TameAbilityEvents {
     private static void applyNamedAttributeEffect(TamableAnimal tame, TameData data, String attribute, net.minecraft.world.effect.MobEffect effect) {
         int level = attributeLevel(data, attribute);
         if (level <= 0) return;
-        int amplifier = binaryAttribute(attribute) ? 0 : breakpointAmplifier(level);
+        int amplifier = binaryAttribute(attribute) ? 0 : "resistance".equals(attribute) ? defensiveAuraAmplifier(Math.min(level, 30)) : breakpointAmplifier(level);
         MobEffectInstance current = tame.getEffect(effect);
         if (current != null && current.getAmplifier() == amplifier && current.getDuration() > 20) {
             return;
@@ -1531,10 +1531,10 @@ public class TameAbilityEvents {
         if (tame == null || data == null || dead == null) return;
         long now = tame.level().getGameTime();
 
-        if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "bloodlust") && wasKiller && isReady(data, "bloodlust_tick", now)) {
+        if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "bloodlust") && wasKiller) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "bloodlust"));
-            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 400, Math.max(0, levelValue - 1)));
-            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 400, Math.max(0, levelValue - 1)));
+            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 200, Math.max(0, levelValue - 1)));
+            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 200, defensiveAuraAmplifier(levelValue)));
             grantSupportUtilityXp(tame, data, tame, now, 1, 2.0F + levelValue, 0.5F);
             applySupportActivationVisual(tame, "bloodlust");
             if (tame.level() instanceof ServerLevel level) {
@@ -1686,8 +1686,8 @@ public class TameAbilityEvents {
         float before = event.getAmount();
         event.setAmount(event.getAmount() * (1.0F - Math.min(0.60F, 0.20F + levelValue * 0.08F)));
         ally.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 80 + levelValue * 20, Math.max(0, (levelValue - 1) / 2), false, false, true));
-        ally.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40 + levelValue * 20, Math.max(0, levelValue >= 4 ? 1 : 0), false, false, true));
-        setAbilityCooldown(supporter, data, "emergency_shield", "emergency_shield_tick", now, Math.max(80L, 240L - levelValue * 20L));
+        ally.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 40 + levelValue * 5, defensiveAuraAmplifier(levelValue), false, false, true));
+        setAbilityCooldown(supporter, data, "emergency_shield", "emergency_shield_tick", now, 200L);
         grantSupportXp(supporter, data, ally, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
         applySupportActivationVisual(supporter, "emergency_shield");
         level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6 + levelValue), 0.3D, 0.35D, 0.3D, 0.02D);
@@ -1800,7 +1800,7 @@ public class TameAbilityEvents {
 
     private static float abilityPowerBaseDamageBonus(TameData data) {
         int level = attributeLevel(data, "ability_power");
-        return (float) level * 0.25F;
+        return (float) level * 0.15F;
     }
 
     public static float offensiveAbilityCastDamage(TameData data, String abilityId, int abilityLevel) {
@@ -1880,7 +1880,7 @@ public class TameAbilityEvents {
 
     public static float offensiveAbilityLevelMultiplier(int abilityLevel) {
         int level = Math.max(1, abilityLevel);
-        return (float) (1.0D + (Math.max(0, level - 1) / 4.0D));
+        return (float) (1.0D + Math.max(0, level - 1) * 0.20D);
     }
 
     public static float offensiveDamageBonusBonusFromLevelOne(TameData data, float scaling) {
