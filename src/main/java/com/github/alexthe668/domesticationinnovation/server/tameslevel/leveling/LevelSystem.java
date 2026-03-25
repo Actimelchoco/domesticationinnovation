@@ -51,6 +51,8 @@ public class LevelSystem {
 
     // mobUUID -> set of tameUUID
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
+    // mobUUID -> set of playerUUID
+    public static final Map<UUID, Set<UUID>> mobOwnerDamageTracker = new HashMap<>();
 
     private enum BaseStatReward {
         HP("hp", "HP", Attributes.MAX_HEALTH, 1.0D),
@@ -75,11 +77,11 @@ public class LevelSystem {
     }
 
     private enum AttributeReward {
-        SPEED("speed", Integer.MAX_VALUE),
-        RESISTANCE("resistance", Integer.MAX_VALUE),
-        STRENGTH("strength", Integer.MAX_VALUE),
-        FIRE_RESISTANCE("fire_resistance", Integer.MAX_VALUE),
-        POISON_RESISTANCE("poison_resistance", Integer.MAX_VALUE),
+        SPEED("speed", 5),
+        RESISTANCE("resistance", 30),
+        STRENGTH("strength", 5),
+        FIRE_RESISTANCE("fire_resistance", 1),
+        POISON_RESISTANCE("poison_resistance", 1),
         ABILITY_POWER("ability_power", Integer.MAX_VALUE),
         LIFESTEAL("lifesteal", Integer.MAX_VALUE),
         REGENERATION("regeneration", Integer.MAX_VALUE),
@@ -92,32 +94,32 @@ public class LevelSystem {
         EMERGENCY_COOLDOWN_REDUCTION("emergency_cooldown_reduction", Integer.MAX_VALUE),
         KILLER("killer", Integer.MAX_VALUE),
         PACIFIST("pacifist", Integer.MAX_VALUE),
-        BOSSKILLER("bosskiller", Integer.MAX_VALUE),
+        BOSSKILLER("bosskiller", 7),
         KILLEXPLODER("killexploder", Integer.MAX_VALUE),
         TOTEM("totem", 5),
         JUMP_BOOST("jump_boost", Integer.MAX_VALUE),
-        FEATHER_FALLING("feather_falling", Integer.MAX_VALUE),
-        EXPLOSION_RESISTANCE("explosion_resistance", Integer.MAX_VALUE),
+        FEATHER_FALLING("feather_falling", 5),
+        EXPLOSION_RESISTANCE("explosion_resistance", 5),
         SMITE("smite", Integer.MAX_VALUE),
         BANE_OF_ARTHROPODS("bane_of_arthropods", Integer.MAX_VALUE),
-        POSITIVE_EFFECT_STEAL("positive_effect_steal", Integer.MAX_VALUE),
+        POSITIVE_EFFECT_STEAL("positive_effect_steal", 5),
         NEGATIVE_EFFECT_TRANSFER("negative_effect_transfer", Integer.MAX_VALUE),
         SWEEPING_EDGE("sweeping_edge", Integer.MAX_VALUE),
         CHAIN_LIGHTNING("chain_lightning", Integer.MAX_VALUE),
         FROST_FANG("frost_fang", Integer.MAX_VALUE),
-        MAGNETIC("magnetic", Integer.MAX_VALUE),
+        MAGNETIC("magnetic", 8),
         LINKED_INVENTORY("linked_inventory", 1),
-        HEALTH_SIPHON("health_siphon", Integer.MAX_VALUE),
-        VICTIM_SIPHON("victim_siphon", Integer.MAX_VALUE),
-        PIERCE("pierce", Integer.MAX_VALUE),
+        HEALTH_SIPHON("health_siphon", 7),
+        VICTIM_SIPHON("victim_siphon", 7),
+        PIERCE("pierce", 5),
         BUBBLING("bubbling", Integer.MAX_VALUE),
         HERDING("herding", Integer.MAX_VALUE),
         AMPHIBIOUS("amphibious", 1),
-        WALL_CLIMBER("wall_climber", 1),
+        WALL_CLIMBER("wall_climber", 5),
         VOID_CLOUD("void_cloud", 1),
-        CHARISMA("charisma", Integer.MAX_VALUE),
+        CHARISMA("charisma", 5),
         DISC_JOCKEY("disc_jockey", 1),
-        WARPING_BITE("warping_bite", Integer.MAX_VALUE),
+        WARPING_BITE("warping_bite", 13),
         ORE_SCENTING("ore_scenting", 1),
         GLUTTONOUS("gluttonous", 1),
         TETHERED_TELEPORT("tethered_teleport", 1),
@@ -138,7 +140,7 @@ public class LevelSystem {
         ARROW_SHOT("arrow_shot", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         GHAST_FIREBALL("ghast_fireball", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         BATTLE_STRENGTH("battle_strength", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
-        DEFENSIVE_AURA("defensive_aura", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        DEFENSIVE_AURA("defensive_aura", AbilityType.SUPPORT, true, 30),
         SNOWBALL_SHOT("snowball_shot", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         ENDER_PEARL_JUMP("ender_pearl_jump", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         LIGHTNING_STRIKE("lightning_strike", AbilityType.ATTACK, true, Integer.MAX_VALUE),
@@ -160,24 +162,24 @@ public class LevelSystem {
         RETALIATION_SLOW("retaliation_slow", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         IMMUNITY_FRAME("immunity_frame", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         DEFLECTION("deflection", AbilityType.SUPPORT, false, 1),
-        DEFUSAL("defusal", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        DEFUSAL("defusal", AbilityType.SUPPORT, true, 5),
         SHADOW_HANDS("shadow_hands", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         PSYCHIC_WALL("psychic_wall", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         HEALING_AURA("healing_aura", AbilityType.HEAL, true, Integer.MAX_VALUE),
-        HEALING_BOTTLE("healing_bottle", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        HEALING_BOTTLE("healing_bottle", AbilityType.HEAL, true, 4),
         GUARDIAN_REPULSE("guardian_repulse", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         LAST_STAND_FURY("last_stand_fury", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
-        SHIELD_BLOCK("shield_block", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        SHIELD_BLOCK("shield_block", AbilityType.SUPPORT, true, 15),
         SKY_LAUNCH("sky_launch", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         GUARDIAN_INTERCEPT("guardian_intercept", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         EMERGENCY_SHIELD("emergency_shield", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         BODY_BLOCK("body_block", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
-        BATTLEFIELD_MEDIC("battlefield_medic", AbilityType.HEAL, true, Integer.MAX_VALUE),
+        BATTLEFIELD_MEDIC("battlefield_medic", AbilityType.HEAL, true, 8),
         TRIAGE_PULSE("triage_pulse", AbilityType.HEAL, true, Integer.MAX_VALUE),
         REVITALIZING_PRESENCE("revitalizing_presence", AbilityType.HEAL, true, Integer.MAX_VALUE),
-        CLEANSE_TOUCH("cleanse_touch", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
+        CLEANSE_TOUCH("cleanse_touch", AbilityType.SUPPORT, true, 9),
         PACK_GUARD("pack_guard", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
-        LIFE_GIFT("life_gift", AbilityType.HEAL, true, Integer.MAX_VALUE);
+        LIFE_GIFT("life_gift", AbilityType.HEAL, true, 40);
 
         private final String id;
         private final AbilityType type;
@@ -251,6 +253,13 @@ public class LevelSystem {
         mobDamageTracker.computeIfAbsent(mob.getUUID(), k -> new HashSet<>()).add(tame.getUUID());
     }
 
+    public static void trackOwnerDamage(LivingEntity mob, Player player) {
+        if (mob == null || player == null) {
+            return;
+        }
+        mobOwnerDamageTracker.computeIfAbsent(mob.getUUID(), k -> new HashSet<>()).add(player.getUUID());
+    }
+
     // ===============================
     // XP DISTRIBUTION
     // ===============================
@@ -259,26 +268,86 @@ public class LevelSystem {
         UUID mobId = dead.getUUID();
         Set<UUID> tameIds = mobDamageTracker.get(mobId);
         if (tameIds == null || tameIds.isEmpty()) {
+            mobOwnerDamageTracker.remove(mobId);
             return;
         }
 
         int xpAmount = dead.getExperienceReward();
-        for (UUID tameId : tameIds) {
+        UUID killerTameId = null;
+        if (killer instanceof TamableAnimal killerTame && killerTame.isTame()) {
+            killerTameId = killerTame.getUUID();
+        }
+
+        Set<UUID> participants = new LinkedHashSet<>(tameIds);
+        if (killerTameId != null) {
+            participants.add(killerTameId);
+        }
+
+        List<UUID> assisters = new ArrayList<>();
+        for (UUID tameId : participants) {
+            if (tameId == null || tameId.equals(killerTameId)) {
+                continue;
+            }
+            assisters.add(tameId);
+        }
+
+        Set<UUID> ownerAssisters = new LinkedHashSet<>();
+        Set<UUID> damagedByOwners = mobOwnerDamageTracker.getOrDefault(mobId, Set.of());
+        if (!damagedByOwners.isEmpty()) {
+            for (UUID ownerId : damagedByOwners) {
+                if (ownerId == null) {
+                    continue;
+                }
+                boolean hasContributingTame = false;
+                for (UUID tameId : participants) {
+                    TameData data = TameRegistry.get(tameId);
+                    if (data != null && ownerId.equals(data.ownerUUID)) {
+                        hasContributingTame = true;
+                        break;
+                    }
+                }
+                if (hasContributingTame) {
+                    ownerAssisters.add(ownerId);
+                }
+            }
+        }
+
+        int assisterSlots = assisters.size() + ownerAssisters.size();
+        double killerBaseXp = 0.0D;
+        double assisterPoolXp = 0.0D;
+        if (killerTameId != null) {
+            if (assisterSlots <= 0) {
+                killerBaseXp = xpAmount;
+            } else if (assisterSlots == 1) {
+                killerBaseXp = xpAmount * 0.75D;
+                assisterPoolXp = xpAmount * 0.25D;
+            } else {
+                killerBaseXp = xpAmount * 0.50D;
+                assisterPoolXp = xpAmount * 0.50D;
+            }
+        } else if (assisterSlots > 0) {
+            assisterPoolXp = xpAmount * 0.50D;
+        }
+        double assisterShareXp = assisterSlots <= 0 ? 0.0D : assisterPoolXp / assisterSlots;
+
+        for (UUID tameId : participants) {
             TameData data = TameRegistry.get(tameId);
             if (data == null) {
                 continue;
             }
 
             double gainedXP;
-            if (killer != null && killer.getUUID().equals(tameId)) {
+            if (killerTameId != null && killerTameId.equals(tameId)) {
                 data.kills++;
-                gainedXP = xpAmount;
+                gainedXP = killerBaseXp;
             } else {
                 data.assists++;
-                gainedXP = xpAmount * 0.25D;
+                gainedXP = assisterShareXp;
             }
 
-            data.xp += scaleRecoveryXpGain(data, gainedXP);
+            if (gainedXP > 0.0D) {
+                data.xp += scaleRecoveryXpGain(data, gainedXP);
+            }
 
             Entity entity = dead.level() instanceof ServerLevel serverLevel ? serverLevel.getEntity(tameId) : null;
             if (entity instanceof TamableAnimal tame) {
@@ -288,6 +357,7 @@ public class LevelSystem {
 
         TameRegistry.markDirty();
         mobDamageTracker.remove(mobId);
+        mobOwnerDamageTracker.remove(mobId);
     }
 
     // ===============================
@@ -336,10 +406,11 @@ public class LevelSystem {
     }
 
     public static int getAttributeLevel(TameData data, String attributeId) {
-        if (attributeId == null) {
+        if (data == null || attributeId == null) {
             return 0;
         }
-        return data.attributeLevels.getOrDefault(attributeId.trim().toLowerCase(java.util.Locale.ROOT), 0);
+        String id = attributeId.trim().toLowerCase(java.util.Locale.ROOT);
+        return clampAttributeLevel(id, data.attributeLevels.getOrDefault(id, 0));
     }
 
     public static boolean addAttribute(TameData data, String attributeId, int amount) {
@@ -394,7 +465,11 @@ public class LevelSystem {
     }
 
     public static int getAbilityLevel(TameData data, String abilityId) {
-        return resolveAbilityLevel(data, canonicalAbilityId(abilityId));
+        if (data == null) {
+            return 0;
+        }
+        String canonicalId = canonicalAbilityId(abilityId);
+        return clampAbilityLevel(canonicalId, resolveAbilityLevel(data, canonicalId));
     }
 
     public static boolean addAbility(TameData data, String abilityId, int amount) {
@@ -1133,7 +1208,23 @@ public class LevelSystem {
                 level = aliasLevel;
             }
         }
-        return level;
+        return clampAbilityLevel(canonicalId, level);
+    }
+
+    private static int clampAttributeLevel(String attributeId, int level) {
+        AttributeReward reward = byAttributeId(attributeId);
+        if (reward == null) {
+            return Math.max(0, level);
+        }
+        return Mth.clamp(level, 0, reward.maxLevel);
+    }
+
+    private static int clampAbilityLevel(String abilityId, int level) {
+        AbilityReward reward = byAbilityId(abilityId);
+        if (reward == null) {
+            return Math.max(0, level);
+        }
+        return Mth.clamp(level, 0, reward.maxLevel);
     }
 
     private static boolean hasLegacyAlias(TameData data, String canonicalId) {

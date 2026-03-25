@@ -80,6 +80,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -106,6 +107,7 @@ import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
@@ -173,6 +175,20 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
         MinecraftForge.EVENT_BUS.register(TameProjectileTimeoutEvents.class);
+        registerOptionalWaystonesCompat();
+    }
+
+    private static void registerOptionalWaystonesCompat() {
+        if (!ModList.get().isLoaded("waystones")) {
+            return;
+        }
+        try {
+            Class<?> compat = Class.forName("com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.WaystonesTeleportCompat");
+            compat.getMethod("init").invoke(null);
+            DomesticationMod.LOGGER.info("Registered optional Waystones TL teleport compat.");
+        } catch (Throwable throwable) {
+            DomesticationMod.LOGGER.error("Failed to register optional Waystones TL teleport compat.", throwable);
+        }
     }
 
     public void serverInit() {
@@ -214,6 +230,15 @@ public class CommonProxy {
                 ensureDiProgressEntryForTame(living, null);
             }
         }
+        sanitizeInvalidDragonflyArmor(event.getEntity());
+    }
+
+    @SubscribeEvent
+    public void onLivingEquipmentChange(LivingEquipmentChangeEvent event) {
+        if (event == null || event.getSlot() != EquipmentSlot.CHEST) {
+            return;
+        }
+        sanitizeInvalidDragonflyArmor(event.getEntity());
     }
 
     @SubscribeEvent
@@ -230,7 +255,7 @@ public class CommonProxy {
             if (TameableUtils.couldBeTamed(living) && TameableUtils.hasEnchant(living, DIEnchantmentRegistry.HEALTH_BOOST)) {
                 TameableUtils.setSafePetHealth(living, living.getHealth());
             }
-
+            markStoredFlutterIfPickedUp(living);
         }
     }
 
@@ -257,6 +282,85 @@ public class CommonProxy {
             if(tracker != null){
                 tracker.addBlockedEntityTick(entity.getUUID(), 5);
             }
+        }
+    }
+
+    private static void sanitizeInvalidDragonflyArmor(Entity entity) {
+        if (!(entity instanceof LivingEntity living) || living.level().isClientSide) {
+            return;
+        }
+        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(living.getType());
+        if (typeId == null || !"crittersandcompanions:dragonfly".equals(typeId.toString())) {
+            return;
+        }
+        ItemStack chest = living.getItemBySlot(EquipmentSlot.CHEST);
+        if (chest.isEmpty()) {
+            return;
+        }
+        if (isValidDragonflyArmor(chest)) {
+            return;
+        }
+        living.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
+    }
+
+    private static boolean isValidDragonflyArmor(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return true;
+        }
+        Item item = stack.getItem();
+        if (item == null) {
+            return false;
+        }
+        ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(item);
+        if (itemId != null
+                && "crittersandcompanions".equals(itemId.getNamespace())
+                && itemId.getPath().endsWith("_dragonfly_armor")) {
+            return true;
+        }
+        String className = item.getClass().getName();
+        return className != null && className.endsWith(".DragonflyArmorItem");
+    }
+
+    private static void markStoredFlutterIfPickedUp(LivingEntity living) {
+        if (!(living instanceof TamableAnimal tame) || !tame.isTame()) {
+            return;
+        }
+        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (typeId == null || !"alexsmobs:flutter".equals(typeId.toString())) {
+            return;
+        }
+        if (tame.getRemovalReason() != Entity.RemovalReason.DISCARDED || !isAlexsMobsFlutterPotted(tame)) {
+            return;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            return;
+        }
+        CompoundTag snapshot = new CompoundTag();
+        tame.save(snapshot);
+        data.entitySnapshot = snapshot;
+        data.stored = true;
+        data.dead = false;
+        data.deadGameTime = 0L;
+        data.deadUnixMillis = 0L;
+        data.deathDimension = "";
+        data.deathX = 0;
+        data.deathY = 0;
+        data.deathZ = 0;
+        data.lastKnownDimension = tame.level().dimension().location().toString();
+        data.lastKnownX = tame.blockPosition().getX();
+        data.lastKnownY = tame.blockPosition().getY();
+        data.lastKnownZ = tame.blockPosition().getZ();
+        data.lastKnownGameTime = tame.level().getGameTime();
+        TameRegistry.markDirty();
+    }
+
+    private static boolean isAlexsMobsFlutterPotted(TamableAnimal tame) {
+        try {
+            Object result = tame.getClass().getMethod("isPotted").invoke(tame);
+            return result instanceof Boolean bool && bool;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -395,6 +499,7 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onLivingUpdate(LivingEvent.LivingTickEvent event) {
+        sanitizeInvalidDragonflyArmor(event.getEntity());
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
             if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {

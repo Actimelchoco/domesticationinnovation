@@ -4,8 +4,8 @@ license="GNU LESSER GENERAL PUBLIC LICENSE"
 issueTrackerURL="https://github.com/Alex-the-666/DomesticationInnovation/issues" #optional
 [[mods]] #mandatory
 modId="domesticationinnovation" #mandatory
-version="1.7.1-v11" #mandatory
-displayName="Domestication Innovation (tamesLevel extension V11)" #mandatory
+version="1.7.1-v12.4" #mandatory
+displayName="Domestication Innovation (tamesLevel extension V12.4)" #mandatory
 displayTest="IGNORE_SERVER_VERSION"
 displayURL="https://www.curseforge.com/minecraft/mc-mods/domestication-innovation" #optional
 authors="Alexthe668, FallenReaper, Yosh" #optional
@@ -29,4 +29,10 @@ logoFile="domesticationinnovation.png" #optional
     mandatory=true
     versionRange="[46,)"
     ordering="NONE"
+    side="BOTH"
+[[dependencies.domesticationinnovation]]
+    modId="waystones"
+    mandatory=false
+    versionRange="[14.1.18,)"
+    ordering="AFTER"
     side="BOTH"

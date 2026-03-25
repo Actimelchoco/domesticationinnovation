@@ -26,6 +26,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Set<String>> doNotAttackTypes = new HashMap<>();
     private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
     private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
+    private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -112,6 +113,17 @@ public class TameRegistrySavedData extends SavedData {
         this.healthSiphon.clear();
         if (healthSiphon != null) {
             this.healthSiphon.putAll(healthSiphon);
+        }
+    }
+
+    public Map<UUID, Boolean> getEnterPortalsByThemselves() {
+        return enterPortalsByThemselves;
+    }
+
+    public void setEnterPortalsByThemselves(Map<UUID, Boolean> enterPortalsByThemselves) {
+        this.enterPortalsByThemselves.clear();
+        if (enterPortalsByThemselves != null) {
+            this.enterPortalsByThemselves.putAll(enterPortalsByThemselves);
         }
     }
 
@@ -202,6 +214,17 @@ public class TameRegistrySavedData extends SavedData {
             healthSiphonTag.add(row);
         }
         tag.put("healthSiphon", healthSiphonTag);
+        ListTag enterPortalsTag = new ListTag();
+        for (Map.Entry<UUID, Boolean> entry : enterPortalsByThemselves.entrySet()) {
+            if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putBoolean("enabled", true);
+            enterPortalsTag.add(row);
+        }
+        tag.put("enterPortalsByThemselves", enterPortalsTag);
         return tag;
     }
 
@@ -297,6 +320,15 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.healthSiphon.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
+            }
+        }
+        if (tag.contains("enterPortalsByThemselves", Tag.TAG_LIST)) {
+            ListTag portalList = tag.getList("enterPortalsByThemselves", Tag.TAG_COMPOUND);
+            for (Tag entry : portalList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.enterPortalsByThemselves.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
             }
         }
         return data;

@@ -37,14 +37,17 @@ public class TameCombatEvents {
 
     @SubscribeEvent
     public static void onHurt(LivingHurtEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity)) return;
+        LivingEntity mob = event.getEntity();
 
         TamableAnimal tame = resolveTameAttacker(event);
-        if (tame == null) return;
-        if (!tame.isTame()) return;
-        if (!(event.getEntity() instanceof LivingEntity)) return;
+        if (tame != null && tame.isTame()) {
+            LevelSystem.trackDamage(mob, tame);
+        }
 
-        LivingEntity mob = event.getEntity();
-        LevelSystem.trackDamage(mob, tame);
+        if (event.getSource().getEntity() instanceof ServerPlayer player) {
+            LevelSystem.trackOwnerDamage(mob, player);
+        }
     }
 
     @SubscribeEvent
@@ -194,14 +197,11 @@ public class TameCombatEvents {
             return;
         }
         String tameName = data.name == null || data.name.isBlank() ? "Your tame" : data.name;
+        String line = (deathMessage != null && !deathMessage.isBlank()) ? deathMessage : (tameName + " died.");
         owner.sendSystemMessage(
                 Component.literal("[Tames] ").withStyle(ChatFormatting.DARK_RED)
-                        .append(Component.literal(tameName).withStyle(ChatFormatting.GOLD))
-                        .append(Component.literal(" died.").withStyle(ChatFormatting.RED))
+                        .append(Component.literal(line).withStyle(ChatFormatting.RED))
         );
-        if (deathMessage != null && !deathMessage.isBlank()) {
-            owner.sendSystemMessage(Component.literal(deathMessage).withStyle(ChatFormatting.GRAY));
-        }
     }
 
     private static void enqueueAndDrainDeaths(PendingDeath death) {

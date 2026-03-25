@@ -1742,7 +1742,7 @@ public class TameAbilityEvents {
     }
 
     private static int attributeLevel(TameData data, String id) {
-        return Math.max(0, data.attributeLevels.getOrDefault(id, 0));
+        return Math.max(0, LevelSystem.getAttributeLevel(data, id));
     }
 
     private static double chanceByLevel(int level, double perLevel, double cap) {

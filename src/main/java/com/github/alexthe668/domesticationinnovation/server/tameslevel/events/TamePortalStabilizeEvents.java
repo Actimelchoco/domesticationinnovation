@@ -8,6 +8,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityTravelToDimensionEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -40,6 +41,20 @@ public class TamePortalStabilizeEvents {
                 serverTick + STABILIZE_INITIAL_DELAY_TICKS,
                 STABILIZE_RETRIES
         ));
+    }
+
+    @SubscribeEvent
+    public static void onTameTravelToDimension(EntityTravelToDimensionEvent event) {
+        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+            return;
+        }
+        if (tame.getOwnerUUID() == null) {
+            return;
+        }
+        if (TameRegistry.canEnterPortalsByThemselves(tame.getOwnerUUID())) {
+            return;
+        }
+        event.setCanceled(true);
     }
 
     @SubscribeEvent

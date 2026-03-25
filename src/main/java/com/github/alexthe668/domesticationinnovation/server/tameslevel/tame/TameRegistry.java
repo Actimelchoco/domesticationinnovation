@@ -31,6 +31,7 @@ public class TameRegistry {
     private static final Map<UUID, Set<String>> OWNER_DO_NOT_ATTACK_TYPES = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
+    private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -74,6 +75,8 @@ public class TameRegistry {
         OWNER_DO_NOT_ATTACK_ANIMALS.putAll(savedData.getDoNotAttackAnimals());
         OWNER_HEALTH_SIPHON.clear();
         OWNER_HEALTH_SIPHON.putAll(savedData.getHealthSiphon());
+        OWNER_ENTER_PORTALS_BY_THEMSELVES.clear();
+        OWNER_ENTER_PORTALS_BY_THEMSELVES.putAll(savedData.getEnterPortalsByThemselves());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -217,7 +220,27 @@ public class TameRegistry {
         savedData.setDoNotAttackTypes(OWNER_DO_NOT_ATTACK_TYPES);
         savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
         savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
+        savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
         savedData.setDirty();
+    }
+
+    public static boolean canEnterPortalsByThemselves(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return false;
+        }
+        return OWNER_ENTER_PORTALS_BY_THEMSELVES.getOrDefault(ownerUuid, false);
+    }
+
+    public static void setEnterPortalsByThemselves(UUID ownerUuid, boolean enabled) {
+        if (ownerUuid == null) {
+            return;
+        }
+        if (enabled) {
+            OWNER_ENTER_PORTALS_BY_THEMSELVES.put(ownerUuid, true);
+        } else {
+            OWNER_ENTER_PORTALS_BY_THEMSELVES.remove(ownerUuid);
+        }
+        markDirty();
     }
 
     public static String getRespawnOrder(UUID ownerUuid) {

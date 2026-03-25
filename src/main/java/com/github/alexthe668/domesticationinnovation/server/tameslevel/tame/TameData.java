@@ -37,6 +37,7 @@ public class TameData {
     public int assists = 0;
     public int deaths = 0;
     public boolean dead = false;
+    public boolean stored = false;
     public long deadGameTime = 0L;
     public long deadUnixMillis = 0L;
     public String deathDimension = "";
@@ -174,6 +175,7 @@ public class TameData {
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
         tag.putBoolean("dead", dead);
+        tag.putBoolean("stored", stored);
         tag.putLong("deadGameTime", deadGameTime);
         tag.putLong("deadUnixMillis", deadUnixMillis);
         tag.putString("deathDimension", deathDimension == null ? "" : deathDimension);
@@ -327,6 +329,7 @@ public class TameData {
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
         data.dead = tag.getBoolean("dead");
+        data.stored = tag.getBoolean("stored");
         data.deadGameTime = tag.contains("deadGameTime", Tag.TAG_LONG) ? tag.getLong("deadGameTime") : 0L;
         data.deadUnixMillis = tag.contains("deadUnixMillis", Tag.TAG_LONG) ? tag.getLong("deadUnixMillis") : 0L;
         data.deathDimension = tag.contains("deathDimension", Tag.TAG_STRING) ? tag.getString("deathDimension") : "";
@@ -497,6 +500,14 @@ public class TameData {
             tlId = UUID.randomUUID();
         }
         return tlId;
+    }
+
+    public boolean isInactive() {
+        return dead || stored;
+    }
+
+    public boolean isActuallyDead() {
+        return dead;
     }
 
     public static UUID getTlId(TamableAnimal tame) {

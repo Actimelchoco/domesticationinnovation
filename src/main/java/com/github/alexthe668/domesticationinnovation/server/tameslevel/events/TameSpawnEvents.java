@@ -73,10 +73,19 @@ public class TameSpawnEvents {
         ParsedName parsed = parseName(tame);
         TamableAnimal clone = findLoadedCloneByIdentity(tame, parsed);
         if (clone != null) {
-            // Prevent external/duplicate respawn systems from materializing clones
-            // when an equivalent [Lvl X] tame with the same owner and name is already loaded.
-            tame.discard();
-            return;
+            if (shouldKeepJoiningIdentityClone(tame, clone, parsed)) {
+                TameData cloneData = TameRegistry.get(clone.getUUID());
+                clone.discard();
+                if (cloneData != null) {
+                    TameRegistry.rebindEntityUuid(cloneData, tame.getUUID());
+                    TameRegistry.bindEntityToData(tame, cloneData);
+                    LevelSystem.reapplyTypeBasePlusBonuses(tame, cloneData);
+                    return;
+                }
+            } else {
+                tame.discard();
+                return;
+            }
         }
 
         registerOrRestoreTame(tame, true, true);
@@ -140,6 +149,10 @@ public class TameSpawnEvents {
                 existing.deathZ = 0;
                 changed = true;
             }
+            if (existing.stored) {
+                existing.stored = false;
+                changed = true;
+            }
             if (TameBedRegistrySync.syncFromEntity(tame, existing)) {
                 changed = true;
             }
@@ -165,6 +178,10 @@ public class TameSpawnEvents {
                 existingByTlId.deathX = 0;
                 existingByTlId.deathY = 0;
                 existingByTlId.deathZ = 0;
+                changed = true;
+            }
+            if (existingByTlId.stored) {
+                existingByTlId.stored = false;
                 changed = true;
             }
             if (TameBedRegistrySync.syncFromEntity(tame, existingByTlId)) {
@@ -284,6 +301,7 @@ public class TameSpawnEvents {
 
         UUID oldUuid = candidate.uuid;
         candidate.dead = false;
+        candidate.stored = false;
         candidate.deadGameTime = 0L;
         candidate.deadUnixMillis = 0L;
         candidate.deathDimension = "";
@@ -385,6 +403,15 @@ public class TameSpawnEvents {
         return joining.tickCount >= loaded.tickCount;
     }
 
+    private static boolean shouldKeepJoiningIdentityClone(TamableAnimal joining, TamableAnimal loaded, ParsedName joiningParsed) {
+        int joiningLevel = resolveTrackedLevel(joining, joiningParsed);
+        int loadedLevel = resolveTrackedLevel(loaded, parseName(loaded));
+        if (joiningLevel != loadedLevel) {
+            return joiningLevel > loadedLevel;
+        }
+        return joining.tickCount >= loaded.tickCount;
+    }
+
     private static int resolveTrackedXp(TamableAnimal tame, TameData fallback) {
         if (tame == null) {
             return Integer.MIN_VALUE;
@@ -421,11 +448,41 @@ public class TameSpawnEvents {
                 String otherBase = otherParsed.baseName == null || otherParsed.baseName.isBlank()
                         ? stripLevelPrefixes(other.hasCustomName() && other.getCustomName() != null ? other.getCustomName().getString() : other.getName().getString())
                         : otherParsed.baseName;
-                if (!otherBase.equalsIgnoreCase(thisBase)) continue;
+                if (!namesOverlapByContainment(thisBase, otherBase)) continue;
                 return other;
             }
         }
         return null;
+    }
+
+    private static int resolveTrackedLevel(TamableAnimal tame, ParsedName parsed) {
+        if (tame == null) {
+            return Integer.MIN_VALUE;
+        }
+        TameData exact = TameRegistry.get(tame.getUUID());
+        if (exact != null) {
+            return exact.level;
+        }
+        UUID tlId = TameData.getTlId(tame);
+        if (tlId != null) {
+            TameData byTlId = TameRegistry.getByTlId(tlId);
+            if (byTlId != null) {
+                return byTlId.level;
+            }
+        }
+        return parsed == null ? 1 : Math.max(1, parsed.level);
+    }
+
+    private static boolean namesOverlapByContainment(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        String left = stripLevelPrefixes(a).trim().toLowerCase(Locale.ROOT);
+        String right = stripLevelPrefixes(b).trim().toLowerCase(Locale.ROOT);
+        if (left.isBlank() || right.isBlank()) {
+            return false;
+        }
+        return left.contains(right) || right.contains(left);
     }
 
     public static String uniqueLoadedNameFor(TamableAnimal self, String requestedName) {

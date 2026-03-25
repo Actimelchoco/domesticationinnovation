@@ -597,6 +597,12 @@ public class TameableUtils {
     }
 
     private static int getVisualFakeEnchantLevel(LivingEntity entity, String effectId, Enchantment enchantment) {
+        if ("health_siphon".equals(effectId)) {
+            UUID ownerUuid = getOwnerUUIDOf(entity);
+            if (ownerUuid != null && !TameRegistry.isHealthSiphonEnabled(ownerUuid)) {
+                return 0;
+            }
+        }
         int level = getProgressOnlyLevel(entity, effectId);
         if (level <= 0) {
             return 0;

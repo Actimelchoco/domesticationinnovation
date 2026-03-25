@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
+import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.TLMigrationImportData;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
@@ -525,6 +526,9 @@ public class TameCommands {
                         .then(Commands.literal("healthSiphon")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("enterPortalsByThemselves")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("graveyard")
                                 .executes(ctx -> graveyard(ctx.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -1675,6 +1679,9 @@ public class TameCommands {
         dispatcher.register(Commands.literal("fixDragonflyArmor")
                 .requires(source -> source.hasPermission(2))
                 .executes(ctx -> fixDragonflyArmor(ctx.getSource())));
+        dispatcher.register(Commands.literal("rebuildDragonfliesFromData")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> rebuildDragonfliesFromData(ctx.getSource())));
     }
 
     @SubscribeEvent
@@ -2314,8 +2321,8 @@ public class TameCommands {
             TameData d = tames.get(i);
             long days = daysAlive(source, d);
             String line = (i + 1) + ". [" + d.level + "] " + d.name + " (" + d.kills + "/" + d.assists + "/" + days + "/" + d.deaths + ")"
-                    + (isDeadEntry(d.uuid) ? " [DEAD]" : "");
-            p.sendSystemMessage(Component.literal(line).withStyle(isDeadEntry(d.uuid) ? ChatFormatting.GRAY : ChatFormatting.WHITE));
+                    + inactiveSuffix(d);
+            p.sendSystemMessage(Component.literal(line).withStyle(statusColor(d, isLoadedAnywhere(source.getServer(), d.uuid))));
         }
         return 1;
     }
@@ -2325,7 +2332,7 @@ public class TameCommands {
         TameData best = null;
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             if (best == null || d.level > best.level || (d.level == best.level && d.kills > best.kills)) best = d;
         }
         if (best == null) return error(p, "You have no registered tames.");
@@ -2343,9 +2350,12 @@ public class TameCommands {
 
         List<TameData> loaded = new ArrayList<>();
         List<TameData> unloaded = new ArrayList<>();
+        List<TameData> stored = new ArrayList<>();
         List<TameData> dead = new ArrayList<>();
         for (TameData d : tames) {
-            if (isDeadEntry(d.uuid)) {
+            if (isStoredEntry(d.uuid)) {
+                stored.add(d);
+            } else if (isDeadEntry(d.uuid)) {
                 dead.add(d);
             } else if (isLoadedAnywhere(source.getServer(), d.uuid)) {
                 loaded.add(d);
@@ -2356,6 +2366,7 @@ public class TameCommands {
 
         loaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         unloaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
+        stored.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         dead.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
 
         p.sendSystemMessage(Component.literal("---- Tame Load Status ----").withStyle(ChatFormatting.GOLD));
@@ -2369,6 +2380,13 @@ public class TameCommands {
                     ? "unknown"
                     : (d.lastKnownDimension + " @ " + d.lastKnownX + " " + d.lastKnownY + " " + d.lastKnownZ);
             p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name + " (" + where + ")").withStyle(ChatFormatting.RED));
+        }
+        p.sendSystemMessage(Component.literal("Stored (" + stored.size() + "):").withStyle(ChatFormatting.AQUA));
+        for (TameData d : stored) {
+            String where = (d.lastKnownDimension == null || d.lastKnownDimension.isBlank())
+                    ? "unknown"
+                    : (d.lastKnownDimension + " @ " + d.lastKnownX + " " + d.lastKnownY + " " + d.lastKnownZ);
+            p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name + " (" + where + ")").withStyle(ChatFormatting.AQUA));
         }
         p.sendSystemMessage(Component.literal("Dead (" + dead.size() + "):").withStyle(ChatFormatting.GRAY));
         for (TameData d : dead) {
@@ -2384,7 +2402,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info respawn, /tames info movement, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -2542,6 +2560,14 @@ public class TameCommands {
                     "/tames healthSiphon <true|false>",
                     "Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.",
                     "This is owner-local and persists for your tame registry."
+            );
+        }
+        else if (key.equals("enterportalsbythemselves") || key.equals("enter_portals_by_themselves")) {
+            sendInfoPage(p, "EnterPortalsByThemselves",
+                    "/tames enterPortalsByThemselves <true|false>",
+                    "Default is false.",
+                    "False: your tames cannot enter portals on their own.",
+                    "They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport."
             );
         }
         else if (key.equals("inspect")) {
@@ -3096,6 +3122,17 @@ public class TameCommands {
         }
         TameRegistry.setHealthSiphonEnabled(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Health siphon " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setEnterPortalsByThemselves(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameRegistry.setEnterPortalsByThemselves(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Tames entering portals by themselves " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -3897,7 +3934,7 @@ public class TameCommands {
     private static void sendTameStats(CommandSourceStack source, ServerPlayer receiver, TameData d, boolean detailed) {
         long days = daysAlive(source, d);
         receiver.sendSystemMessage(Component.literal("=== " + d.name + " ===").withStyle(ChatFormatting.GOLD));
-        receiver.sendSystemMessage(Component.literal("Status " + (isDeadEntry(d.uuid) ? "dead" : "alive")).withStyle(isDeadEntry(d.uuid) ? ChatFormatting.GRAY : ChatFormatting.GREEN));
+        receiver.sendSystemMessage(Component.literal("Status " + statusLabel(d, source.getServer())).withStyle(statusColor(d, isLoadedAnywhere(source.getServer(), d.uuid))));
         receiver.sendSystemMessage(Component.literal("Lvl " + d.level + "  XP " + d.xp + "/" + d.xpToNext).withStyle(ChatFormatting.YELLOW));
         if (isReincarnationEligible(d)) {
             receiver.sendSystemMessage(Component.literal(
@@ -4049,18 +4086,16 @@ public class TameCommands {
         }
 
         matches.sort(Comparator
-                .comparing((TameData data) -> isDeadEntry(data.uuid))
-                .thenComparing((TameData data) -> !isLoadedAnywhere(source.getServer(), data.uuid))
+                .comparingInt((TameData data) -> statusOrder(data, source.getServer()))
                 .thenComparing((TameData data) -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT))
                 .thenComparing((TameData data) -> -data.level));
 
         player.sendSystemMessage(Component.literal("=== Search " + category + ": " + query + " ===").withStyle(ChatFormatting.GOLD));
         player.sendSystemMessage(Component.literal("Matches: " + matches.size()).withStyle(ChatFormatting.GRAY));
         for (TameData data : matches) {
-            boolean dead = isDeadEntry(data.uuid);
-            boolean loaded = !dead && isLoadedAnywhere(source.getServer(), data.uuid);
-            String state = dead ? "dead" : loaded ? "loaded" : "unloaded";
-            ChatFormatting color = dead ? ChatFormatting.DARK_GRAY : loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
+            boolean loaded = isLoadedAnywhere(source.getServer(), data.uuid);
+            String state = statusLabel(data, source.getServer());
+            ChatFormatting color = statusColor(data, loaded);
             String extra = switch (category) {
                 case "Ability" -> " L" + Math.max(1, LevelSystem.getAbilityLevel(data, query));
                 case "Attribute" -> " L" + Math.max(1, LevelSystem.getAttributeLevel(data, query));
@@ -5229,8 +5264,9 @@ public class TameCommands {
             int x = anchor == null ? 0 : anchor.getInt("x");
             int y = anchor == null ? 0 : anchor.getInt("y");
             int z = anchor == null ? 0 : anchor.getInt("z");
-            ChatFormatting color = data.dead ? ChatFormatting.RED : isTameLoadedAnywhere(source.getServer(), data) ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
-            String state = data.dead ? "dead" : isTameLoadedAnywhere(source.getServer(), data) ? "loaded" : "unloaded";
+            boolean loaded = isTameLoadedAnywhere(source.getServer(), data);
+            ChatFormatting color = statusColor(data, loaded);
+            String state = statusLabel(data, source.getServer());
             player.sendSystemMessage(Component.literal(
                     "[" + data.level + "] " + data.name + " [" + state + "] @ " + dimension + " " + x + " " + y + " " + z
             ).withStyle(color));
@@ -5873,8 +5909,9 @@ public class TameCommands {
 
     private static int teleportPet(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
-        TameData d = findOwnedTame(p.getUUID(), pet);
+        TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
+        if (d.stored) return error(p, tameDisplayName(d) + " is stored and cannot be teleported until released.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
@@ -5893,8 +5930,9 @@ public class TameCommands {
 
     private static int teleportGuardianPet(CommandSourceStack source, String pet) {
         ServerPlayer player = source.getPlayer();
-        TameData data = findOwnedTame(player.getUUID(), pet);
+        TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be teleported until released.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         if (!data.hasHome) return error(player, data.name + " does not currently have a guardian location.");
         return teleportGuardianBatch(source, player, List.of(data), "TPGuardian " + data.name, 0);
@@ -5902,8 +5940,9 @@ public class TameCommands {
 
     private static int teleportPetHome(CommandSourceStack source, String pet) {
         ServerPlayer player = source.getPlayer();
-        TameData data = findOwnedTame(player.getUUID(), pet);
+        TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be teleported until released.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         return teleportHomeBatch(source, player, List.of(data), "TPHome " + data.name, ownedDeadTames(player.getUUID()).stream().anyMatch(d -> Objects.equals(d.uuid, data.uuid)) ? 1 : 0);
     }
@@ -7642,6 +7681,14 @@ public class TameCommands {
         return true;
     }
 
+    public static boolean autoFollowTeleportLoadedToLocation(TamableAnimal tame, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (tame == null || level == null || pos == null || !tame.isAlive()) {
+            return false;
+        }
+        teleportTameToLocation(tame, new SpawnTarget(level, pos, yRot, xRot));
+        return true;
+    }
+
     private static void teleportTameToLocation(TamableAnimal tame, SpawnTarget target) {
         if (tame == null || target == null || target.level == null || target.pos == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
@@ -7666,6 +7713,15 @@ public class TameCommands {
             return false;
         }
         SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        UnloadedTpResult result = tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target);
+        return result.success;
+    }
+
+    public static boolean autoFollowTeleportUnloadedToLocation(ServerPlayer owner, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (owner == null || data == null || data.uuid == null || data.dead || level == null || pos == null) {
+            return false;
+        }
+        SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
         UnloadedTpResult result = tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target);
         return result.success;
     }
@@ -7699,6 +7755,7 @@ public class TameCommands {
         String scope = includeAll ? "all players" : "your tames";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
         p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("score / kills / assists / deaths / days").withStyle(ChatFormatting.DARK_GRAY));
         for (int i = 0; i < limit; i++) {
             TameData d = entries.get(i);
             int score = weightedCombatScore(d);
@@ -7706,11 +7763,17 @@ public class TameCommands {
                     .append(Component.literal("(" + ownerInitials(source.getServer(), d.ownerUUID) + ") ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("[" + d.level + "] ").withStyle(ChatFormatting.YELLOW))
                     .append(Component.literal(d.name + " ").withStyle(ChatFormatting.AQUA))
-                    .append((m.equals("mix") || m.equals("score")) ? Component.literal("S:" + score + " ").withStyle(ChatFormatting.LIGHT_PURPLE) : Component.empty())
-                    .append(Component.literal("K:" + d.kills + " ").withStyle(ChatFormatting.RED))
-                    .append(Component.literal("A:" + d.assists + " ").withStyle(ChatFormatting.GREEN))
-                    .append(Component.literal("D:" + d.deaths + " ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("DA:" + daysAlive(source, d)).withStyle(ChatFormatting.DARK_AQUA)));
+                    .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(score)).withStyle(ChatFormatting.LIGHT_PURPLE))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(d.kills)).withStyle(ChatFormatting.RED))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(d.assists)).withStyle(ChatFormatting.GREEN))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(d.deaths)).withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(daysAlive(source, d))).withStyle(ChatFormatting.DARK_AQUA))
+                    .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY)));
         }
         return 1;
     }
@@ -9684,6 +9747,96 @@ public class TameCommands {
         return fixedEntities > 0 ? fixedEntities : 1;
     }
 
+    private static int rebuildDragonfliesFromData(CommandSourceStack source) {
+        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
+        EntityType<?> dragonflyType = ForgeRegistries.ENTITY_TYPES.getValue(dragonflyId);
+        if (dragonflyType == null) {
+            source.sendFailure(Component.literal("Dragonfly entity type not found: " + dragonflyId));
+            return 0;
+        }
+
+        int rebuilt = 0;
+        int skippedUnloaded = 0;
+        int failed = 0;
+
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || data.dead) {
+                continue;
+            }
+            if (!dragonflyId.toString().equalsIgnoreCase(data.type)) {
+                continue;
+            }
+
+            TamableAnimal current = findLoadedTameByUuid(source.getServer(), data.uuid);
+            if (current == null) {
+                skippedUnloaded++;
+                continue;
+            }
+            if (!(current.level() instanceof ServerLevel level)) {
+                failed++;
+                continue;
+            }
+
+            Vec3 pos = current.position();
+            float yRot = current.getYRot();
+            float xRot = current.getXRot();
+            boolean sitting = current.isOrderedToSit();
+            UUID ownerId = current.getOwnerUUID() != null ? current.getOwnerUUID() : data.ownerUUID;
+
+            current.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
+            current.discard();
+
+            Entity spawned = dragonflyType.create(level);
+            if (!(spawned instanceof TamableAnimal rebuiltDragonfly)) {
+                failed++;
+                continue;
+            }
+
+            rebuiltDragonfly.setUUID(data.uuid);
+            rebuiltDragonfly.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
+            rebuiltDragonfly.setDeltaMovement(0.0D, 0.0D, 0.0D);
+            rebuiltDragonfly.setTame(true);
+            if (ownerId != null) {
+                rebuiltDragonfly.setOwnerUUID(ownerId);
+            }
+            rebuiltDragonfly.setTarget(null);
+            rebuiltDragonfly.getNavigation().stop();
+            rebuiltDragonfly.setOrderedToSit(sitting);
+
+            if (!level.addFreshEntity(rebuiltDragonfly)) {
+                failed++;
+                continue;
+            }
+
+            TameGoalInstaller.installIfMissing(rebuiltDragonfly);
+            TameRegistry.bindEntityToData(rebuiltDragonfly, data);
+            LevelSystem.ensureClassAssigned(rebuiltDragonfly, data, false);
+            LevelSystem.reapplyTypeBasePlusBonuses(rebuiltDragonfly, data);
+            LevelSystem.updateTameName(rebuiltDragonfly, data);
+            rebuiltDragonfly.setHealth(rebuiltDragonfly.getMaxHealth());
+
+            data.ownerUUID = ownerId;
+            data.lastKnownDimension = level.dimension().location().toString();
+            data.lastKnownX = rebuiltDragonfly.blockPosition().getX();
+            data.lastKnownY = rebuiltDragonfly.blockPosition().getY();
+            data.lastKnownZ = rebuiltDragonfly.blockPosition().getZ();
+            data.lastKnownGameTime = level.getGameTime();
+            CompoundTag refreshedSnapshot = new CompoundTag();
+            rebuiltDragonfly.save(refreshedSnapshot);
+            data.entitySnapshot = refreshedSnapshot;
+            rebuilt++;
+        }
+
+        TameRegistry.markDirty();
+        final int rebuiltCount = rebuilt;
+        final int skippedCount = skippedUnloaded;
+        final int failedCount = failed;
+        source.sendSuccess(() -> Component.literal(
+                "Rebuilt " + rebuiltCount + " loaded dragonflies from registry data; skipped unloaded " + skippedCount + "; failed " + failedCount + "."
+        ), true);
+        return rebuiltCount > 0 ? rebuiltCount : 1;
+    }
+
     private static int adminSetTameStat(CommandSourceStack source, String petName, String stat, int value) {
         ServerPlayer player = source.getPlayer();
         TameData data = resolveAdminAliveTame(player, petName);
@@ -11603,7 +11756,7 @@ public class TameCommands {
     private static List<TamableAnimal> loadedOwnedGroupTames(CommandSourceStack source, UUID owner, String group) {
         List<TamableAnimal> list = new ArrayList<>();
         for (TameData data : ownedGroup(owner, group)) {
-            if (isDeadEntry(data.uuid)) continue;
+            if (isInactiveEntry(data.uuid)) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
             if (tame == null || !tame.isAlive()) continue;
             list.add(tame);
@@ -11614,7 +11767,7 @@ public class TameCommands {
     private static List<TamableAnimal> loadedOwnedAllTames(CommandSourceStack source, UUID owner) {
         List<TamableAnimal> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
-            if (isDeadEntry(data.uuid)) continue;
+            if (isInactiveEntry(data.uuid)) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
             if (tame == null || !tame.isAlive()) continue;
             list.add(tame);
@@ -11977,7 +12130,7 @@ public class TameCommands {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (d == null || d.name == null) continue;
             if (!owner.equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             if (!d.name.equalsIgnoreCase(name)) continue;
             if (best == null
                     || d.level > best.level
@@ -12036,6 +12189,73 @@ public class TameCommands {
         }
         // Backward compatibility with older persisted death registries.
         return TameRegistry.LAST_DEATHS.containsKey(tameUuid);
+    }
+
+    private static boolean isStoredEntry(UUID tameUuid) {
+        if (tameUuid == null) return false;
+        TameData data = TameRegistry.get(tameUuid);
+        return data != null && data.stored;
+    }
+
+    private static boolean isInactiveEntry(UUID tameUuid) {
+        if (tameUuid == null) return false;
+        TameData data = TameRegistry.get(tameUuid);
+        if (data != null) {
+            return data.isInactive();
+        }
+        return TameRegistry.LAST_DEATHS.containsKey(tameUuid);
+    }
+
+    private static String inactiveSuffix(TameData data) {
+        if (data == null) {
+            return "";
+        }
+        if (data.stored) {
+            return " [STORED]";
+        }
+        if (data.dead) {
+            return " [DEAD]";
+        }
+        return "";
+    }
+
+    private static String statusLabel(TameData data, MinecraftServer server) {
+        if (data == null) {
+            return "unknown";
+        }
+        if (data.stored) {
+            return "stored";
+        }
+        if (data.dead) {
+            return "dead";
+        }
+        return isLoadedAnywhere(server, data.uuid) ? "loaded" : "unloaded";
+    }
+
+    private static ChatFormatting statusColor(TameData data, boolean loaded) {
+        if (data == null) {
+            return ChatFormatting.WHITE;
+        }
+        if (data.stored) {
+            return ChatFormatting.AQUA;
+        }
+        if (data.dead) {
+            return ChatFormatting.GRAY;
+        }
+        return loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
+    }
+
+    private static int statusOrder(TameData data, MinecraftServer server) {
+        if (data == null) {
+            return 4;
+        }
+        if (data.stored) {
+            return 2;
+        }
+        if (data.dead) {
+            return 3;
+        }
+        return isLoadedAnywhere(server, data.uuid) ? 0 : 1;
     }
 
     private static long daysAlive(CommandSourceStack source, TameData data) {
@@ -12121,7 +12341,7 @@ public class TameCommands {
     private static TamableAnimal findLoadedOwnedTameByName(CommandSourceStack source, UUID owner, String name) {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!owner.equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             if (!d.name.equalsIgnoreCase(name)) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, d.uuid);
             if (tame != null) return tame;
@@ -12134,7 +12354,7 @@ public class TameCommands {
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             suggestCommandString(b, d.name);
         }
         return b.buildFuture();
@@ -12155,7 +12375,7 @@ public class TameCommands {
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             if (!d.hasPetBed || d.petBedDimension == null || d.petBedDimension.isBlank()) continue;
             suggestCommandString(b, d.name);
         }
@@ -12167,7 +12387,7 @@ public class TameCommands {
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
-            if (isDeadEntry(d.uuid)) continue;
+            if (isInactiveEntry(d.uuid)) continue;
             if (isEffectivelyLoaded(source, p, d)) continue;
             suggestCommandString(b, d.name);
         }
