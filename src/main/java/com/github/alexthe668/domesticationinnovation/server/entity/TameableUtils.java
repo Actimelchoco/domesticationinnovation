@@ -85,12 +85,18 @@ public class TameableUtils {
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
 
     private static final UUID SPEED_BOOST_AQUATIC_LAND_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31745");
-    private static final Map<String, Enchantment> VISUAL_FAKE_ENCHANTMENTS = Map.of(
-            "magnetic", DIEnchantmentRegistry.MAGNETIC,
-            "health_siphon", DIEnchantmentRegistry.HEALTH_SIPHON,
-            "void_cloud", DIEnchantmentRegistry.VOID_CLOUD,
-            "blazing_protection", DIEnchantmentRegistry.BLAZING_PROTECTION
-    );
+    private static final Map<String, Enchantment> VISUAL_FAKE_ENCHANTMENTS;
+
+    static {
+        Map<String, Enchantment> visualFakeEnchants = new LinkedHashMap<>();
+        visualFakeEnchants.put("magnetic", DIEnchantmentRegistry.MAGNETIC);
+        visualFakeEnchants.put("health_siphon", DIEnchantmentRegistry.HEALTH_SIPHON);
+        visualFakeEnchants.put("void_cloud", DIEnchantmentRegistry.VOID_CLOUD);
+        visualFakeEnchants.put("blazing_protection", DIEnchantmentRegistry.BLAZING_PROTECTION);
+        visualFakeEnchants.put("shadow_hands", DIEnchantmentRegistry.SHADOW_HANDS);
+        visualFakeEnchants.put("disc_jockey", DIEnchantmentRegistry.DISK_JOCKEY);
+        VISUAL_FAKE_ENCHANTMENTS = Collections.unmodifiableMap(visualFakeEnchants);
+    }
 
     public static boolean hasSameOwnerAs(LivingEntity tameable, Entity target) {
         return hasSameOwnerAsOneWay(tameable, target) || hasSameOwnerAsOneWay(target, tameable);
