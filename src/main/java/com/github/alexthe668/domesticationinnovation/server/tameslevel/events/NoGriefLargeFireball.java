@@ -5,8 +5,12 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.util.Mth;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -14,6 +18,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.LargeFireball;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 public class NoGriefLargeFireball extends LargeFireball {
     private static final int MAX_LIFETIME_TICKS = 80;
@@ -61,8 +66,18 @@ public class NoGriefLargeFireball extends LargeFireball {
                 LevelSystem.trackDamage(nearby, tame);
             }
             nearby.hurt(this.damageSources().mobProjectile(this, shooter), damage);
+            Vec3 push = nearby.position().subtract(this.position());
+            if (push.lengthSqr() > 0.0001D) {
+                double resistanceScale = Math.max(0.1D, 1.0D - Mth.clamp(nearby.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE), 0.0D, 1.0D));
+                Vec3 knockback = push.normalize().scale((0.85D + this.noGriefExplosionPower * 0.15D) * resistanceScale);
+                nearby.push(knockback.x, 0.22D * resistanceScale, knockback.z);
+                nearby.hurtMarked = true;
+            }
         }
 
+        if (this.level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, this.getX(), this.getY(), this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        }
         this.level().playSound(null, this.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 1.0F, 1.0F);
         this.discard();
     }

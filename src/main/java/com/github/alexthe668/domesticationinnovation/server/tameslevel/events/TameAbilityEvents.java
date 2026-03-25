@@ -255,6 +255,8 @@ public class TameAbilityEvents {
             TameData targetData = TameRegistry.get(targetTame.getUUID());
             if (targetData == null) return;
 
+            applyBrokenDragonflyHealthDamageScaling(targetTame, targetData, event);
+
             if (!targetTame.isOrderedToSit() && !INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
                 TamePerformanceProfiler.run("feature.ally_support_responses", () -> handleAllyTameSupportResponses(targetTame, targetData, event));
             }
@@ -271,6 +273,22 @@ public class TameAbilityEvents {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
         }
+    }
+
+    private static void applyBrokenDragonflyHealthDamageScaling(TamableAnimal tame, TameData data, LivingHurtEvent event) {
+        if (event.getAmount() <= 0.0F || tame == null || data == null || data.type == null) {
+            return;
+        }
+        if (!"crittersandcompanions:dragonfly".equals(data.type)) {
+            return;
+        }
+        double actualHpPool = Math.max(1.0D, tame.getMaxHealth());
+        double intendedHpPool = Math.max(1.0D, 4.0D + data.bonusHealth);
+        if (actualHpPool <= intendedHpPool + 0.01D) {
+            return;
+        }
+        double scale = actualHpPool / intendedHpPool;
+        event.setAmount((float) (event.getAmount() * scale));
     }
 
     @SubscribeEvent
@@ -762,7 +780,7 @@ public class TameAbilityEvents {
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battle_strength"));
         int amplifier = Math.max(0, levelValue - 1);
         int affected = 0;
-        for (LivingEntity nearby : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(8))) {
+        for (LivingEntity nearby : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(3))) {
             if (!isFriendly(tame, nearby)) continue;
             nearby.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 100, amplifier));
             affected++;
@@ -776,10 +794,10 @@ public class TameAbilityEvents {
         if (targetTame.getRandom().nextDouble() > 0.10D) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "defensive_aura"));
-        int amplifier = Math.max(0, levelValue - 1);
+        int amplifier = defensiveAuraAmplifier(levelValue);
         int duration = 100 + (Math.max(0, levelValue - 1) * 20);
         int affected = 0;
-        for (LivingEntity nearby : targetTame.level().getEntitiesOfClass(LivingEntity.class, targetTame.getBoundingBox().inflate(8))) {
+        for (LivingEntity nearby : targetTame.level().getEntitiesOfClass(LivingEntity.class, targetTame.getBoundingBox().inflate(3))) {
             if (!isFriendly(targetTame, nearby)) continue;
             nearby.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, duration, amplifier));
             affected++;
@@ -787,6 +805,20 @@ public class TameAbilityEvents {
         grantSupportUtilityXp(targetTame, data, targetTame, targetTame.level().getGameTime(), affected, 1.0F + amplifier, 0.5F);
         applySupportActivationVisual(targetTame, "defensive_aura");
         debugAbilityUse(targetTame, "defensive_aura");
+    }
+
+    private static int defensiveAuraAmplifier(int levelValue) {
+        int displayedResistance = 1;
+        int threshold = 1;
+        while (displayedResistance < 4) {
+            int nextLevel = displayedResistance + 1;
+            threshold += nextLevel * nextLevel;
+            if (levelValue < threshold) {
+                break;
+            }
+            displayedResistance = nextLevel;
+        }
+        return displayedResistance - 1;
     }
 
     private static void handleTotem(TamableAnimal tame, TameData data, LivingHurtEvent event) {

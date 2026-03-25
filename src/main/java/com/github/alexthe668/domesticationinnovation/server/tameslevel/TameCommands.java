@@ -60,6 +60,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Wolf;
@@ -1666,9 +1667,12 @@ public class TameCommands {
 
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
-                        );
+        );
 
         dispatcher.register(Commands.literal("tame").redirect(root));
+        dispatcher.register(Commands.literal("fixDragonflyArmor")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> fixDragonflyArmor(ctx.getSource())));
     }
 
     @SubscribeEvent
@@ -9632,6 +9636,37 @@ public class TameCommands {
         return 1;
     }
 
+    private static int fixDragonflyArmor(CommandSourceStack source) {
+        int touched = 0;
+        int clearedStacks = 0;
+        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+                if (!dragonflyId.equals(typeId) || !(entity instanceof LivingEntity living)) {
+                    continue;
+                }
+                int removedHere = 0;
+                for (EquipmentSlot slot : List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)) {
+                    ItemStack stack = living.getItemBySlot(slot);
+                    if (stack.isEmpty()) {
+                        continue;
+                    }
+                    living.setItemSlot(slot, ItemStack.EMPTY);
+                    removedHere++;
+                }
+                if (removedHere > 0) {
+                    touched++;
+                    clearedStacks += removedHere;
+                }
+            }
+        }
+        final int fixedEntities = touched;
+        final int fixedStacks = clearedStacks;
+        source.sendSuccess(() -> Component.literal("Fixed dragonfly armor on " + fixedEntities + " loaded dragonflies and removed " + fixedStacks + " equipped armor stacks."), true);
+        return fixedEntities > 0 ? fixedEntities : 1;
+    }
+
     private static int adminSetTameStat(CommandSourceStack source, String petName, String stat, int value) {
         ServerPlayer player = source.getPlayer();
         TameData data = resolveAdminAliveTame(player, petName);
@@ -10740,6 +10775,9 @@ public class TameCommands {
             clearGuardianAnchor(data);
         }
         boolean sit = order == MovementOrder.SIT;
+        if (tame instanceof IComandableMob commandableMob) {
+            commandableMob.setCommand(preferredCommandInt(order));
+        }
         tame.setOrderedToSit(sit);
         if (sit || order == MovementOrder.WANDER) {
             tame.setTarget(null);

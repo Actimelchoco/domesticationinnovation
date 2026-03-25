@@ -73,6 +73,7 @@ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.animal.Fox;
 import net.minecraft.world.entity.animal.Rabbit;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Ravager;
 import net.minecraft.world.entity.npc.VillagerTrades;
 import net.minecraft.world.entity.player.Player;
@@ -852,7 +853,11 @@ public class CommonProxy {
                 TameableUtils.setFrozenTimeTag(event.getEntity(), frozenTimeApplied);
                 TameableUtils.setFrozenLevel(event.getEntity(), safeLevel);
             }
-            if (bubblingLevel > 0 && !TameableUtils.shouldBlockFriendlyDiEffect(attacker, event.getEntity()) && attacker.getRandom().nextDouble() < bubblingProcChance(bubblingLevel, event.getEntity())) {
+            if (bubblingLevel > 0
+                    && isBaseAttackHit(attacker, event)
+                    && event.getEntity() instanceof Enemy
+                    && !TameableUtils.shouldBlockOffensiveDiTarget(attacker, event.getEntity())
+                    && attacker.getRandom().nextDouble() < bubblingProcChance(bubblingLevel, event.getEntity())) {
                 if (!(event.getEntity().getRootVehicle() instanceof GiantBubbleEntity) && (event.getEntity().onGround() || event.getEntity().isInWaterOrBubble() || event.getEntity().isInLava())) {
                     GiantBubbleEntity bubble = DIEntityRegistry.GIANT_BUBBLE.get().create(event.getEntity().level());
                     bubble.copyPosition(event.getEntity());
@@ -879,7 +884,12 @@ public class CommonProxy {
                 }
             }
             int warpingBiteLevel = getDiEffectLevel(attacker, "warping_bite");
-            if (!event.getEntity().level().isClientSide && warpingBiteLevel > 0 && !TameableUtils.shouldBlockFriendlyDiEffect(attacker, event.getEntity()) && attacker.getRandom().nextDouble() < warpingBiteProcChance(warpingBiteLevel, event.getEntity())) {
+            if (!event.getEntity().level().isClientSide
+                    && warpingBiteLevel > 0
+                    && isBaseAttackHit(attacker, event)
+                    && event.getEntity() instanceof Enemy
+                    && !TameableUtils.shouldBlockOffensiveDiTarget(attacker, event.getEntity())
+                    && attacker.getRandom().nextDouble() < warpingBiteProcChance(warpingBiteLevel, event.getEntity())) {
                 int attempts = warpingBiteAttempts(warpingBiteLevel);
                 double horizontalRange = warpingBiteHorizontalRange(warpingBiteLevel);
                 int verticalRange = warpingBiteVerticalRange(warpingBiteLevel);
@@ -2071,6 +2081,13 @@ public class CommonProxy {
 
     private static int warpingBiteVerticalRange(int level) {
         return Math.min(24, 16 + Math.max(0, level - 1) * 2);
+    }
+
+    private static boolean isBaseAttackHit(LivingEntity attacker, LivingAttackEvent event) {
+        if (attacker == null || event == null || event.getSource() == null) {
+            return false;
+        }
+        return event.getSource().getEntity() == attacker && event.getSource().getDirectEntity() == attacker;
     }
 
     private static int psychicAbilityToEnchantScale(int abilityLevel) {
