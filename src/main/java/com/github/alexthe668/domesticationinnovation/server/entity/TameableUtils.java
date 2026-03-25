@@ -972,7 +972,7 @@ public class TameableUtils {
         if (health != null && !hasEnchant(enchanted, DIEnchantmentRegistry.HEALTH_BOOST)) {
             health.removePermanentModifier(HEALTH_BOOST_UUID);
         }
-        double clampedHealth = Mth.clamp(enchanted.getHealth(), 0.0F, enchanted.getMaxHealth());
+        double clampedHealth = Mth.clamp(enchanted.getHealth(), 0.0D, enchanted.getMaxHealth());
         setSafePetHealth(enchanted, clampedHealth);
     }
 

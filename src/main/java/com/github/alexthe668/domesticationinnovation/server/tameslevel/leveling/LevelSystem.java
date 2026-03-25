@@ -3,7 +3,6 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
-import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -1229,8 +1228,7 @@ public class LevelSystem {
         setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, resolveBaseValue(data, template, Attributes.KNOCKBACK_RESISTANCE, data.bonusKnockbackResist) + data.bonusKnockbackResist));
 
         updateTameName(tame, data);
-        TameableUtils.normalizeLegacyHealthBoostState(tame);
-        tame.setHealth(tame.getMaxHealth());
+        tame.setHealth((float) Mth.clamp(tame.getHealth(), 1.0D, tame.getMaxHealth()));
         return true;
     }
 
