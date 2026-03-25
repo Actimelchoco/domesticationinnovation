@@ -442,11 +442,13 @@ public class CommonProxy {
                         mob.playSound(DISoundRegistry.MAGNET_LOOP.get(), 1F, 1F);
                     }
                     mob.setDeltaMovement(mob.getDeltaMovement().multiply(0.88D, 1.0D, 0.88D));
-                    Vec3 move = new Vec3(mob.getX() - sucking.getX(), mob.getY() - (double) sucking.getEyeHeight() / 2.0D - sucking.getY(), mob.getZ() - sucking.getZ());
-                    double resistanceMultiplier = sucking instanceof LivingEntity living ? magneticResistanceMultiplier(living) : 1.0D;
-                    double pullStrength = magneticPullStrength(magneticLevel, mob.onGround()) * resistanceMultiplier;
-                    if (pullStrength > 0.0D) {
-                        sucking.setDeltaMovement(sucking.getDeltaMovement().add(move.normalize().scale(pullStrength)));
+                    if (!TameableUtils.shouldBlockFriendlyDiEffect(mob, sucking)) {
+                        Vec3 move = new Vec3(mob.getX() - sucking.getX(), mob.getY() - (double) sucking.getEyeHeight() / 2.0D - sucking.getY(), mob.getZ() - sucking.getZ());
+                        double resistanceMultiplier = sucking instanceof LivingEntity living ? magneticResistanceMultiplier(living) : 1.0D;
+                        double pullStrength = magneticPullStrength(magneticLevel, mob.onGround()) * resistanceMultiplier;
+                        if (pullStrength > 0.0D) {
+                            sucking.setDeltaMovement(sucking.getDeltaMovement().add(move.normalize().scale(pullStrength)));
+                        }
                     }
                 }
             }
@@ -677,7 +679,7 @@ public class CommonProxy {
                     boolean applied = false;
                     for (LivingEntity needsHealing : hurtNearby) {
                         if (!needsHealing.hasEffect(MobEffects.REGENERATION)) {
-                            needsHealing.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, Math.max(0, healingAuraLevel - 1)));
+                            needsHealing.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, Math.max(0, healingAuraLevel / 4)));
                             applied = true;
                         }
                     }
@@ -761,7 +763,7 @@ public class CommonProxy {
                 int bars = TameableUtils.getBlazingProtectionBars(event.getEntity());
                 if (bars > 0) {
                     Entity attacker = event.getSource().getEntity();
-                    if (attacker instanceof LivingEntity livingAttacker && !TameableUtils.hasSameOwnerAs(livingAttacker, event.getEntity())) {
+                    if (attacker instanceof LivingEntity livingAttacker && !TameableUtils.shouldBlockFriendlyDiEffect((LivingEntity) event.getEntity(), livingAttacker)) {
                         livingAttacker.setSecondsOnFire(blazingProtectionFireSeconds(blazingProtectionLevel) + event.getEntity().getRandom().nextInt(2));
                         livingAttacker.knockback(blazingProtectionKnockback(blazingProtectionLevel), event.getEntity().getX() - livingAttacker.getX(), event.getEntity().getZ() - livingAttacker.getZ());
                     }
@@ -827,10 +829,12 @@ public class CommonProxy {
             int vampireLevel = TameableUtils.getEnchantLevel(attacker, DIEnchantmentRegistry.VAMPIRE);
 
             if (lightningLevel > 0) {
-                spawnLegacyChainLightning(attacker, event.getEntity(), lightningLevel);
+                if (!TameableUtils.shouldBlockOffensiveDiTarget(attacker, event.getEntity())) {
+                    spawnLegacyChainLightning(attacker, event.getEntity(), lightningLevel);
+                }
             }
             int frostFangLevel = getDiEffectLevel(attacker, "frost_fang");
-            if (shouldApplyLegacyFrostFang(attacker, frostFangLevel)) {
+            if (!TameableUtils.shouldBlockFriendlyDiEffect(attacker, event.getEntity()) && shouldApplyLegacyFrostFang(attacker, frostFangLevel)) {
                 int safeLevel = Math.max(1, frostFangLevel);
                 double resistanceMultiplier = frostFangResistanceMultiplier(event.getEntity());
                 int frozenTicks = Math.max(10, Mth.floor((100 + Math.max(0, safeLevel - 1) * 20) * resistanceMultiplier));
@@ -847,7 +851,7 @@ public class CommonProxy {
                 TameableUtils.setFrozenTimeTag(event.getEntity(), frozenTimeApplied);
                 TameableUtils.setFrozenLevel(event.getEntity(), safeLevel);
             }
-            if (bubblingLevel > 0 && attacker.getRandom().nextDouble() < bubblingProcChance(bubblingLevel, event.getEntity())) {
+            if (bubblingLevel > 0 && !TameableUtils.shouldBlockFriendlyDiEffect(attacker, event.getEntity()) && attacker.getRandom().nextDouble() < bubblingProcChance(bubblingLevel, event.getEntity())) {
                 if (!(event.getEntity().getRootVehicle() instanceof GiantBubbleEntity) && (event.getEntity().onGround() || event.getEntity().isInWaterOrBubble() || event.getEntity().isInLava())) {
                     GiantBubbleEntity bubble = DIEntityRegistry.GIANT_BUBBLE.get().create(event.getEntity().level());
                     bubble.copyPosition(event.getEntity());
@@ -874,7 +878,7 @@ public class CommonProxy {
                 }
             }
             int warpingBiteLevel = getDiEffectLevel(attacker, "warping_bite");
-            if (!event.getEntity().level().isClientSide && warpingBiteLevel > 0 && attacker.getRandom().nextDouble() < warpingBiteProcChance(warpingBiteLevel, event.getEntity())) {
+            if (!event.getEntity().level().isClientSide && warpingBiteLevel > 0 && !TameableUtils.shouldBlockFriendlyDiEffect(attacker, event.getEntity()) && attacker.getRandom().nextDouble() < warpingBiteProcChance(warpingBiteLevel, event.getEntity())) {
                 int attempts = warpingBiteAttempts(warpingBiteLevel);
                 double horizontalRange = warpingBiteHorizontalRange(warpingBiteLevel);
                 int verticalRange = warpingBiteVerticalRange(warpingBiteLevel);

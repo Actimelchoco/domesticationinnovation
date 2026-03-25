@@ -110,10 +110,15 @@ public class FollowOwner2Goal extends Goal {
         TameData data = TameRegistry.get(this.tamable.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BOSS) && this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
+            if (mode == TameMode.BOSS && this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
                 return false;
             }
             double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
+            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.AGGRESSIVE)
+                    && this.tamable.getTarget() != null
+                    && this.tamable.getTarget().isAlive()) {
+                teleportDistance = 44.0D;
+            }
             if (mode == TameMode.BODYGUARD) {
                 teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
             }

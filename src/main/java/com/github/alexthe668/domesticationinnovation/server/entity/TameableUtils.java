@@ -8,6 +8,7 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
@@ -93,6 +94,44 @@ public class TameableUtils {
 
     public static boolean hasSameOwnerAs(LivingEntity tameable, Entity target) {
         return hasSameOwnerAsOneWay(tameable, target) || hasSameOwnerAsOneWay(target, tameable);
+    }
+
+    public static boolean shouldBlockFriendlyDiEffect(LivingEntity source, Entity target) {
+        if (source == null || target == null) {
+            return false;
+        }
+        if (target instanceof LivingEntity living && TameDuelManager.areDuelOpponents(source.getUUID(), living.getUUID())) {
+            return false;
+        }
+        if (source.isAlliedTo(target)) {
+            return true;
+        }
+        if (target instanceof Player) {
+            return hasSameOwnerAs(source, target);
+        }
+        return target instanceof TamableAnimal tame && tame.isTame() && hasSameOwnerAs(source, target);
+    }
+
+    public static boolean shouldBlockOffensiveDiTarget(LivingEntity source, Entity target) {
+        if (source == null || target == null) {
+            return false;
+        }
+        if (shouldBlockFriendlyDiEffect(source, target)) {
+            return true;
+        }
+        if (target instanceof LivingEntity living && TameDuelManager.areDuelOpponents(source.getUUID(), living.getUUID())) {
+            return false;
+        }
+        if (target instanceof Player) {
+            return true;
+        }
+        if (target instanceof TamableAnimal tame && tame.isTame()) {
+            return true;
+        }
+        if (source instanceof TamableAnimal tameSource && tameSource.isTame()) {
+            return TameRegistry.isProtectedAttackTarget(tameSource, target);
+        }
+        return false;
     }
 
     private static boolean hasSameOwnerAsOneWay(Entity tameable, Entity target) {
@@ -654,19 +693,14 @@ public class TameableUtils {
     }
 
     public static int getImmuneTime(LivingEntity enchanted) {
-        if (hasEnchant(enchanted, DIEnchantmentRegistry.IMMUNITY_FRAME)) {
-            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-            return tag.getInt(IMMUNITY_TIME_TAG);
-        }
-        return 0;
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        return tag.getInt(IMMUNITY_TIME_TAG);
     }
 
     public static void setImmuneTime(LivingEntity enchanted, int time) {
-        if (hasEnchant(enchanted, DIEnchantmentRegistry.IMMUNITY_FRAME)) {
-            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-            tag.putInt(IMMUNITY_TIME_TAG, time);
-            sync(enchanted, tag);
-        }
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putInt(IMMUNITY_TIME_TAG, time);
+        sync(enchanted, tag);
     }
 
     public static int getFrozenTime(LivingEntity enchanted) {

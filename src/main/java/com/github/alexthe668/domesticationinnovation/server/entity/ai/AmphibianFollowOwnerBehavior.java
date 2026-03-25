@@ -71,10 +71,15 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
         TameData data = TameRegistry.get(axolotl.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BOSS) && axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
+            if (mode == TameMode.BOSS && axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
                 return false;
             }
             double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
+            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.AGGRESSIVE)
+                    && axolotl.getTarget() != null
+                    && axolotl.getTarget().isAlive()) {
+                teleportDistance = 44.0D;
+            }
             if (mode == TameMode.BODYGUARD) {
                 teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
             }

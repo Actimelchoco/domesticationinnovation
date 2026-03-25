@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -166,7 +167,22 @@ public class TameBehaviorEvents {
                     tame.setTarget(ownerCombatTarget);
                 }
             }
-            case MONSTER_HUNTER, AGGRESSIVE -> tame.setTarget(ownerCombatTarget);
+            case MONSTER_HUNTER -> {
+                LivingEntity nearest = findNearestMonster(tame, 10.0D);
+                if (nearest != null) {
+                    tame.setTarget(nearest);
+                } else {
+                    tame.setTarget(ownerCombatTarget);
+                }
+            }
+            case AGGRESSIVE -> {
+                LivingEntity nearest = findNearestAggressiveTarget(tame, 10.0D);
+                if (nearest != null) {
+                    tame.setTarget(nearest);
+                } else {
+                    tame.setTarget(ownerCombatTarget);
+                }
+            }
         }
     }
 
@@ -177,12 +193,12 @@ public class TameBehaviorEvents {
                 owner.getX() - radius, owner.getY() - radius, owner.getZ() - radius,
                 owner.getX() + radius, owner.getY() + radius, owner.getZ() + radius
         );
-        for (Monster monster : owner.serverLevel().getEntitiesOfClass(Monster.class, box)) {
-            if (!monster.isAlive()) continue;
-            double hp = monster.getMaxHealth();
+        for (LivingEntity living : owner.serverLevel().getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!(living instanceof Enemy) || !isValidCombatTarget(null, living, owner.serverLevel())) continue;
+            double hp = living.getMaxHealth();
             if (hp > bestHp) {
                 bestHp = hp;
-                best = monster;
+                best = living;
             }
         }
         return best;
@@ -218,13 +234,13 @@ public class TameBehaviorEvents {
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         AABB box = tame.getBoundingBox().inflate(radius);
-        for (Monster monster : tame.level().getEntitiesOfClass(Monster.class, box)) {
-            if (!isValidCombatTarget(tame, monster)) continue;
-            if (!monster.isAlive()) continue;
-            double d2 = monster.distanceToSqr(tame);
+        for (LivingEntity living : tame.level().getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!(living instanceof Enemy)) continue;
+            if (!isValidCombatTarget(tame, living)) continue;
+            double d2 = living.distanceToSqr(tame);
             if (d2 < bestDist) {
                 bestDist = d2;
-                best = monster;
+                best = living;
             }
         }
         return best;
@@ -380,13 +396,17 @@ public class TameBehaviorEvents {
     }
 
     private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target) {
+        return isValidCombatTarget(tame, target, tame == null ? null : tame.level());
+    }
+
+    private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target, net.minecraft.world.level.Level sourceLevel) {
         if (tame == null || target == null) return false;
         if (!target.isAlive()) return false;
         if (target == tame) return false;
-        if (target.level() != tame.level()) return false;
+        if (sourceLevel != null && target.level() != sourceLevel) return false;
         if (target instanceof Player) return false;
         if (target instanceof TamableAnimal otherTame && otherTame.isTame()) return false;
-        if (TameRegistry.isProtectedAttackTarget(tame, target)) return false;
+        if (tame != null && TameRegistry.isProtectedAttackTarget(tame, target)) return false;
         return true;
     }
 

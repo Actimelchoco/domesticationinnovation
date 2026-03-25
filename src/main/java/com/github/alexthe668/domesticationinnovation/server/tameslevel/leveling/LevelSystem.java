@@ -1240,11 +1240,25 @@ public class LevelSystem {
     }
 
     private static double resolveBaseValue(TameData data, TamableAnimal template, Attribute attribute, double trackedBonus) {
+        Double forcedBase = resolveForcedTypeBaseValue(data, attribute);
+        if (forcedBase != null) {
+            return forcedBase;
+        }
         Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus);
         if (snapshotBase != null) {
             return snapshotBase;
         }
         return readBaseOrDefault(template, attribute);
+    }
+
+    private static Double resolveForcedTypeBaseValue(TameData data, Attribute attribute) {
+        if (data == null || attribute != Attributes.MAX_HEALTH || data.type == null) {
+            return null;
+        }
+        if ("crittersandcompanions:dragonfly".equals(data.type)) {
+            return 4.0D;
+        }
+        return null;
     }
 
     private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus) {

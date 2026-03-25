@@ -4,9 +4,11 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Skeleton;
 import net.minecraft.world.phys.AABB;
@@ -180,12 +182,11 @@ final class TameGoalSupport {
     private static LivingEntity findNearestHostile(ServerLevel level, double x, double y, double z, double radius) {
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
-        for (Monster monster : level.getEntitiesOfClass(Monster.class, new AABB(x - radius, y - radius, z - radius, x + radius, y + radius, z + radius))) {
-            if (!monster.isAlive()) continue;
-            double d2 = monster.distanceToSqr(x, y, z);
+        for (LivingEntity living : level.getEntitiesOfClass(LivingEntity.class, new AABB(x - radius, y - radius, z - radius, x + radius, y + radius, z + radius), TameGoalSupport::isHostileTarget)) {
+            double d2 = living.distanceToSqr(x, y, z);
             if (d2 < bestDist) {
                 bestDist = d2;
-                best = monster;
+                best = living;
             }
         }
         return best;
@@ -194,25 +195,31 @@ final class TameGoalSupport {
     private static LivingEntity findBestHostile(ServerLevel level, double x, double y, double z, double radius, boolean preferHighHealth) {
         LivingEntity best = null;
         double bestScore = -Double.MAX_VALUE;
-        for (Monster monster : level.getEntitiesOfClass(Monster.class, new AABB(x - radius, y - radius, z - radius, x + radius, y + radius, z + radius))) {
-            if (!monster.isAlive()) continue;
-            double score = priorityScore(monster);
-            if (preferHighHealth) score += monster.getMaxHealth() * 8.0D;
-            else score -= Math.sqrt(monster.distanceToSqr(x, y, z)) * 0.2D;
+        for (LivingEntity living : level.getEntitiesOfClass(LivingEntity.class, new AABB(x - radius, y - radius, z - radius, x + radius, y + radius, z + radius), TameGoalSupport::isHostileTarget)) {
+            double score = priorityScore(living);
+            if (preferHighHealth) score += living.getMaxHealth() * 8.0D;
+            else score -= Math.sqrt(living.distanceToSqr(x, y, z)) * 0.2D;
             if (score > bestScore) {
                 bestScore = score;
-                best = monster;
+                best = living;
             }
         }
         return best;
     }
 
-    private static double priorityScore(Monster monster) {
-        double score = monster.getMaxHealth();
-        if (monster.getMaxHealth() > 70.0F) score += 1000.0D;
-        if (monster instanceof Skeleton) score += 800.0D;
-        else if (monster instanceof Creeper) score += 700.0D;
+    private static double priorityScore(LivingEntity living) {
+        double score = living.getMaxHealth();
+        if (living.getMaxHealth() > 70.0F) score += 1000.0D;
+        if (living instanceof Skeleton) score += 800.0D;
+        else if (living instanceof Creeper) score += 700.0D;
         else score += 500.0D;
         return score;
+    }
+
+    private static boolean isHostileTarget(LivingEntity living) {
+        if (living == null || !living.isAlive()) return false;
+        if (!(living instanceof Enemy)) return false;
+        if (living instanceof TamableAnimal tame && tame.isTame()) return false;
+        return !(living instanceof net.minecraft.world.entity.player.Player);
     }
 }

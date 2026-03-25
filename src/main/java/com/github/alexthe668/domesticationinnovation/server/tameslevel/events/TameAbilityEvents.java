@@ -958,7 +958,7 @@ public class TameAbilityEvents {
         if (tame.getHealth() >= tame.getMaxHealth()) return;
 
         tame.heal(0.5F + 0.5F * regenLevel);
-        long cooldown = regenLevel >= 5 ? 20L : regenLevel >= 3 ? 30L : 40L;
+        long cooldown = regenLevel >= 5 ? 60L : regenLevel >= 3 ? 70L : 80L;
         setAbilityCooldown(tame, data, "regeneration", "attr_regen", now, cooldown);
         grantSupportXp(tame, data, tame, now, 0.5F + 0.5F * regenLevel, 0.5F);
         debugAbilityUse(tame, "regeneration");
@@ -970,7 +970,16 @@ public class TameAbilityEvents {
             setCooldown(data, "passive_heal_tick", now + 100L);
             return;
         }
-        tame.heal(1.0F);
+        float heal = 1.0F;
+        if (tame.level() instanceof ServerLevel level && tame.getOwnerUUID() != null) {
+            for (TamableAnimal supporter : collectOwnedNearbySupportTames(level, tame, tame.getOwnerUUID(), 2.0D)) {
+                if (supporter == tame) continue;
+                TameData supporterData = TameRegistry.get(supporter.getUUID());
+                if (supporterData == null || !LevelSystem.hasAbility(supporterData, "revitalizing_presence")) continue;
+                heal += Math.max(1, LevelSystem.getAbilityLevel(supporterData, "revitalizing_presence"));
+            }
+        }
+        tame.heal(heal);
         setCooldown(data, "passive_heal_tick", now + 100L);
     }
 
@@ -1002,23 +1011,21 @@ public class TameAbilityEvents {
         if (tame.getHealth() >= tame.getMaxHealth()) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "healing_bottle"));
+        int effectiveLevel = Math.min(levelValue, 4);
         ItemStack potion = new ItemStack(Items.SPLASH_POTION);
-        PotionUtils.setPotion(potion, levelValue >= 4 ? Potions.STRONG_HEALING : Potions.HEALING);
-        int regenerationDuration = 60 + (Math.max(0, levelValue - 1) * 40);
-        int regenerationAmplifier = Math.min(4, Math.max(0, (levelValue - 1) / 3));
-        PotionUtils.setCustomEffects(potion, List.of(new MobEffectInstance(MobEffects.REGENERATION, regenerationDuration, regenerationAmplifier)));
+        PotionUtils.setPotion(potion, effectiveLevel >= 4 ? Potions.STRONG_HEALING : Potions.HEALING);
 
         ThrownPotion thrownPotion = new TimedTameThrownPotion(level, tame);
         thrownPotion.setItem(potion);
         thrownPotion.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
-        thrownPotion.setDeltaMovement(0.0D, 0.65D + (Math.min(6, levelValue) * 0.03D), 0.0D);
+        thrownPotion.setDeltaMovement(0.0D, 0.65D + (effectiveLevel * 0.03D), 0.0D);
         TameProjectileTimeoutEvents.track(thrownPotion, SHORT_PROJECTILE_TICKS);
         level.addFreshEntity(thrownPotion);
 
         level.playSound(null, tame.blockPosition(), SoundEvents.SPLASH_POTION_THROW, SoundSource.NEUTRAL, 0.7F, 1.0F);
-        long cooldown = Math.max(60L, 220L - (Math.max(0, levelValue - 1) * 15L));
+        long cooldown = Math.max(60L, 220L - (Math.max(0, effectiveLevel - 1) * 15L));
         setAbilityCooldown(tame, data, "healing_bottle", "healing_bottle_tick", now, cooldown);
-        grantSupportXp(tame, data, tame, now, levelValue >= 4 ? 8.0F : 4.0F, 0.5F);
+        grantSupportXp(tame, data, tame, now, effectiveLevel >= 4 ? 8.0F : 4.0F, 0.5F);
         applySupportActivationVisual(tame, "healing_bottle");
         debugAbilityUse(tame, "healing_bottle");
     }
@@ -1034,8 +1041,7 @@ public class TameAbilityEvents {
         float before = patient.getHealth();
         patient.heal(heal);
         float actualHealed = Math.max(0.0F, patient.getHealth() - before);
-        long cooldown = Math.max(40L, 120L - Math.max(0, levelValue - 1) * 10L);
-        setAbilityCooldown(tame, data, "triage_pulse", "triage_pulse_tick", now, cooldown);
+        setAbilityCooldown(tame, data, "triage_pulse", "triage_pulse_tick", now, 120L);
         grantSupportXp(tame, data, patient, now, actualHealed, 0.5F);
         applySupportActivationVisual(tame, "triage_pulse");
         if (level != null) {
@@ -1528,18 +1534,36 @@ public class TameAbilityEvents {
             }
         }
 
-        if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "battlefield_medic") && isReady(data, "battlefield_medic_tick", now) && tame.level() instanceof ServerLevel level) {
+        if (!tame.isOrderedToSit()
+                && wasKiller
+                && LevelSystem.hasAbility(data, "battlefield_medic")
+                && tame.level() instanceof ServerLevel level) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battlefield_medic"));
-            float heal = (wasKiller ? 2.0F : 1.0F) + 0.75F * levelValue;
-            int healed = healNearbyAllies(level, tame, 8.0D, heal, true);
-            if (healed > 0) {
-                setAbilityCooldown(tame, data, "battlefield_medic", "battlefield_medic_tick", now, wasKiller ? 80L : 120L);
-                grantSupportXp(tame, data, tame, now, healed * heal, 0.35F);
-                applySupportActivationVisual(tame, "battlefield_medic");
-                level.sendParticles(ParticleTypes.HEART, tame.getX(), tame.getY(0.7D), tame.getZ(), capParticles(tame, 4 + healed), 0.35D, 0.35D, 0.35D, 0.03D);
-                debugAbilityUse(tame, "battlefield_medic");
+            int procLevel = Math.min(levelValue, 8);
+            double procChance = Math.min(1.0D, 0.30D + Math.max(0, procLevel - 1) * 0.10D);
+            if (tame.getRandom().nextDouble() < procChance) {
+                throwBattlefieldMedicBottle(level, tame, data, now, levelValue);
             }
         }
+
+    }
+
+    private static void throwBattlefieldMedicBottle(ServerLevel level, TamableAnimal tame, TameData data, long now, int levelValue) {
+        int effectiveLevel = Math.min(levelValue, 4);
+        ItemStack potion = new ItemStack(Items.SPLASH_POTION);
+        PotionUtils.setPotion(potion, effectiveLevel >= 4 ? Potions.STRONG_HEALING : Potions.HEALING);
+
+        ThrownPotion thrownPotion = new TimedTameThrownPotion(level, tame);
+        thrownPotion.setItem(potion);
+        thrownPotion.setPos(tame.getX(), tame.getEyeY() - 0.1D, tame.getZ());
+        thrownPotion.setDeltaMovement(0.0D, 0.65D + (effectiveLevel * 0.03D), 0.0D);
+        TameProjectileTimeoutEvents.track(thrownPotion, SHORT_PROJECTILE_TICKS);
+        level.addFreshEntity(thrownPotion);
+
+        level.playSound(null, tame.blockPosition(), SoundEvents.SPLASH_POTION_THROW, SoundSource.NEUTRAL, 0.7F, 1.0F);
+        grantSupportXp(tame, data, tame, now, effectiveLevel >= 4 ? 8.0F : 4.0F, 0.5F);
+        applySupportActivationVisual(tame, "battlefield_medic");
+        debugAbilityUse(tame, "battlefield_medic");
     }
 
     private static void handleOwnerSupportResponses(ServerPlayer owner, LivingHurtEvent event) {
@@ -1671,7 +1695,7 @@ public class TameAbilityEvents {
 
         event.setAmount(Math.max(0.0F, event.getAmount() - transfer));
         supporter.setHealth(Math.max(5.0F, supporter.getHealth() - transfer));
-        setAbilityCooldown(supporter, data, "life_gift", "life_gift_tick", now, Math.max(100L, 300L - levelValue * 20L));
+        setAbilityCooldown(supporter, data, "life_gift", "life_gift_tick", now, Math.max(2000L, 10000L - levelValue * 200L));
         grantSupportXp(supporter, data, ally, now, transfer, 0.75F);
         applySupportActivationVisual(supporter, "life_gift");
         level.sendParticles(ParticleTypes.HEART, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6), 0.25D, 0.25D, 0.25D, 0.02D);
@@ -1680,26 +1704,7 @@ public class TameAbilityEvents {
     }
 
     private static void handleRevitalizingPresence(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity healed, float amount, long now, List<TamableAnimal> nearbySupportTames) {
-        if (!LevelSystem.hasAbility(data, "revitalizing_presence")) return;
-        if (supporter.isOrderedToSit()) return;
-        if (!isReady(data, "revitalizing_presence_tick", now)) return;
-        if (amount <= 0.0F) return;
-
-        LivingEntity patient = findLowestHealthAlly(level, supporter, 10.0D, true, nearbySupportTames);
-        if (patient == null || patient == healed || patient.getHealth() >= patient.getMaxHealth()) return;
-
-        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "revitalizing_presence"));
-        float mirrored = amount * (0.20F + 0.10F * levelValue);
-        if (mirrored <= 0.0F) return;
-
-        float before = patient.getHealth();
-        patient.heal(mirrored);
-        float actualHealed = Math.max(0.0F, patient.getHealth() - before);
-        setAbilityCooldown(supporter, data, "revitalizing_presence", "revitalizing_presence_tick", now, Math.max(20L, 80L - levelValue * 5L));
-        grantSupportXp(supporter, data, patient, now, actualHealed, 0.5F);
-        applySupportActivationVisual(supporter, "revitalizing_presence");
-        level.sendParticles(ParticleTypes.HEART, patient.getX(), patient.getY(0.6D), patient.getZ(), capParticles(supporter, 4), 0.2D, 0.2D, 0.2D, 0.02D);
-        debugAbilityUse(supporter, "revitalizing_presence");
+        // Revitalizing presence now boosts passive self-healing in handlePassiveHeal.
     }
 
     private static int attributeLevel(TameData data, String id) {
@@ -2239,14 +2244,6 @@ public class TameAbilityEvents {
     }
 
     private static boolean ownerHasNearbyReactiveHealSupport(UUID ownerId) {
-        if (ownerId == null) {
-            return false;
-        }
-        for (TameData data : TameRegistry.getOwned(ownerId)) {
-            if (data != null && LevelSystem.hasAbility(data, "revitalizing_presence")) {
-                return true;
-            }
-        }
         return false;
     }
 
@@ -2491,8 +2488,8 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
             case PASSIVE -> false;
             // DEFAULT should still allow abilities against the tame's current valid target.
             case DEFAULT -> true;
-            case MONSTER_HUNTER, BOSS -> target instanceof Monster;
-            case BODYGUARD -> (target instanceof Monster) || isOwnerCombatPriorityTarget(tame, target);
+            case MONSTER_HUNTER, BOSS -> target instanceof Enemy;
+            case BODYGUARD -> (target instanceof Enemy) || isOwnerCombatPriorityTarget(tame, target);
             case DEFAULT_PLUS, AGGRESSIVE -> true;
         };
     }

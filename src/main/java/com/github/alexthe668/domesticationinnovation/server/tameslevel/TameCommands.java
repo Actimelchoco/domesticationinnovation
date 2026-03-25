@@ -1292,6 +1292,9 @@ public class TameCommands {
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
                                 .then(Commands.literal("reloadTames")
                                         .executes(ctx -> adminReloadTames(ctx.getSource())))
+                                .then(Commands.literal("repair")
+                                        .then(Commands.literal("loaded")
+                                                .executes(ctx -> adminRepairLoadedTames(ctx.getSource()))))
                                 .then(Commands.literal("grantMissingMilestoneAttributes")
                                         .executes(ctx -> adminGrantMissingMilestoneAttributes(ctx.getSource())))
                                 .then(Commands.literal("reloadClassWeights")
@@ -9155,6 +9158,101 @@ public class TameCommands {
 
         p.sendSystemMessage(Component.literal("Reload tames complete: scanned " + scanned + ", added " + added + ".").withStyle(ChatFormatting.GREEN));
         return added > 0 ? 1 : 0;
+    }
+
+    private static int adminRepairLoadedTames(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        if (server == null) {
+            source.sendFailure(Component.literal("Server unavailable."));
+            return 0;
+        }
+
+        int scanned = 0;
+        int repaired = 0;
+        int restored = 0;
+
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) {
+                    continue;
+                }
+                scanned++;
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null && TameData.getTlId(tame) != null) {
+                    data = TameRegistry.getByTlId(TameData.getTlId(tame));
+                }
+                if (data == null) {
+                    data = TameSpawnEvents.registerOrRestoreTame(tame, false);
+                    if (data != null) {
+                        restored++;
+                    }
+                }
+                if (data != null && repairLoadedTameState(tame, data)) {
+                    repaired++;
+                }
+            }
+        }
+
+        if (repaired > 0 || restored > 0) {
+            TameRegistry.markDirty();
+        }
+        final int totalScanned = scanned;
+        final int totalRepaired = repaired;
+        final int totalRestored = restored;
+        source.sendSuccess(
+                () -> Component.literal(
+                        "Repair loaded: scanned " + totalScanned
+                                + ", repaired " + totalRepaired
+                                + ", restored registry " + totalRestored + "."
+                ).withStyle(ChatFormatting.GREEN),
+                true
+        );
+        return totalRepaired > 0 || totalRestored > 0 ? 1 : 0;
+    }
+
+    private static boolean repairLoadedTameState(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return false;
+        }
+        MovementOrder intendedOrder = resolveRepairMovementOrder(tame, data);
+        CompoundTag before = new CompoundTag();
+        tame.save(before);
+        applyMovementOverride(tame, intendedOrder);
+        CompoundTag after = new CompoundTag();
+        tame.save(after);
+        return !after.equals(before);
+    }
+
+    private static MovementOrder resolveRepairMovementOrder(TamableAnimal tame, TameData data) {
+        if (data != null) {
+            CompoundTag snapshot = data.entitySnapshot;
+            Integer command = findSnapshotCommand(snapshot);
+            if (command != null) {
+                return switch (command) {
+                    case 1 -> MovementOrder.SIT;
+                    case 2 -> MovementOrder.FOLLOW;
+                    default -> data.hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+                };
+            }
+            if (snapshot != null && !snapshot.isEmpty()) {
+                if (snapshot.contains("Sitting", Tag.TAG_BYTE) && snapshot.getBoolean("Sitting")) {
+                    return MovementOrder.SIT;
+                }
+                if (snapshot.contains("orderedToSit", Tag.TAG_BYTE) && snapshot.getBoolean("orderedToSit")) {
+                    return MovementOrder.SIT;
+                }
+                if (snapshot.contains("OrderedToSit", Tag.TAG_BYTE) && snapshot.getBoolean("OrderedToSit")) {
+                    return MovementOrder.SIT;
+                }
+            }
+            if (data.hasHome) {
+                return MovementOrder.GUARDIAN;
+            }
+        }
+        if (tame != null && tame.isOrderedToSit()) {
+            return MovementOrder.SIT;
+        }
+        return MovementOrder.FOLLOW;
     }
 
     private static int adminGrantMissingMilestoneAttributes(CommandSourceStack source) {

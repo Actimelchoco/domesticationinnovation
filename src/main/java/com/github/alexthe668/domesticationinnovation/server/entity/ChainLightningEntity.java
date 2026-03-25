@@ -70,7 +70,8 @@ public class ChainLightningEntity extends Entity {
                     if(!hasShocked){
                         hasShocked = true;
                         float damage = getShockDamage();
-                        if (shouldShockCurrentTarget() && damage > 0.0F && current instanceof LivingEntity living) {
+                        if (shouldShockCurrentTarget() && damage > 0.0F && current instanceof LivingEntity living
+                                && !TameableUtils.shouldBlockOffensiveDiTarget((LivingEntity) creator, current)) {
                             living.hurt(living.damageSources().lightningBolt(), damage);
                         }
                     }
@@ -82,7 +83,11 @@ public class ChainLightningEntity extends Entity {
                 if(this.getChainsLeft() > 0 && creator instanceof LivingEntity) {
                     Entity closestValid = null;
                     for (Entity entity : this.level().getEntitiesOfClass(LivingEntity.class, this.getBoundingBox().inflate(8.0D))) {
-                        if (!entity.equals(creator) && !TameableUtils.hasSameOwnerAs((LivingEntity) creator, entity) && !previouslyShocked.contains(entity) && !creator.isAlliedTo(entity) && entity instanceof Mob && this.hasLineOfSight(entity)) {
+                        if (!entity.equals(creator)
+                                && !TameableUtils.shouldBlockOffensiveDiTarget((LivingEntity) creator, entity)
+                                && !previouslyShocked.contains(entity)
+                                && entity instanceof Mob
+                                && this.hasLineOfSight(entity)) {
                             if (closestValid == null || this.distanceTo(entity) < this.distanceTo(closestValid)) {
                                 closestValid = entity;
                             }
