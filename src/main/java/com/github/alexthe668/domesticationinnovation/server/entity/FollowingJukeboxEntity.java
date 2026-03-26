@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.entity;
 
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
+import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -70,7 +71,7 @@ public class FollowingJukeboxEntity extends Entity {
                 } else {
                     this.level().broadcastEntityEvent(this, (byte) 67);
                 }
-                if(following instanceof LivingEntity && !TameableUtils.hasEnchant((LivingEntity) following, DIEnchantmentRegistry.DISK_JOCKEY)){
+                if(following instanceof LivingEntity living && CommonProxy.getAbilityOrEnchantLevelForCompat(living, "disc_jockey") <= 0){
                     this.setFollowingUUID(null);
                 }
             }else{

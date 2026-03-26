@@ -56,7 +56,7 @@ public class PetBedBlock extends BaseEntityBlock {
     public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
         if(TameableUtils.isTamed(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
            if((entity.tickCount + entity.getId()) % 10 == 0 && random.nextInt(6) == 0){
-               String currentDimension = level.dimension().toString();
+               String currentDimension = level.dimension().location().toString();
                TameData claimedBy = TameRegistry.getTameByPetBed(currentDimension, pos);
                if (claimedBy != null && claimedBy.uuid != null && !claimedBy.uuid.equals(entity.getUUID())) {
                    super.entityInside(state, level, pos, entity);
@@ -82,7 +82,7 @@ public class PetBedBlock extends BaseEntityBlock {
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
         if (player.isShiftKeyDown()) {
             if (!level.isClientSide) {
-                TameData claimedBy = TameRegistry.getTameByPetBed(level.dimension().toString(), pos);
+                TameData claimedBy = TameRegistry.getTameByPetBed(level.dimension().location().toString(), pos);
                 if (claimedBy == null || claimedBy.name == null || claimedBy.name.isBlank()) {
                     player.displayClientMessage(Component.literal("This pet bed is unclaimed."), true);
                 } else {

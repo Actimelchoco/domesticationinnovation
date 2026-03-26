@@ -205,12 +205,12 @@ public class TameRegistrySavedData extends SavedData {
         tag.put("doNotAttackAnimals", doNotAttackAnimalsTag);
         ListTag healthSiphonTag = new ListTag();
         for (Map.Entry<UUID, Boolean> entry : healthSiphon.entrySet()) {
-            if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
+            if (entry.getKey() == null || entry.getValue() == null) {
                 continue;
             }
             CompoundTag row = new CompoundTag();
             row.putUUID("ownerUUID", entry.getKey());
-            row.putBoolean("enabled", true);
+            row.putBoolean("enabled", entry.getValue());
             healthSiphonTag.add(row);
         }
         tag.put("healthSiphon", healthSiphonTag);

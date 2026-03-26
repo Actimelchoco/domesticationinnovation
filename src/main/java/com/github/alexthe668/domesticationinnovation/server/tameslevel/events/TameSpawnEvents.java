@@ -41,8 +41,7 @@ public class TameSpawnEvents {
         // if already tracked, bind identity tags and never discard the newly joined entity here.
         TameData existingByUuid = TameRegistry.get(tame.getUUID());
         if (existingByUuid != null) {
-            TameRegistry.bindEntityToData(tame, existingByUuid);
-            LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByUuid);
+            registerOrRestoreTame(tame, false, true);
             return;
         }
 
@@ -53,8 +52,8 @@ public class TameSpawnEvents {
                 if (shouldKeepJoiningTame(tame, loadedByTlId, existingByTlId)) {
                     loadedByTlId.discard();
                     TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
-                    TameRegistry.bindEntityToData(tame, existingByTlId);
-                    LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
+                    registerOrRestoreTame(tame, false, true);
+                    return;
                 } else {
                     tame.discard();
                     return;
@@ -78,8 +77,7 @@ public class TameSpawnEvents {
                 clone.discard();
                 if (cloneData != null) {
                     TameRegistry.rebindEntityUuid(cloneData, tame.getUUID());
-                    TameRegistry.bindEntityToData(tame, cloneData);
-                    LevelSystem.reapplyTypeBasePlusBonuses(tame, cloneData);
+                    registerOrRestoreTame(tame, false, true);
                     return;
                 }
             } else {

@@ -108,6 +108,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Arrays;
+import java.util.function.Predicate;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.lang.reflect.Method;
@@ -1330,6 +1331,16 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "pet")
                                                 ))))
+                                .then(Commands.literal("fixStats")
+                                        .executes(ctx -> adminFixLoadedTameStatsAll(ctx.getSource()))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> adminFixLoadedTameStatsAll(ctx.getSource())))
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                .executes(ctx -> adminFixLoadedTameStats(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet")
+                                                ))))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
                                 .then(Commands.literal("stat")
@@ -1871,7 +1882,27 @@ public class TameCommands {
             }
         }
         for (UUID ownerUuid : owners) {
-            for (TameData data : morningRespawnCandidates(server, ownerUuid)) {
+            for (TameData data : coloredMorningRespawnCandidates(server, ownerUuid)) {
+                SpawnTarget target = resolveMorningRespawnTarget(server, data);
+                if (target == null) {
+                    continue;
+                }
+                RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
+                if (!result.success) {
+                    continue;
+                }
+                clearMatchingDiBedRespawnRequests(server, data);
+                ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+                TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
+                if (owner != null && respawned != null) {
+                    owner.displayClientMessage(
+                            Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
+                                    .append(Component.literal(" " + respawnProgressSuffix(data))),
+                            false
+                    );
+                }
+            }
+            for (TameData data : whiteMorningRespawnCandidates(server, ownerUuid)) {
                 SpawnTarget target = resolveMorningRespawnTarget(server, data);
                 if (target == null) {
                     continue;
@@ -1936,6 +1967,18 @@ public class TameCommands {
     }
 
     private static List<TameData> morningRespawnCandidates(MinecraftServer server, UUID ownerUuid) {
+        return morningRespawnCandidates(server, ownerUuid, TameCommands::isWhitePetBedBlock);
+    }
+
+    private static List<TameData> whiteMorningRespawnCandidates(MinecraftServer server, UUID ownerUuid) {
+        return morningRespawnCandidates(server, ownerUuid, TameCommands::isWhitePetBedBlock);
+    }
+
+    private static List<TameData> coloredMorningRespawnCandidates(MinecraftServer server, UUID ownerUuid) {
+        return morningRespawnCandidates(server, ownerUuid, TameCommands::isColoredPetBedBlock);
+    }
+
+    private static List<TameData> morningRespawnCandidates(MinecraftServer server, UUID ownerUuid, Predicate<ResourceLocation> bedFilter) {
         List<TameData> dead = new ArrayList<>();
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || !data.dead || data.uuid == null) {
@@ -1947,7 +1990,7 @@ public class TameCommands {
             if (findLoadedTameByIdentity(server, data.uuid, data.tlId) != null) {
                 continue;
             }
-            if (!hasEligibleAutomaticRespawnBed(server, data)) {
+            if (!hasEligibleAutomaticRespawnBed(server, data, bedFilter)) {
                 continue;
             }
             dead.add(data);
@@ -2026,10 +2069,18 @@ public class TameCommands {
     }
 
     private static boolean hasEligibleAutomaticRespawnBed(MinecraftServer server, TameData data) {
-        return resolveAutomaticRespawnBedTarget(server, data) != null;
+        return hasEligibleAutomaticRespawnBed(server, data, blockId -> blockId != null && blockId.getPath().startsWith("pet_bed_"));
+    }
+
+    private static boolean hasEligibleAutomaticRespawnBed(MinecraftServer server, TameData data, Predicate<ResourceLocation> bedFilter) {
+        return resolveAutomaticRespawnBedTarget(server, data, bedFilter) != null;
     }
 
     private static SpawnTarget resolveAutomaticRespawnBedTarget(MinecraftServer server, TameData data) {
+        return resolveAutomaticRespawnBedTarget(server, data, blockId -> blockId != null && blockId.getPath().startsWith("pet_bed_"));
+    }
+
+    private static SpawnTarget resolveAutomaticRespawnBedTarget(MinecraftServer server, TameData data, Predicate<ResourceLocation> bedFilter) {
         if (server == null || data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
             return null;
         }
@@ -2047,7 +2098,7 @@ public class TameCommands {
             return null;
         }
         ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(bedLevel.getBlockState(bedPos).getBlock());
-        if (!isColoredPetBedBlock(blockId)) {
+        if (bedFilter == null || !bedFilter.test(blockId)) {
             return null;
         }
         Direction facing = bedLevel.getBlockState(bedPos).hasProperty(com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock.FACING)
@@ -2061,6 +2112,12 @@ public class TameCommands {
             return false;
         }
         return blockId.getPath().startsWith("pet_bed_") && !"pet_bed_white".equals(blockId.getPath());
+    }
+
+    private static boolean isWhitePetBedBlock(ResourceLocation blockId) {
+        return blockId != null
+                && "domesticationinnovation".equals(blockId.getNamespace())
+                && "pet_bed_white".equals(blockId.getPath());
     }
 
     private static boolean isBlackPetBedBlock(ResourceLocation blockId) {
@@ -2529,8 +2586,9 @@ public class TameCommands {
                     "Respawn works only on dead tames and does not apply an extra death penalty.",
                     "Respawn target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
                     "Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 totem in main hand.",
-                    "Morning auto-respawn is separate: up to 1 dead tame per owner each morning, ordered by that owner's respawn order.",
-                    "Automatic morning respawn requires a colored pet bed. White beds do not auto-respawn."
+                    "Morning auto-respawn is split by pet bed color.",
+                    "All dead tames with colored pet beds respawn the next morning.",
+                    "White pet beds use the TL graveyard/respawn-order queue, and only 1 white-bed tame per owner respawns each morning."
             );
         }
         else if (key.equals("arise")) {
@@ -6019,11 +6077,11 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         List<TameData> queue = morningRespawnCandidates(source.getServer(), player.getUUID());
         if (queue.isEmpty()) {
-            return error(player, "No dead tames are waiting for morning respawn.");
+            return error(player, "No dead white-bed tames are waiting in the morning respawn queue.");
         }
         int limit = Math.min(Math.max(1, requestedLimit), queue.size());
         player.sendSystemMessage(Component.literal(
-                "---- Morning Respawn Waiting List | order: " + respawnOrderLabel(player.getUUID()) + " | showing " + limit + "/" + queue.size() + " ----"
+                "---- White Bed Morning Respawn Queue | order: " + respawnOrderLabel(player.getUUID()) + " | showing " + limit + "/" + queue.size() + " ----"
         ).withStyle(ChatFormatting.GOLD));
         for (int i = 0; i < limit; i++) {
             TameData data = queue.get(i);
@@ -9743,6 +9801,84 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminFixLoadedTameStatsAll(CommandSourceStack source) {
+        int fixed = 0;
+        int missingData = 0;
+        int failed = 0;
+
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) {
+                    continue;
+                }
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null) {
+                    data = TameRegistry.getByTlId(TameData.getTlId(tame));
+                    if (data != null && !tame.getUUID().equals(data.uuid)) {
+                        TameRegistry.rebindEntityUuid(data, tame.getUUID());
+                    }
+                }
+                if (data == null) {
+                    missingData++;
+                    continue;
+                }
+                if (!fixLoadedTameStats(tame, data)) {
+                    failed++;
+                    continue;
+                }
+                fixed++;
+            }
+        }
+
+        TameRegistry.markDirty();
+        final int fixedCount = fixed;
+        final int missingCount = missingData;
+        final int failedCount = failed;
+        source.sendSuccess(() -> Component.literal(
+                "Fixed loaded tame stats: " + fixedCount + " fixed, " + missingCount + " missing registry data, " + failedCount + " failed."
+        ), true);
+        return fixedCount > 0 ? 1 : 0;
+    }
+
+    private static int adminFixLoadedTameStats(CommandSourceStack source, String petName) {
+        List<TameData> matches = findAliveTamesByName(petName);
+        if (matches.isEmpty()) {
+            return error(source.getPlayer(), "No alive tame found with that name.");
+        }
+        if (matches.size() > 1) {
+            return error(source.getPlayer(), "Ambiguous tame name (" + matches.size() + " matches). Rename duplicates first.");
+        }
+
+        TameData data = matches.get(0);
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null && data.tlId != null) {
+            for (ServerLevel level : source.getServer().getAllLevels()) {
+                for (Entity entity : level.getAllEntities()) {
+                    if (entity instanceof TamableAnimal candidate && data.tlId.equals(TameData.getTlId(candidate))) {
+                        tame = candidate;
+                        if (!candidate.getUUID().equals(data.uuid)) {
+                            TameRegistry.rebindEntityUuid(data, candidate.getUUID());
+                        }
+                        break;
+                    }
+                }
+                if (tame != null) {
+                    break;
+                }
+            }
+        }
+        if (tame == null) {
+            return error(source.getPlayer(), "Target tame is not loaded.");
+        }
+        if (!fixLoadedTameStats(tame, data)) {
+            return error(source.getPlayer(), "Could not fix loaded stats for this tame.");
+        }
+
+        TameRegistry.markDirty();
+        source.sendSuccess(() -> Component.literal("Fixed loaded stats for " + data.name + "."), true);
+        return 1;
+    }
+
     private static int fixDragonflyArmor(CommandSourceStack source) {
         int touched = 0;
         int clearedStacks = 0;
@@ -9919,6 +10055,34 @@ public class TameCommands {
                 "Fixed dragonfly stats on " + fixedCount + " loaded tracked dragonflies; skipped untracked " + skippedCount + "; failed " + failedCount + "."
         ), true);
         return fixedCount > 0 ? fixedCount : 1;
+    }
+
+    private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        float oldHealth = tame.getHealth();
+        float oldMaxHealth = Math.max(1.0F, (float) tame.getMaxHealth());
+        double healthRatio = Mth.clamp(oldHealth / oldMaxHealth, 0.0F, 1.0F);
+
+        TameGoalInstaller.installIfMissing(tame);
+        TameRegistry.bindEntityToData(tame, data);
+        LevelSystem.ensureClassAssigned(tame, data, false);
+        if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
+            return false;
+        }
+        LevelSystem.updateTameName(tame, data);
+        tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+
+        data.lastKnownDimension = level.dimension().location().toString();
+        data.lastKnownX = tame.blockPosition().getX();
+        data.lastKnownY = tame.blockPosition().getY();
+        data.lastKnownZ = tame.blockPosition().getZ();
+        data.lastKnownGameTime = level.getGameTime();
+        CompoundTag refreshedSnapshot = new CompoundTag();
+        tame.save(refreshedSnapshot);
+        data.entitySnapshot = refreshedSnapshot;
+        return true;
     }
 
     private static int adminSetTameStat(CommandSourceStack source, String petName, String stat, int value) {

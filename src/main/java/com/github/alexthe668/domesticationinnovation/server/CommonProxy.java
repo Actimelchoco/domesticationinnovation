@@ -2026,6 +2026,10 @@ public class CommonProxy {
         owner.sendSystemMessage(Component.literal(tameName + ": " + abilityId));
     }
 
+    public static int getAbilityOrEnchantLevelForCompat(LivingEntity entity, String abilityId) {
+        return getAbilityOrEnchantLevel(entity, abilityId);
+    }
+
     private static int getAbilityOrEnchantLevel(LivingEntity entity, String abilityId) {
         return getDiEffectLevel(entity, abilityId);
     }
