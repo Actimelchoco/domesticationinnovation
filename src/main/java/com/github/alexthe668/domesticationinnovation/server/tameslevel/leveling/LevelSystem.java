@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -1296,6 +1297,7 @@ public class LevelSystem {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
             return false;
         }
+        normalizeLiveTypeId(tame, data);
         Entity spawned = tame.getType().create(serverLevel);
         TamableAnimal template;
         if (spawned instanceof TamableAnimal createdTemplate) {
@@ -1315,9 +1317,14 @@ public class LevelSystem {
 
         scrubLegacyManagedModifiers(tame);
         Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
-        double maxHealthBase = forcedMaxHealth != null
-                ? forcedMaxHealth
-                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
+        double maxHealthBase;
+        if (isDragonflyType(data.type) && forcedMaxHealth != null) {
+            maxHealthBase = forcedMaxHealth + data.bonusHealth;
+        } else {
+            maxHealthBase = forcedMaxHealth != null
+                    ? forcedMaxHealth
+                    : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
+        }
         setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
         setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
@@ -1354,10 +1361,29 @@ public class LevelSystem {
         if (data == null || attribute != Attributes.MAX_HEALTH || data.type == null) {
             return resolveForcedClassBaseValue(data, attribute);
         }
-        if ("crittersandcompanions:dragonfly".equals(data.type)) {
+        if (isDragonflyType(data.type)) {
             return 4.0D;
         }
         return resolveForcedClassBaseValue(data, attribute);
+    }
+
+    private static boolean isDragonflyType(String typeId) {
+        return "crittersandcompanions:dragonfly".equals(typeId)
+                || "entity.crittersandcompanions.dragonfly".equals(typeId);
+    }
+
+    private static void normalizeLiveTypeId(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return;
+        }
+        ResourceLocation liveType = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (liveType == null) {
+            return;
+        }
+        String normalized = liveType.toString();
+        if (!normalized.equals(data.type)) {
+            data.type = normalized;
+        }
     }
 
     private static Double resolveForcedClassBaseValue(TameData data, Attribute attribute) {
@@ -1396,7 +1422,15 @@ public class LevelSystem {
             if (!key.toString().equals(entry.getString("Name"))) {
                 continue;
             }
-            return entry.getDouble("Base") - trackedBonus;
+            double base = entry.getDouble("Base");
+            double normalized = base - trackedBonus;
+            double defaultValue = attribute.getDefaultValue();
+            // Some old saves store the raw entity base in the snapshot instead of "base + tracked bonus".
+            // In that case subtracting the tracked bonus produces nonsense and would erase all TL bonuses.
+            if (normalized <= 0.0D || normalized < defaultValue * 0.25D) {
+                return null;
+            }
+            return normalized;
         }
         return null;
     }

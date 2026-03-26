@@ -1544,6 +1544,13 @@ public class TameCommands {
                                                 .executes(ctx -> adminCleanupProjectiles(ctx.getSource(), "all")))
                                         .then(Commands.literal("dragonFireball")
                                                 .executes(ctx -> adminCleanupProjectiles(ctx.getSource(), "dragon_fireball"))))
+                                .then(Commands.literal("dragonfly")
+                                        .then(Commands.literal("fixArmor")
+                                                .executes(ctx -> fixDragonflyArmor(ctx.getSource())))
+                                        .then(Commands.literal("fixStats")
+                                                .executes(ctx -> fixDragonflyStats(ctx.getSource())))
+                                        .then(Commands.literal("rebuildFromData")
+                                                .executes(ctx -> rebuildDragonfliesFromData(ctx.getSource()))))
 
                                 .then(Commands.literal("xp")
                                         .then(Commands.literal("add")
@@ -1680,12 +1687,6 @@ public class TameCommands {
         );
 
         dispatcher.register(Commands.literal("tame").redirect(root));
-        dispatcher.register(Commands.literal("fixDragonflyArmor")
-                .requires(source -> source.hasPermission(2))
-                .executes(ctx -> fixDragonflyArmor(ctx.getSource())));
-        dispatcher.register(Commands.literal("rebuildDragonfliesFromData")
-                .requires(source -> source.hasPermission(2))
-                .executes(ctx -> rebuildDragonfliesFromData(ctx.getSource())));
     }
 
     @SubscribeEvent
@@ -9861,6 +9862,63 @@ public class TameCommands {
                 "Rebuilt " + rebuiltCount + " loaded dragonflies from registry data; skipped unloaded " + skippedCount + "; failed " + failedCount + "."
         ), true);
         return rebuiltCount > 0 ? rebuiltCount : 1;
+    }
+
+    private static int fixDragonflyStats(CommandSourceStack source) {
+        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
+        int fixed = 0;
+        int skippedUntracked = 0;
+        int failed = 0;
+
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+                if (!dragonflyId.equals(typeId) || !(entity instanceof TamableAnimal tame)) {
+                    continue;
+                }
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null) {
+                    data = TameRegistry.getByTlId(TameData.getTlId(tame));
+                }
+                if (data == null) {
+                    skippedUntracked++;
+                    continue;
+                }
+
+                float oldHealth = tame.getHealth();
+                float oldMaxHealth = Math.max(1.0F, (float) tame.getMaxHealth());
+                double healthRatio = Mth.clamp(oldHealth / oldMaxHealth, 0.0F, 1.0F);
+
+                TameGoalInstaller.installIfMissing(tame);
+                TameRegistry.bindEntityToData(tame, data);
+                LevelSystem.ensureClassAssigned(tame, data, false);
+                if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
+                    failed++;
+                    continue;
+                }
+                LevelSystem.updateTameName(tame, data);
+                tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+
+                data.lastKnownDimension = level.dimension().location().toString();
+                data.lastKnownX = tame.blockPosition().getX();
+                data.lastKnownY = tame.blockPosition().getY();
+                data.lastKnownZ = tame.blockPosition().getZ();
+                data.lastKnownGameTime = level.getGameTime();
+                CompoundTag refreshedSnapshot = new CompoundTag();
+                tame.save(refreshedSnapshot);
+                data.entitySnapshot = refreshedSnapshot;
+                fixed++;
+            }
+        }
+
+        TameRegistry.markDirty();
+        final int fixedCount = fixed;
+        final int skippedCount = skippedUntracked;
+        final int failedCount = failed;
+        source.sendSuccess(() -> Component.literal(
+                "Fixed dragonfly stats on " + fixedCount + " loaded tracked dragonflies; skipped untracked " + skippedCount + "; failed " + failedCount + "."
+        ), true);
+        return fixedCount > 0 ? fixedCount : 1;
     }
 
     private static int adminSetTameStat(CommandSourceStack source, String petName, String stat, int value) {

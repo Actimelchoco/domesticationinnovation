@@ -185,6 +185,7 @@ public class CommonProxy {
         try {
             Class<?> compat = Class.forName("com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.WaystonesTeleportCompat");
             compat.getMethod("init").invoke(null);
+            MinecraftForge.EVENT_BUS.register(compat);
             DomesticationMod.LOGGER.info("Registered optional Waystones TL teleport compat.");
         } catch (Throwable throwable) {
             DomesticationMod.LOGGER.error("Failed to register optional Waystones TL teleport compat.", throwable);
