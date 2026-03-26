@@ -7,15 +7,19 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,6 +27,8 @@ import java.util.regex.Pattern;
 public class TameSpawnEvents {
     private static final Pattern LEVEL_PREFIX =
             Pattern.compile("^\\[lvl\\s*(\\d+)\\]\\s*(.*)$", Pattern.CASE_INSENSITIVE);
+    private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
+    private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 40L;
 
     @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
@@ -160,6 +166,7 @@ public class TameSpawnEvents {
             // Keep entity attributes in sync with registry bonuses whenever a tracked tame loads.
             TameRegistry.bindEntityToData(tame, existing);
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existing);
+            queueDeferredStatRefresh(tame, existing, DEFERRED_STAT_REFRESH_DELAY_TICKS);
             return existing;
         }
 
@@ -189,6 +196,7 @@ public class TameSpawnEvents {
                 TameRegistry.markDirty();
             }
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
+            queueDeferredStatRefresh(tame, existingByTlId, DEFERRED_STAT_REFRESH_DELAY_TICKS);
             return existingByTlId;
         }
 
@@ -196,6 +204,10 @@ public class TameSpawnEvents {
         TameData synced = trySyncFromLeveledNameMatch(tame, parsed);
         if (synced != null) {
             return synced;
+        }
+        TameData storedFlutter = trySyncFromStoredFlutterMatch(tame, parsed);
+        if (storedFlutter != null) {
+            return storedFlutter;
         }
         if (allowDeadIdentitySync) {
             TameData syncedDead = trySyncFromDeadIdentityMatch(tame, parsed);
@@ -214,8 +226,61 @@ public class TameSpawnEvents {
         notifyNewTameFound(tame, data);
         LevelSystem.ensureClassAssigned(tame, data, true);
         LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
+        queueDeferredStatRefresh(tame, data, DEFERRED_STAT_REFRESH_DELAY_TICKS);
         System.out.println("[TamesLevel] Registered tame: " + data.name);
         return data;
+    }
+
+    public static void queueDeferredStatRefresh(TamableAnimal tame, TameData data, long delayTicks) {
+        if (tame == null || data == null || tame.level().isClientSide || !LevelSystem.needsDeferredStatRefresh(tame, data)) {
+            return;
+        }
+        UUID key = data.ensureTlId();
+        long dueTick = tame.level().getGameTime() + Math.max(1L, delayTicks);
+        Long existing = PENDING_DEFERRED_STAT_REFRESH.get(key);
+        if (existing == null || dueTick > existing) {
+            PENDING_DEFERRED_STAT_REFRESH.put(key, dueTick);
+        }
+    }
+
+    public static void processDeferredStatRefresh(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || tame.level().isClientSide) {
+            return;
+        }
+        UUID key = data.ensureTlId();
+        Long dueTick = PENDING_DEFERRED_STAT_REFRESH.get(key);
+        if (dueTick == null || tame.level().getGameTime() < dueTick) {
+            return;
+        }
+        PENDING_DEFERRED_STAT_REFRESH.remove(key);
+
+        float oldHealth = tame.getHealth();
+        float oldMaxHealth = Math.max(1.0F, (float) tame.getMaxHealth());
+        double healthRatio = Mth.clamp(oldHealth / oldMaxHealth, 0.0F, 1.0F);
+
+        TameRegistry.bindEntityToData(tame, data);
+        LevelSystem.ensureClassAssigned(tame, data, false);
+        if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
+            return;
+        }
+        LevelSystem.updateTameName(tame, data);
+        tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+        refreshRegistrySnapshot(tame, data);
+    }
+
+    private static void refreshRegistrySnapshot(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return;
+        }
+        CompoundTag snapshot = new CompoundTag();
+        tame.save(snapshot);
+        data.entitySnapshot = snapshot;
+        data.lastKnownDimension = tame.level().dimension().location().toString();
+        data.lastKnownX = tame.blockPosition().getX();
+        data.lastKnownY = tame.blockPosition().getY();
+        data.lastKnownZ = tame.blockPosition().getZ();
+        data.lastKnownGameTime = tame.level().getGameTime();
+        TameRegistry.markDirty();
     }
 
     private static void notifyNewTameFound(TamableAnimal tame, TameData data) {
@@ -315,6 +380,67 @@ public class TameSpawnEvents {
         LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
         System.out.println("[TamesLevel] Synced respawned tame to dead entry: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
+        return candidate;
+    }
+
+    private static TameData trySyncFromStoredFlutterMatch(TamableAnimal tame, ParsedName parsed) {
+        UUID ownerId = tame.getOwnerUUID();
+        if (ownerId == null) {
+            return null;
+        }
+
+        String tameType = normalizeTypeId(ForgeRegistries.ENTITY_TYPES.getKey(tame.getType()) == null ? "" : ForgeRegistries.ENTITY_TYPES.getKey(tame.getType()).toString());
+        if (!"alexsmobs:flutter".equals(tameType)) {
+            return null;
+        }
+
+        String placedName = parsed != null ? parsed.baseName : "";
+        if (placedName == null || placedName.isBlank()) {
+            placedName = stripLevelPrefixes(tame.hasCustomName() && tame.getCustomName() != null ? tame.getCustomName().getString() : tame.getName().getString());
+        }
+        if (placedName == null || placedName.isBlank()) {
+            return null;
+        }
+
+        UUID newUuid = tame.getUUID();
+        TameData candidate = null;
+        for (TameData d : TameRegistry.TAMES.values()) {
+            if (d == null || d.uuid == null || d.name == null || !d.stored) continue;
+            if (!ownerId.equals(d.ownerUUID)) continue;
+            if (!sameType(tameType, d.type)) continue;
+            if (!namesOverlapByContainment(placedName, d.name)) continue;
+            if (d.uuid.equals(newUuid)) continue;
+            if (isUuidLoaded(tame, d.uuid)) continue;
+            if (candidate == null
+                    || d.level > candidate.level
+                    || (d.level == candidate.level && d.name.length() > candidate.name.length())) {
+                candidate = d;
+            }
+        }
+
+        if (candidate == null) {
+            return null;
+        }
+
+        UUID oldUuid = candidate.uuid;
+        candidate.stored = false;
+        candidate.dead = false;
+        candidate.deadGameTime = 0L;
+        candidate.deadUnixMillis = 0L;
+        candidate.deathDimension = "";
+        candidate.deathX = 0;
+        candidate.deathY = 0;
+        candidate.deathZ = 0;
+        candidate.name = uniqueLoadedNameFor(tame, stripLevelPrefixes(candidate.name));
+        TameBedRegistrySync.syncFromEntity(tame, candidate);
+
+        TameRegistry.rebindEntityUuid(candidate, newUuid);
+        TameRegistry.bindEntityToData(tame, candidate);
+        TameRegistry.markDirty();
+        LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
+        LevelSystem.updateTameName(tame, candidate);
+        queueDeferredStatRefresh(tame, candidate, DEFERRED_STAT_REFRESH_DELAY_TICKS);
+        System.out.println("[TamesLevel] Synced released stored Flutter: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
     }
 

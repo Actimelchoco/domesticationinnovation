@@ -503,7 +503,7 @@ public class TameData {
     }
 
     public boolean isInactive() {
-        return dead || stored;
+        return dead;
     }
 
     public boolean isActuallyDead() {

@@ -340,7 +340,7 @@ public class CommonProxy {
         CompoundTag snapshot = new CompoundTag();
         tame.save(snapshot);
         data.entitySnapshot = snapshot;
-        data.stored = true;
+        data.stored = false;
         data.dead = false;
         data.deadGameTime = 0L;
         data.deadUnixMillis = 0L;

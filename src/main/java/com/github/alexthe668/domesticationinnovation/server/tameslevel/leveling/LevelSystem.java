@@ -1338,6 +1338,20 @@ public class LevelSystem {
         return true;
     }
 
+    public static boolean needsDeferredStatRefresh(TamableAnimal tame, TameData data) {
+        ResourceLocation liveType = tame == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (liveType != null) {
+            if ("crittersandcompanions".equals(liveType.getNamespace()) && "dragonfly".equals(liveType.getPath())) {
+                return true;
+            }
+            if ("legendary_monsters".equals(liveType.getNamespace())) {
+                return true;
+            }
+        }
+        String typeId = data == null ? null : data.type;
+        return isDragonflyType(typeId) || isLegendaryMonstersType(typeId);
+    }
+
     private static double readBaseOrDefault(TamableAnimal tame, Attribute attribute) {
         if (tame == null || attribute == null) return 0.0D;
         AttributeInstance instance = tame.getAttribute(attribute);
@@ -1370,6 +1384,18 @@ public class LevelSystem {
     private static boolean isDragonflyType(String typeId) {
         return "crittersandcompanions:dragonfly".equals(typeId)
                 || "entity.crittersandcompanions.dragonfly".equals(typeId);
+    }
+
+    private static boolean isLegendaryMonstersType(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return normalized.startsWith("legendary_monsters:")
+                || normalized.startsWith("legendary_monsters.");
     }
 
     private static void normalizeLiveTypeId(TamableAnimal tame, TameData data) {

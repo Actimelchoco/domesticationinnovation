@@ -4,8 +4,8 @@ license="GNU LESSER GENERAL PUBLIC LICENSE"
 issueTrackerURL="https://github.com/Alex-the-666/DomesticationInnovation/issues" #optional
 [[mods]] #mandatory
 modId="domesticationinnovation" #mandatory
-version="1.7.1-v13" #mandatory
-displayName="Domestication Innovation (tamesLevel extension V13)" #mandatory
+version="1.7.1-v13.2" #mandatory
+displayName="Domestication Innovation (tamesLevel extension V13.2)" #mandatory
 displayTest="IGNORE_SERVER_VERSION"
 displayURL="https://www.curseforge.com/minecraft/mc-mods/domestication-innovation" #optional
 authors="Alexthe668, FallenReaper, Yosh" #optional

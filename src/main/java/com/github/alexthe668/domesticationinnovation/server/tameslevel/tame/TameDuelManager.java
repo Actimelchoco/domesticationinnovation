@@ -165,7 +165,9 @@ public final class TameDuelManager {
             assisters.sort(Comparator.comparing(id -> entityLabel(server, id)));
         }
         UUID duelKiller = killerId != null && battle.participants.contains(killerId) ? killerId : null;
-        battle.eliminations.add(new DuelElimination(victimId, duelKiller, assisters));
+        DuelElimination elimination = new DuelElimination(victimId, duelKiller, assisters);
+        battle.eliminations.add(elimination);
+        notifyElimination(server, battle, elimination);
     }
 
     public static synchronized int endDuelsForOwner(MinecraftServer server, UUID ownerId) {
@@ -265,6 +267,9 @@ public final class TameDuelManager {
 
         List<String> healthSummary = buildHealthSummary(server, battle);
         List<String> eliminationSummary = buildEliminationSummary(server, battle);
+        List<String> diedSummary = buildDiedSummary(server, battle);
+        List<String> survivedSummary = buildSurvivedSummary(server, battle);
+        List<String> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
 
         Set<UUID> allParticipants = new HashSet<>(battle.roster);
         int resetCount = 0;
@@ -280,9 +285,9 @@ public final class TameDuelManager {
         if (resetCount > 0) {
             message += " Reset " + resetCount + " tame(s): respawn/heal/effects/cooldowns.";
         }
-        notifyOwner(server, battle.ownerA, message, healthSummary, eliminationSummary);
+        notifyOwner(server, battle.ownerA, message, healthSummary, eliminationSummary, diedSummary, survivedSummary, leaderboardSummary);
         if (!battle.ownerA.equals(battle.ownerB)) {
-            notifyOwner(server, battle.ownerB, message, healthSummary, eliminationSummary);
+            notifyOwner(server, battle.ownerB, message, healthSummary, eliminationSummary, diedSummary, survivedSummary, leaderboardSummary);
         }
     }
 
@@ -293,7 +298,7 @@ public final class TameDuelManager {
         tame.getNavigation().stop();
     }
 
-    private static void notifyOwner(MinecraftServer server, UUID ownerId, String message, List<String> healthSummary, List<String> eliminationSummary) {
+    private static void notifyOwner(MinecraftServer server, UUID ownerId, String message, List<String> healthSummary, List<String> eliminationSummary, List<String> diedSummary, List<String> survivedSummary, List<String> leaderboardSummary) {
         if (server == null || ownerId == null || message == null || message.isBlank()) return;
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
         if (owner != null) {
@@ -304,7 +309,87 @@ public final class TameDuelManager {
             for (String line : eliminationSummary) {
                 owner.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GRAY));
             }
+            for (String line : diedSummary) {
+                owner.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.RED));
+            }
+            for (String line : survivedSummary) {
+                owner.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GREEN));
+            }
+            for (String line : leaderboardSummary) {
+                owner.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.AQUA));
+            }
         }
+    }
+
+    private static void notifyElimination(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
+        if (server == null || battle == null || elimination == null || elimination.victimId == null) {
+            return;
+        }
+        String line = eliminationLine(server, elimination);
+        if (line.isBlank()) {
+            return;
+        }
+        UUID killerOwner = participantOwner(battle, elimination.killerId);
+        UUID victimOwner = participantOwner(battle, elimination.victimId);
+
+        if (killerOwner != null) {
+            ServerPlayer killerPlayer = server.getPlayerList().getPlayer(killerOwner);
+            if (killerPlayer != null) {
+                killerPlayer.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GREEN));
+            }
+        }
+        if (victimOwner != null && !victimOwner.equals(killerOwner)) {
+            ServerPlayer victimPlayer = server.getPlayerList().getPlayer(victimOwner);
+            if (victimPlayer != null) {
+                victimPlayer.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.RED));
+            }
+        } else if (victimOwner != null) {
+            ServerPlayer sameOwner = server.getPlayerList().getPlayer(victimOwner);
+            if (sameOwner != null) {
+                sameOwner.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.YELLOW));
+            }
+        }
+    }
+
+    private static String eliminationLine(MinecraftServer server, DuelElimination elimination) {
+        StringBuilder line = new StringBuilder();
+        line.append("Duel KO: ").append(entityLabel(server, elimination.victimId)).append(" was killed");
+        if (elimination.killerId != null) {
+            line.append(" by ").append(entityLabel(server, elimination.killerId));
+        }
+        if (elimination.assisterIds != null && !elimination.assisterIds.isEmpty()) {
+            line.append(" | assists: ");
+            for (int i = 0; i < elimination.assisterIds.size(); i++) {
+                if (i > 0) {
+                    line.append(", ");
+                }
+                line.append(entityLabel(server, elimination.assisterIds.get(i)));
+            }
+        }
+        return line.toString();
+    }
+
+    private static UUID participantOwner(DuelBattle battle, UUID participantId) {
+        if (battle == null || participantId == null) {
+            return null;
+        }
+        if (participantId.equals(battle.ownerA)) {
+            return battle.ownerA;
+        }
+        if (participantId.equals(battle.ownerB)) {
+            return battle.ownerB;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data != null && data.ownerUUID != null) {
+            return data.ownerUUID;
+        }
+        if (battle.teamA.contains(participantId)) {
+            return battle.ownerA;
+        }
+        if (battle.teamB.contains(participantId)) {
+            return battle.ownerB;
+        }
+        return null;
     }
 
     private static List<String> buildHealthSummary(MinecraftServer server, DuelBattle battle) {
@@ -330,23 +415,89 @@ public final class TameDuelManager {
         lines.add("Duel KOs:");
         for (DuelElimination elimination : battle.eliminations) {
             if (elimination == null || elimination.victimId == null) continue;
-            StringBuilder line = new StringBuilder();
-            line.append(" - ").append(entityLabel(server, elimination.victimId)).append(" was killed");
-            if (elimination.killerId != null) {
-                line.append(" by ").append(entityLabel(server, elimination.killerId));
-            }
-            if (!elimination.assisterIds.isEmpty()) {
-                line.append(" | assists: ");
-                for (int i = 0; i < elimination.assisterIds.size(); i++) {
-                    if (i > 0) {
-                        line.append(", ");
-                    }
-                    line.append(entityLabel(server, elimination.assisterIds.get(i)));
-                }
-            }
-            lines.add(line.toString());
+            lines.add(" - " + eliminationLine(server, elimination).replaceFirst("^Duel KO: ", ""));
         }
         return lines;
+    }
+
+    private static List<String> buildDiedSummary(MinecraftServer server, DuelBattle battle) {
+        List<String> lines = new ArrayList<>();
+        if (server == null || battle == null) {
+            return lines;
+        }
+        Set<UUID> diedIds = new HashSet<>();
+        for (DuelElimination elimination : battle.eliminations) {
+            if (elimination != null && elimination.victimId != null) {
+                diedIds.add(elimination.victimId);
+            }
+        }
+        List<String> names = new ArrayList<>();
+        for (UUID id : diedIds) {
+            names.add(entityLabel(server, id));
+        }
+        names.sort(String::compareToIgnoreCase);
+        lines.add("Died: " + (names.isEmpty() ? "none" : String.join(", ", names)));
+        return lines;
+    }
+
+    private static List<String> buildSurvivedSummary(MinecraftServer server, DuelBattle battle) {
+        List<String> lines = new ArrayList<>();
+        if (server == null || battle == null) {
+            return lines;
+        }
+        Set<UUID> diedIds = new HashSet<>();
+        for (DuelElimination elimination : battle.eliminations) {
+            if (elimination != null && elimination.victimId != null) {
+                diedIds.add(elimination.victimId);
+            }
+        }
+        List<String> names = new ArrayList<>();
+        for (UUID participantId : battle.roster) {
+            if (!diedIds.contains(participantId)) {
+                names.add(entityLabel(server, participantId));
+            }
+        }
+        names.sort(String::compareToIgnoreCase);
+        lines.add("Survived: " + (names.isEmpty() ? "none" : String.join(", ", names)));
+        return lines;
+    }
+
+    private static List<String> buildDuelLeaderboardSummary(MinecraftServer server, DuelBattle battle) {
+        List<String> lines = new ArrayList<>();
+        if (server == null || battle == null || battle.roster.isEmpty()) {
+            return lines;
+        }
+        List<UUID> ordered = new ArrayList<>(battle.roster);
+        ordered.sort((a, b) -> {
+            int scoreCompare = Integer.compare(duelScore(server, b), duelScore(server, a));
+            if (scoreCompare != 0) {
+                return scoreCompare;
+            }
+            return entityLabel(server, a).compareToIgnoreCase(entityLabel(server, b));
+        });
+
+        lines.add("Duel leaderboard:");
+        lines.add("score / kills / assists / deaths / days");
+        int rank = 1;
+        for (UUID participantId : ordered) {
+            TameData data = TameRegistry.get(participantId);
+            int score = duelScore(server, participantId);
+            int kills = data == null ? 0 : Math.max(0, data.kills);
+            int assists = data == null ? 0 : Math.max(0, data.assists);
+            int deaths = data == null ? 0 : Math.max(0, data.deaths);
+            int days = data == null ? 0 : Math.max(0, data.activeSurvivalDays);
+            lines.add(rank + ". [" + entityLabel(server, participantId) + "] (" + score + "/" + kills + "/" + assists + "/" + deaths + "/" + days + ")");
+            rank++;
+        }
+        return lines;
+    }
+
+    private static int duelScore(MinecraftServer server, UUID participantId) {
+        TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            return 0;
+        }
+        return Math.max(0, data.kills) * 4 + Math.max(0, data.assists);
     }
 
     private static String entityLabel(MinecraftServer server, UUID entityId) {

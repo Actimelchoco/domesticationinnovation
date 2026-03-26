@@ -36,6 +36,7 @@ public class TameBehaviorEvents {
                 return;
             }
         }
+        TameSpawnEvents.processDeferredStatRefresh(tame, data);
         final TameData activeData = data;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (hasInvalidTarget(tame)) {

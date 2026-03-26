@@ -517,6 +517,16 @@ public class TameCommands {
                         .then(Commands.literal("bed")
                                 .executes(ctx -> listOwnedBeds(ctx.getSource()))
                                 .then(Commands.literal("remove")
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> removeOwnedBedsAll(ctx.getSource())))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("group", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> removeOwnedBedsGroup(ctx.getSource(), StringArgumentType.getString(ctx, "group")))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> removeOwnedBedsType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.argument("name", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestOwnedPetNamesWithBeds(ctx.getSource(), b))
                                                 .executes(ctx -> removeOwnedBed(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
@@ -2412,12 +2422,9 @@ public class TameCommands {
 
         List<TameData> loaded = new ArrayList<>();
         List<TameData> unloaded = new ArrayList<>();
-        List<TameData> stored = new ArrayList<>();
         List<TameData> dead = new ArrayList<>();
         for (TameData d : tames) {
-            if (isStoredEntry(d.uuid)) {
-                stored.add(d);
-            } else if (isDeadEntry(d.uuid)) {
+            if (isDeadEntry(d.uuid)) {
                 dead.add(d);
             } else if (isLoadedAnywhere(source.getServer(), d.uuid)) {
                 loaded.add(d);
@@ -2428,7 +2435,6 @@ public class TameCommands {
 
         loaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         unloaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
-        stored.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         dead.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
 
         p.sendSystemMessage(Component.literal("---- Tame Load Status ----").withStyle(ChatFormatting.GOLD));
@@ -2442,13 +2448,6 @@ public class TameCommands {
                     ? "unknown"
                     : (d.lastKnownDimension + " @ " + d.lastKnownX + " " + d.lastKnownY + " " + d.lastKnownZ);
             p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name + " (" + where + ")").withStyle(ChatFormatting.RED));
-        }
-        p.sendSystemMessage(Component.literal("Stored (" + stored.size() + "):").withStyle(ChatFormatting.AQUA));
-        for (TameData d : stored) {
-            String where = (d.lastKnownDimension == null || d.lastKnownDimension.isBlank())
-                    ? "unknown"
-                    : (d.lastKnownDimension + " @ " + d.lastKnownX + " " + d.lastKnownY + " " + d.lastKnownZ);
-            p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name + " (" + where + ")").withStyle(ChatFormatting.AQUA));
         }
         p.sendSystemMessage(Component.literal("Dead (" + dead.size() + "):").withStyle(ChatFormatting.GRAY));
         for (TameData d : dead) {
@@ -2573,6 +2572,9 @@ public class TameCommands {
             sendInfoPage(p, "Bed",
                     "/tames bed",
                     "/tames bed remove <pet>",
+                    "/tames bed remove all",
+                    "/tames bed remove group <group>",
+                    "/tames bed remove type <type>",
                     "Shows your tames with assigned beds.",
                     "Each row is formatted as: Tame: BedType, Dimension [x, y, z].",
                     "Removing a bed clears that tame's stored bed assignment."
@@ -3238,6 +3240,54 @@ public class TameCommands {
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Removed bed assignment for " + tameDisplayName(data) + ".").withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int removeOwnedBedsAll(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        return removeOwnedBeds(source, player, ownedTames(player.getUUID()), "all your tames");
+    }
+
+    private static int removeOwnedBedsGroup(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        return removeOwnedBeds(source, player, ownedGroup(player.getUUID(), group), "group '" + group + "'");
+    }
+
+    private static int removeOwnedBedsType(CommandSourceStack source, String typeFilter) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        return removeOwnedBeds(source, player, ownedType(player.getUUID(), typeFilter), "type '" + typeFilter + "'");
+    }
+
+    private static int removeOwnedBeds(CommandSourceStack source, ServerPlayer player, List<TameData> requested, String label) {
+        if (player == null) {
+            return 0;
+        }
+        if (requested == null || requested.isEmpty()) {
+            return error(player, "No tames found for " + label + ".");
+        }
+        int removed = 0;
+        for (TameData data : requested) {
+            if (data == null || !data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank()) {
+                continue;
+            }
+            clearTameBedAssignment(source.getServer(), data);
+            removed++;
+        }
+        if (removed <= 0) {
+            return error(player, "No bed assignments found for " + label + ".");
+        }
+        TameRegistry.markDirty();
+        int finalRemoved = removed;
+        player.sendSystemMessage(Component.literal("Removed " + finalRemoved + " bed assignment(s) for " + label + ".").withStyle(ChatFormatting.GREEN));
+        return finalRemoved;
     }
 
     private static void clearTameBedAssignment(MinecraftServer server, TameData data) {
@@ -5974,7 +6024,6 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
-        if (d.stored) return error(p, tameDisplayName(d) + " is stored and cannot be teleported until released.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
@@ -5999,7 +6048,6 @@ public class TameCommands {
         }
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be modified while released.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead.");
         TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
         if (tame == null) return error(player, tameDisplayName(data) + " must be loaded.");
@@ -6017,7 +6065,6 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be teleported until released.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         if (!data.hasHome) return error(player, data.name + " does not currently have a guardian location.");
         return teleportGuardianBatch(source, player, List.of(data), "TPGuardian " + data.name, 0);
@@ -6027,7 +6074,6 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be teleported until released.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         return teleportHomeBatch(source, player, List.of(data), "TPHome " + data.name, ownedDeadTames(player.getUUID()).stream().anyMatch(d -> Objects.equals(d.uuid, data.uuid)) ? 1 : 0);
     }
@@ -6511,9 +6557,12 @@ public class TameCommands {
         }
         TameRegistry.bindEntityToData(tame, data);
         applyLatestDeathSnapshotIfAvailable(tame, data);
+        tame.removeAllEffects();
+        tame.setHealth(tame.getMaxHealth());
         tame.hurtTime = 0;
         tame.deathTime = 0;
         tame.invulnerableTime = 0;
+        tame.setSecondsOnFire(0);
         tame.setRemainingFireTicks(0);
         tame.fallDistance = 0.0F;
         tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
@@ -9099,6 +9148,10 @@ public class TameCommands {
         if (loaded != null) {
             loaded.discard();
         }
+        if (data.stored) {
+            data.stored = false;
+            TameRegistry.markDirty();
+        }
 
         String typeId = recoverEntityTypeId(data);
         if (typeId.isBlank()) return error(source.getPlayer(), "Cannot respawn this tame: missing saved entity type.");
@@ -10034,6 +10087,7 @@ public class TameCommands {
                 }
                 LevelSystem.updateTameName(tame, data);
                 tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+                TameSpawnEvents.queueDeferredStatRefresh(tame, data, 40L);
 
                 data.lastKnownDimension = level.dimension().location().toString();
                 data.lastKnownX = tame.blockPosition().getX();
@@ -10073,6 +10127,7 @@ public class TameCommands {
         }
         LevelSystem.updateTameName(tame, data);
         tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+        TameSpawnEvents.queueDeferredStatRefresh(tame, data, 40L);
 
         data.lastKnownDimension = level.dimension().location().toString();
         data.lastKnownX = tame.blockPosition().getX();
@@ -12440,9 +12495,7 @@ public class TameCommands {
     }
 
     private static boolean isStoredEntry(UUID tameUuid) {
-        if (tameUuid == null) return false;
-        TameData data = TameRegistry.get(tameUuid);
-        return data != null && data.stored;
+        return false;
     }
 
     private static boolean isInactiveEntry(UUID tameUuid) {
@@ -12458,9 +12511,6 @@ public class TameCommands {
         if (data == null) {
             return "";
         }
-        if (data.stored) {
-            return " [STORED]";
-        }
         if (data.dead) {
             return " [DEAD]";
         }
@@ -12470,9 +12520,6 @@ public class TameCommands {
     private static String statusLabel(TameData data, MinecraftServer server) {
         if (data == null) {
             return "unknown";
-        }
-        if (data.stored) {
-            return "stored";
         }
         if (data.dead) {
             return "dead";
@@ -12484,9 +12531,6 @@ public class TameCommands {
         if (data == null) {
             return ChatFormatting.WHITE;
         }
-        if (data.stored) {
-            return ChatFormatting.AQUA;
-        }
         if (data.dead) {
             return ChatFormatting.GRAY;
         }
@@ -12495,13 +12539,10 @@ public class TameCommands {
 
     private static int statusOrder(TameData data, MinecraftServer server) {
         if (data == null) {
-            return 4;
-        }
-        if (data.stored) {
-            return 2;
+            return 3;
         }
         if (data.dead) {
-            return 3;
+            return 2;
         }
         return isLoadedAnywhere(server, data.uuid) ? 0 : 1;
     }
