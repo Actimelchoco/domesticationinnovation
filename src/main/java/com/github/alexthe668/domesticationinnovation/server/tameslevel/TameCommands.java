@@ -526,6 +526,10 @@ public class TameCommands {
                         .then(Commands.literal("healthSiphon")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("setMaxHp999")
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> setMaxHp999(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("enterPortalsByThemselves")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -4172,7 +4176,7 @@ public class TameCommands {
             case "berserker" -> id + " L" + level + ": at <=20% HP, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(2000L);
             case "bloodlust" -> id + " L" + level + ": on kill, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(200L) + "; no cooldown";
             case "retaliation_slow" -> id + " L" + level + ": on hurt, " + fmt(Math.min(0.85D, 0.20D + level * 0.04D) * 100.0D) + "% proc; radius " + fmt(2.0D + Math.max(0, level - (level / 3)) * 0.35D) + ", Slowness " + romanAmp(level / 3) + " for " + fmtSeconds(40L + level * 10L) + "; cooldown " + fmtSeconds(60L);
-            case "immunity_frame" -> id + " L" + level + ": reactive invulnerability window " + fmtSeconds(20L + 20L * level) + "; passive/no active cast DPS";
+            case "immunity_frame" -> id + " L" + level + ": first hit is canceled and starts invulnerability for " + fmtSeconds(Math.min(100L, 5L + 5L * level)) + "; cooldown " + fmtSeconds(200L) + "; caps at 5.0s by level 19; while active, this tame cannot use abilities; passive/no active cast DPS";
             case "deflection" -> id + " L" + level + ": projectile deflect; reverses incoming projectile to 20% speed; passive reactive trigger";
             case "defusal" -> id + " L" + level + ": cancels nearby explosions; range " + fmt(10.0D + (level / 3) * 10.0D) + ", cooldown " + fmtSeconds(Math.max(0L, 100L - Math.max(0, level - 1) * 20L));
             case "psychic_wall" -> id + " L" + level + ": wall width " + (level + 1) + ", owner protect range " + fmt(5.0D + Math.max(0, level - 1) * 1.5D) + ", lifespan " + fmtSeconds(100L * level) + ", cooldown " + fmtSeconds(260L * level + 60L);
@@ -5925,6 +5929,28 @@ public class TameCommands {
         if (!payTeleportXp(p, cost)) return 0;
         teleportTameToPlayer(ta, p);
         p.sendSystemMessage(Component.literal("Teleported " + d.name + " (-" + cost + " XP points" + (crossDimension ? ", cross-dimension" : "") + ")."));
+        return 1;
+    }
+
+    private static int setMaxHp999(CommandSourceStack source, String pet) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.literal("Only players can use this command."));
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        if (data.stored) return error(player, tameDisplayName(data) + " is stored and cannot be modified while released.");
+        if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead.");
+        TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+        if (tame == null) return error(player, tameDisplayName(data) + " must be loaded.");
+
+        setAttributeToValue(tame, Attributes.MAX_HEALTH, 999.0D);
+        tame.setHealth(999.0F);
+        CompoundTag refreshedSnapshot = new CompoundTag();
+        tame.save(refreshedSnapshot);
+        data.entitySnapshot = refreshedSnapshot;
+        player.sendSystemMessage(Component.literal("Set max HP of " + tameDisplayName(data) + " to 999.").withStyle(ChatFormatting.GREEN));
         return 1;
     }
 

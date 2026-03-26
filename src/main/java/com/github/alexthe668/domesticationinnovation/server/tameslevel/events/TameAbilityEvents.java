@@ -153,7 +153,7 @@ public class TameAbilityEvents {
                 boolean ownerProtectionPass = shouldRunPeriodicPass(tame, now, OWNER_PROTECTION_TICK_RATE);
                 boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, currentTarget);
-                boolean abilitiesBlocked = false;
+                boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0;
                 TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, currentTarget, now));
 
                 if (namedEffectsPass) {
@@ -1635,6 +1635,7 @@ public class TameAbilityEvents {
 
     private static boolean handleGuardianInterceptSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "guardian_intercept")) return false;
+        if (TameableUtils.getImmuneTime(supporter) > 0) return false;
         if (supporter.isOrderedToSit()) return false;
         if (ally == supporter || event.getAmount() <= 0.0F) return false;
         if (!isReady(data, "guardian_intercept_tick", now)) return false;
@@ -1647,6 +1648,7 @@ public class TameAbilityEvents {
         setAbilityCooldown(supporter, data, "guardian_intercept", "guardian_intercept_tick", now, Math.max(40L, 410L - levelValue * 10L));
         grantSupportXp(supporter, data, ally, now, redirected, 0.75F);
         applySupportActivationVisual(supporter, "guardian_intercept");
+        applyProtectedTargetIFrameVisual(ally);
         level.sendParticles(ParticleTypes.CRIT, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 4 + levelValue), 0.25D, 0.25D, 0.25D, 0.02D);
         debugAbilityUse(supporter, "guardian_intercept");
         return true;
@@ -1654,6 +1656,7 @@ public class TameAbilityEvents {
 
     private static boolean handleBodyBlockSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "body_block")) return false;
+        if (TameableUtils.getImmuneTime(supporter) > 0) return false;
         if (supporter.isOrderedToSit()) return false;
         if (ally == supporter || event.getAmount() <= 0.0F) return false;
         if (!isProjectileDamage(event)) return false;
@@ -1667,6 +1670,7 @@ public class TameAbilityEvents {
         setAbilityCooldown(supporter, data, "body_block", "body_block_tick", now, Math.max(40L, 415L - levelValue * 15L));
         grantSupportXp(supporter, data, ally, now, prevented, 0.75F);
         applySupportActivationVisual(supporter, "body_block");
+        applyProtectedTargetIFrameVisual(ally);
         level.playSound(null, supporter.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
         debugAbilityUse(supporter, "body_block");
         return true;
@@ -1674,6 +1678,7 @@ public class TameAbilityEvents {
 
     private static void handleEmergencyShieldSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "emergency_shield")) return;
+        if (TameableUtils.getImmuneTime(supporter) > 0) return;
         if (supporter.isOrderedToSit()) return;
         if (event.getAmount() <= 0.0F) return;
         if (supporter.distanceToSqr(ally) > 25.0D) return;
@@ -1690,12 +1695,21 @@ public class TameAbilityEvents {
         setAbilityCooldown(supporter, data, "emergency_shield", "emergency_shield_tick", now, 200L);
         grantSupportXp(supporter, data, ally, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
         applySupportActivationVisual(supporter, "emergency_shield");
+        applyProtectedTargetIFrameVisual(ally);
         level.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, ally.getX(), ally.getY(0.6D), ally.getZ(), capParticles(supporter, 6 + levelValue), 0.3D, 0.35D, 0.3D, 0.02D);
         debugAbilityUse(supporter, "emergency_shield");
     }
 
+    private static void applyProtectedTargetIFrameVisual(LivingEntity target) {
+        if (target == null) {
+            return;
+        }
+        TameableUtils.setImmuneTime(target, Math.max(TameableUtils.getImmuneTime(target), 20));
+    }
+
     private static void handlePackGuardSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "pack_guard")) return;
+        if (TameableUtils.getImmuneTime(supporter) > 0) return;
         if (supporter.isOrderedToSit()) return;
         if (!isReady(data, "pack_guard_tick", now)) return;
         LivingEntity attacker = resolveLivingAttacker(event);
@@ -1712,6 +1726,7 @@ public class TameAbilityEvents {
 
     private static boolean handleLifeGiftSupport(ServerLevel level, TamableAnimal supporter, TameData data, LivingEntity ally, LivingHurtEvent event, long now) {
         if (!LevelSystem.hasAbility(data, "life_gift")) return false;
+        if (TameableUtils.getImmuneTime(supporter) > 0) return false;
         if (supporter.isOrderedToSit()) return false;
         if (!(ally instanceof TamableAnimal)) return false;
         if (!isReady(data, "life_gift_tick", now)) return false;
@@ -2538,5 +2553,4 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
     }
 
 }
-
 

@@ -510,6 +510,10 @@ public class CommonProxy {
                 if (i > 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), i - 1);
                 }
+                int cooldown = TameableUtils.getImmuneCooldown(event.getEntity());
+                if (cooldown > 0) {
+                    TameableUtils.setImmuneCooldown(event.getEntity(), cooldown - 1);
+                }
             }
             if (event.getEntity().hasEffect(MobEffects.POISON) && TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.POISON_RESISTANCE)) {
                 event.getEntity().removeEffect(MobEffects.POISON);
@@ -856,10 +860,13 @@ public class CommonProxy {
             int immunityFrameLevel = getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame");
             if (immunityFrameLevel > 0) {
                 int level = immunityFrameLevel;
-                if (TameableUtils.getImmuneTime(event.getEntity()) <= 0) {
-                    TameableUtils.setImmuneTime(event.getEntity(), 20 + level * 20);
+                if (TameableUtils.getImmuneTime(event.getEntity()) > 0) {
+                    flag = true;
+                    event.setCanceled(true);
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");
-                } else {
+                } else if (TameableUtils.getImmuneCooldown(event.getEntity()) <= 0) {
+                    TameableUtils.setImmuneTime(event.getEntity(), Math.min(100, 5 + level * 5));
+                    TameableUtils.setImmuneCooldown(event.getEntity(), 200);
                     flag = true;
                     event.setCanceled(true);
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");

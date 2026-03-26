@@ -30,19 +30,25 @@ public class TameBehaviorEvents {
         if (tame.level().isClientSide) return;
         if (!tame.isAlive()) return;
         TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null) return;
+        if (data == null) {
+            data = TameSpawnEvents.registerOrRestoreTame(tame, true);
+            if (data == null) {
+                return;
+            }
+        }
+        final TameData activeData = data;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (hasInvalidTarget(tame)) {
             tame.setTarget(null);
         }
 
-        if (data.closeMovement && tame.tickCount % 10 == 0) {
-            TamePerformanceProfiler.run("behavior.close_owner", () -> handleCloseOwner(tame, data));
+        if (activeData.closeMovement && tame.tickCount % 10 == 0) {
+            TamePerformanceProfiler.run("behavior.close_owner", () -> handleCloseOwner(tame, activeData));
         }
 
-        if (data.hasHome) {
-            TamePerformanceProfiler.run("behavior.guardian_return_timer", () -> updateGuardianReturnTimer(tame, data));
-            TamePerformanceProfiler.run("behavior.guardian_target_timeout", () -> updateGuardianTargetTimeout(tame, data));
+        if (activeData.hasHome) {
+            TamePerformanceProfiler.run("behavior.guardian_return_timer", () -> updateGuardianReturnTimer(tame, activeData));
+            TamePerformanceProfiler.run("behavior.guardian_target_timeout", () -> updateGuardianTargetTimeout(tame, activeData));
         }
 
         int scanInterval = getBehaviorScanInterval(tame);
@@ -54,10 +60,10 @@ public class TameBehaviorEvents {
         }
 
         if (tame.tickCount % getGuardianReturnInterval(tame) == 0) {
-            TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, data));
+            TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
-        TameMode mode = TameMode.byId(data.mode);
+        TameMode mode = TameMode.byId(activeData.mode);
         if (mode == TameMode.MONSTER_HUNTER) {
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));

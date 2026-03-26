@@ -53,6 +53,7 @@ public class TameableUtils {
     private static final String FAKE_VISUAL_ENCHANT_TAG = "TLFakeVisualEnchant";
     private static final String COLLAR_TAG = "HasPetCollar";
     private static final String IMMUNITY_TIME_TAG = "PetImmunityTimer";
+    private static final String IMMUNITY_COOLDOWN_TAG = "PetImmunityCooldown";
     private static final String FROZEN_TIME_TAG = "PetFrozenTime";
     private static final String FROZEN_LEVEL_TAG = "PetFrozenLevel";
     private static final String ATTACK_TARGET_ENTITY = "PetAttackTarget";
@@ -712,6 +713,17 @@ public class TameableUtils {
     public static void setImmuneTime(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
         tag.putInt(IMMUNITY_TIME_TAG, time);
+        sync(enchanted, tag);
+    }
+
+    public static int getImmuneCooldown(LivingEntity enchanted) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        return tag.getInt(IMMUNITY_COOLDOWN_TAG);
+    }
+
+    public static void setImmuneCooldown(LivingEntity enchanted, int time) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putInt(IMMUNITY_COOLDOWN_TAG, time);
         sync(enchanted, tag);
     }
 

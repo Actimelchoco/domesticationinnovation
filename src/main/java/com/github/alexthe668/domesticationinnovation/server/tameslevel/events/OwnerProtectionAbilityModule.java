@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -156,6 +157,7 @@ public final class OwnerProtectionAbilityModule {
         data.cooldowns.put(SHIELD_BLOCK_RESTORE_ORDER, (long) resolveMovementOrderCode(tame, data));
         data.cooldowns.put(SHIELD_BLOCK_RESTORE_TICK, now + SHIELD_BLOCK_SIT_TICKS);
         applyMovementOrder(tame, 1, data);
+        TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
         if (tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, tame, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
             level.sendParticles(ParticleTypes.CRIT, tame.getX(), tame.getY(0.6D), tame.getZ(), 8, 0.3D, 0.3D, 0.3D, 0.02D);
