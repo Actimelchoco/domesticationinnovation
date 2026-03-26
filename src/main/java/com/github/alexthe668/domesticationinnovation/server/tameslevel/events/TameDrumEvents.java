@@ -1,8 +1,5 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
-import com.github.alexthe668.domesticationinnovation.server.block.DIBlockRegistry;
-import com.github.alexthe668.domesticationinnovation.server.block.DrumBlock;
-import com.github.alexthe668.domesticationinnovation.server.block.DrumBlockEntity;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -13,31 +10,30 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
+import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.event.TickEvent;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public class TameDrumEvents {
+    private static final String TAG_BONE_COMMAND = "DIBoneCommand";
+    private static final int DEFAULT_BONE_COMMAND = 2;
     private static final int LEFT_CLICK_HOLD_TICKS = 60;
-    private static final int PLACED_REPORT_HOLD_TICKS = 60;
-    private static final int PLACED_CLEAR_GROUP_HOLD_TICKS = 200;
+    private static final int RIGHT_CLICK_HOLD_TICKS = 100;
     private static final Map<UUID, LeftClickHold> LEFT_CLICK_HOLDS = new HashMap<>();
     private static final Map<UUID, RightClickHold> RIGHT_CLICK_HOLDS = new HashMap<>();
     private static final Map<UUID, PendingPassiveSit> PENDING_PASSIVE_SITS = new HashMap<>();
-    private static final Map<UUID, PlacedDrumHold> PLACED_DRUM_HOLDS = new HashMap<>();
-
-    public record RightClickHold(BlockPos blockPos) {
-    }
 
     private record LeftClickHold(BlockPos blockPos, boolean sneaking, long startTick, ResourceKey<Level> dimension) {
     }
@@ -45,34 +41,38 @@ public class TameDrumEvents {
     private record PendingPassiveSit(BlockPos blockPos, ResourceKey<Level> dimension) {
     }
 
-    private record PlacedDrumHold(BlockPos blockPos, ResourceKey<Level> dimension, long startTick, boolean sneaking, boolean reported) {
+    private record RightClickHold(BlockPos blockPos, ResourceKey<Level> dimension, long startTick, InteractionHand hand) {
+    }
+
+    public static boolean isControllerBone(ItemStack stack) {
+        return stack != null && !stack.isEmpty() && stack.is(Items.BONE);
+    }
+
+    @SubscribeEvent
+    public static void onLeftClickEmpty(PlayerInteractEvent.LeftClickEmpty event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        ItemStack stack = player.getMainHandItem();
+        if (!isControllerBone(stack)) {
+            return;
+        }
+        int affected = TameCommands.drumCycleHeldMode(player, stack);
+        if (affected > 0) {
+            consumeOne(player, stack);
+        }
     }
 
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (event.getLevel().getBlockState(event.getPos()).getBlock() instanceof DrumBlock) {
-            if (!player.isShiftKeyDown()) {
-                PLACED_DRUM_HOLDS.remove(player.getUUID());
-                return;
+        if (!isControllerBone(event.getItemStack())) return;
+
+        if (!player.isShiftKeyDown()) {
+            int cleared = TameCommands.drumClearTargets(player, event.getItemStack());
+            if (cleared > 0) {
+                consumeOne(player, event.getItemStack());
             }
-            PLACED_DRUM_HOLDS.put(player.getUUID(), new PlacedDrumHold(
-                    event.getPos().immutable(),
-                    player.level().dimension(),
-                    player.level().getGameTime(),
-                    false,
-                    false
-            ));
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.SUCCESS);
-            event.setUseBlock(Event.Result.DENY);
-            return;
-        }
-        if (!isMainHandDrum(event.getItemStack())) return;
-        if (player.isShiftKeyDown()) {
-            TameCommands.drumCycleHeldMode(player, event.getItemStack());
-        } else {
-            TameCommands.drumClearTargets(player, event.getItemStack());
         }
         LEFT_CLICK_HOLDS.put(player.getUUID(), new LeftClickHold(
                 event.getPos().immutable(),
@@ -90,21 +90,21 @@ public class TameDrumEvents {
     public static void onAttackEntity(AttackEntityEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         ItemStack stack = player.getMainHandItem();
-        if (!isMainHandDrum(stack)) return;
+        if (!isControllerBone(stack)) return;
         Entity target = event.getTarget();
 
-        if (player.isShiftKeyDown() && target instanceof TamableAnimal tame) {
-            if (TameCommands.drumRemoveGroupTarget(player, stack, tame)) {
-                event.setCanceled(true);
-            }
-            return;
-        }
         if (target instanceof TamableAnimal tame && tame.isTame() && player.getUUID().equals(tame.getOwnerUUID())) {
+            if (TameCommands.drumRemoveGroupTarget(player, stack, tame)) {
+                consumeOne(player, stack);
+            }
             event.setCanceled(true);
             return;
         }
         if (target instanceof LivingEntity living) {
-            TameCommands.drumSetTargets(player, stack, living);
+            int count = TameCommands.drumSetTargets(player, stack, living);
+            if (count > 0) {
+                consumeOne(player, stack);
+            }
             event.setCanceled(true);
         }
     }
@@ -120,31 +120,84 @@ public class TameDrumEvents {
     }
 
     @SubscribeEvent
+    public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!isControllerBone(event.getItemStack())) return;
+        startRightClickHold(player, null, event.getHand());
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+    }
+
+    @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        if (!(event.getLevel().getBlockState(event.getPos()).getBlock() instanceof DrumBlock)) return;
-        if (!(event.getLevel().getBlockEntity(event.getPos()) instanceof DrumBlockEntity drum)) return;
-        if (!player.isShiftKeyDown()) return;
-        TameCommands.drumCyclePlacedMode(player, drum.getSelectorName());
-        PLACED_DRUM_HOLDS.put(player.getUUID(), new PlacedDrumHold(
-                event.getPos().immutable(),
-                player.level().dimension(),
-                player.level().getGameTime(),
-                true,
-                false
-        ));
+        if (event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!isControllerBone(event.getItemStack())) return;
+        startRightClickHold(player, event.getPos(), event.getHand());
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
         event.setUseBlock(Event.Result.DENY);
+        event.setUseItem(Event.Result.ALLOW);
+    }
+
+    @SubscribeEvent
+    public static void onUseItemStop(LivingEntityUseItemEvent.Stop event) {
+        resolveRightClickHold(event.getEntity(), event.getItem());
+    }
+
+    @SubscribeEvent
+    public static void onUseItemFinish(LivingEntityUseItemEvent.Finish event) {
+        resolveRightClickHold(event.getEntity(), event.getItem());
+    }
+
+    private static void resolveRightClickHold(LivingEntity entity, ItemStack stack) {
+        if (!(entity instanceof ServerPlayer player) || !isControllerBone(stack)) {
+            return;
+        }
+        RightClickHold hold = RIGHT_CLICK_HOLDS.remove(player.getUUID());
+        if (hold == null || hold.dimension() != player.level().dimension()) {
+            return;
+        }
+        long heldTicks = Math.max(0L, player.level().getGameTime() - hold.startTick());
+        int result;
+        if (heldTicks >= RIGHT_CLICK_HOLD_TICKS) {
+            result = hold.blockPos() == null
+                    ? TameCommands.drumTeleportHome(player, stack)
+                    : TameCommands.drumTeleportToBlock(player, stack, hold.blockPos());
+            if (result > 0) {
+                consumeOne(player, stack);
+                player.displayClientMessage(net.minecraft.network.chat.Component.literal("Bone: teleport triggered.")
+                        .withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), true);
+            }
+            return;
+        }
+        int command = currentBoneCommand(player);
+        result = TameCommands.drumIssueMovementCommand(player, stack, command);
+        if (result > 0) {
+            consumeOne(player, stack);
+            player.displayClientMessage(net.minecraft.network.chat.Component.literal("Bone: " + TameCommands.drumCommandLabel(command) + " (" + result + ")")
+                    .withStyle(net.minecraft.ChatFormatting.GOLD), true);
+        }
+    }
+
+    private static void startRightClickHold(ServerPlayer player, BlockPos blockPos, InteractionHand hand) {
+        player.startUsingItem(hand);
+        RIGHT_CLICK_HOLDS.put(player.getUUID(), new RightClickHold(
+                blockPos == null ? null : blockPos.immutable(),
+                player.level().dimension(),
+                player.level().getGameTime(),
+                hand
+        ));
     }
 
     private static void handleGroupInteract(net.minecraft.world.entity.player.Player rawPlayer, InteractionHand hand, ItemStack stack, Entity target, PlayerInteractEvent event) {
         if (hand != InteractionHand.MAIN_HAND) return;
         if (!(rawPlayer instanceof ServerPlayer player)) return;
-        if (!player.isShiftKeyDown()) return;
-        if (!isMainHandDrum(stack)) return;
+        if (!isControllerBone(stack)) return;
         if (!(target instanceof TamableAnimal tame)) return;
         if (TameCommands.drumAddGroupTarget(player, stack, tame)) {
+            consumeOne(player, stack);
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setResult(Event.Result.ALLOW);
@@ -153,9 +206,8 @@ public class TameDrumEvents {
 
     @SubscribeEvent
     public static void onBreakBlock(BlockEvent.BreakEvent event) {
-        if (!(event.getPlayer() instanceof ServerPlayer)) return;
-        if (!isMainHandDrum(event.getPlayer().getMainHandItem())) return;
-        if (event.getState().getBlock() instanceof DrumBlock) return;
+        if (!(event.getPlayer() instanceof ServerPlayer player)) return;
+        if (!isControllerBone(player.getMainHandItem())) return;
         event.setCanceled(true);
     }
 
@@ -166,7 +218,7 @@ public class TameDrumEvents {
 
         LeftClickHold hold = LEFT_CLICK_HOLDS.get(player.getUUID());
         if (hold != null) {
-            if (!isMainHandDrum(player.getMainHandItem()) || player.level().dimension() != hold.dimension()) {
+            if (!isControllerBone(player.getMainHandItem()) || player.level().dimension() != hold.dimension()) {
                 LEFT_CLICK_HOLDS.remove(player.getUUID());
             } else if (player.level().getGameTime() - hold.startTick() >= LEFT_CLICK_HOLD_TICKS) {
                 HitResult hit = player.pick(6.0D, 0.0F, false);
@@ -178,34 +230,9 @@ public class TameDrumEvents {
                     } else {
                         TameCommands.drumSetGuardianAnchor(player, player.getMainHandItem(), hold.blockPos());
                     }
+                    consumeOne(player, player.getMainHandItem());
                 }
                 LEFT_CLICK_HOLDS.remove(player.getUUID());
-            }
-        }
-
-        PlacedDrumHold placedHold = PLACED_DRUM_HOLDS.get(player.getUUID());
-        if (placedHold != null) {
-            if (player.level().dimension() != placedHold.dimension()) {
-                PLACED_DRUM_HOLDS.remove(player.getUUID());
-            } else {
-                HitResult hit = player.pick(6.0D, 0.0F, false);
-                boolean stillLooking = hit instanceof BlockHitResult bhr && bhr.getBlockPos().equals(placedHold.blockPos());
-                if (!stillLooking) {
-                    PLACED_DRUM_HOLDS.remove(player.getUUID());
-                } else {
-                    long heldTicks = player.level().getGameTime() - placedHold.startTick();
-                    if (!placedHold.sneaking() && !placedHold.reported() && heldTicks >= PLACED_REPORT_HOLD_TICKS) {
-                        if (player.level().getBlockEntity(placedHold.blockPos()) instanceof DrumBlockEntity drum) {
-                            TameCommands.drumReportSelector(player, drum.getSelectorName());
-                        }
-                        PLACED_DRUM_HOLDS.put(player.getUUID(), new PlacedDrumHold(placedHold.blockPos(), placedHold.dimension(), placedHold.startTick(), false, true));
-                    } else if (placedHold.sneaking() && heldTicks >= PLACED_CLEAR_GROUP_HOLD_TICKS) {
-                        if (player.level().getBlockEntity(placedHold.blockPos()) instanceof DrumBlockEntity drum) {
-                            TameCommands.drumClearGroupSelector(player, drum.getSelectorName());
-                        }
-                        PLACED_DRUM_HOLDS.remove(player.getUUID());
-                    }
-                }
             }
         }
 
@@ -239,15 +266,21 @@ public class TameDrumEvents {
         }
     }
 
-    public static void beginRightClickHold(ServerPlayer player, BlockPos blockPos) {
-        RIGHT_CLICK_HOLDS.put(player.getUUID(), new RightClickHold(blockPos == null ? null : blockPos.immutable()));
+    private static int currentBoneCommand(ServerPlayer player) {
+        int value = player.getPersistentData().getInt(TAG_BONE_COMMAND);
+        return value < 0 || value > 2 ? DEFAULT_BONE_COMMAND : value;
     }
 
-    public static RightClickHold finishRightClickHold(ServerPlayer player) {
-        return RIGHT_CLICK_HOLDS.remove(player.getUUID());
+    private static int nextBoneCommand(ServerPlayer player) {
+        int next = (currentBoneCommand(player) + 1) % 3;
+        player.getPersistentData().putInt(TAG_BONE_COMMAND, next);
+        return next;
     }
 
-    private static boolean isMainHandDrum(ItemStack stack) {
-        return !stack.isEmpty() && stack.is(DIBlockRegistry.DRUM.get().asItem());
+    private static void consumeOne(ServerPlayer player, ItemStack stack) {
+        if (player.getAbilities().instabuild || stack.isEmpty()) {
+            return;
+        }
+        stack.shrink(1);
     }
 }

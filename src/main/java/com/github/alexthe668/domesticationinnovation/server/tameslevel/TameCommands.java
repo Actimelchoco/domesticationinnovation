@@ -136,8 +136,11 @@ public class TameCommands {
     private static final int MORNING_LANTERN_RADIUS = 64;
     private static final int IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS = 5;
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
+    private static final String TAG_GUARDIAN_TOOL_ORDER = "DIGuardianToolOrder";
+    private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
     private static final Map<UUID, PendingImmediateChunkTeleport> PENDING_IMMEDIATE_CHUNK_TELEPORTS = new HashMap<>();
+    private static final Map<UUID, PendingGuardianToolConfirm> PENDING_GUARDIAN_TOOL_CONFIRMS = new HashMap<>();
     private static long lastMorningRegistrySweepDay = Long.MIN_VALUE;
     private static long tlMigrationLastScanned = 0L;
     private static long tlMigrationLastMatchedPayload = 0L;
@@ -186,6 +189,35 @@ public class TameCommands {
         }
     }
 
+    private enum GuardianToolOrder {
+        LEVEL("lvl"),
+        NAME("name"),
+        POINTS("points"),
+        TYPE("type");
+
+        private final String id;
+
+        GuardianToolOrder(String id) {
+            this.id = id;
+        }
+
+        private static GuardianToolOrder parse(String raw) {
+            if (raw == null) {
+                return LEVEL;
+            }
+            String normalized = raw.trim().toLowerCase(Locale.ROOT);
+            if (normalized.equals("level")) {
+                return LEVEL;
+            }
+            for (GuardianToolOrder value : values()) {
+                if (value.id.equals(normalized)) {
+                    return value;
+                }
+            }
+            return LEVEL;
+        }
+    }
+
     private enum ReviveMode {
         RESPAWN(false, "Respawned"),
         ARISE(true, "Arose");
@@ -221,6 +253,9 @@ public class TameCommands {
             this.createdTick = createdTick;
             this.tameName = tameName;
         }
+    }
+
+    private record PendingGuardianToolConfirm(String selectorRaw, String setName, String dimensionId, int x, int y, int z, long expiresAtTick) {
     }
 
     private static final class PendingImmediateChunkTeleport {
@@ -516,6 +551,10 @@ public class TameCommands {
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
                         .then(Commands.literal("bed")
                                 .executes(ctx -> listOwnedBeds(ctx.getSource()))
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .executes(ctx -> setOwnedBed(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("remove")
                                         .then(Commands.literal("all")
                                                 .executes(ctx -> removeOwnedBedsAll(ctx.getSource())))
@@ -984,6 +1023,13 @@ public class TameCommands {
                                                         MovementOrder.WANDER
                                                 )))))
                         .then(Commands.literal("guardian")
+                                .then(Commands.literal("tool")
+                                        .then(Commands.literal("confirm")
+                                                .executes(ctx -> guardianToolConfirm(ctx.getSource())))
+                                        .then(Commands.literal("changeOrder")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(List.of("lvl", "name", "points", "type"), b))
+                                                        .executes(ctx -> guardianToolChangeOrder(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                                 .then(Commands.literal("list")
                                         .executes(ctx -> guardianList(ctx.getSource())))
                                 .then(Commands.literal("deployGroup")
@@ -1341,6 +1387,15 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "pet")
                                                 ))))
+                                .then(Commands.literal("callOrder")
+                                        .then(Commands.literal("info")
+                                                .executes(ctx -> adminCallOrderInfo(ctx.getSource())))
+                                        .then(Commands.literal("invert")
+                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .executes(ctx -> adminToggleCallOrderInvert(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "typeId")
+                                                        )))))
                                 .then(Commands.literal("fixStats")
                                         .executes(ctx -> adminFixLoadedTameStatsAll(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -2571,11 +2626,13 @@ public class TameCommands {
         else if (key.equals("bed")) {
             sendInfoPage(p, "Bed",
                     "/tames bed",
+                    "/tames bed set <pet>",
                     "/tames bed remove <pet>",
                     "/tames bed remove all",
                     "/tames bed remove group <group>",
                     "/tames bed remove type <type>",
                     "Shows your tames with assigned beds.",
+                    "Stand on a pet bed and run /tames bed set <pet> to assign that bed for the normal teleport XP cost.",
                     "Each row is formatted as: Tame: BedType, Dimension [x, y, z].",
                     "Removing a bed clears that tame's stored bed assignment."
             );
@@ -3224,6 +3281,36 @@ public class TameCommands {
         return withBeds.size();
     }
 
+    private static int setOwnedBed(CommandSourceStack source, String petName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), petName);
+        if (data == null) {
+            return error(player, "Tame not found.");
+        }
+        BlockPos bedPos = currentPetBedUnderPlayer(player);
+        if (bedPos == null) {
+            return error(player, "Stand on a pet bed to set a tame bed location.");
+        }
+        String dimensionId = player.serverLevel().dimension().location().toString();
+        TameData claimed = TameRegistry.getTameByPetBed(dimensionId, bedPos);
+        if (claimed != null && claimed.uuid != null && !claimed.uuid.equals(data.uuid)) {
+            return error(player, "That pet bed already belongs to " + tameDisplayName(claimed) + ".");
+        }
+        boolean crossDimension = isCrossDimension(data, player);
+        int cost = teleportCostFor(data, crossDimension);
+        if (!payTeleportXp(player, cost)) {
+            return 0;
+        }
+        assignTameBed(player.getServer(), data, dimensionId, bedPos);
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Set bed for " + tameDisplayName(data) + " at [" + bedPos.getX() + ", " + bedPos.getY() + ", " + bedPos.getZ() + "] (-" + cost + " XP points" + (crossDimension ? ", cross-dimension" : "") + ").")
+                .withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
     private static int removeOwnedBed(CommandSourceStack source, String petName) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
@@ -3304,6 +3391,42 @@ public class TameCommands {
             TameableUtils.removePetBedPos(loaded);
             TameableUtils.setPetBedDimension(loaded, "");
         }
+    }
+
+    private static void assignTameBed(MinecraftServer server, TameData data, String dimensionId, BlockPos bedPos) {
+        if (data == null || dimensionId == null || dimensionId.isBlank() || bedPos == null) {
+            return;
+        }
+        data.hasPetBed = true;
+        data.petBedDimension = dimensionId;
+        data.petBedX = bedPos.getX();
+        data.petBedY = bedPos.getY();
+        data.petBedZ = bedPos.getZ();
+        TamableAnimal loaded = server == null ? null : findLoadedTameByUuid(server, data.uuid);
+        if (loaded != null) {
+            TameableUtils.setPetBedPos(loaded, bedPos);
+            TameableUtils.setPetBedDimension(loaded, dimensionId);
+        }
+    }
+
+    private static BlockPos currentPetBedUnderPlayer(ServerPlayer player) {
+        if (player == null) {
+            return null;
+        }
+        BlockPos[] candidates = new BlockPos[]{
+                player.blockPosition(),
+                player.blockPosition().below()
+        };
+        for (BlockPos pos : candidates) {
+            if (pos == null) {
+                continue;
+            }
+            BlockEntity blockEntity = player.serverLevel().getBlockEntity(pos);
+            if (blockEntity instanceof com.github.alexthe668.domesticationinnovation.server.block.PetBedBlockEntity) {
+                return pos.immutable();
+            }
+        }
+        return null;
     }
 
     private static String formatBedEntry(MinecraftServer server, TameData data) {
@@ -5471,6 +5594,9 @@ public class TameCommands {
             case SINGLE -> selector.value;
             case GROUP -> "Group " + selector.value;
             case TYPE -> "Type " + selector.value;
+            case CLOSE -> "Close";
+            case NEARBY -> "Nearby";
+            case STATE -> selector.value;
         };
         return drumCyclePlacedMode(player, selectorName);
     }
@@ -5688,7 +5814,10 @@ public class TameCommands {
         ALL,
         SINGLE,
         GROUP,
-        TYPE
+        TYPE,
+        CLOSE,
+        NEARBY,
+        STATE
     }
 
     private record DrumSelector(DrumSelectorKind kind, String value) {
@@ -5703,10 +5832,19 @@ public class TameCommands {
 
     private static DrumSelector parseDrumSelector(String rawText) {
         String raw = rawText == null ? "" : rawText.trim();
-        if (raw.isBlank() || raw.equalsIgnoreCase("Drum")) {
+        if (raw.isBlank() || raw.equalsIgnoreCase("Drum") || raw.equalsIgnoreCase("all")) {
             return new DrumSelector(DrumSelectorKind.ALL, "");
         }
         String lower = raw.toLowerCase(Locale.ROOT);
+        if (lower.equals("close")) {
+            return new DrumSelector(DrumSelectorKind.CLOSE, "");
+        }
+        if (lower.equals("nearby")) {
+            return new DrumSelector(DrumSelectorKind.NEARBY, "");
+        }
+        if (lower.equals("follow") || lower.equals("sit") || lower.equals("wander")) {
+            return new DrumSelector(DrumSelectorKind.STATE, lower);
+        }
         if (lower.startsWith("group ")) {
             String value = raw.substring("group ".length()).trim();
             return value.isBlank() ? new DrumSelector(DrumSelectorKind.ALL, "") : new DrumSelector(DrumSelectorKind.GROUP, value);
@@ -5734,6 +5872,12 @@ public class TameCommands {
         return switch (selector.kind) {
             case ALL -> loadedOwnedAllTames(source, player.getUUID());
             case GROUP -> loadedOwnedGroupTames(source, player.getUUID(), selector.value);
+            case CLOSE -> loadedOwnedCloseTames(source, player.getUUID(), player);
+            case NEARBY -> loadedOwnedNearbyTames(source, player.getUUID(), player);
+            case STATE -> {
+                MovementOrder order = parseMovementOrder(selector.value);
+                yield order == null ? List.of() : loadedOwnedStateTames(source, player.getUUID(), order);
+            }
             case TYPE -> {
                 List<TamableAnimal> list = new ArrayList<>();
                 for (TameData data : ownedType(player.getUUID(), selector.value)) {
@@ -5770,11 +5914,323 @@ public class TameCommands {
             case ALL -> ownedTames(player.getUUID());
             case GROUP -> ownedGroup(player.getUUID(), selector.value);
             case TYPE -> ownedType(player.getUUID(), selector.value);
+            case CLOSE -> loadedSelectionData(player, loadedOwnedCloseTames(player.createCommandSourceStack(), player.getUUID(), player));
+            case NEARBY -> loadedSelectionData(player, loadedOwnedNearbyTames(player.createCommandSourceStack(), player.getUUID(), player));
+            case STATE -> {
+                MovementOrder order = parseMovementOrder(selector.value);
+                yield order == null ? List.of() : ownedState(player.getUUID(), order);
+            }
             case SINGLE -> {
                 TameData data = findOwnedTame(player.getUUID(), selector.value);
                 yield data == null ? List.of() : List.of(data);
             }
         };
+    }
+
+    private static List<TameData> loadedSelectionData(ServerPlayer player, List<TamableAnimal> loaded) {
+        List<TameData> out = new ArrayList<>();
+        for (TamableAnimal tame : loaded) {
+            if (tame == null || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) continue;
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null) {
+                out.add(data);
+            }
+        }
+        return out;
+    }
+
+    private static List<TamableAnimal> loadedOwnedCloseTames(CommandSourceStack source, UUID owner, ServerPlayer player) {
+        List<TamableAnimal> list = new ArrayList<>();
+        for (TamableAnimal tame : loadedOwnedAllTames(source, owner)) {
+            if (tame.distanceToSqr(player) <= 2.25D) {
+                list.add(tame);
+            }
+        }
+        return list;
+    }
+
+    private static List<TamableAnimal> loadedOwnedNearbyTames(CommandSourceStack source, UUID owner, ServerPlayer player) {
+        List<TamableAnimal> list = new ArrayList<>();
+        for (TamableAnimal tame : player.level().getEntitiesOfClass(TamableAnimal.class, player.getBoundingBox().inflate(32))) {
+            if (!tame.isTame() || !owner.equals(tame.getOwnerUUID())) continue;
+            list.add(tame);
+        }
+        return list;
+    }
+
+    private static List<TameData> ownedState(UUID owner, MovementOrder order) {
+        List<TameData> list = new ArrayList<>();
+        for (TameData data : ownedTames(owner)) {
+            if (matchesMovementOrderSnapshot(data, order)) {
+                list.add(data);
+            }
+        }
+        return list;
+    }
+
+    private record GuardianToolTarget(DrumSelector selector, String selectorRaw, String setName) {
+    }
+
+    private static GuardianToolTarget parseGuardianToolTarget(ItemStack arrow) {
+        if (arrow == null || arrow.isEmpty() || !arrow.hasCustomHoverName()) {
+            return null;
+        }
+        String raw = arrow.getHoverName().getString().trim();
+        if (raw.isBlank()) {
+            return null;
+        }
+        int colon = raw.indexOf(':');
+        String selectorRaw = colon >= 0 ? raw.substring(0, colon).trim() : raw;
+        String setRaw = colon >= 0 ? raw.substring(colon + 1).trim() : "";
+        if (selectorRaw.isBlank()) {
+            selectorRaw = "all";
+        }
+        String lowerSelector = selectorRaw.toLowerCase(Locale.ROOT);
+        DrumSelector selector = lowerSelector.equals("all") || lowerSelector.startsWith("all ")
+                ? new DrumSelector(DrumSelectorKind.ALL, "")
+                : parseDrumSelector(selectorRaw);
+        String normalizedSet = normalizeGuardianSetName(setRaw);
+        if (normalizedSet.isBlank()) {
+            return null;
+        }
+        return new GuardianToolTarget(selector, selectorRaw, normalizedSet);
+    }
+
+    private static GuardianToolOrder currentGuardianToolOrder(ServerPlayer player) {
+        return GuardianToolOrder.parse(player.getPersistentData().getString(TAG_GUARDIAN_TOOL_ORDER));
+    }
+
+    public static int guardianToolChangeOrder(CommandSourceStack source, String rawOrder) {
+        ServerPlayer player = source.getPlayer();
+        GuardianToolOrder order = GuardianToolOrder.parse(rawOrder);
+        player.getPersistentData().putString(TAG_GUARDIAN_TOOL_ORDER, order.id);
+        player.sendSystemMessage(Component.literal("Guardian tool order -> " + order.id + ".").withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    public static int guardianToolConfirm(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        PendingGuardianToolConfirm pending = PENDING_GUARDIAN_TOOL_CONFIRMS.remove(player.getUUID());
+        if (pending == null) {
+            return error(player, "No guardian tool confirmation is pending.");
+        }
+        if (player.serverLevel().getGameTime() > pending.expiresAtTick()) {
+            return error(player, "Guardian tool confirmation expired.");
+        }
+        GuardianToolTarget target = new GuardianToolTarget(parseDrumSelector(pending.selectorRaw()), pending.selectorRaw(), pending.setName());
+        BlockPos pos = new BlockPos(pending.x(), pending.y(), pending.z());
+        return guardianToolSetAllAnchors(player, target, pending.dimensionId(), pos, true);
+    }
+
+    public static int guardianToolQueueAllConfirm(ServerPlayer player, ItemStack arrow, BlockPos pos) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) {
+            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+        }
+        PENDING_GUARDIAN_TOOL_CONFIRMS.put(player.getUUID(), new PendingGuardianToolConfirm(
+                target.selectorRaw(),
+                target.setName(),
+                player.serverLevel().dimension().location().toString(),
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                player.serverLevel().getGameTime() + GUARDIAN_TOOL_CONFIRM_TICKS
+        ));
+        player.sendSystemMessage(Component.literal("Confirm guardian tool set-all with /tames guardian tool confirm within 60 seconds.")
+                .withStyle(ChatFormatting.GOLD));
+        return 1;
+    }
+
+    public static int guardianToolSetNextAnchor(ServerPlayer player, ItemStack arrow, BlockPos pos) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) {
+            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+        }
+        List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
+        if (selected.isEmpty()) {
+            return error(player, "No matching tames for that guardian tool.");
+        }
+        TameData next = null;
+        for (TameData data : selected) {
+            if (!data.guardianSetAnchors.containsKey(target.setName())) {
+                next = data;
+                break;
+            }
+        }
+        if (next == null) {
+            return error(player, "All selected tames already have a guardian location in '" + target.setName() + "'.");
+        }
+        putGuardianSetAnchor(next, target.setName(), player.serverLevel().dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ());
+        TameRegistry.markDirty();
+        TameData upcoming = null;
+        boolean seen = false;
+        for (TameData data : selected) {
+            if (!seen) {
+                if (data.uuid != null && data.uuid.equals(next.uuid)) {
+                    seen = true;
+                }
+                continue;
+            }
+            if (!data.guardianSetAnchors.containsKey(target.setName())) {
+                upcoming = data;
+                break;
+            }
+        }
+        net.minecraft.network.chat.MutableComponent line = Component.literal("Set guardian '" + target.setName() + "' for " + tameDisplayName(next) + ". ")
+                .withStyle(ChatFormatting.GREEN);
+        if (upcoming != null) {
+            line = line.append(Component.literal("Next: " + tameDisplayName(upcoming) + ".").withStyle(ChatFormatting.AQUA));
+        } else {
+            line = line.append(Component.literal("No next tame pending.").withStyle(ChatFormatting.GRAY));
+        }
+        player.sendSystemMessage(line);
+        return 1;
+    }
+
+    public static int guardianToolClearAnchorsAtBlock(ServerPlayer player, ItemStack arrow, BlockPos pos) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) {
+            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+        }
+        List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
+        String dimensionId = player.serverLevel().dimension().location().toString();
+        int removed = 0;
+        for (TameData data : selected) {
+            CompoundTag anchor = getGuardianSetAnchor(data, target.setName());
+            if (guardianToolMatchesAnchor(anchor, dimensionId, pos)) {
+                data.guardianSetAnchors.remove(target.setName());
+                removed++;
+            }
+        }
+        if (removed <= 0) {
+            return error(player, "No guardian locations removed at that block.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Removed guardian '" + target.setName() + "' from " + removed + " tame(s).")
+                .withStyle(ChatFormatting.YELLOW));
+        return removed;
+    }
+
+    public static boolean guardianToolAddGroupTarget(ServerPlayer player, ItemStack arrow, TamableAnimal tame) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null || target.selector().kind != DrumSelectorKind.GROUP) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) return false;
+        data.group = target.selector().value;
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Guardian tool: added " + tameDisplayName(data) + " to group " + target.selector().value + ".")
+                .withStyle(ChatFormatting.GREEN), true);
+        return true;
+    }
+
+    public static boolean guardianToolRemoveGroupTarget(ServerPlayer player, ItemStack arrow, TamableAnimal tame) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null || target.selector().kind != DrumSelectorKind.GROUP) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null || data.group == null || data.group.isBlank()) return false;
+        if (!data.group.equalsIgnoreCase(target.selector().value)) return false;
+        data.group = "";
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Guardian tool: removed " + tameDisplayName(data) + " from group " + target.selector().value + ".")
+                .withStyle(ChatFormatting.YELLOW), true);
+        return true;
+    }
+
+    public static boolean guardianToolAddCurrentAnchorToSet(ServerPlayer player, ItemStack arrow, TamableAnimal tame) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null || !data.hasHome || data.homeDimension == null || data.homeDimension.isBlank()) {
+            error(player, "That tame has no current guardian location to store.");
+            return false;
+        }
+        putGuardianSetAnchor(data, target.setName(), data.homeDimension, data.homeX, data.homeY, data.homeZ);
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Guardian tool: stored current guardian of " + tameDisplayName(data) + " in '" + target.setName() + "'.")
+                .withStyle(ChatFormatting.DARK_AQUA), true);
+        return true;
+    }
+
+    public static boolean guardianToolRemoveCurrentAnchorFromSet(ServerPlayer player, ItemStack arrow, TamableAnimal tame) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) return false;
+        if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) return false;
+        CompoundTag anchor = getGuardianSetAnchor(data, target.setName());
+        if (anchor == null || anchor.isEmpty()) {
+            return false;
+        }
+        if (data.hasHome && guardianToolMatchesAnchor(anchor, data.homeDimension, new BlockPos(data.homeX, data.homeY, data.homeZ))) {
+            data.guardianSetAnchors.remove(target.setName());
+        } else {
+            data.guardianSetAnchors.remove(target.setName());
+        }
+        TameRegistry.markDirty();
+        player.displayClientMessage(Component.literal("Guardian tool: removed guardian '" + target.setName() + "' from " + tameDisplayName(data) + ".")
+                .withStyle(ChatFormatting.YELLOW), true);
+        return true;
+    }
+
+    private static int guardianToolSetAllAnchors(ServerPlayer player, GuardianToolTarget target, String dimensionId, BlockPos pos, boolean fromConfirm) {
+        List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
+        if (selected.isEmpty()) {
+            return error(player, "No matching tames for that guardian tool.");
+        }
+        int count = 0;
+        for (TameData data : selected) {
+            putGuardianSetAnchor(data, target.setName(), dimensionId, pos.getX(), pos.getY(), pos.getZ());
+            count++;
+        }
+        if (count <= 0) {
+            return 0;
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal((fromConfirm ? "Confirmed" : "Set") + " guardian '" + target.setName() + "' for " + count + " tame(s).")
+                .withStyle(ChatFormatting.GREEN));
+        return count;
+    }
+
+    private static List<TameData> guardianToolOrderedSelection(ServerPlayer player, DrumSelector selector) {
+        List<TameData> selected = new ArrayList<>(drumSelectedTameData(player, selector));
+        selected.removeIf(data -> data == null || data.dead || data.ownerUUID == null || !player.getUUID().equals(data.ownerUUID));
+        Comparator<TameData> comparator = switch (currentGuardianToolOrder(player)) {
+            case NAME -> Comparator
+                    .comparing((TameData data) -> safeName(data).toLowerCase(Locale.ROOT))
+                    .thenComparing(data -> data.level, Comparator.reverseOrder())
+                    .thenComparing(data -> data.uuid == null ? "" : data.uuid.toString());
+            case POINTS -> Comparator
+                    .comparingInt(TameCommands::weightedCombatScore).reversed()
+                    .thenComparing((TameData data) -> data.level, Comparator.reverseOrder())
+                    .thenComparing(data -> safeName(data).toLowerCase(Locale.ROOT));
+            case TYPE -> Comparator
+                    .comparing((TameData data) -> data.type == null ? "" : data.type.toLowerCase(Locale.ROOT))
+                    .thenComparing(data -> safeName(data).toLowerCase(Locale.ROOT))
+                    .thenComparing(data -> data.level, Comparator.reverseOrder());
+            case LEVEL -> Comparator
+                    .comparingInt((TameData data) -> data.level).reversed()
+                    .thenComparing(data -> safeName(data).toLowerCase(Locale.ROOT))
+                    .thenComparing(data -> weightedCombatScore(data), Comparator.reverseOrder());
+        };
+        selected.sort(comparator);
+        return selected;
+    }
+
+    private static boolean guardianToolMatchesAnchor(CompoundTag anchor, String dimensionId, BlockPos pos) {
+        if (anchor == null || anchor.isEmpty() || dimensionId == null || pos == null) {
+            return false;
+        }
+        return dimensionId.equals(anchor.getString("dimension"))
+                && pos.getX() == anchor.getInt("x")
+                && pos.getY() == anchor.getInt("y")
+                && pos.getZ() == anchor.getInt("z");
+    }
+
+    private static String safeName(TameData data) {
+        return data == null || data.name == null ? "" : data.name;
     }
 
     private static int groupTames(CommandSourceStack source, String group) {
@@ -9854,6 +10310,54 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminToggleCallOrderInvert(CommandSourceStack source, String typeId) {
+        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            if (source.getPlayer() != null) {
+                return error(source.getPlayer(), "Type id required.");
+            }
+            source.sendFailure(Component.literal("Type id required."));
+            return 0;
+        }
+        boolean enabled = TameRegistry.toggleCallOrderInvertedType(normalized);
+        Component line = Component.literal("Call-order invert override for " + normalized + " -> " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.AQUA : ChatFormatting.YELLOW);
+        if (source.getPlayer() != null) {
+            source.getPlayer().sendSystemMessage(line);
+        } else {
+            source.sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
+    private static int adminCallOrderInfo(CommandSourceStack source) {
+        List<String> types = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
+        types.sort(String::compareToIgnoreCase);
+        Component header = Component.literal("Call-order default: inverted generic mapping (0 wander, 1 follow, 2 sit).")
+                .withStyle(ChatFormatting.AQUA);
+        if (source.getPlayer() != null) {
+            source.getPlayer().sendSystemMessage(header);
+            if (types.isEmpty()) {
+                source.getPlayer().sendSystemMessage(Component.literal("No per-type call-order overrides are currently enabled.")
+                        .withStyle(ChatFormatting.GRAY));
+            } else {
+                source.getPlayer().sendSystemMessage(Component.literal("Override types using old mapping (0 wander, 1 sit, 2 follow):")
+                        .withStyle(ChatFormatting.GOLD));
+                for (String type : types) {
+                    source.getPlayer().sendSystemMessage(Component.literal("- " + type).withStyle(ChatFormatting.YELLOW));
+                }
+            }
+        } else {
+            source.sendSuccess(() -> header, false);
+            if (types.isEmpty()) {
+                source.sendSuccess(() -> Component.literal("No per-type call-order overrides are currently enabled."), false);
+            } else {
+                source.sendSuccess(() -> Component.literal("Override types using old mapping (0 wander, 1 sit, 2 follow): " + String.join(", ", types)), false);
+            }
+        }
+        return 1;
+    }
+
     private static int adminFixLoadedTameStatsAll(CommandSourceStack source) {
         int fixed = 0;
         int missingData = 0;
@@ -11226,6 +11730,15 @@ public class TameCommands {
         };
     }
 
+    private static boolean usesInvertedGenericCallOrder(TamableAnimal tame) {
+        if (tame == null) {
+            return true;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        String typeId = key == null ? tame.getType().toString() : key.toString();
+        return !TameRegistry.isCallOrderInvertedType(typeId);
+    }
+
     private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
         List<TamableAnimal> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
@@ -11302,10 +11815,11 @@ public class TameCommands {
         tryInvokeBooleanSetter(tame, "setSitting", sit);
         tryInvokeBooleanSetter(tame, "setSit", sit);
         // Common int-based command APIs used by tame mods.
-        tryInvokeIntSetter(tame, "setCommand", preferredCommandInt(order));
-        tryInvokeIntSetter(tame, "setPetCommand", preferredCommandInt(order));
-        tryInvokeIntSetter(tame, "setOrder", preferredCommandInt(order));
-        tryInvokeIntSetter(tame, "setMode", preferredCommandInt(order));
+        int genericCommand = preferredCommandInt(tame, order);
+        tryInvokeIntSetter(tame, "setCommand", genericCommand);
+        tryInvokeIntSetter(tame, "setPetCommand", genericCommand);
+        tryInvokeIntSetter(tame, "setOrder", genericCommand);
+        tryInvokeIntSetter(tame, "setMode", genericCommand);
         // Try DI helper class variants (if present at runtime).
         tryInvokeStaticHelper("com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils", tame, order);
         tryInvokeStaticHelper("com.github.alexthe668.domesticationinnovation.server.misc.TameableUtils", tame, order);
@@ -11336,6 +11850,18 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(MovementOrder order) {
+        return preferredCommandInt(null, order);
+    }
+
+    private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {
+        if (usesInvertedGenericCallOrder(tame)) {
+            return switch (order) {
+                case WANDER -> 0;
+                case FOLLOW -> 1;
+                case SIT -> 2;
+                case GUARDIAN -> 0;
+            };
+        }
         return switch (order) {
             case WANDER -> 0;
             case SIT -> 1;
@@ -11369,7 +11895,7 @@ public class TameCommands {
                     continue;
                 }
                 if ((arg1 == int.class || arg1 == Integer.class) && (name.contains("command") || name.contains("order") || name.contains("mode"))) {
-                    for (int candidate : commandCandidates(order)) {
+                    for (int candidate : commandCandidates(tame, order)) {
                         try {
                             method.invoke(null, tame, candidate);
                             break;
@@ -11412,6 +11938,18 @@ public class TameCommands {
     }
 
     private static int[] commandCandidates(MovementOrder order) {
+        return commandCandidates(null, order);
+    }
+
+    private static int[] commandCandidates(TamableAnimal tame, MovementOrder order) {
+        if (usesInvertedGenericCallOrder(tame)) {
+            return switch (order) {
+                case WANDER -> new int[]{0, 1, 2, 3};
+                case FOLLOW -> new int[]{1, 2, 0, 3};
+                case SIT -> new int[]{2, 1, 0, 3};
+                case GUARDIAN -> new int[]{0, 1, 2, 3};
+            };
+        }
         return switch (order) {
             case WANDER -> new int[]{0, 2, 1, 3};
             case SIT -> new int[]{1, 2, 0, 3};

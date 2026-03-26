@@ -32,6 +32,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
+    private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -77,6 +78,8 @@ public class TameRegistry {
         OWNER_HEALTH_SIPHON.putAll(savedData.getHealthSiphon());
         OWNER_ENTER_PORTALS_BY_THEMSELVES.clear();
         OWNER_ENTER_PORTALS_BY_THEMSELVES.putAll(savedData.getEnterPortalsByThemselves());
+        INVERTED_CALL_ORDER_TYPE_IDS.clear();
+        INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -221,7 +224,36 @@ public class TameRegistry {
         savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
         savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
+        savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setDirty();
+    }
+
+    public static boolean isCallOrderInvertedType(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        return INVERTED_CALL_ORDER_TYPE_IDS.contains(typeId.trim().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    public static Set<String> getCallOrderInvertedTypes() {
+        return Set.copyOf(INVERTED_CALL_ORDER_TYPE_IDS);
+    }
+
+    public static boolean toggleCallOrderInvertedType(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean enabled;
+        if (INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized)) {
+            INVERTED_CALL_ORDER_TYPE_IDS.remove(normalized);
+            enabled = false;
+        } else {
+            INVERTED_CALL_ORDER_TYPE_IDS.add(normalized);
+            enabled = true;
+        }
+        markDirty();
+        return enabled;
     }
 
     public static boolean canEnterPortalsByThemselves(UUID ownerUuid) {

@@ -17,6 +17,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameDrumEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProjectileTimeoutEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePortalStabilizeEvents;
@@ -164,6 +165,7 @@ public class CommonProxy {
         DomesticationMod.LOGGER.info("Registering TL integration handlers in DomesticationMod.");
         MinecraftForge.EVENT_BUS.register(TameCombatEvents.class);
         MinecraftForge.EVENT_BUS.register(TameDrumEvents.class);
+        MinecraftForge.EVENT_BUS.register(GuardianToolEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);

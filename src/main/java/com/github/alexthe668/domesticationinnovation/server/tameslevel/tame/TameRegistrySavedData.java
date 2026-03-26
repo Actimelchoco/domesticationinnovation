@@ -27,6 +27,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
     private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
+    private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -124,6 +125,22 @@ public class TameRegistrySavedData extends SavedData {
         this.enterPortalsByThemselves.clear();
         if (enterPortalsByThemselves != null) {
             this.enterPortalsByThemselves.putAll(enterPortalsByThemselves);
+        }
+    }
+
+    public Set<String> getInvertedCallOrderTypeIds() {
+        return invertedCallOrderTypeIds;
+    }
+
+    public void setInvertedCallOrderTypeIds(Set<String> invertedCallOrderTypeIds) {
+        this.invertedCallOrderTypeIds.clear();
+        if (invertedCallOrderTypeIds != null) {
+            for (String id : invertedCallOrderTypeIds) {
+                if (id == null || id.isBlank()) {
+                    continue;
+                }
+                this.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+            }
         }
     }
 
@@ -225,6 +242,14 @@ public class TameRegistrySavedData extends SavedData {
             enterPortalsTag.add(row);
         }
         tag.put("enterPortalsByThemselves", enterPortalsTag);
+        ListTag invertedCallOrderTag = new ListTag();
+        for (String id : invertedCallOrderTypeIds) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            invertedCallOrderTag.add(net.minecraft.nbt.StringTag.valueOf(id));
+        }
+        tag.put("invertedCallOrderTypeIds", invertedCallOrderTag);
         return tag;
     }
 
@@ -329,6 +354,18 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.enterPortalsByThemselves.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
+            }
+        }
+
+        if (tag.contains("invertedCallOrderTypeIds", Tag.TAG_LIST)) {
+            ListTag invertedCallOrderTag = tag.getList("invertedCallOrderTypeIds", Tag.TAG_STRING);
+            for (Tag entry : invertedCallOrderTag) {
+                if (entry instanceof net.minecraft.nbt.StringTag stringTag) {
+                    String id = stringTag.getAsString();
+                    if (id != null && !id.isBlank()) {
+                        data.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                    }
+                }
             }
         }
         return data;
