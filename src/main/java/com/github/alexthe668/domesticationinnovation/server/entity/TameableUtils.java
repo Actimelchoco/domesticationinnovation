@@ -91,6 +91,7 @@ public class TameableUtils {
     static {
         Map<String, Enchantment> visualFakeEnchants = new LinkedHashMap<>();
         visualFakeEnchants.put("magnetic", DIEnchantmentRegistry.MAGNETIC);
+        visualFakeEnchants.put("immunity_frame", DIEnchantmentRegistry.IMMUNITY_FRAME);
         visualFakeEnchants.put("health_siphon", DIEnchantmentRegistry.HEALTH_SIPHON);
         visualFakeEnchants.put("void_cloud", DIEnchantmentRegistry.VOID_CLOUD);
         visualFakeEnchants.put("blazing_protection", DIEnchantmentRegistry.BLAZING_PROTECTION);

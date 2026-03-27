@@ -772,14 +772,21 @@ public class LevelSystem {
     }
 
     private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data, BaseStatReward reward, double amount) {
-        addToAttribute(tame, reward.attribute, amount);
         trackBonus(data, reward, amount);
+        boolean reapplied = false;
+        if (tame != null && data != null && isLegendaryMonstersType(data.type)) {
+            reapplied = reapplyTypeBasePlusBonuses(tame, data);
+        } else {
+            addToAttribute(tame, reward.attribute, amount);
+        }
         if (reward == BaseStatReward.HP) {
             if (amount >= 0.0D) {
                 tame.setHealth(tame.getMaxHealth());
             } else {
                 tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
             }
+        } else if (reapplied && tame != null) {
+            tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
         }
         TameRegistry.markDirty();
         return new LevelRewardResult(RewardCategory.BASE_STAT, reward.name(), amount, reward.display + " +" + formatDouble(amount));

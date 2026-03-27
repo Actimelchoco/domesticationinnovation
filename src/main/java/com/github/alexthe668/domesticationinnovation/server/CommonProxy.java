@@ -254,7 +254,8 @@ public class CommonProxy {
         if (event.getEntity() instanceof LivingEntity living) {
             if (living instanceof TamableAnimal tame
                     && tame.isTame()
-                    && isAlexsMobsPottedFlutter(tame)
+                    && tame.isAlive()
+                    && isAlexsMobsFlutter(tame)
                     && tame.getRemovalReason() == Entity.RemovalReason.DISCARDED) {
                 TameSpawnEvents.markFlutterStoredFromPot(tame);
             }
@@ -329,16 +330,9 @@ public class CommonProxy {
         return className != null && className.endsWith(".DragonflyArmorItem");
     }
 
-    private static boolean isAlexsMobsPottedFlutter(TamableAnimal tame) {
+    private static boolean isAlexsMobsFlutter(TamableAnimal tame) {
         ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        if (typeId == null || !"alexsmobs:flutter".equals(typeId.toString())) {
-            return false;
-        }
-        try {
-            return (boolean) tame.getClass().getMethod("isPotted").invoke(tame);
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
+        return typeId != null && "alexsmobs:flutter".equals(typeId.toString());
     }
 
     @SubscribeEvent
@@ -504,7 +498,7 @@ public class CommonProxy {
             if (event.getEntity() instanceof Mob mob && ((magneticLevel > 0 && !mob.level().isClientSide) || magneticVisual)) {
                 Entity sucking = TameableUtils.getPetAttackTarget(mob);
                 if (!mob.level().isClientSide) {
-                    if (mob.getTarget() == null || !mob.getTarget().isAlive() || mob.distanceTo(mob.getTarget()) < 0.5F + mob.getBbWidth() || mob.getRootVehicle() instanceof GiantBubbleEntity) {
+                    if (mob.getTarget() == null || !mob.getTarget().isAlive() || mob.getRootVehicle() instanceof GiantBubbleEntity) {
                         if (TameableUtils.getPetAttackTargetID(mob) != -1) {
                             TameableUtils.setPetAttackTarget(mob, -1);
                         }

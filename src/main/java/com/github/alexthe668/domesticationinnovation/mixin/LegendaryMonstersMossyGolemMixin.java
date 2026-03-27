@@ -70,6 +70,29 @@ public abstract class LegendaryMonstersMossyGolemMixin extends TamableAnimal {
         }
     }
 
+    /**
+     * @author Codex
+     * @reason Keep same-owner duel opponents as valid targets for Mossy Golems.
+     */
+    @Overwrite(remap = false)
+    public void stopAttackingAllies() {
+        LivingEntity target = this.getTarget();
+        if (!(target instanceof TamableAnimal tameTarget)) {
+            return;
+        }
+        LivingEntity owner = this.getOwner();
+        if (owner == null) {
+            return;
+        }
+        if (tameTarget.getOwner() != owner) {
+            return;
+        }
+        if (TameDuelManager.areDuelOpponents(this.getUUID(), tameTarget.getUUID())) {
+            return;
+        }
+        this.setTarget(null);
+    }
+
     private static boolean isWithinArcAndRange(float distance, float maxDistance, float relativeYaw, float arc) {
         if (distance > maxDistance) {
             return false;

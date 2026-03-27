@@ -292,22 +292,30 @@ public final class TameDuelManager {
         for (UUID ownId : ownTeam) {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
+            LivingEntity current = own.getTarget();
+            if (isUsableCurrentDuelTarget(own, current)) {
+                continue;
+            }
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 own.setTarget(null);
                 own.getNavigation().stop();
                 continue;
             }
-            if (own.getTarget() != null) {
-                LivingEntity current = own.getTarget();
-                if (current == null || !areDuelOpponents(own.getUUID(), current.getUUID())) {
-                    own.setTarget(null);
-                }
-            }
             if (own.getTarget() != nearest) {
                 own.setTarget(nearest);
             }
         }
+    }
+
+    private static boolean isUsableCurrentDuelTarget(TamableAnimal own, LivingEntity current) {
+        if (own == null || current == null || !current.isAlive()) {
+            return false;
+        }
+        if (own.level() != current.level()) {
+            return false;
+        }
+        return areDuelOpponents(own.getUUID(), current.getUUID());
     }
 
     private static void prepareParticipantForDuel(MinecraftServer server, UUID participantId) {

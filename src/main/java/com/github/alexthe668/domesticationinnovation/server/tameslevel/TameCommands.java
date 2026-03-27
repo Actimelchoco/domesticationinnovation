@@ -580,10 +580,6 @@ public class TameCommands {
                         .then(Commands.literal("healthSiphon")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("setMaxHp999")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> setMaxHp999(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("enterPortalsByThemselves")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -2749,9 +2745,12 @@ public class TameCommands {
 
         List<TameData> loaded = new ArrayList<>();
         List<TameData> unloaded = new ArrayList<>();
+        List<TameData> stored = new ArrayList<>();
         List<TameData> dead = new ArrayList<>();
         for (TameData d : tames) {
-            if (isDeadEntry(d.uuid)) {
+            if (d.stored) {
+                stored.add(d);
+            } else if (isDeadEntry(d.uuid)) {
                 dead.add(d);
             } else if (isLoadedAnywhere(source.getServer(), d.uuid)) {
                 loaded.add(d);
@@ -2762,12 +2761,20 @@ public class TameCommands {
 
         loaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         unloaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
+        stored.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         dead.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
 
         p.sendSystemMessage(Component.literal("---- Tame Load Status ----").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Loaded (" + loaded.size() + "):").withStyle(ChatFormatting.GREEN));
         for (TameData d : loaded) {
             p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name).withStyle(ChatFormatting.GREEN));
+        }
+        p.sendSystemMessage(Component.literal("Stored (" + stored.size() + "):").withStyle(ChatFormatting.LIGHT_PURPLE));
+        for (TameData d : stored) {
+            String where = (d.lastKnownDimension == null || d.lastKnownDimension.isBlank())
+                    ? "unknown"
+                    : (d.lastKnownDimension + " @ " + d.lastKnownX + " " + d.lastKnownY + " " + d.lastKnownZ);
+            p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name + " (" + where + ")").withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         p.sendSystemMessage(Component.literal("Unloaded (" + unloaded.size() + "):").withStyle(ChatFormatting.RED));
         for (TameData d : unloaded) {
@@ -7071,6 +7078,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
+        if (d.stored) return error(p, tameDisplayName(d) + " is stored and can only be recovered with admin respawn.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
@@ -7095,31 +7103,11 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setMaxHp999(CommandSourceStack source, String pet) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("Only players can use this command."));
-            return 0;
-        }
-        TameData data = findOwnedTame(player.getUUID(), pet);
-        if (data == null) return error(player, "Pet not found.");
-        if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead.");
-        TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
-        if (tame == null) return error(player, tameDisplayName(data) + " must be loaded.");
-
-        setAttributeToValue(tame, Attributes.MAX_HEALTH, 999.0D);
-        tame.setHealth(999.0F);
-        CompoundTag refreshedSnapshot = new CompoundTag();
-        tame.save(refreshedSnapshot);
-        data.entitySnapshot = refreshedSnapshot;
-        player.sendSystemMessage(Component.literal("Set max HP of " + tameDisplayName(data) + " to 999.").withStyle(ChatFormatting.GREEN));
-        return 1;
-    }
-
     private static int teleportGuardianPet(CommandSourceStack source, String pet) {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         if (!data.hasHome) return error(player, data.name + " does not currently have a guardian location.");
         return teleportGuardianBatch(source, player, List.of(data), "TPGuardian " + data.name, 0);
@@ -7129,6 +7117,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         return teleportHomeBatch(source, player, List.of(data), "TPHome " + data.name, ownedDeadTames(player.getUUID()).stream().anyMatch(d -> Objects.equals(d.uuid, data.uuid)) ? 1 : 0);
     }
@@ -7137,6 +7126,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData data = findOwnedTame(p.getUUID(), pet);
         if (data == null) return error(p, "Pet not found.");
+        if (data.stored) return error(p, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (isEffectivelyLoaded(source, p, data)) {
             return error(p, "Pet is already loaded/carried. Recover is only for lost/unloaded tames.");
         }
@@ -14361,6 +14351,10 @@ public class TameCommands {
         if (alive != null) {
             return alive;
         }
+        TameData stored = findOwnedStoredTame(owner, name);
+        if (stored != null) {
+            return stored;
+        }
         if (owner == null || name == null) return null;
         TameData bestDead = null;
         for (TameData d : TameRegistry.TAMES.values()) {
@@ -14380,6 +14374,23 @@ public class TameCommands {
         return bestDead;
     }
 
+    private static TameData findOwnedStoredTame(UUID owner, String name) {
+        if (owner == null || name == null) return null;
+        TameData best = null;
+        for (TameData d : TameRegistry.TAMES.values()) {
+            if (d == null || d.name == null) continue;
+            if (!owner.equals(d.ownerUUID)) continue;
+            if (!d.stored) continue;
+            if (!d.name.equalsIgnoreCase(name)) continue;
+            if (best == null
+                    || d.level > best.level
+                    || (d.level == best.level && String.valueOf(d.uuid).compareTo(String.valueOf(best.uuid)) < 0)) {
+                best = d;
+            }
+        }
+        return best;
+    }
+
     private static boolean isDeadEntry(UUID tameUuid) {
         if (tameUuid == null) return false;
         TameData data = TameRegistry.get(tameUuid);
@@ -14391,7 +14402,9 @@ public class TameCommands {
     }
 
     private static boolean isStoredEntry(UUID tameUuid) {
-        return false;
+        if (tameUuid == null) return false;
+        TameData data = TameRegistry.get(tameUuid);
+        return data != null && data.stored;
     }
 
     private static boolean isInactiveEntry(UUID tameUuid) {

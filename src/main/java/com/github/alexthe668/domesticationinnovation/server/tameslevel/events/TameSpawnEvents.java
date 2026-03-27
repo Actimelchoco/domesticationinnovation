@@ -429,13 +429,13 @@ public class TameSpawnEvents {
             return;
         }
         if (tame.getOwner() instanceof ServerPlayer owner) {
-            owner.sendSystemMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW));
+            owner.displayClientMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW), true);
             return;
         }
         if (data != null && data.ownerUUID != null && tame.level().getServer() != null) {
             ServerPlayer owner = tame.level().getServer().getPlayerList().getPlayer(data.ownerUUID);
             if (owner != null) {
-                owner.sendSystemMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW));
+                owner.displayClientMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW), true);
             }
         }
     }
@@ -445,13 +445,13 @@ public class TameSpawnEvents {
             return;
         }
         if (tame.getOwner() instanceof ServerPlayer owner) {
-            owner.sendSystemMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN));
+            owner.displayClientMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN), true);
             return;
         }
         if (data != null && data.ownerUUID != null && tame.level().getServer() != null) {
             ServerPlayer owner = tame.level().getServer().getPlayerList().getPlayer(data.ownerUUID);
             if (owner != null) {
-                owner.sendSystemMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN));
+                owner.displayClientMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN), true);
             }
         }
     }

@@ -23,6 +23,7 @@
     "FrogMixin",
     "ItemMixin",
     "LegendaryMonstersAnimatedTamableMobMixin",
+    "LegendaryMonstersHauntedGuardMixin",
     "LegendaryMonstersMossyGolemMixin",
     "LivingEntityMixin",
     "MobMixin",
