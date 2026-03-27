@@ -150,6 +150,7 @@ public class TameSpawnEvents {
         TameData existing = TameRegistry.get(tame.getUUID());
         if (existing != null) {
             boolean changed = false;
+            boolean released = existing.stored;
             if (existing.dead) {
                 existing.dead = false;
                 existing.deadGameTime = 0L;
@@ -170,6 +171,9 @@ public class TameSpawnEvents {
             if (changed) {
                 TameRegistry.markDirty();
             }
+            if (released) {
+                notifyFlutterReleased(tame, existing);
+            }
             // Keep entity attributes in sync with registry bonuses whenever a tracked tame loads.
             TameRegistry.bindEntityToData(tame, existing);
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existing);
@@ -182,6 +186,7 @@ public class TameSpawnEvents {
             TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
             TameRegistry.bindEntityToData(tame, existingByTlId);
             boolean changed = false;
+            boolean released = existingByTlId.stored;
             if (existingByTlId.dead) {
                 existingByTlId.dead = false;
                 existingByTlId.deadGameTime = 0L;
@@ -201,6 +206,9 @@ public class TameSpawnEvents {
             }
             if (changed) {
                 TameRegistry.markDirty();
+            }
+            if (released) {
+                notifyFlutterReleased(tame, existingByTlId);
             }
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
             queueDeferredStatRefresh(tame, existingByTlId, DEFERRED_STAT_REFRESH_DELAY_TICKS);
@@ -321,6 +329,8 @@ public class TameSpawnEvents {
         if (candidate.ownerUUID == null) {
             candidate.ownerUUID = ownerId;
         }
+        boolean released = candidate.stored;
+        candidate.stored = false;
         // Normalize back to base name if spawn item carried [Lvl X] prefix.
         candidate.name = uniqueLoadedNameFor(tame, parsed.baseName);
         TameRegistry.rebindEntityUuid(candidate, newUuid);
@@ -328,6 +338,9 @@ public class TameSpawnEvents {
         TameRegistry.markDirty();
         LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
+        if (released) {
+            notifyFlutterReleased(tame, candidate);
+        }
         System.out.println("[TamesLevel] Synced tame entry by [Lvl] name match: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
     }
@@ -385,6 +398,62 @@ public class TameSpawnEvents {
         LevelSystem.updateTameName(tame, candidate);
         System.out.println("[TamesLevel] Synced respawned tame to dead entry: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
+    }
+
+    public static void markFlutterStoredFromPot(TamableAnimal tame) {
+        if (tame == null || tame.level().isClientSide || !isAlexsMobsFlutter(tame)) {
+            return;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(tame);
+            if (tlId != null) {
+                data = TameRegistry.getByTlId(tlId);
+            }
+        }
+        if (data == null || data.stored) {
+            return;
+        }
+        data.stored = true;
+        TameRegistry.markDirty();
+        notifyFlutterStored(tame, data);
+    }
+
+    private static boolean isAlexsMobsFlutter(TamableAnimal tame) {
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key != null && "alexsmobs:flutter".equals(key.toString());
+    }
+
+    private static void notifyFlutterStored(TamableAnimal tame, TameData data) {
+        if (!isAlexsMobsFlutter(tame)) {
+            return;
+        }
+        if (tame.getOwner() instanceof ServerPlayer owner) {
+            owner.sendSystemMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW));
+            return;
+        }
+        if (data != null && data.ownerUUID != null && tame.level().getServer() != null) {
+            ServerPlayer owner = tame.level().getServer().getPlayerList().getPlayer(data.ownerUUID);
+            if (owner != null) {
+                owner.sendSystemMessage(Component.literal("flutter stored").withStyle(ChatFormatting.YELLOW));
+            }
+        }
+    }
+
+    private static void notifyFlutterReleased(TamableAnimal tame, TameData data) {
+        if (!isAlexsMobsFlutter(tame)) {
+            return;
+        }
+        if (tame.getOwner() instanceof ServerPlayer owner) {
+            owner.sendSystemMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN));
+            return;
+        }
+        if (data != null && data.ownerUUID != null && tame.level().getServer() != null) {
+            ServerPlayer owner = tame.level().getServer().getPlayerList().getPlayer(data.ownerUUID);
+            if (owner != null) {
+                owner.sendSystemMessage(Component.literal("flutter released").withStyle(ChatFormatting.GREEN));
+            }
+        }
     }
 
     private static boolean sameType(String tameType, String dataTypeRaw) {

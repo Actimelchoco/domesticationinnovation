@@ -14407,6 +14407,9 @@ public class TameCommands {
         if (data == null) {
             return "";
         }
+        if (data.stored) {
+            return " [STORED]";
+        }
         if (data.dead) {
             return " [DEAD]";
         }
@@ -14416,6 +14419,9 @@ public class TameCommands {
     private static String statusLabel(TameData data, MinecraftServer server) {
         if (data == null) {
             return "unknown";
+        }
+        if (data.stored) {
+            return "stored";
         }
         if (data.dead) {
             return "dead";
@@ -14427,6 +14433,9 @@ public class TameCommands {
         if (data == null) {
             return ChatFormatting.WHITE;
         }
+        if (data.stored) {
+            return ChatFormatting.LIGHT_PURPLE;
+        }
         if (data.dead) {
             return ChatFormatting.GRAY;
         }
@@ -14435,10 +14444,13 @@ public class TameCommands {
 
     private static int statusOrder(TameData data, MinecraftServer server) {
         if (data == null) {
-            return 3;
+            return 4;
+        }
+        if (data.stored) {
+            return 2;
         }
         if (data.dead) {
-            return 2;
+            return 3;
         }
         return isLoadedAnywhere(server, data.uuid) ? 0 : 1;
     }
