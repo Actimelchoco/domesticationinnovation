@@ -252,13 +252,6 @@ public class CommonProxy {
     @SubscribeEvent
     public void onEntityLeaveWorld(EntityLeaveLevelEvent event) {
         if (event.getEntity() instanceof LivingEntity living) {
-            if (living instanceof TamableAnimal tame
-                    && tame.isTame()
-                    && tame.isAlive()
-                    && isAlexsMobsFlutter(tame)
-                    && tame.getRemovalReason() == Entity.RemovalReason.DISCARDED) {
-                TameSpawnEvents.markFlutterStoredFromPot(tame);
-            }
             if (living.getPersistentData().getBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG)) {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
             }
@@ -328,11 +321,6 @@ public class CommonProxy {
         }
         String className = item.getClass().getName();
         return className != null && className.endsWith(".DragonflyArmorItem");
-    }
-
-    private static boolean isAlexsMobsFlutter(TamableAnimal tame) {
-        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        return typeId != null && "alexsmobs:flutter".equals(typeId.toString());
     }
 
     @SubscribeEvent
