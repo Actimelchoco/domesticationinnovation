@@ -255,7 +255,11 @@ public class TameCommands {
         }
     }
 
-    private record PendingGuardianToolConfirm(String selectorRaw, String setName, String dimensionId, int x, int y, int z, long expiresAtTick) {
+    private enum GuardianToolConfirmAction {
+        CLEAR_ALL
+    }
+
+    private record PendingGuardianToolConfirm(GuardianToolConfirmAction action, String selectorRaw, String setName, String dimensionId, int x, int y, int z, long expiresAtTick) {
     }
 
     private static final class PendingImmediateChunkTeleport {
@@ -1081,6 +1085,52 @@ public class TameCommands {
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .executes(ctx -> guardianSetInfo(ctx.getSource(), StringArgumentType.getString(ctx, "setName")))))
                                 .then(Commands.literal("deploymentGroup")
+                                        .then(Commands.literal("delete")
+                                                .then(Commands.argument("setName", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> guardianDeleteSet(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "setName")
+                                                        ))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("setName", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> guardianRemoveSetAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "setName")
+                                                                )))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                                        .executes(ctx -> guardianRemoveSetGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "setName"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                                        .executes(ctx -> guardianRemoveSetType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "setName"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.literal("state")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestMovementStates(b))
+                                                                        .executes(ctx -> guardianRemoveSetState(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "setName"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                                .executes(ctx -> guardianRemoveSetPet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "setName"),
+                                                                        StringArgumentType.getString(ctx, "pet")
+                                                                )))))
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .then(Commands.argument("pet", StringArgumentType.string())
@@ -1295,6 +1345,10 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
                                         .executes(ctx -> groupTames(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                .then(Commands.literal("delete")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> groupDelete(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("add")
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
@@ -1396,6 +1450,138 @@ public class TameCommands {
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
                                                         )))))
+                                .then(Commands.literal("player")
+                                        .then(Commands.argument("player", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
+                                                .then(Commands.literal("respawn")
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> adminPlayerRespawnAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        ReviveMode.RESPAWN,
+                                                                        false
+                                                                )))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.RESPAWN,
+                                                                                false
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.RESPAWN,
+                                                                                false
+                                                                        ))))
+                                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                                .executes(ctx -> adminPlayerRespawnPet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        StringArgumentType.getString(ctx, "name"),
+                                                                        ReviveMode.RESPAWN,
+                                                                        false
+                                                                ))))
+                                                .then(Commands.literal("arise")
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> adminPlayerRespawnAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        ReviveMode.ARISE,
+                                                                        false
+                                                                )))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.ARISE,
+                                                                                false
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.ARISE,
+                                                                                false
+                                                                        ))))
+                                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                                .executes(ctx -> adminPlayerRespawnPet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        StringArgumentType.getString(ctx, "name"),
+                                                                        ReviveMode.ARISE,
+                                                                        false
+                                                                ))))
+                                                .then(Commands.literal("respawnReincarnated")
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> adminPlayerRespawnAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        ReviveMode.RESPAWN,
+                                                                        true
+                                                                )))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.RESPAWN,
+                                                                                true
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerRespawnType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                ReviveMode.RESPAWN,
+                                                                                true
+                                                                        ))))
+                                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                                .executes(ctx -> adminPlayerRespawnPet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        StringArgumentType.getString(ctx, "name"),
+                                                                        ReviveMode.RESPAWN,
+                                                                        true
+                                                                ))))
+                                                .then(Commands.literal("reincarnate")
+                                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                                .executes(ctx -> adminPlayerReincarnatePet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        StringArgumentType.getString(ctx, "name")
+                                                                ))))
+                                                .then(Commands.literal("reincarnation")
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> adminPlayerReincarnateBatchAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player")
+                                                                )))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerReincarnateBatchGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .executes(ctx -> adminPlayerReincarnateBatchType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        )))))))
                                 .then(Commands.literal("fixStats")
                                         .executes(ctx -> adminFixLoadedTameStatsAll(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -1531,6 +1717,8 @@ public class TameCommands {
                                                         false
                                                 ))))
                                 .then(Commands.literal("respawn")
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> adminRespawnAll(ctx.getSource())))
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestAllRespawnableTameNames(b))
                                                 .executes(ctx -> adminRespawnPet(
@@ -5252,6 +5440,99 @@ public class TameCommands {
         return 1;
     }
 
+    private static int guardianRemoveSetPet(CommandSourceStack source, String setName, String pet) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
+        if (data.guardianSetAnchors.remove(normalizedSet) == null) {
+            return error(player, tameDisplayName(data) + " is not in deployment group '" + normalizedSet + "'.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Removed " + tameDisplayName(data) + " from deployment group '" + normalizedSet + "'.").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int guardianRemoveSetAll(CommandSourceStack source, String setName) {
+        ServerPlayer player = source.getPlayer();
+        return guardianRemoveSet(source, setName, ownedTames(player.getUUID()), "all owned tames");
+    }
+
+    private static int guardianRemoveSetGroup(CommandSourceStack source, String setName, String group) {
+        ServerPlayer player = source.getPlayer();
+        return guardianRemoveSet(source, setName, ownedGroup(player.getUUID(), group), "group '" + group + "'");
+    }
+
+    private static int guardianRemoveSetType(CommandSourceStack source, String setName, String typeFilter) {
+        ServerPlayer player = source.getPlayer();
+        return guardianRemoveSet(source, setName, ownedType(player.getUUID(), typeFilter), "type '" + typeFilter + "'");
+    }
+
+    private static int guardianRemoveSetState(CommandSourceStack source, String setName, String stateName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
+        return guardianRemoveSet(source, setName, ownedState(player.getUUID(), order), "state '" + movementLabel(order) + "'");
+    }
+
+    private static int guardianDeleteSet(CommandSourceStack source, String setName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
+        int removed = 0;
+        for (TameData data : ownedTames(player.getUUID())) {
+            if (data == null) {
+                continue;
+            }
+            if (data.guardianSetAnchors.remove(normalizedSet) != null) {
+                removed++;
+            }
+        }
+        if (removed <= 0) {
+            return error(player, "Deployment group '" + normalizedSet + "' does not exist on any of your tames.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Deleted deployment group '" + normalizedSet + "' from " + removed + " tame(s).").withStyle(ChatFormatting.YELLOW));
+        return removed;
+    }
+
+    private static int guardianRemoveSet(CommandSourceStack source, String setName, List<TameData> selected, String label) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
+        if (selected == null || selected.isEmpty()) {
+            return error(player, "No tames found for " + label + ".");
+        }
+        int removed = 0;
+        for (TameData data : selected) {
+            if (data == null) {
+                continue;
+            }
+            if (data.guardianSetAnchors.remove(normalizedSet) != null) {
+                removed++;
+            }
+        }
+        if (removed <= 0) {
+            return error(player, "No deployment-group entries removed for " + label + ".");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Removed deployment group '" + normalizedSet + "' from " + removed + " tame(s) in " + label + ".").withStyle(ChatFormatting.YELLOW));
+        return removed;
+    }
+
     private static int guardianCaptureCurrentAll(CommandSourceStack source, String setName, boolean includeInactiveCurrent) {
         ServerPlayer player = source.getPlayer();
         return guardianCaptureCurrent(source, setName, ownedTames(player.getUUID()), includeInactiveCurrent, "all");
@@ -5540,6 +5821,31 @@ public class TameCommands {
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Removed " + d.name + " from all groups."));
         return 1;
+    }
+
+    private static int groupDelete(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<TameData> members = ownedGroup(player.getUUID(), group);
+        if (members.isEmpty()) {
+            return error(player, "No tames in group '" + group + "'.");
+        }
+        int removed = 0;
+        for (TameData data : members) {
+            if (data == null || data.group == null || data.group.isBlank()) {
+                continue;
+            }
+            data.group = "";
+            removed++;
+        }
+        if (removed <= 0) {
+            return error(player, "No tames in group '" + group + "'.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Deleted group '" + group + "' from " + removed + " tame(s).").withStyle(ChatFormatting.YELLOW));
+        return removed;
     }
 
     public static int drumIssueMovementCommand(ServerPlayer player, ItemStack drum, int command) {
@@ -6018,25 +6324,27 @@ public class TameCommands {
             return error(player, "Guardian tool confirmation expired.");
         }
         GuardianToolTarget target = new GuardianToolTarget(parseDrumSelector(pending.selectorRaw()), pending.selectorRaw(), pending.setName());
-        BlockPos pos = new BlockPos(pending.x(), pending.y(), pending.z());
-        return guardianToolSetAllAnchors(player, target, pending.dimensionId(), pos, true);
+        return switch (pending.action()) {
+            case CLEAR_ALL -> guardianToolClearAllAnchors(player, target, true);
+        };
     }
 
-    public static int guardianToolQueueAllConfirm(ServerPlayer player, ItemStack arrow, BlockPos pos) {
+    public static int guardianToolQueueClearConfirm(ServerPlayer player, ItemStack arrow) {
         GuardianToolTarget target = parseGuardianToolTarget(arrow);
         if (target == null) {
-            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+            return error(player, guardianToolRenameHelp());
         }
         PENDING_GUARDIAN_TOOL_CONFIRMS.put(player.getUUID(), new PendingGuardianToolConfirm(
+                GuardianToolConfirmAction.CLEAR_ALL,
                 target.selectorRaw(),
                 target.setName(),
                 player.serverLevel().dimension().location().toString(),
-                pos.getX(),
-                pos.getY(),
-                pos.getZ(),
+                0,
+                0,
+                0,
                 player.serverLevel().getGameTime() + GUARDIAN_TOOL_CONFIRM_TICKS
         ));
-        player.sendSystemMessage(Component.literal("Confirm guardian tool set-all with /tames guardian tool confirm within 60 seconds.")
+        player.sendSystemMessage(Component.literal("Confirm clearing deployment group '" + target.setName() + "' with /tames guardian tool confirm within 60 seconds.")
                 .withStyle(ChatFormatting.GOLD));
         return 1;
     }
@@ -6044,7 +6352,7 @@ public class TameCommands {
     public static int guardianToolSetNextAnchor(ServerPlayer player, ItemStack arrow, BlockPos pos) {
         GuardianToolTarget target = parseGuardianToolTarget(arrow);
         if (target == null) {
-            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+            return error(player, guardianToolRenameHelp());
         }
         List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
         if (selected.isEmpty()) {
@@ -6076,21 +6384,35 @@ public class TameCommands {
                 break;
             }
         }
-        net.minecraft.network.chat.MutableComponent line = Component.literal("Set guardian '" + target.setName() + "' for " + tameDisplayName(next) + ". ")
-                .withStyle(ChatFormatting.GREEN);
+        net.minecraft.network.chat.MutableComponent line = Component.literal("Set guardian '")
+                .withStyle(ChatFormatting.WHITE)
+                .append(Component.literal(target.setName()).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal("' for ").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(tameDisplayName(next)).withStyle(ChatFormatting.GREEN))
+                .append(Component.literal(". ").withStyle(ChatFormatting.WHITE));
         if (upcoming != null) {
-            line = line.append(Component.literal("Next: " + tameDisplayName(upcoming) + ".").withStyle(ChatFormatting.AQUA));
+            line = line.append(Component.literal("Next: ").withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal(tameDisplayName(upcoming)).withStyle(ChatFormatting.BLUE))
+                    .append(Component.literal(".").withStyle(ChatFormatting.WHITE));
         } else {
-            line = line.append(Component.literal("No next tame pending.").withStyle(ChatFormatting.GRAY));
+            line = line.append(Component.literal("No next tame pending.").withStyle(ChatFormatting.WHITE));
         }
         player.sendSystemMessage(line);
         return 1;
     }
 
+    public static int guardianToolDeploySet(ServerPlayer player, ItemStack arrow) {
+        GuardianToolTarget target = parseGuardianToolTarget(arrow);
+        if (target == null) {
+            return error(player, guardianToolRenameHelp());
+        }
+        return guardianDeploySet(player.createCommandSourceStack(), target.setName());
+    }
+
     public static int guardianToolClearAnchorsAtBlock(ServerPlayer player, ItemStack arrow, BlockPos pos) {
         GuardianToolTarget target = parseGuardianToolTarget(arrow);
         if (target == null) {
-            return error(player, "Rename the arrow to '<all|group <name>|type <name>|pet>: <guardianGroupName>'.");
+            return error(player, guardianToolRenameHelp());
         }
         List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
         String dimensionId = player.serverLevel().dimension().location().toString();
@@ -6194,6 +6516,29 @@ public class TameCommands {
         return count;
     }
 
+    private static int guardianToolClearAllAnchors(ServerPlayer player, GuardianToolTarget target, boolean fromConfirm) {
+        List<TameData> selected = guardianToolOrderedSelection(player, target.selector());
+        if (selected.isEmpty()) {
+            return error(player, "No matching tames for that guardian tool.");
+        }
+        int removed = 0;
+        for (TameData data : selected) {
+            if (data == null) {
+                continue;
+            }
+            if (data.guardianSetAnchors.remove(target.setName()) != null) {
+                removed++;
+            }
+        }
+        if (removed <= 0) {
+            return error(player, "No guardian locations were stored in '" + target.setName() + "' for that selection.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal((fromConfirm ? "Confirmed" : "Cleared") + " guardian group '" + target.setName() + "' for " + removed + " tame(s).")
+                .withStyle(ChatFormatting.YELLOW));
+        return removed;
+    }
+
     private static List<TameData> guardianToolOrderedSelection(ServerPlayer player, DrumSelector selector) {
         List<TameData> selected = new ArrayList<>(drumSelectedTameData(player, selector));
         selected.removeIf(data -> data == null || data.dead || data.ownerUUID == null || !player.getUUID().equals(data.ownerUUID));
@@ -6217,6 +6562,10 @@ public class TameCommands {
         };
         selected.sort(comparator);
         return selected;
+    }
+
+    private static String guardianToolRenameHelp() {
+        return "Rename the arrow to '<target>: <guardianGroup>'. Examples: 'all: base', 'group wolves: north', 'type minecraft:wolf: west', 'Fluffy: tower'.";
     }
 
     private static boolean guardianToolMatchesAnchor(CompoundTag anchor, String dimensionId, BlockPos pos) {
@@ -6575,6 +6924,54 @@ public class TameCommands {
         return respawnDeadBatch(source, p, dead, mode, mode.label + " all dead tames");
     }
 
+    private static int adminPlayerRespawnPet(CommandSourceStack source, String playerName, String pet, ReviveMode mode, boolean reincarnateAfter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        TameData data = findOwnedDeadTame(ownerId, pet);
+        if (data == null) {
+            return adminError(source, "No dead tame found with that name for " + resolveKnownOwnerName(source.getServer(), ownerId, playerName) + ".");
+        }
+        return adminPlayerRespawnDeadBatch(source, ownerId, List.of(data), mode, adminPlayerReviveLabel(resolveKnownOwnerName(source.getServer(), ownerId, playerName), mode, pet), reincarnateAfter);
+    }
+
+    private static int adminPlayerRespawnGroup(CommandSourceStack source, String playerName, String group, ReviveMode mode, boolean reincarnateAfter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        List<TameData> dead = ownedDeadGroup(ownerId, group);
+        if (dead.isEmpty()) {
+            return adminError(source, "No dead tames in group '" + group + "' for " + resolveKnownOwnerName(source.getServer(), ownerId, playerName) + ".");
+        }
+        return adminPlayerRespawnDeadBatch(source, ownerId, dead, mode, adminPlayerReviveLabel(resolveKnownOwnerName(source.getServer(), ownerId, playerName), mode, "group '" + group + "'"), reincarnateAfter);
+    }
+
+    private static int adminPlayerRespawnType(CommandSourceStack source, String playerName, String typeFilter, ReviveMode mode, boolean reincarnateAfter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        List<TameData> dead = ownedDeadType(ownerId, typeFilter);
+        if (dead.isEmpty()) {
+            return adminError(source, "No dead tames of type '" + typeFilter + "' for " + resolveKnownOwnerName(source.getServer(), ownerId, playerName) + ".");
+        }
+        return adminPlayerRespawnDeadBatch(source, ownerId, dead, mode, adminPlayerReviveLabel(resolveKnownOwnerName(source.getServer(), ownerId, playerName), mode, "type '" + typeFilter + "'"), reincarnateAfter);
+    }
+
+    private static int adminPlayerRespawnAll(CommandSourceStack source, String playerName, ReviveMode mode, boolean reincarnateAfter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        List<TameData> dead = ownedDeadTames(ownerId);
+        if (dead.isEmpty()) {
+            return adminError(source, resolveKnownOwnerName(source.getServer(), ownerId, playerName) + " has no dead tames to respawn.");
+        }
+        return adminPlayerRespawnDeadBatch(source, ownerId, dead, mode, adminPlayerReviveLabel(resolveKnownOwnerName(source.getServer(), ownerId, playerName), mode, "all dead tames"), reincarnateAfter);
+    }
+
     private static int respawnWaitingList(CommandSourceStack source, int requestedLimit) {
         ServerPlayer player = source.getPlayer();
         List<TameData> queue = morningRespawnCandidates(source.getServer(), player.getUUID());
@@ -6591,6 +6988,117 @@ public class TameCommands {
                     (i + 1) + ". [" + data.level + "] " + data.name + " K:" + data.kills + " A:" + data.assists + " D:" + data.deaths
                             + "  " + respawnProgressSuffix(data)
             ).withStyle(ChatFormatting.GRAY));
+        }
+        return 1;
+    }
+
+    private static int adminPlayerReincarnatePet(CommandSourceStack source, String playerName, String petName) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
+        TameData data = findOwnedTame(ownerId, petName);
+        if (data == null) {
+            return adminError(source, "Loaded/alive tame not found for " + ownerName + ".");
+        }
+        if (data.dead) {
+            return adminError(source, "That tame is dead. Respawn it first.");
+        }
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null || !tame.isAlive()) {
+            return adminError(source, "Reincarnation requires the tame to be loaded and alive.");
+        }
+        if (!data.hasSavedProgress) {
+            return adminError(source, "That tame has no higher saved progress to restore.");
+        }
+        if (data.level >= data.savedLevel) {
+            return adminError(source, "That tame is already at or above its highest saved level.");
+        }
+        int fromLevel = data.level;
+        int targetLevel = data.savedLevel;
+        if (!LevelSystem.restoreHighestProgressWithoutXpCost(tame, data)) {
+            return adminError(source, "Failed to restore saved progress.");
+        }
+        source.sendSuccess(() -> Component.literal(
+                "Admin reincarnated " + tameDisplayName(data) + " for " + ownerName + " from level " + fromLevel + " to level " + targetLevel + " (no cost)."
+        ).withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminPlayerReincarnateBatchAll(CommandSourceStack source, String playerName) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        return adminPlayerReincarnateBatch(
+                source,
+                resolveKnownOwnerName(source.getServer(), ownerId, playerName),
+                eligibleLoadedReincarnationTames(source, ownerId, ownedTames(ownerId)),
+                "all"
+        );
+    }
+
+    private static int adminPlayerReincarnateBatchGroup(CommandSourceStack source, String playerName, String group) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        return adminPlayerReincarnateBatch(
+                source,
+                resolveKnownOwnerName(source.getServer(), ownerId, playerName),
+                eligibleLoadedReincarnationTames(source, ownerId, ownedGroup(ownerId, group)),
+                "group " + group
+        );
+    }
+
+    private static int adminPlayerReincarnateBatchType(CommandSourceStack source, String playerName, String typeFilter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        return adminPlayerReincarnateBatch(
+                source,
+                resolveKnownOwnerName(source.getServer(), ownerId, playerName),
+                eligibleLoadedReincarnationTames(source, ownerId, ownedType(ownerId, typeFilter)),
+                "type " + typeFilter
+        );
+    }
+
+    private static int adminPlayerReincarnateBatch(CommandSourceStack source, String ownerName, List<TameData> requested, String label) {
+        if (requested.isEmpty()) {
+            return adminError(source, "No loaded reincarnation-eligible tames found for " + ownerName + " " + label + ".");
+        }
+        int totalLevelsRestored = 0;
+        int restored = 0;
+        List<String> failed = new ArrayList<>();
+        for (TameData data : requested) {
+            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            int restoredLevels = Math.max(0, data.savedLevel - data.level);
+            if (LevelSystem.restoreHighestProgressWithoutXpCost(tame, data)) {
+                restored++;
+                totalLevelsRestored += restoredLevels;
+            } else {
+                failed.add(tameDisplayName(data) + " (failed to restore saved progress)");
+            }
+        }
+        if (restored <= 0) {
+            StringBuilder message = new StringBuilder("No tames were reincarnated for ").append(ownerName).append(".");
+            if (!failed.isEmpty()) {
+                message.append(" Failures: ").append(String.join("; ", failed)).append(".");
+            }
+            return adminError(source, message.toString());
+        }
+        final int restoredCount = restored;
+        final int restoredLevelsTotal = totalLevelsRestored;
+        source.sendSuccess(() -> Component.literal(
+                "Admin reincarnated " + restoredCount + " tame(s) for " + ownerName + " (" + restoredLevelsTotal + " total level(s) restored, no cost)."
+        ).withStyle(ChatFormatting.GREEN), true);
+        if (!failed.isEmpty()) {
+            source.sendFailure(Component.literal("Failures: " + String.join("; ", failed)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -6620,6 +7128,70 @@ public class TameCommands {
             if (!deathMessage.isBlank()) {
                 player.sendSystemMessage(Component.literal("    cause: " + deathMessage).withStyle(ChatFormatting.DARK_RED));
             }
+        }
+        return 1;
+    }
+
+    private static int adminPlayerRespawnDeadBatch(CommandSourceStack source, UUID ownerId, List<TameData> candidates, ReviveMode mode, String label, boolean reincarnateAfter) {
+        if (source == null || ownerId == null || candidates == null || candidates.isEmpty()) {
+            return 0;
+        }
+        String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, ownerId.toString());
+        int success = 0;
+        int failed = 0;
+        int reincarnated = 0;
+        List<String> failReasons = new ArrayList<>();
+
+        for (TameData data : candidates) {
+            if (data == null || data.uuid == null) {
+                failed++;
+                failReasons.add("unknown (invalid registry entry)");
+                continue;
+            }
+            if (!isDeadEntry(data.uuid)) {
+                continue;
+            }
+            if (findLoadedOwnedTameByUuid(source, ownerId, data.uuid) != null) {
+                failed++;
+                failReasons.add(data.name + " (already loaded)");
+                continue;
+            }
+            SpawnTarget target = resolveAdminPlayerRespawnTarget(source, ownerId, data, mode);
+            if (target == null || target.level == null) {
+                failed++;
+                failReasons.add(data.name + " (invalid target dimension)");
+                continue;
+            }
+            RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
+            if (!result.success) {
+                failed++;
+                failReasons.add(data.name + " (" + result.error + ")");
+                continue;
+            }
+            if (reincarnateAfter) {
+                TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
+                if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
+                        && LevelSystem.restoreHighestProgressWithoutXpCost(respawned, data)) {
+                    reincarnated++;
+                }
+            }
+            success++;
+        }
+
+        if (success <= 0) {
+            StringBuilder message = new StringBuilder("No dead tames respawned for ").append(ownerName).append(".");
+            if (!failReasons.isEmpty()) {
+                message.append(" Reasons: ").append(String.join("; ", failReasons));
+            }
+            return adminError(source, message.toString());
+        }
+        final int respawnedCount = success;
+        final int reincarnatedCount = reincarnated;
+        source.sendSuccess(() -> Component.literal(
+                label + ": " + respawnedCount + " tame(s) for " + ownerName + (reincarnateAfter ? ", " + reincarnatedCount + " restored to saved progress" : "") + " (no cost)."
+        ).withStyle(ChatFormatting.GREEN), true);
+        if (failed > 0 && !failReasons.isEmpty()) {
+            source.sendFailure(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -6722,6 +7294,43 @@ public class TameCommands {
         return new SpawnTarget(source.getLevel(), source.getPosition(), source.getRotation().y, source.getRotation().x);
     }
 
+    private static SpawnTarget resolveAdminPlayerRespawnTarget(CommandSourceStack source, UUID ownerId, TameData data, ReviveMode mode) {
+        if (source == null || source.getServer() == null) {
+            return null;
+        }
+        if (mode == null) {
+            mode = ReviveMode.RESPAWN;
+        }
+        ServerPlayer owner = ownerId == null ? null : source.getServer().getPlayerList().getPlayer(ownerId);
+        if (mode.toMe) {
+            if (owner == null) {
+                return null;
+            }
+            return new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        }
+        if (data != null && data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
+            ResourceLocation bedId = ResourceLocation.tryParse(data.petBedDimension);
+            if (bedId != null) {
+                ServerLevel bedLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, bedId));
+                if (bedLevel != null) {
+                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY, data.petBedZ + 0.5D), 0.0F, 0.0F);
+                }
+            }
+        }
+        SpawnTarget diQueueTarget = resolveBedTargetFromDiQueue(source, data);
+        if (diQueueTarget != null) {
+            return diQueueTarget;
+        }
+        SpawnTarget ownerBedTarget = resolveOwnerBedTarget(source.getServer(), ownerId);
+        if (ownerBedTarget != null) {
+            return ownerBedTarget;
+        }
+        if (owner != null) {
+            return new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        }
+        return new SpawnTarget(source.getLevel(), source.getPosition(), source.getRotation().y, source.getRotation().x);
+    }
+
     private static SpawnTarget resolveOwnerBedTarget(CommandSourceStack source, ServerPlayer player) {
         if (source == null || source.getServer() == null || player == null) {
             return null;
@@ -6786,6 +7395,9 @@ public class TameCommands {
         static RespawnResult fail(String error) {
             return new RespawnResult(false, error == null ? "unknown error" : error);
         }
+    }
+
+    private record AdminRespawnEntry(TameData data, TameDeathRecord deadRecord) {
     }
 
     private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
@@ -7013,6 +7625,10 @@ public class TameCommands {
         }
         TameRegistry.bindEntityToData(tame, data);
         applyLatestDeathSnapshotIfAvailable(tame, data);
+        tame.stopRiding();
+        if (tame.isVehicle()) {
+            tame.ejectPassengers();
+        }
         tame.removeAllEffects();
         tame.setHealth(tame.getMaxHealth());
         tame.hurtTime = 0;
@@ -7024,7 +7640,10 @@ public class TameCommands {
         tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
         tame.setTarget(null);
         tame.getNavigation().stop();
+        tame.setNoGravity(false);
         tame.setNoAi(false);
+        tame.setInSittingPose(false);
+        TameGoalInstaller.installIfMissing(tame);
         if (data.hasHome) {
             // Respawns should preserve guardian mode when the tame died with a current guardian anchor.
             tame.setOrderedToSit(false);
@@ -9482,6 +10101,11 @@ public class TameCommands {
         return fallback == null || fallback.isBlank() ? ownerId.toString() : fallback;
     }
 
+    private static String adminPlayerReviveLabel(String ownerName, ReviveMode mode, String targetLabel) {
+        String action = mode == ReviveMode.ARISE ? "Admin arose" : "Admin respawned";
+        return action + " " + targetLabel + " for " + ownerName;
+    }
+
     private static void forceRemoveLoadedTame(TamableAnimal loaded) {
         if (loaded == null) {
             return;
@@ -9600,6 +10224,73 @@ public class TameCommands {
                 data = deadRows.get(chosenIndex - 1);
             }
         }
+        return adminRespawnResolvedEntry(source, data, deadRecord);
+    }
+
+    private static int adminRespawnAll(CommandSourceStack source) {
+        List<AdminRespawnEntry> entries = new ArrayList<>();
+        Set<UUID> seen = new HashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || !isDeadEntry(data.uuid)) {
+                continue;
+            }
+            if (data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
+                continue;
+            }
+            entries.add(new AdminRespawnEntry(data, null));
+            seen.add(data.uuid);
+        }
+        for (TameDeathRecord record : TameRegistry.LAST_DEATHS.values()) {
+            if (record == null || record.uuid == null || seen.contains(record.uuid)) {
+                continue;
+            }
+            if (record.snapshot == null || record.snapshot.isEmpty()) {
+                continue;
+            }
+            TameData data = TameData.fromTag(record.snapshot.copy());
+            if (data == null || data.uuid == null) {
+                continue;
+            }
+            if (data.name == null || data.name.isBlank()) {
+                data.name = record.name == null ? data.uuid.toString() : record.name;
+            }
+            entries.add(new AdminRespawnEntry(data, record));
+            seen.add(data.uuid);
+        }
+        if (entries.isEmpty()) {
+            return error(source.getPlayer(), "No dead tames found.");
+        }
+        int success = 0;
+        List<String> failed = new ArrayList<>();
+        for (AdminRespawnEntry entry : entries) {
+            int result = adminRespawnResolvedEntry(source, entry.data(), entry.deadRecord(), false, failed);
+            if (result > 0) {
+                success++;
+            }
+        }
+        if (success <= 0) {
+            return error(source.getPlayer(), "No tames respawned. Reasons: " + String.join("; ", failed));
+        }
+        final int successCount = success;
+        source.sendSuccess(() -> Component.literal("Respawned " + successCount + " dead tame(s) at your position.").withStyle(ChatFormatting.GREEN), true);
+        if (!failed.isEmpty()) {
+            source.sendFailure(Component.literal("Respawn failed for " + failed.size() + ": " + String.join("; ", failed)).withStyle(ChatFormatting.RED));
+        }
+        return 1;
+    }
+
+    private static int adminRespawnResolvedEntry(CommandSourceStack source, TameData data, TameDeathRecord deadRecord) {
+        return adminRespawnResolvedEntry(source, data, deadRecord, true, null);
+    }
+
+    private static int adminRespawnResolvedEntry(CommandSourceStack source, TameData data, TameDeathRecord deadRecord, boolean announceSingle, List<String> failures) {
+        if (data == null || data.uuid == null) {
+            if (failures != null) {
+                failures.add("unknown (invalid registry entry)");
+                return 0;
+            }
+            return error(source.getPlayer(), "Cannot respawn this tame: invalid registry entry.");
+        }
         TamableAnimal loaded = findLoadedTameByUuid(source, data.uuid);
         if (loaded != null) {
             loaded.discard();
@@ -9610,17 +10301,39 @@ public class TameCommands {
         }
 
         String typeId = recoverEntityTypeId(data);
-        if (typeId.isBlank()) return error(source.getPlayer(), "Cannot respawn this tame: missing saved entity type.");
+        if (typeId.isBlank()) {
+            if (failures != null) {
+                failures.add(data.name + " (missing saved entity type)");
+                return 0;
+            }
+            return error(source.getPlayer(), "Cannot respawn this tame: missing saved entity type.");
+        }
 
         ResourceLocation id = ResourceLocation.tryParse(typeId);
-        if (id == null) return error(source.getPlayer(), "Cannot respawn this tame: invalid entity type '" + typeId + "'.");
+        if (id == null) {
+            if (failures != null) {
+                failures.add(data.name + " (invalid entity type '" + typeId + "')");
+                return 0;
+            }
+            return error(source.getPlayer(), "Cannot respawn this tame: invalid entity type '" + typeId + "'.");
+        }
 
         EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
-        if (entityType == null) return error(source.getPlayer(), "Cannot respawn this tame: unknown entity type '" + typeId + "'.");
+        if (entityType == null) {
+            if (failures != null) {
+                failures.add(data.name + " (unknown entity type '" + typeId + "')");
+                return 0;
+            }
+            return error(source.getPlayer(), "Cannot respawn this tame: unknown entity type '" + typeId + "'.");
+        }
 
         ServerLevel level = source.getLevel();
         Entity spawned = entityType.create(level);
         if (!(spawned instanceof TamableAnimal respawned)) {
+            if (failures != null) {
+                failures.add(data.name + " (stored type is not tamable)");
+                return 0;
+            }
             return error(source.getPlayer(), "Cannot respawn this tame: stored type is not tamable.");
         }
 
@@ -9639,6 +10352,10 @@ public class TameCommands {
             if (deadRecord != null) {
                 TameRegistry.remove(data.uuid);
             }
+            if (failures != null) {
+                failures.add(data.name + " (UUID conflict or invalid state)");
+                return 0;
+            }
             return error(source.getPlayer(), "Failed to respawn tame (UUID conflict or invalid state).");
         }
 
@@ -9654,10 +10371,12 @@ public class TameCommands {
             TameRegistry.removeLastDeath(deadRecord);
         }
         TameRegistry.markDirty();
-        if (normalized) {
-            source.sendSuccess(() -> Component.literal("Respawned " + data.name + " at your position and normalized bonuses."), true);
-        } else {
-            source.sendSuccess(() -> Component.literal("Respawned " + data.name + " at your position (normalize failed: type template unavailable)."), true);
+        if (announceSingle) {
+            if (normalized) {
+                source.sendSuccess(() -> Component.literal("Respawned " + data.name + " at your position and normalized bonuses."), true);
+            } else {
+                source.sendSuccess(() -> Component.literal("Respawned " + data.name + " at your position (normalize failed: type template unavailable)."), true);
+            }
         }
         return 1;
     }
@@ -11642,6 +12361,12 @@ public class TameCommands {
 
     private static int notImplemented(CommandSourceStack source, String message) { source.getPlayer().sendSystemMessage(Component.literal(message)); return 0; }
     private static int error(ServerPlayer p, String message) { p.sendSystemMessage(Component.literal(message)); return 0; }
+    private static int adminError(CommandSourceStack source, String message) {
+        if (source != null) {
+            source.sendFailure(Component.literal(message));
+        }
+        return 0;
+    }
     private static String fmt(double v) { return Math.floor(v) == v ? Integer.toString((int) v) : String.format(Locale.ROOT, "%.2f", v); }
     private static String formatLevelsCompact(Map<String, Integer> levels) {
         if (levels == null || levels.isEmpty()) return "none";
@@ -11850,7 +12575,12 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(MovementOrder order) {
-        return preferredCommandInt(null, order);
+        return switch (order) {
+            case WANDER -> 0;
+            case SIT -> 1;
+            case FOLLOW -> 2;
+            case GUARDIAN -> 0;
+        };
     }
 
     private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {

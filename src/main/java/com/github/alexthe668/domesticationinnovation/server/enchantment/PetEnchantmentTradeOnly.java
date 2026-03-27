@@ -10,6 +10,6 @@ public class PetEnchantmentTradeOnly extends PetEnchantmentLootOnly {
     }
 
     public boolean isTradeable() {
-        return DomesticationMod.CONFIG.isEnchantEnabled(this);
+        return false;
     }
 }

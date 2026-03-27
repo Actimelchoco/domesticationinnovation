@@ -1314,7 +1314,6 @@ public class CommonProxy {
             level5.add(new SellingItemTrade(Items.GOLDEN_HORSE_ARMOR, 13, 1, 1, 18));
             level5.add(new SellingItemTrade(Items.SCUTE, 21, 1, 3, 18));
             level5.add(new EnchantItemTrade(DIItemRegistry.COLLAR_TAG.get(), 50, 4, 38, 3, 20));
-            level5.add(new SellingEnchantedBook(DIEnchantmentRegistry.CHARISMA, 3, 12, 1, 18, 0.02F));
             event.getTrades().put(1, level1);
             event.getTrades().put(2, level2);
             event.getTrades().put(3, level3);

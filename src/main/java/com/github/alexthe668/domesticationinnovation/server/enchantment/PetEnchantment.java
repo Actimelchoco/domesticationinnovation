@@ -38,15 +38,15 @@ public class PetEnchantment extends Enchantment {
     }
 
     public boolean isTradeable() {
-        return super.isTradeable() && DomesticationMod.CONFIG.isEnchantEnabled(this);
+        return false;
     }
 
     public boolean isDiscoverable() {
-        return super.isDiscoverable() && DomesticationMod.CONFIG.isEnchantEnabled(this);
+        return false;
     }
 
     public boolean isAllowedOnBooks() {
-        return super.isAllowedOnBooks() && DomesticationMod.CONFIG.isEnchantEnabled(this);
+        return false;
     }
 
     @Override

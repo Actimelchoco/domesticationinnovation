@@ -47,45 +47,8 @@ public class DILootModifier extends LootModifier {
                     generatedLoot.add(new ItemStack(DIItemRegistry.SINISTER_CARROT.get(), context.getRandom().nextInt(1, 2)));
                 }
                 break;
-            case 1:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.bubblingLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.BUBBLING, context.getRandom()));
-                }
-                break;
-            case 2:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.vampirismLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.VAMPIRE, context.getRandom()));
-                }
-                break;
-            case 3:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.voidCloudLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.VOID_CLOUD, context.getRandom()));
-                }
-                break;
-            case 4:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.oreScentingLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.ORE_SCENTING, context.getRandom()));
-                }
-                break;
-            case 5:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.muffledLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.MUFFLED, context.getRandom()));
-                }
-                break;
-            case 6:
-                if (context.getRandom().nextFloat() < DomesticationMod.CONFIG.blazingProtectionLootChance.get()) {
-                    generatedLoot.add(enchantedBook(DIEnchantmentRegistry.BLAZING_PROTECTION, context.getRandom()));
-                }
-                break;
         }
         return generatedLoot;
-    }
-
-    private ItemStack enchantedBook(Enchantment enchantment, RandomSource randomSource) {
-        ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-        int maxLevels = enchantment.getMaxLevel();
-        EnchantedBookItem.addEnchantment(book, new EnchantmentInstance(enchantment, maxLevels > 1 ? 1 + randomSource.nextInt(maxLevels - 1) : 1));
-        return book;
     }
 
     @Override
