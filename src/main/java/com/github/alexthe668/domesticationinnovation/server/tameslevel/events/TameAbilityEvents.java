@@ -1571,6 +1571,7 @@ public class TameAbilityEvents {
         if (!tame.isOrderedToSit()
                 && wasKiller
                 && LevelSystem.hasAbility(data, "battlefield_medic")
+                && !TameDuelManager.isEntityInDuel(tame.getUUID())
                 && tame.level() instanceof ServerLevel level) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battlefield_medic"));
             int procLevel = Math.min(levelValue, 8);
@@ -2110,9 +2111,13 @@ public class TameAbilityEvents {
         if (level == null || center == null || ownerId == null) {
             return List.of();
         }
+        UUID centerId = center.getUUID();
+        if (centerId != null && TameDuelManager.isEntityInDuel(centerId)) {
+            return List.of();
+        }
         SupportCacheKey key = null;
-        if (cache != null && center.getUUID() != null) {
-            key = new SupportCacheKey(center.getUUID(), ownerId, (int) Math.round(radius * 1000.0D));
+        if (cache != null && centerId != null) {
+            key = new SupportCacheKey(centerId, ownerId, (int) Math.round(radius * 1000.0D));
             List<TamableAnimal> cached = cache.get(key);
             if (cached != null) {
                 return cached;
@@ -2123,6 +2128,7 @@ public class TameAbilityEvents {
                 tame.isTame()
                         && tame.isAlive()
                         && ownerId.equals(tame.getOwnerUUID())
+                        && TameDuelManager.canProvideSupport(tame.getUUID(), centerId)
         );
         if (cache != null && key != null) {
             cache.put(key, found);
@@ -2140,7 +2146,8 @@ public class TameAbilityEvents {
         float bestRatio = 1.01F;
 
         LivingEntity owner = supporter.getOwner();
-        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius) {
+        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius
+                && TameDuelManager.canProvideSupport(supporter.getUUID(), owner.getUUID())) {
             float ratio = owner.getHealth() / Math.max(1.0F, owner.getMaxHealth());
             if (ratio < bestRatio && owner.getHealth() < owner.getMaxHealth()) {
                 bestRatio = ratio;
@@ -2149,6 +2156,7 @@ public class TameAbilityEvents {
         }
 
         for (TamableAnimal ally : nearbySupportTames) {
+            if (!TameDuelManager.canProvideSupport(supporter.getUUID(), ally.getUUID())) continue;
             float ratio = ally.getHealth() / Math.max(1.0F, ally.getMaxHealth());
             if (ratio < bestRatio && ally.getHealth() < ally.getMaxHealth()) {
                 bestRatio = ratio;
@@ -2165,10 +2173,13 @@ public class TameAbilityEvents {
     private static LivingEntity findFirstDebuffedAlly(ServerLevel level, TamableAnimal supporter, double radius, List<TamableAnimal> nearbySupportTames) {
         if (level == null || supporter == null || supporter.getOwnerUUID() == null) return null;
         LivingEntity owner = supporter.getOwner();
-        if (owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius && firstHarmfulEffect(owner) != null) {
+        if (owner != null && owner.isAlive() && owner.distanceToSqr(supporter) <= radius * radius
+                && TameDuelManager.canProvideSupport(supporter.getUUID(), owner.getUUID())
+                && firstHarmfulEffect(owner) != null) {
             return owner;
         }
         for (TamableAnimal ally : nearbySupportTames) {
+            if (!TameDuelManager.canProvideSupport(supporter.getUUID(), ally.getUUID())) continue;
             if (firstHarmfulEffect(ally) != null) {
                 return ally;
             }
@@ -2208,11 +2219,14 @@ public class TameAbilityEvents {
         }
         int healed = 0;
         LivingEntity owner = source.getOwner();
-        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(source) <= radius * radius && owner.getHealth() < owner.getMaxHealth()) {
+        if (includeOwner && owner != null && owner.isAlive() && owner.distanceToSqr(source) <= radius * radius
+                && owner.getHealth() < owner.getMaxHealth()
+                && TameDuelManager.canProvideSupport(source.getUUID(), owner.getUUID())) {
             owner.heal(amount);
             healed++;
         }
         for (TamableAnimal ally : collectOwnedNearbySupportTames(level, source, source.getOwnerUUID(), radius)) {
+            if (!TameDuelManager.canProvideSupport(source.getUUID(), ally.getUUID())) continue;
             if (ally.getHealth() >= ally.getMaxHealth()) continue;
             ally.heal(amount);
             healed++;
@@ -2553,4 +2567,3 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
     }
 
 }
-

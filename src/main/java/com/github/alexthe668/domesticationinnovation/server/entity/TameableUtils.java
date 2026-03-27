@@ -1172,12 +1172,26 @@ public class TameableUtils {
     }
 
     public static List<LivingEntity> getAuraHealables(LivingEntity pet) {
-        Predicate<Entity> hurtAndOnTeam = (animal) -> hasSameOwnerAs((LivingEntity) animal, pet) && animal.distanceTo(pet) < 4 && ((LivingEntity) animal).getHealth() < ((LivingEntity) animal).getMaxHealth();
+        if (pet == null || TameDuelManager.isEntityInDuel(pet.getUUID())) {
+            return List.of();
+        }
+        Predicate<Entity> hurtAndOnTeam = (animal) ->
+                hasSameOwnerAs((LivingEntity) animal, pet)
+                        && animal.distanceTo(pet) < 4
+                        && ((LivingEntity) animal).getHealth() < ((LivingEntity) animal).getMaxHealth()
+                        && TameDuelManager.canProvideSupport(pet.getUUID(), animal.getUUID());
         return pet.level().getEntitiesOfClass(LivingEntity.class, pet.getBoundingBox().inflate(4, 4, 4), EntitySelector.NO_SPECTATORS.and(hurtAndOnTeam));
     }
 
     public static List<LivingEntity> getNearbyHealers(LivingEntity hurtOwner) {
-        Predicate<Entity> healer = (animal) -> hasSameOwnerAs((LivingEntity) animal, hurtOwner) && hasEnchant((LivingEntity) animal, DIEnchantmentRegistry.HEALING_AURA) && getHealingAuraTime((LivingEntity) animal) == 0;
+        if (hurtOwner == null || TameDuelManager.isEntityInDuel(hurtOwner.getUUID())) {
+            return List.of();
+        }
+        Predicate<Entity> healer = (animal) ->
+                hasSameOwnerAs((LivingEntity) animal, hurtOwner)
+                        && hasEnchant((LivingEntity) animal, DIEnchantmentRegistry.HEALING_AURA)
+                        && getHealingAuraTime((LivingEntity) animal) == 0
+                        && TameDuelManager.canProvideSupport(animal.getUUID(), hurtOwner.getUUID());
         return hurtOwner.level().getEntitiesOfClass(LivingEntity.class, hurtOwner.getBoundingBox().inflate(16, 4, 16), EntitySelector.NO_SPECTATORS.and(healer));
     }
 

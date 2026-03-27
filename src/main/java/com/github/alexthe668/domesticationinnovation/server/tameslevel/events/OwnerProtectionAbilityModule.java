@@ -19,6 +19,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.List;
 import java.lang.reflect.Method;
@@ -227,6 +228,7 @@ public final class OwnerProtectionAbilityModule {
         boolean follow = orderCode == 0;
         boolean wander = orderCode == 2 || orderCode == 3;
         tame.setOrderedToSit(sit);
+        tame.setInSittingPose(sit);
         if (sit || wander) {
             tame.setTarget(null);
         }
@@ -239,10 +241,11 @@ public final class OwnerProtectionAbilityModule {
         tryInvokeBooleanSetter(tame, "setFollow", follow);
         tryInvokeBooleanSetter(tame, "setSitting", sit);
         tryInvokeBooleanSetter(tame, "setSit", sit);
-        tryInvokeIntSetter(tame, "setCommand", preferredCommandInt(orderCode));
-        tryInvokeIntSetter(tame, "setPetCommand", preferredCommandInt(orderCode));
-        tryInvokeIntSetter(tame, "setOrder", preferredCommandInt(orderCode));
-        tryInvokeIntSetter(tame, "setMode", preferredCommandInt(orderCode));
+        int preferred = preferredCommandInt(tame, orderCode);
+        tryInvokeIntSetter(tame, "setCommand", preferred);
+        tryInvokeIntSetter(tame, "setPetCommand", preferred);
+        tryInvokeIntSetter(tame, "setOrder", preferred);
+        tryInvokeIntSetter(tame, "setMode", preferred);
         if (tame instanceof IComandableMob commandable) {
             commandable.setCommand(preferredCommandInt(orderCode));
         }
@@ -258,6 +261,29 @@ public final class OwnerProtectionAbilityModule {
             case 2, 3 -> 0;
             default -> 2;
         };
+    }
+
+    private static int preferredCommandInt(TamableAnimal tame, int orderCode) {
+        if (usesInvertedGenericCallOrder(tame)) {
+            return switch (orderCode) {
+                case 1 -> 2;
+                case 2, 3 -> 0;
+                default -> 1;
+            };
+        }
+        return preferredCommandInt(orderCode);
+    }
+
+    private static boolean usesInvertedGenericCallOrder(TamableAnimal tame) {
+        if (tame == null) {
+            return true;
+        }
+        if (tame instanceof IComandableMob) {
+            return false;
+        }
+        var key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        String typeId = key == null ? tame.getType().toString() : key.toString();
+        return !TameRegistry.isCallOrderInvertedType(typeId);
     }
 
     private static void tryInvokeBooleanSetter(TamableAnimal tame, String methodName, boolean value) {

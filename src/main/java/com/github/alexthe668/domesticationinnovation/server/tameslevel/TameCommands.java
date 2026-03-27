@@ -1271,7 +1271,13 @@ public class TameCommands {
                                                 .executes(ctx -> typeTp(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                        .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), null))
+                                        .then(Commands.literal("follow")
+                                                .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW)))
+                                        .then(Commands.literal("sit")
+                                                .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
+                                        .then(Commands.literal("wander")
+                                                .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))))
                         .then(Commands.literal("tphome")
                                 .then(Commands.literal("all")
                                         .executes(ctx -> teleportAllHome(ctx.getSource())))
@@ -1592,6 +1598,9 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "pet")
                                                 ))))
+                                .then(Commands.literal("fixStale")
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> adminFixStaleAll(ctx.getSource()))))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
                                 .then(Commands.literal("stat")
@@ -2706,7 +2715,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info respawn, /tames info movement, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -2783,6 +2792,31 @@ public class TameCommands {
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
                     "'deploy' activates the current guardian locations for the selected tames.",
                     "Deployment groups store per-tame guardian positions under a shared name and later redeploy those members with deployGroup."
+            );
+        }
+        else if (key.equals("guardian_arrow") || key.equals("guardianarrow")) {
+            sendInfoPage(p, "GuardianArrow",
+                    "Rename an arrow to '<target>: <guardianGroup>'.",
+                    "Examples: 'all: base', 'group wolves: north', 'type minecraft:wolf: west', 'Fluffy: tower'.",
+                    "Right click block: set the next selected tame's guardian location in that guardian group one block above the clicked block.",
+                    "Sneak right click block: deploy that guardian group.",
+                    "Left click block: remove that guardian-group location at the clicked block from matching selected tames.",
+                    "Sneak left click block for 3s: queue a confirm to clear that guardian group for the selected tames; use /tames guardian tool confirm within 60s.",
+                    "Right click tame: add it to the selected group if the selector is 'group ...'. Left click tame: remove it from that group.",
+                    "Sneak right click tame: store its current guardian anchor in the guardian group. Sneak left click tame: remove that guardian-group anchor from the tame."
+            );
+        }
+        else if (key.equals("call_stick") || key.equals("callstick")) {
+            sendInfoPage(p, "CallStick",
+                    "Rename a bone to a selector: all, exact tame name, 'group <group>', 'type <type>', close, nearby, follow, sit, or wander.",
+                    "Right click air/block: apply the current movement command to all selected tames.",
+                    "Left click air: cycle combat mode for the selected tames.",
+                    "Left click block: clear current combat targets for the selected tames.",
+                    "Left click block for 3s: set guardian there. Sneak left click block for 3s: move there and passive-sit.",
+                    "Hit a mob: all selected tames target it.",
+                    "Right click block for 5s: teleport selected tames there. Right click air for 5s: teleport them home.",
+                    "Right click tame: add it to the selected group if the bone targets 'group ...'. Left click tame: remove it from that group.",
+                    "The bone is consumed on use unless you are in creative, so renaming a stack lets you reuse the same selector many times."
             );
         }
         else if (key.equals("movement")) {
@@ -4059,7 +4093,7 @@ public class TameCommands {
         }
 
         TameDuelManager.startGroupDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds);
-        owner.sendSystemMessage(Component.literal("Duel started: " + duelSelectionLabel(leftSelection) + " vs " + duelSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.RED));
+        owner.sendSystemMessage(Component.literal("Duel started: " + sameOwnerDuelSelectionLabel(leftSelection, rightSelection, true) + " vs " + sameOwnerDuelSelectionLabel(leftSelection, rightSelection, false) + ".").withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -6825,7 +6859,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int teleportPet(CommandSourceStack source, String pet) {
+    private static int teleportPet(CommandSourceStack source, String pet, MovementOrder orderOverride) {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
@@ -6834,6 +6868,10 @@ public class TameCommands {
         if (ta == null) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
             if (!unloaded.success) return error(p, "Failed to tp unloaded tame: " + unloaded.error);
+            TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+            if (orderOverride != null && loadedAfterTeleport != null) {
+                applyMovementOverride(loadedAfterTeleport, orderOverride);
+            }
             p.sendSystemMessage(Component.literal("Teleported unloaded " + d.name + " to your position.").withStyle(ChatFormatting.GREEN));
             return 1;
         }
@@ -6841,6 +6879,10 @@ public class TameCommands {
         int cost = teleportCostFor(d, crossDimension);
         if (!payTeleportXp(p, cost)) return 0;
         teleportTameToPlayer(ta, p);
+        TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+        if (orderOverride != null && loadedAfterTeleport != null) {
+            applyMovementOverride(loadedAfterTeleport, orderOverride);
+        }
         p.sendSystemMessage(Component.literal("Teleported " + d.name + " (-" + cost + " XP points" + (crossDimension ? ", cross-dimension" : "") + ")."));
         return 1;
     }
@@ -7500,6 +7542,55 @@ public class TameCommands {
         return changed;
     }
 
+    public static boolean restoreDuelParticipantSnapshot(MinecraftServer server, CompoundTag tameSnapshotTag) {
+        if (server == null || tameSnapshotTag == null || tameSnapshotTag.isEmpty()) {
+            return false;
+        }
+        TameData snapshot = TameData.fromTag(tameSnapshotTag.copy());
+        if (snapshot.uuid == null) {
+            return false;
+        }
+        TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
+        if (loaded != null) {
+            loaded.discard();
+        }
+        String typeId = recoverEntityTypeId(snapshot);
+        if (typeId.isBlank()) {
+            return false;
+        }
+        ResourceLocation entityId = ResourceLocation.tryParse(typeId);
+        if (entityId == null) {
+            return false;
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(entityId);
+        if (entityType == null) {
+            return false;
+        }
+        SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
+        if (target == null || target.level == null || target.pos == null) {
+            return false;
+        }
+        Entity created = entityType.create(target.level);
+        if (!(created instanceof TamableAnimal restored)) {
+            return false;
+        }
+        CompoundTag entitySnapshot = snapshot.entitySnapshot == null ? new CompoundTag() : snapshot.entitySnapshot.copy();
+        if (!entitySnapshot.isEmpty()) {
+            restored.load(entitySnapshot);
+        }
+        restored.setUUID(snapshot.uuid);
+        TameData.syncTlIdToEntity(restored, snapshot.tlId);
+        restored.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
+        enforceTamedOwnerPreserveCollar(restored, snapshot.ownerUUID);
+        if (!target.level.addFreshEntity(restored)) {
+            return false;
+        }
+        TameGoalInstaller.installIfMissing(restored);
+        TameRegistry.register(snapshot);
+        TameRegistry.markDirty();
+        return true;
+    }
+
     private static SpawnTarget resolveDuelRespawnTarget(MinecraftServer server, TameData data) {
         if (server == null || data == null) {
             return null;
@@ -7572,6 +7663,40 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRespawnState(respawned, data);
         return RespawnResult.ok();
+    }
+
+    private static SpawnTarget spawnTargetFromSnapshot(MinecraftServer server, TameData data) {
+        if (server == null || data == null) {
+            return null;
+        }
+        ServerLevel level = null;
+        if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
+            ResourceLocation dimId = ResourceLocation.tryParse(data.lastKnownDimension);
+            if (dimId != null) {
+                level = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimId));
+            }
+        }
+        if (level == null) {
+            level = server.overworld();
+        }
+        Vec3 pos = new Vec3(data.lastKnownX + 0.5D, data.lastKnownY, data.lastKnownZ + 0.5D);
+        float yRot = 0.0F;
+        float xRot = 0.0F;
+        CompoundTag entitySnapshot = data.entitySnapshot;
+        if (entitySnapshot != null && entitySnapshot.contains("Pos", Tag.TAG_LIST)) {
+            ListTag posList = entitySnapshot.getList("Pos", Tag.TAG_DOUBLE);
+            if (posList.size() >= 3) {
+                pos = new Vec3(posList.getDouble(0), posList.getDouble(1), posList.getDouble(2));
+            }
+        }
+        if (entitySnapshot != null && entitySnapshot.contains("Rotation", Tag.TAG_LIST)) {
+            ListTag rotList = entitySnapshot.getList("Rotation", Tag.TAG_FLOAT);
+            if (rotList.size() >= 2) {
+                yRot = rotList.getFloat(0);
+                xRot = rotList.getFloat(1);
+            }
+        }
+        return new SpawnTarget(level, pos, yRot, xRot);
     }
 
     public static boolean respawnDeadTameAtBed(ServerLevel level, BlockPos bedPos, Direction facing, TameData data) {
@@ -10277,6 +10402,106 @@ public class TameCommands {
             source.sendFailure(Component.literal("Respawn failed for " + failed.size() + ": " + String.join("; ", failed)).withStyle(ChatFormatting.RED));
         }
         return 1;
+    }
+
+    private static int adminFixStaleAll(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        if (server == null) {
+            return adminError(source, "Server not available.");
+        }
+        List<TamableAnimal> loaded = new ArrayList<>();
+        Set<UUID> seen = new HashSet<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) {
+                    continue;
+                }
+                if (!seen.add(tame.getUUID())) {
+                    continue;
+                }
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null || data.dead) {
+                    continue;
+                }
+                loaded.add(tame);
+            }
+        }
+        if (loaded.isEmpty()) {
+            return adminError(source, "No loaded alive registered tames found.");
+        }
+        int success = 0;
+        List<String> failed = new ArrayList<>();
+        for (TamableAnimal tame : loaded) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) {
+                failed.add("unknown (missing registry data)");
+                continue;
+            }
+            if (adminFixStaleLoadedTame(source, tame, data, failed)) {
+                success++;
+            }
+        }
+        if (success <= 0) {
+            return adminError(source, "No loaded tames were rebuilt. Reasons: " + String.join("; ", failed));
+        }
+        final int successCount = success;
+        source.sendSuccess(() -> Component.literal("Rebuilt " + successCount + " loaded tame(s) in place.").withStyle(ChatFormatting.GREEN), true);
+        if (!failed.isEmpty()) {
+            source.sendFailure(Component.literal("FixStale failed for " + failed.size() + ": " + String.join("; ", failed)).withStyle(ChatFormatting.RED));
+        }
+        return 1;
+    }
+
+    private static boolean adminFixStaleLoadedTame(CommandSourceStack source, TamableAnimal tame, TameData data, List<String> failures) {
+        if (tame == null || data == null || data.uuid == null) {
+            failures.add("unknown (invalid loaded tame)");
+            return false;
+        }
+        String typeId = recoverEntityTypeId(data);
+        if (typeId.isBlank()) {
+            failures.add(tameDisplayName(data) + " (missing saved entity type)");
+            return false;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(typeId);
+        if (id == null) {
+            failures.add(tameDisplayName(data) + " (invalid entity type '" + typeId + "')");
+            return false;
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            failures.add(tameDisplayName(data) + " (unknown entity type '" + typeId + "')");
+            return false;
+        }
+        ServerLevel level = (ServerLevel) tame.level();
+        Vec3 pos = tame.position();
+        float yRot = tame.getYRot();
+        float xRot = tame.getXRot();
+        CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
+        Entity created = entityType.create(level);
+        if (!(created instanceof TamableAnimal rebuilt)) {
+            failures.add(tameDisplayName(data) + " (stored type is not tamable)");
+            return false;
+        }
+        if (!snapshot.isEmpty()) {
+            rebuilt.load(snapshot);
+        }
+        rebuilt.setUUID(data.uuid);
+        rebuilt.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
+        rebuilt.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        enforceTamedOwnerPreserveCollar(rebuilt, data.ownerUUID);
+        tame.discard();
+        if (!level.addFreshEntity(rebuilt)) {
+            failures.add(tameDisplayName(data) + " (spawn failed after rebuild)");
+            return false;
+        }
+        boolean normalized = applyTypeBasePlusBonus(rebuilt, data);
+        if (!normalized) {
+            LevelSystem.updateTameName(rebuilt, data);
+            rebuilt.setHealth(rebuilt.getMaxHealth());
+        }
+        finalizeRespawnState(rebuilt, data);
+        TameRegistry.markDirty();
+        return true;
     }
 
     private static int adminRespawnResolvedEntry(CommandSourceStack source, TameData data, TameDeathRecord deadRecord) {
@@ -13592,6 +13817,15 @@ public class TameCommands {
             case SINGLE -> "tame " + selection.value;
             case ALL -> "all loaded tames";
         };
+    }
+
+    private static String sameOwnerDuelSelectionLabel(DuelSelection leftSelection, DuelSelection rightSelection, boolean leftSide) {
+        DuelSelection current = leftSide ? leftSelection : rightSelection;
+        DuelSelection other = leftSide ? rightSelection : leftSelection;
+        if (current != null && current.kind == DuelSelectionKind.ALL && other != null && other.kind != DuelSelectionKind.ALL) {
+            return "rest";
+        }
+        return duelSelectionLabel(current);
     }
 
     private static String teamSelectionLabel(TeamSelection selection) {
