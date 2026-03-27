@@ -10,6 +10,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -80,15 +81,6 @@ public class TameCombatEvents {
         if (!tame.isTame()) return;
 
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID());
-        if (diedInDuel) {
-            PendingDeath captured = getCapturedDeath(tame.getUUID());
-            UUID killerTameUuid = captured != null ? captured.killerTameUuid() : resolveKillerTameUuid(event);
-            Set<UUID> contributors = captured != null
-                    ? new HashSet<>(captured.contributors())
-                    : new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(tame.getUUID(), Set.of()));
-            TameDuelManager.recordElimination(tame.level().getServer(), tame.getUUID(), contributors, killerTameUuid);
-        }
-        TameDuelManager.endDuelForTame(tame.level().getServer(), tame.getUUID());
         TameData data = TameRegistry.get(tame.getUUID());
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
@@ -148,12 +140,6 @@ public class TameCombatEvents {
         if (event.isCanceled()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!TameDuelManager.isEntityInDuel(player.getUUID())) return;
-
-        PendingDeath captured = getCapturedDeath(player.getUUID());
-        UUID killerParticipantUuid = captured != null ? captured.killerTameUuid() : resolveKillerParticipantUuid(event);
-        TameDuelManager.recordElimination(player.level().getServer(), player.getUUID(), Set.of(), killerParticipantUuid);
-        TameDuelManager.endDuelForEntity(player.level().getServer(), player.getUUID());
-        clearCapturedDeath(player.getUUID());
     }
 
     private static TamableAnimal resolveTameAttacker(LivingHurtEvent event) {
@@ -280,6 +266,15 @@ public class TameCombatEvents {
 
     private static void processDeath(PendingDeath death) {
         LivingEntity dead = death.dead();
+        if (dead != null && TameDuelManager.isEntityInDuel(death.deadId())) {
+            TameDuelManager.recordElimination(
+                    dead.level().getServer(),
+                    death.deadId(),
+                    death.contributors(),
+                    resolveDuelKillerParticipantUuid(dead.level().getServer(), death)
+            );
+            TameDuelManager.endDuelForEntity(dead.level().getServer(), death.deadId());
+        }
         LevelSystem.distributeXP(dead, death.killer());
         if (!(dead.level() instanceof ServerLevel serverLevel)) {
             return;
@@ -296,6 +291,16 @@ public class TameCombatEvents {
             TameAbilityEvents.onKillOrAssist(tame, data, dead, wasKiller);
         }
         debugEnemyKilled(serverLevel, dead, dead.getExperienceReward(), death.contributors(), death.killerTameUuid());
+    }
+
+    private static UUID resolveDuelKillerParticipantUuid(MinecraftServer server, PendingDeath death) {
+        if (death == null) {
+            return null;
+        }
+        if (death.killer() instanceof ServerPlayer player) {
+            return player.getUUID();
+        }
+        return death.killerTameUuid();
     }
 
     private record PendingDeath(LivingEntity dead, UUID deadId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {

@@ -10,17 +10,21 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.level.Level;
 
 public class TimedTameDragonBreathCloud extends AreaEffectCloud {
-    private static final int MAX_LIFETIME_TICKS = 80;
-    private static final int DAMAGE_INTERVAL_TICKS = 10;
-    private static final float CLOUD_DAMAGE = 1.0F;
+    private final int maxLifetimeTicks;
+    private final int damageIntervalTicks;
+    private final float cloudDamage;
 
-    public TimedTameDragonBreathCloud(Level level, LivingEntity owner, double x, double y, double z) {
+    public TimedTameDragonBreathCloud(Level level, LivingEntity owner, double x, double y, double z, int abilityLevel, float cloudDamage) {
         super(EntityType.AREA_EFFECT_CLOUD, level);
+        int safeLevel = Math.max(1, abilityLevel);
+        this.damageIntervalTicks = 10;
+        this.maxLifetimeTicks = 80 + Math.max(0, safeLevel - 30);
+        this.cloudDamage = Math.max(0.0F, cloudDamage);
         this.setPos(x, y, z);
         this.setOwner(owner);
         this.setParticle(ParticleTypes.DRAGON_BREATH);
         this.setRadius(2.0F);
-        this.setDuration(MAX_LIFETIME_TICKS);
+        this.setDuration(this.maxLifetimeTicks);
         this.setRadiusPerTick(0.0F);
         this.setWaitTime(0);
     }
@@ -31,11 +35,11 @@ public class TimedTameDragonBreathCloud extends AreaEffectCloud {
         if (this.level().isClientSide) {
             return;
         }
-        if (this.tickCount >= MAX_LIFETIME_TICKS) {
+        if (this.tickCount >= this.maxLifetimeTicks) {
             this.discard();
             return;
         }
-        if (this.tickCount % DAMAGE_INTERVAL_TICKS != 0) {
+        if (this.tickCount % this.damageIntervalTicks != 0) {
             return;
         }
 
@@ -51,7 +55,7 @@ public class TimedTameDragonBreathCloud extends AreaEffectCloud {
             if (owner instanceof TamableAnimal tame) {
                 LevelSystem.trackDamage(nearby, tame);
             }
-            nearby.hurt(this.damageSources().indirectMagic(this, owner), CLOUD_DAMAGE);
+            nearby.hurt(this.damageSources().indirectMagic(this, owner), this.cloudDamage);
         }
     }
 

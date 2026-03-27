@@ -3,7 +3,10 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.bossevents.CustomBossEvents;
+import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.ChatFormatting;
+import net.minecraft.world.BossEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
@@ -36,6 +39,7 @@ public final class TameDuelManager {
         private final List<DuelElimination> eliminations = new ArrayList<>();
         private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
         private final Map<UUID, DuelStats> duelStats = new HashMap<>();
+        private final Map<UUID, List<ServerBossEvent>> ownerBossBars = new HashMap<>();
 
         private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB) {
             this.battleId = battleId;
@@ -118,6 +122,7 @@ public final class TameDuelManager {
             TEAM_A_BY_ENTITY.put(participantId, false);
             capturePreDuelTameState(server, battle, participantId);
         }
+        setupBossBars(server, battle);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -252,6 +257,7 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
+            updateBossBars(server, battle);
         }
     }
 
@@ -326,6 +332,7 @@ public final class TameDuelManager {
     private static void finishBattle(MinecraftServer server, DuelBattle battle, String reason, UUID forfeitingOwner) {
         if (battle == null) return;
         BATTLE_BY_ID.remove(battle.battleId);
+        removeBossBars(battle);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
@@ -366,6 +373,178 @@ public final class TameDuelManager {
                 owner.sendSystemMessage(line);
             }
         }
+    }
+
+    private static void setupBossBars(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) {
+            return;
+        }
+        createOwnerBossBars(server, battle, battle.ownerA);
+        if (!battle.ownerA.equals(battle.ownerB)) {
+            createOwnerBossBars(server, battle, battle.ownerB);
+        }
+        updateBossBars(server, battle);
+    }
+
+    private static void createOwnerBossBars(MinecraftServer server, DuelBattle battle, UUID ownerId) {
+        if (server == null || battle == null || ownerId == null) {
+            return;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(ownerId);
+        if (player == null) {
+            return;
+        }
+        List<ServerBossEvent> bars = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            ServerBossEvent bar = new ServerBossEvent(Component.literal("Duel"), BossEvent.BossBarColor.WHITE, BossEvent.BossBarOverlay.PROGRESS);
+            bar.setVisible(true);
+            bar.addPlayer(player);
+            bars.add(bar);
+        }
+        battle.ownerBossBars.put(ownerId, bars);
+    }
+
+    private static void updateBossBars(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) {
+            return;
+        }
+        updateOwnerBossBars(server, battle, battle.ownerA);
+        if (!battle.ownerA.equals(battle.ownerB)) {
+            updateOwnerBossBars(server, battle, battle.ownerB);
+        }
+    }
+
+    private static void updateOwnerBossBars(MinecraftServer server, DuelBattle battle, UUID ownerId) {
+        if (server == null || battle == null || ownerId == null) {
+            return;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(ownerId);
+        if (player == null) {
+            return;
+        }
+        List<ServerBossEvent> bars = battle.ownerBossBars.get(ownerId);
+        if (bars == null || bars.size() < 6) {
+            createOwnerBossBars(server, battle, ownerId);
+            bars = battle.ownerBossBars.get(ownerId);
+        }
+        if (bars == null || bars.size() < 6) {
+            return;
+        }
+
+        boolean ownerIsTeamA = ownerId.equals(battle.ownerA);
+        Set<UUID> ownTeam = ownerIsTeamA ? battle.originalTeamA : battle.originalTeamB;
+        Set<UUID> enemyTeam = ownerIsTeamA ? battle.originalTeamB : battle.originalTeamA;
+
+        TeamBossStats ownStats = summarizeBossTeam(server, battle, ownTeam);
+        TeamBossStats enemyStats = summarizeBossTeam(server, battle, enemyTeam);
+
+        applyCountBar(bars.get(0), Component.literal("Your team ").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(ownStats.alive + " alive").withStyle(ChatFormatting.GREEN))
+                .append(Component.literal(" / ").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(ownStats.dead + " dead").withStyle(ChatFormatting.RED)),
+                ownStats.total <= 0 ? 0.0F : (float) ownStats.alive / (float) ownStats.total,
+                BossEvent.BossBarColor.BLUE);
+        String opposingLabel = battle.ownerA.equals(battle.ownerB) ? "Opposing team " : "Enemy team ";
+        applyCountBar(bars.get(1), Component.literal(opposingLabel).withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(enemyStats.alive + " alive").withStyle(ChatFormatting.GREEN))
+                .append(Component.literal(" / ").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(enemyStats.dead + " dead").withStyle(ChatFormatting.RED)),
+                enemyStats.total <= 0 ? 0.0F : (float) enemyStats.alive / (float) enemyStats.total,
+                BossEvent.BossBarColor.YELLOW);
+
+        applyTameBar(server, battle, bars.get(2), ownStats.top.get(0), true);
+        applyTameBar(server, battle, bars.get(3), ownStats.top.get(1), true);
+        applyTameBar(server, battle, bars.get(4), enemyStats.top.get(0), false);
+        applyTameBar(server, battle, bars.get(5), enemyStats.top.get(1), false);
+    }
+
+    private static void applyCountBar(ServerBossEvent bar, Component name, float progress, BossEvent.BossBarColor color) {
+        if (bar == null) {
+            return;
+        }
+        bar.setName(name);
+        bar.setColor(color);
+        bar.setProgress(Math.max(0.0F, Math.min(1.0F, progress)));
+    }
+
+    private static void applyTameBar(MinecraftServer server, DuelBattle battle, ServerBossEvent bar, UUID tameId, boolean friendly) {
+        if (bar == null) {
+            return;
+        }
+        if (tameId == null) {
+            bar.setName(Component.literal(friendly ? "No team tame" : "No enemy tame").withStyle(ChatFormatting.DARK_GRAY));
+            bar.setColor(BossEvent.BossBarColor.WHITE);
+            bar.setProgress(0.0F);
+            return;
+        }
+        TameData data = tameDataForSummary(server, battle, tameId);
+        LivingEntity current = findLoadedLivingParticipant(server, tameId);
+        boolean alive = current != null && current.isAlive() && battle.duelStats.getOrDefault(tameId, new DuelStats()).deaths <= 0;
+        String label = data == null ? entityLabel(server, tameId) : "[Lvl " + Math.max(1, data.level) + "] " + entityLabel(server, tameId);
+        MutableComponent name = Component.literal(label + " ").withStyle(alive ? (friendly ? ChatFormatting.AQUA : ChatFormatting.GOLD) : ChatFormatting.DARK_RED);
+        if (alive && current != null) {
+            name.append(Component.literal("(" + formatHealth(current) + ")").withStyle(ChatFormatting.RED));
+        } else {
+            name.append(Component.literal("(dead)").withStyle(ChatFormatting.DARK_RED));
+        }
+        bar.setName(name);
+        bar.setColor(alive ? (friendly ? BossEvent.BossBarColor.BLUE : BossEvent.BossBarColor.YELLOW) : BossEvent.BossBarColor.RED);
+        float progress = alive && current != null && current.getMaxHealth() > 0.0F ? current.getHealth() / current.getMaxHealth() : 0.0F;
+        bar.setProgress(Math.max(0.0F, Math.min(1.0F, progress)));
+    }
+
+    private static void removeBossBars(DuelBattle battle) {
+        if (battle == null) {
+            return;
+        }
+        for (List<ServerBossEvent> bars : battle.ownerBossBars.values()) {
+            if (bars == null) {
+                continue;
+            }
+            for (ServerBossEvent bar : bars) {
+                if (bar != null) {
+                    bar.removeAllPlayers();
+                    bar.setVisible(false);
+                }
+            }
+        }
+        battle.ownerBossBars.clear();
+    }
+
+    private static TeamBossStats summarizeBossTeam(MinecraftServer server, DuelBattle battle, Set<UUID> teamIds) {
+        int total = 0;
+        int alive = 0;
+        int dead = 0;
+        List<UUID> ranked = new ArrayList<>();
+        for (UUID participantId : teamIds) {
+            TameData data = tameDataForSummary(server, battle, participantId);
+            if (data == null) {
+                continue;
+            }
+            total++;
+            DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
+            if (stats.deaths > 0) {
+                dead++;
+            } else {
+                alive++;
+            }
+            ranked.add(participantId);
+        }
+        ranked.sort((a, b) -> {
+            TameData left = tameDataForSummary(server, battle, a);
+            TameData right = tameDataForSummary(server, battle, b);
+            int leftLevel = left == null ? 1 : Math.max(1, left.level);
+            int rightLevel = right == null ? 1 : Math.max(1, right.level);
+            int compare = Integer.compare(rightLevel, leftLevel);
+            if (compare != 0) {
+                return compare;
+            }
+            return entityLabel(server, a).compareToIgnoreCase(entityLabel(server, b));
+        });
+        while (ranked.size() < 2) {
+            ranked.add(null);
+        }
+        return new TeamBossStats(total, alive, dead, ranked.subList(0, 2));
     }
 
     private static void notifyElimination(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
@@ -614,6 +793,9 @@ public final class TameDuelManager {
     }
 
     private record TeamResult(UUID ownerId, String displayName, int tameCount, int totalLevel, int survived, int died) {
+    }
+
+    private record TeamBossStats(int total, int alive, int dead, List<UUID> top) {
     }
 
     private static TameData tameDataForSummary(MinecraftServer server, DuelBattle battle, UUID participantId) {

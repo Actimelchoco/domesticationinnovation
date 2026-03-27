@@ -212,10 +212,6 @@ public class TameSpawnEvents {
         if (synced != null) {
             return synced;
         }
-        TameData releasedFlutter = trySyncFromReleasedFlutterMatch(tame, parsed);
-        if (releasedFlutter != null) {
-            return releasedFlutter;
-        }
         if (allowDeadIdentitySync) {
             TameData syncedDead = trySyncFromDeadIdentityMatch(tame, parsed);
             if (syncedDead != null) {
@@ -387,68 +383,6 @@ public class TameSpawnEvents {
         LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
         System.out.println("[TamesLevel] Synced respawned tame to dead entry: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
-        return candidate;
-    }
-
-    private static TameData trySyncFromReleasedFlutterMatch(TamableAnimal tame, ParsedName parsed) {
-        UUID ownerId = tame.getOwnerUUID();
-        if (ownerId == null) {
-            return null;
-        }
-
-        String tameType = normalizeTypeId(ForgeRegistries.ENTITY_TYPES.getKey(tame.getType()) == null ? "" : ForgeRegistries.ENTITY_TYPES.getKey(tame.getType()).toString());
-        if (!"alexsmobs:flutter".equals(tameType)) {
-            return null;
-        }
-
-        String placedName = parsed != null ? parsed.baseName : "";
-        if (placedName == null || placedName.isBlank()) {
-            placedName = stripLevelPrefixes(tame.hasCustomName() && tame.getCustomName() != null ? tame.getCustomName().getString() : tame.getName().getString());
-        }
-        if (placedName == null || placedName.isBlank()) {
-            return null;
-        }
-
-        UUID newUuid = tame.getUUID();
-        TameData candidate = null;
-        for (TameData d : TameRegistry.TAMES.values()) {
-            if (d == null || d.uuid == null || d.name == null) continue;
-            if (!ownerId.equals(d.ownerUUID)) continue;
-            if (!sameType(tameType, d.type)) continue;
-            if (d.dead) continue;
-            if (!namesOverlapByContainment(placedName, d.name)) continue;
-            if (d.uuid.equals(newUuid)) continue;
-            if (isUuidLoaded(tame, d.uuid)) continue;
-            if (candidate == null
-                    || d.level > candidate.level
-                    || (d.level == candidate.level && d.name.length() > candidate.name.length())) {
-                candidate = d;
-            }
-        }
-
-        if (candidate == null) {
-            return null;
-        }
-
-        UUID oldUuid = candidate.uuid;
-        candidate.stored = false;
-        candidate.dead = false;
-        candidate.deadGameTime = 0L;
-        candidate.deadUnixMillis = 0L;
-        candidate.deathDimension = "";
-        candidate.deathX = 0;
-        candidate.deathY = 0;
-        candidate.deathZ = 0;
-        candidate.name = uniqueLoadedNameFor(tame, stripLevelPrefixes(candidate.name));
-        TameBedRegistrySync.syncFromEntity(tame, candidate);
-
-        TameRegistry.rebindEntityUuid(candidate, newUuid);
-        TameRegistry.bindEntityToData(tame, candidate);
-        TameRegistry.markDirty();
-        LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
-        LevelSystem.updateTameName(tame, candidate);
-        queueDeferredStatRefresh(tame, candidate, DEFERRED_STAT_REFRESH_DELAY_TICKS);
-        System.out.println("[TamesLevel] Synced released Flutter to existing row: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
     }
 

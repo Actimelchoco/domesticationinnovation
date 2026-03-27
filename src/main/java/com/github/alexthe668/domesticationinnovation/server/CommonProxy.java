@@ -258,7 +258,6 @@ public class CommonProxy {
             if (TameableUtils.couldBeTamed(living) && TameableUtils.hasEnchant(living, DIEnchantmentRegistry.HEALTH_BOOST)) {
                 TameableUtils.setSafePetHealth(living, living.getHealth());
             }
-            markStoredFlutterIfPickedUp(living);
         }
     }
 
@@ -322,49 +321,6 @@ public class CommonProxy {
         }
         String className = item.getClass().getName();
         return className != null && className.endsWith(".DragonflyArmorItem");
-    }
-
-    private static void markStoredFlutterIfPickedUp(LivingEntity living) {
-        if (!(living instanceof TamableAnimal tame) || !tame.isTame()) {
-            return;
-        }
-        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        if (typeId == null || !"alexsmobs:flutter".equals(typeId.toString())) {
-            return;
-        }
-        if (tame.getRemovalReason() != Entity.RemovalReason.DISCARDED || !isAlexsMobsFlutterPotted(tame)) {
-            return;
-        }
-        TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null) {
-            return;
-        }
-        CompoundTag snapshot = new CompoundTag();
-        tame.save(snapshot);
-        data.entitySnapshot = snapshot;
-        data.stored = false;
-        data.dead = false;
-        data.deadGameTime = 0L;
-        data.deadUnixMillis = 0L;
-        data.deathDimension = "";
-        data.deathX = 0;
-        data.deathY = 0;
-        data.deathZ = 0;
-        data.lastKnownDimension = tame.level().dimension().location().toString();
-        data.lastKnownX = tame.blockPosition().getX();
-        data.lastKnownY = tame.blockPosition().getY();
-        data.lastKnownZ = tame.blockPosition().getZ();
-        data.lastKnownGameTime = tame.level().getGameTime();
-        TameRegistry.markDirty();
-    }
-
-    private static boolean isAlexsMobsFlutterPotted(TamableAnimal tame) {
-        try {
-            Object result = tame.getClass().getMethod("isPotted").invoke(tame);
-            return result instanceof Boolean bool && bool;
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     @SubscribeEvent
