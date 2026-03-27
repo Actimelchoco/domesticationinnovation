@@ -65,6 +65,17 @@ public class TameBehaviorEvents {
         }
 
         TameMode mode = TameMode.byId(activeData.mode);
+        if (mode == TameMode.PASSIVE) {
+            if (tame.getTarget() != null) {
+                tame.setTarget(null);
+            }
+            return;
+        }
+        if ((mode == TameMode.DEFAULT_PLUS || mode == TameMode.BODYGUARD || mode == TameMode.BOSS)
+                && tame.getOwner() instanceof ServerPlayer owner) {
+            TamePerformanceProfiler.run("behavior.owner_mode_periodic", () -> applyPeriodicOwnerModeTarget(tame, activeData, owner));
+            return;
+        }
         if (mode == TameMode.MONSTER_HUNTER) {
             final LivingEntity[] nearest = new LivingEntity[1];
             TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
@@ -155,6 +166,45 @@ public class TameBehaviorEvents {
         tame.setTarget(attacker);
     }
 
+    private static void applyPeriodicOwnerModeTarget(TamableAnimal tame, TameData data, ServerPlayer owner) {
+        if (tame == null || data == null || owner == null) {
+            return;
+        }
+        if (TameDuelManager.isTameInDuel(tame.getUUID())) {
+            return;
+        }
+        TameMode mode = TameMode.byId(data.mode);
+        if (mode == TameMode.PASSIVE || mode == TameMode.DEFAULT) {
+            return;
+        }
+        if (hasValidCurrentTarget(tame)) {
+            return;
+        }
+
+        LivingEntity ownerCombatTarget = prioritizeOwnerCombatTarget(owner, tame);
+        switch (mode) {
+            case DEFAULT_PLUS, BODYGUARD -> {
+                if (ownerCombatTarget != null && isValidCombatTarget(tame, ownerCombatTarget)) {
+                    tame.setTarget(ownerCombatTarget);
+                    return;
+                }
+                double passiveRadius = mode == TameMode.BODYGUARD ? 5.0D : 8.0D;
+                LivingEntity nearbyThreat = findNearestHostile(owner, passiveRadius);
+                if (nearbyThreat != null && isValidCombatTarget(tame, nearbyThreat)) {
+                    tame.setTarget(nearbyThreat);
+                }
+            }
+            case BOSS -> {
+                LivingEntity highest = findHighestHpHostile(owner, 96.0D);
+                if (highest != null && isValidCombatTarget(tame, highest)) {
+                    tame.setTarget(highest);
+                } else if (ownerCombatTarget != null && isValidCombatTarget(tame, ownerCombatTarget)) {
+                    tame.setTarget(ownerCombatTarget);
+                }
+            }
+        }
+    }
+
     private static void applyRetargetByMode(TamableAnimal tame, TameData data, ServerPlayer owner, LivingEntity ownerCombatTarget) {
         if (ownerCombatTarget == null || !ownerCombatTarget.isAlive()) return;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
@@ -196,6 +246,48 @@ public class TameBehaviorEvents {
                 }
             }
         }
+    }
+
+    private static LivingEntity prioritizeOwnerCombatTarget(ServerPlayer owner, TamableAnimal tame) {
+        if (owner == null) return null;
+
+        LivingEntity attacker = owner.getLastHurtByMob();
+        if (isValidBodyguardTarget(attacker, owner, tame)) {
+            return attacker;
+        }
+
+        LivingEntity attacked = owner.getLastHurtMob();
+        if (isValidBodyguardTarget(attacked, owner, tame)) {
+            return attacked;
+        }
+        return null;
+    }
+
+    private static boolean isValidBodyguardTarget(LivingEntity target, ServerPlayer owner, TamableAnimal tame) {
+        if (target == null) return false;
+        if (!target.isAlive()) return false;
+        if (target == owner || target == tame) return false;
+        if (target instanceof Player) return false;
+        if (target instanceof TamableAnimal otherTame && otherTame.isTame()) return false;
+        return isValidCombatTarget(tame, target, owner.serverLevel());
+    }
+
+    private static LivingEntity findNearestHostile(ServerPlayer owner, double radius) {
+        LivingEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        AABB box = owner.getBoundingBox().inflate(radius);
+        for (LivingEntity living : owner.serverLevel().getEntitiesOfClass(LivingEntity.class, box)) {
+            if (!(living instanceof Enemy)) continue;
+            if (!living.isAlive()) continue;
+            if (living instanceof Player) continue;
+            if (living instanceof TamableAnimal otherTame && otherTame.isTame()) continue;
+            double d2 = living.distanceToSqr(owner);
+            if (d2 < bestDist) {
+                bestDist = d2;
+                best = living;
+            }
+        }
+        return best;
     }
 
     private static LivingEntity findHighestHpHostile(ServerPlayer owner, double radius) {

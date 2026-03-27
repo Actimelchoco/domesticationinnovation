@@ -22,6 +22,7 @@
     "FrogAttackablesSensorMixin",
     "FrogMixin",
     "ItemMixin",
+    "LegendaryMonstersMossyGolemMixin",
     "LivingEntityMixin",
     "MobMixin",
     "PanicGoalMixin",

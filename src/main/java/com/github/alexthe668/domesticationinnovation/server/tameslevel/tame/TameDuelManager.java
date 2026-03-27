@@ -117,11 +117,13 @@ public final class TameDuelManager {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, true);
             capturePreDuelTameState(server, battle, participantId);
+            prepareParticipantForDuel(server, participantId);
         }
         for (UUID participantId : cleanB) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, false);
             capturePreDuelTameState(server, battle, participantId);
+            prepareParticipantForDuel(server, participantId);
         }
     }
 
@@ -290,7 +292,6 @@ public final class TameDuelManager {
         for (UUID ownId : ownTeam) {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
-            own.setOrderedToSit(false);
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 own.setTarget(null);
@@ -306,6 +307,17 @@ public final class TameDuelManager {
             if (own.getTarget() != nearest) {
                 own.setTarget(nearest);
             }
+        }
+    }
+
+    private static void prepareParticipantForDuel(MinecraftServer server, UUID participantId) {
+        TamableAnimal tame = findLoadedTame(server, participantId);
+        if (tame == null || !tame.isAlive()) {
+            return;
+        }
+        tame.setOrderedToSit(false);
+        if (tame instanceof IComandableMob commandableMob) {
+            commandableMob.setCommand(0);
         }
     }
 

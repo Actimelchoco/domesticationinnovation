@@ -1626,6 +1626,56 @@ public class TameCommands {
                                 .then(Commands.literal("fixStale")
                                         .then(Commands.literal("all")
                                                 .executes(ctx -> adminFixStaleAll(ctx.getSource()))))
+                                .then(Commands.literal("setMode")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("value", IntegerArgumentType.integer())
+                                                        .executes(ctx -> adminInvokeTameIntSetter(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet"),
+                                                                "setMode",
+                                                                IntegerArgumentType.getInteger(ctx, "value")
+                                                        )))))
+                                .then(Commands.literal("setOrder")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("value", IntegerArgumentType.integer())
+                                                        .executes(ctx -> adminInvokeTameIntSetter(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet"),
+                                                                "setOrder",
+                                                                IntegerArgumentType.getInteger(ctx, "value")
+                                                        )))))
+                                .then(Commands.literal("setCommand")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("value", IntegerArgumentType.integer())
+                                                        .executes(ctx -> adminInvokeTameIntSetter(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet"),
+                                                                "setCommand",
+                                                                IntegerArgumentType.getInteger(ctx, "value")
+                                                        )))))
+                                .then(Commands.literal("setOrderedToSit")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("value", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminInvokeTameBooleanSetter(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet"),
+                                                                "setOrderedToSit",
+                                                                BoolArgumentType.getBool(ctx, "value")
+                                                        )))))
+                                .then(Commands.literal("setFollow")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("value", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminInvokeTameBooleanSetter(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet"),
+                                                                "setFollow",
+                                                                BoolArgumentType.getBool(ctx, "value")
+                                                        )))))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
                                 .then(Commands.literal("stat")
@@ -11760,6 +11810,94 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminInvokeTameIntSetter(CommandSourceStack source, String petName, String methodName, int value) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), petName);
+        if (data == null) {
+            return error(player, "Pet not found: " + petName);
+        }
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null) {
+            return error(player, data.name + " is not loaded.");
+        }
+        if (!player.getUUID().equals(tame.getOwnerUUID())) {
+            return error(player, "That tame is not yours.");
+        }
+        if (!invokeExactIntSetter(tame, methodName, value)) {
+            return error(player, tame.getName().getString() + " has no " + methodName + "(int).");
+        }
+        refreshRegistrySnapshotFor(tame);
+        source.sendSuccess(() -> Component.literal(
+                "Called " + methodName + "(" + value + ") on " + tame.getName().getString() + "."
+        ), true);
+        return 1;
+    }
+
+    private static int adminInvokeTameBooleanSetter(CommandSourceStack source, String petName, String methodName, boolean value) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), petName);
+        if (data == null) {
+            return error(player, "Pet not found: " + petName);
+        }
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null) {
+            return error(player, data.name + " is not loaded.");
+        }
+        if (!player.getUUID().equals(tame.getOwnerUUID())) {
+            return error(player, "That tame is not yours.");
+        }
+        if (!invokeExactBooleanSetter(tame, methodName, value)) {
+            return error(player, tame.getName().getString() + " has no " + methodName + "(boolean).");
+        }
+        refreshRegistrySnapshotFor(tame);
+        source.sendSuccess(() -> Component.literal(
+                "Called " + methodName + "(" + value + ") on " + tame.getName().getString() + "."
+        ), true);
+        return 1;
+    }
+
+    private static boolean invokeExactIntSetter(TamableAnimal tame, String methodName, int value) {
+        try {
+            Method m = tame.getClass().getMethod(methodName, int.class);
+            m.setAccessible(true);
+            m.invoke(tame, value);
+            return true;
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method m = tame.getClass().getMethod(methodName, Integer.class);
+            m.setAccessible(true);
+            m.invoke(tame, Integer.valueOf(value));
+            return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private static boolean invokeExactBooleanSetter(TamableAnimal tame, String methodName, boolean value) {
+        try {
+            Method m = tame.getClass().getMethod(methodName, boolean.class);
+            m.setAccessible(true);
+            m.invoke(tame, value);
+            return true;
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method m = tame.getClass().getMethod(methodName, Boolean.class);
+            m.setAccessible(true);
+            m.invoke(tame, Boolean.valueOf(value));
+            return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
     private static int adminAddMissingAbilities(CommandSourceStack source) {
         int touchedTames = 0;
         int restoredAbilities = 0;
@@ -12904,13 +13042,32 @@ public class TameCommands {
             if (sit || order == MovementOrder.WANDER) {
                 tame.setTarget(null);
             }
-            // Best-effort compatibility with non-DI wandering/order state.
-            clearExternalWanderingState(tame, order);
+            if (!usesMinimalMovementOverride(tame)) {
+                // Best-effort compatibility with non-DI wandering/order state.
+                clearExternalWanderingState(tame, order);
+            }
         }
         if (order == MovementOrder.SIT) {
             tame.setTarget(null);
         }
         refreshRegistrySnapshotFor(tame);
+    }
+
+    private static boolean usesMinimalMovementOverride(TamableAnimal tame) {
+        ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return isLegendaryMonstersType(typeKey == null ? null : typeKey.toString());
+    }
+
+    private static boolean isLegendaryMonstersType(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return normalized.startsWith("legendary_monsters:")
+                || normalized.startsWith("legendary_monsters.");
     }
 
     private static void syncCommandableMovementState(TamableAnimal tame, IComandableMob commandableMob, MovementOrder order) {

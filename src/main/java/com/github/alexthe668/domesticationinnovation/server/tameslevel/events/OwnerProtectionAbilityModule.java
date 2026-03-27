@@ -22,9 +22,6 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import java.util.List;
 
 public final class OwnerProtectionAbilityModule {
-    private static final String SHIELD_BLOCK_RESTORE_TICK = "shield_block_restore_tick";
-    private static final long SHIELD_BLOCK_SIT_TICKS = 20L;
-
     public interface Hooks {
         void debugAbilityUse(TamableAnimal tame, String ability);
 
@@ -75,7 +72,6 @@ public final class OwnerProtectionAbilityModule {
     }
 
     public static void onTick(TamableAnimal tame, TameData data) {
-        restoreShieldBlockOrderIfReady(tame, data);
         if (!LevelSystem.hasAbility(data, "last_stand_fury")) return;
         LivingEntity owner = tame.getOwner();
         if (owner == null || !owner.isAlive()) return;
@@ -175,10 +171,8 @@ public final class OwnerProtectionAbilityModule {
 
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
         setCooldown(data, "shield_block_tick", now + cooldownTicks);
-        data.cooldowns.put(SHIELD_BLOCK_RESTORE_TICK, now + SHIELD_BLOCK_SIT_TICKS);
         tame.setTarget(null);
         tame.getNavigation().stop();
-        tame.setInSittingPose(true);
         TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
         if (tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, tame, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
@@ -198,11 +192,9 @@ public final class OwnerProtectionAbilityModule {
 
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
         setCooldown(data, "shield_block_tick", now + cooldownTicks);
-        data.cooldowns.put(SHIELD_BLOCK_RESTORE_TICK, now + SHIELD_BLOCK_SIT_TICKS);
         dashShieldBlockToOwner(level, owner, tame, data, levelValue);
         tame.setTarget(null);
         tame.getNavigation().stop();
-        tame.setInSittingPose(true);
         TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
         hooks.applySupportActivationVisual(tame, "shield_block");
         hooks.grantSupportXp(tame, data, owner, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
@@ -262,19 +254,5 @@ public final class OwnerProtectionAbilityModule {
 
     private static void setCooldown(TameData data, String key, long tick) {
         data.cooldowns.put(key, tick);
-    }
-
-    private static void restoreShieldBlockOrderIfReady(TamableAnimal tame, TameData data) {
-        if (tame == null || data == null) {
-            return;
-        }
-        long restoreTick = data.cooldowns.getOrDefault(SHIELD_BLOCK_RESTORE_TICK, 0L);
-        if (restoreTick <= 0L || tame.level().getGameTime() < restoreTick) {
-            return;
-        }
-        boolean sit = tame.isOrderedToSit();
-        tame.setOrderedToSit(sit);
-        tame.setInSittingPose(sit);
-        data.cooldowns.remove(SHIELD_BLOCK_RESTORE_TICK);
     }
 }
