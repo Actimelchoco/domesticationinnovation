@@ -54,6 +54,7 @@ public final class TameDuelManager {
     }
 
     private static final class DuelStats {
+        private double points;
         private int kills;
         private int assists;
         private int deaths;
@@ -224,6 +225,7 @@ public final class TameDuelManager {
             DuelStats assisterStats = battle.duelStats.computeIfAbsent(assisterId, ignored -> new DuelStats());
             assisterStats.assists++;
         }
+        awardDuelPoints(server, battle, elimination);
         notifyElimination(server, battle, elimination);
     }
 
@@ -341,13 +343,9 @@ public final class TameDuelManager {
                 restoredCount++;
             }
         }
-        String message = "Group duel ended" + (reason == null || reason.isBlank() ? "." : ": " + reason);
-        if (restoredCount > 0) {
-            message += " Restored " + restoredCount + " tame(s).";
-        }
-        notifyOwner(server, battle.ownerA, message, resultSummary, leaderboardSummary);
+        notifyOwner(server, battle.ownerA, resultSummary, leaderboardSummary);
         if (!battle.ownerA.equals(battle.ownerB)) {
-            notifyOwner(server, battle.ownerB, message, resultSummary, leaderboardSummary);
+            notifyOwner(server, battle.ownerB, resultSummary, leaderboardSummary);
         }
     }
 
@@ -358,11 +356,10 @@ public final class TameDuelManager {
         tame.getNavigation().stop();
     }
 
-    private static void notifyOwner(MinecraftServer server, UUID ownerId, String message, List<Component> resultSummary, List<Component> leaderboardSummary) {
-        if (server == null || ownerId == null || message == null || message.isBlank()) return;
+    private static void notifyOwner(MinecraftServer server, UUID ownerId, List<Component> resultSummary, List<Component> leaderboardSummary) {
+        if (server == null || ownerId == null) return;
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
         if (owner != null) {
-            owner.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
             for (Component line : resultSummary) {
                 owner.sendSystemMessage(line);
             }
@@ -464,7 +461,7 @@ public final class TameDuelManager {
         ordered.sort((a, b) -> {
             DuelStats statsA = battle.duelStats.getOrDefault(a, new DuelStats());
             DuelStats statsB = battle.duelStats.getOrDefault(b, new DuelStats());
-            int scoreCompare = Integer.compare(duelScore(statsB), duelScore(statsA));
+            int scoreCompare = Double.compare(statsB.points, statsA.points);
             if (scoreCompare != 0) {
                 return scoreCompare;
             }
@@ -499,7 +496,7 @@ public final class TameDuelManager {
             }
             row = row
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal("p:" + duelScore(stats)).withStyle(ChatFormatting.LIGHT_PURPLE))
+                    .append(Component.literal("p:" + formatPoints(stats.points)).withStyle(ChatFormatting.LIGHT_PURPLE))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal("k:" + stats.kills).withStyle(ChatFormatting.RED))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
@@ -617,13 +614,6 @@ public final class TameDuelManager {
     private record TeamResult(UUID ownerId, String displayName, int tameCount, int totalLevel, int survived, int died) {
     }
 
-    private static int duelScore(DuelStats stats) {
-        if (stats == null) {
-            return 0;
-        }
-        return Math.max(0, stats.kills) * 4 + Math.max(0, stats.assists);
-    }
-
     private static TameData tameDataForSummary(MinecraftServer server, DuelBattle battle, UUID participantId) {
         TameData live = TameRegistry.get(participantId);
         if (live != null) {
@@ -714,6 +704,50 @@ public final class TameDuelManager {
 
     private static String formatNumber(float value) {
         return String.format(java.util.Locale.ROOT, "%.1f", value);
+    }
+
+    private static String formatPoints(double value) {
+        double rounded = Math.rint(value);
+        if (Math.abs(value - rounded) < 0.0001D) {
+            return Integer.toString((int) rounded);
+        }
+        return String.format(java.util.Locale.ROOT, "%.1f", value);
+    }
+
+    private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
+        if (battle == null || elimination == null || elimination.victimId == null) {
+            return;
+        }
+        TameData victimData = tameDataForSummary(server, battle, elimination.victimId);
+        double pointsPool = victimData == null ? 0.0D : Math.max(1, victimData.level);
+        UUID killerId = elimination.killerId;
+        int assisterSlots = elimination.assisterIds == null ? 0 : elimination.assisterIds.size();
+        double killerBasePoints = 0.0D;
+        double assisterPoolPoints = 0.0D;
+        if (killerId != null) {
+            if (assisterSlots <= 0) {
+                killerBasePoints = pointsPool;
+            } else if (assisterSlots == 1) {
+                killerBasePoints = pointsPool * 0.75D;
+                assisterPoolPoints = pointsPool * 0.25D;
+            } else {
+                killerBasePoints = pointsPool * 0.50D;
+                assisterPoolPoints = pointsPool * 0.50D;
+            }
+        } else if (assisterSlots > 0) {
+            assisterPoolPoints = pointsPool * 0.50D;
+        }
+        double assisterShare = assisterSlots <= 0 ? 0.0D : assisterPoolPoints / assisterSlots;
+        if (killerId != null) {
+            DuelStats killerStats = battle.duelStats.computeIfAbsent(killerId, ignored -> new DuelStats());
+            killerStats.points += killerBasePoints;
+        }
+        if (elimination.assisterIds != null) {
+            for (UUID assisterId : elimination.assisterIds) {
+                DuelStats assisterStats = battle.duelStats.computeIfAbsent(assisterId, ignored -> new DuelStats());
+                assisterStats.points += assisterShare;
+            }
+        }
     }
 
     private static TamableAnimal findLoadedTame(MinecraftServer server, UUID tameId) {
