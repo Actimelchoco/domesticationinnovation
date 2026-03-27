@@ -5927,6 +5927,7 @@ public class TameCommands {
             return error(player, "No tames found for " + label + ".");
         }
         int changed = 0;
+        List<TameData> changedEntries = new ArrayList<>();
         for (TameData data : requested) {
             if (data == null) {
                 continue;
@@ -5936,6 +5937,7 @@ public class TameCommands {
             }
             if (addGroupMembership(data, group)) {
                 changed++;
+                changedEntries.add(data);
             }
         }
         TameRegistry.rememberGroup(player.getUUID(), group);
@@ -5943,7 +5945,8 @@ public class TameCommands {
             return error(player, "No tames changed for " + label + ".");
         }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Added " + changed + " tame(s) from " + label + " to group '" + group + "'.").withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Group '" + group + "' add: " + changed + " tame(s) changed from " + label + ".").withStyle(ChatFormatting.GREEN));
+        sendGroupSelectionPreview(player, group, changedEntries, ChatFormatting.GREEN);
         return changed;
     }
 
@@ -5959,12 +5962,14 @@ public class TameCommands {
             return error(player, "No tames found for " + label + ".");
         }
         int changed = 0;
+        List<TameData> changedEntries = new ArrayList<>();
         for (TameData data : requested) {
             if (data == null || !isInGroup(data, group)) {
                 continue;
             }
             if (removeGroupMembership(data, group)) {
                 changed++;
+                changedEntries.add(data);
             }
         }
         if (changed <= 0) {
@@ -5975,8 +5980,23 @@ public class TameCommands {
         } else {
             TameRegistry.markDirty();
         }
-        player.sendSystemMessage(Component.literal("Removed " + changed + " tame(s) from group '" + group + "' using " + label + ".").withStyle(ChatFormatting.YELLOW));
+        player.sendSystemMessage(Component.literal("Group '" + group + "' remove: " + changed + " tame(s) changed using " + label + ".").withStyle(ChatFormatting.YELLOW));
+        sendGroupSelectionPreview(player, group, changedEntries, ChatFormatting.YELLOW);
         return changed;
+    }
+
+    private static void sendGroupSelectionPreview(ServerPlayer player, String group, List<TameData> changedEntries, ChatFormatting color) {
+        if (player == null || changedEntries == null || changedEntries.isEmpty()) {
+            return;
+        }
+        List<TameData> sorted = new ArrayList<>(changedEntries);
+        sorted.sort(Comparator
+                .comparingInt((TameData data) -> data.level).reversed()
+                .thenComparing(data -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT)));
+        player.sendSystemMessage(Component.literal("---- Group '" + group + "' changed tames (" + sorted.size() + ") ----").withStyle(ChatFormatting.GOLD));
+        for (TameData data : sorted) {
+            player.sendSystemMessage(Component.literal("- [" + data.level + "] " + tameDisplayName(data)).withStyle(color));
+        }
     }
 
     private static int groupDelete(CommandSourceStack source, String group) {
@@ -12858,6 +12878,14 @@ public class TameCommands {
         TameData data = TameRegistry.get(tame.getUUID());
         if (order != MovementOrder.GUARDIAN) {
             clearGuardianAnchor(data);
+        }
+        if (data != null) {
+            data.movementOrder = switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER -> 2;
+                case GUARDIAN -> 3;
+            };
         }
         tame.setTarget(null);
         tame.getNavigation().stop();

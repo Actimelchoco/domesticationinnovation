@@ -42,6 +42,30 @@ public final class OwnerProtectionAbilityModule {
         List<TamableAnimal> nearbyTames = collectOwnedNearbyTames(level, owner, 3.0D);
         if (nearbyTames.isEmpty()) return;
 
+        TamableAnimal bestShieldBlocker = null;
+        TameData bestShieldData = null;
+        int bestShieldLevel = 0;
+        double bestShieldDistance = Double.MAX_VALUE;
+
+        for (TamableAnimal tame : nearbyTames) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) continue;
+            if (!LevelSystem.hasAbility(data, "shield_block")) continue;
+            if (!isReady(data, "shield_block_tick", now)) continue;
+            int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "shield_block"));
+            double distance = tame.distanceToSqr(owner);
+            if (bestShieldBlocker == null || levelValue > bestShieldLevel || (levelValue == bestShieldLevel && distance < bestShieldDistance)) {
+                bestShieldBlocker = tame;
+                bestShieldData = data;
+                bestShieldLevel = levelValue;
+                bestShieldDistance = distance;
+            }
+        }
+
+        if (bestShieldBlocker != null && bestShieldData != null) {
+            handleShieldBlockOwner(level, owner, bestShieldBlocker, bestShieldData, event, now, hooks);
+        }
+
         for (TamableAnimal tame : nearbyTames) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
@@ -162,6 +186,59 @@ public final class OwnerProtectionAbilityModule {
             level.playSound(null, tame.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
         }
         hooks.debugAbilityUse(tame, "shield_block");
+    }
+
+    private static void handleShieldBlockOwner(ServerLevel level, ServerPlayer owner, TamableAnimal tame, TameData data, LivingHurtEvent event, long now, Hooks hooks) {
+        if (event.getAmount() <= 0.0F) return;
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "shield_block"));
+        float reduction = Math.min(0.95F, 0.65F + (levelValue - 1) * 0.03F);
+        float before = event.getAmount();
+        event.setAmount(event.getAmount() * (1.0F - reduction));
+
+        long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
+        setCooldown(data, "shield_block_tick", now + cooldownTicks);
+        data.cooldowns.put(SHIELD_BLOCK_RESTORE_TICK, now + SHIELD_BLOCK_SIT_TICKS);
+        dashShieldBlockToOwner(level, owner, tame, data, levelValue);
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        tame.setInSittingPose(true);
+        TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
+        hooks.applySupportActivationVisual(tame, "shield_block");
+        hooks.grantSupportXp(tame, data, owner, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
+        level.sendParticles(ParticleTypes.CRIT, owner.getX(), owner.getY(0.6D), owner.getZ(), 8, 0.3D, 0.3D, 0.3D, 0.02D);
+        level.playSound(null, owner.blockPosition(), SoundEvents.SHIELD_BLOCK, SoundSource.NEUTRAL, 1.0F, 1.0F);
+        hooks.debugAbilityUse(tame, "shield_block");
+    }
+
+    private static void dashShieldBlockToOwner(ServerLevel level, ServerPlayer owner, TamableAnimal tame, TameData data, int levelValue) {
+        Vec3 start = tame.position();
+        Vec3 ownerPos = owner.position();
+        Vec3 toOwner = ownerPos.subtract(start);
+        double distance = toOwner.length();
+        if (distance < 0.2D) {
+            return;
+        }
+
+        Vec3 dir = toOwner.normalize();
+        Vec3 end = ownerPos.subtract(dir.scale(0.8D));
+        AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
+        float damage = TameAbilityEvents.offensiveAbilityCastDamage(data, "dash", levelValue);
+
+        for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, sweep)) {
+            if (!nearby.isAlive()) continue;
+            if (nearby == tame || nearby == owner) continue;
+            if (!(nearby instanceof Monster)) continue;
+            if (TameRegistry.isProtectedAttackTarget(tame, nearby)) continue;
+            LevelSystem.trackDamage(nearby, tame);
+            nearby.hurt(tame.damageSources().mobAttack(tame), damage);
+        }
+
+        tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
+        tame.setDeltaMovement(dir.x * 0.9D, 0.10D, dir.z * 0.9D);
+        tame.hurtMarked = true;
+        level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), 6, 0.25D, 0.1D, 0.25D, 0.0D);
+        level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.NEUTRAL, 0.8F, 1.2F);
     }
 
     private static List<TamableAnimal> collectOwnedNearbyTames(ServerLevel level, ServerPlayer owner, double radius) {

@@ -16,7 +16,12 @@ final class AggressiveModeGoal extends AbstractModeGoal {
     }
 
     @Override
+    protected int tickInterval() {
+        return 10;
+    }
+
+    @Override
     protected void tickMode(ServerLevel level, TameData data) {
-        TameGoalSupport.setAggressiveTarget(level, tame, 7.0D);
+        TameGoalSupport.setAggressiveTarget(level, tame, 10.0D);
     }
 }

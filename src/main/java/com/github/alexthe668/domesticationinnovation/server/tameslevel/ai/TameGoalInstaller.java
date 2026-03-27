@@ -12,8 +12,7 @@ public final class TameGoalInstaller {
         addTargetIfMissing(tame, DefaultPlusModeGoal.class, 3, new DefaultPlusModeGoal(tame));
         addTargetIfMissing(tame, BossModeGoal.class, 3, new BossModeGoal(tame));
         addTargetIfMissing(tame, BodyguardModeGoal.class, 3, new BodyguardModeGoal(tame));
-        addTargetIfMissing(tame, MonsterHunterModeGoal.class, 3, new MonsterHunterModeGoal(tame));
-        addTargetIfMissing(tame, AggressiveModeGoal.class, 3, new AggressiveModeGoal(tame));
+        // Monster hunter / aggressive / arena use the event-driven periodic scan instead.
     }
 
     private static void addTargetIfMissing(TamableAnimal tame, Class<? extends Goal> goalType, int priority, Goal goal) {

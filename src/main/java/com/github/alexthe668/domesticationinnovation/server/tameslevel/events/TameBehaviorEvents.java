@@ -64,6 +64,31 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
+        TameMode mode = TameMode.byId(activeData.mode);
+        if (mode == TameMode.MONSTER_HUNTER) {
+            final LivingEntity[] nearest = new LivingEntity[1];
+            TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
+            if (shouldSwitchTarget(tame, nearest[0])) {
+                tame.setTarget(nearest[0]);
+            }
+            return;
+        }
+        if (mode == TameMode.ARENA) {
+            final LivingEntity[] nearest = new LivingEntity[1];
+            TamePerformanceProfiler.run("behavior.find_nearest_arena_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 64.0D));
+            if (shouldSwitchTarget(tame, nearest[0])) {
+                tame.setTarget(nearest[0]);
+            }
+            return;
+        }
+        if (mode == TameMode.AGGRESSIVE) {
+            final LivingEntity[] nearest = new LivingEntity[1];
+            TamePerformanceProfiler.run("behavior.find_nearest_aggressive_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 10.0D));
+            if (shouldSwitchTarget(tame, nearest[0])) {
+                tame.setTarget(nearest[0]);
+            }
+        }
+
     }
 
     @SubscribeEvent

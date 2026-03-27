@@ -291,9 +291,6 @@ public final class TameDuelManager {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
             own.setOrderedToSit(false);
-            if (own instanceof IComandableMob commandable) {
-                commandable.setCommand(0);
-            }
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 own.setTarget(null);

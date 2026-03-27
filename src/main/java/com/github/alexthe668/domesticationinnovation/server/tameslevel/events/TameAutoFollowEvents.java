@@ -366,11 +366,14 @@ public class TameAutoFollowEvents {
         return null;
     }
 
-    private static boolean isFollowing(TameData data) {
+    public static boolean isFollowing(TameData data) {
         if (data == null) {
             return false;
         }
         if (data == null || data.isInactive()) {
+            return false;
+        }
+        if (data.movementOrder != 0) {
             return false;
         }
         CompoundTag snapshot = data.entitySnapshot;

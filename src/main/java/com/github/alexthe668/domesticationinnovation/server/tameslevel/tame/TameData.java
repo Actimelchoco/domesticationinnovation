@@ -86,6 +86,7 @@ public class TameData {
     public TameClass tameClass;
     public int classRerollsUsed = 0;
     public int mode = 0;
+    public int movementOrder = 0;
     public String group = "";
     public boolean defendAllies = false;
     public boolean escapeMode = true;
@@ -238,6 +239,7 @@ public class TameData {
         }
         tag.putInt("classRerollsUsed", Math.max(0, classRerollsUsed));
         tag.putInt("mode", mode);
+        tag.putInt("movementOrder", movementOrder);
         tag.putString("group", group == null ? "" : group);
         tag.putBoolean("defendAllies", defendAllies);
         tag.putBoolean("escapeMode", escapeMode);
@@ -392,6 +394,7 @@ public class TameData {
         data.bonusKnockback = tag.getDouble("bonusKnockback");
         data.bonusKnockbackResist = tag.getDouble("bonusKnockbackResist");
         data.mode = tag.getInt("mode");
+        data.movementOrder = tag.contains("movementOrder", Tag.TAG_INT) ? tag.getInt("movementOrder") : 0;
         data.group = tag.getString("group");
         data.defendAllies = tag.getBoolean("defendAllies");
         data.escapeMode = !tag.contains("escapeMode") || tag.getBoolean("escapeMode");

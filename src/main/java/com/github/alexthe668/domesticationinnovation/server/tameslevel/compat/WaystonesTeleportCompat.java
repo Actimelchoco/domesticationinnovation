@@ -239,7 +239,7 @@ public final class WaystonesTeleportCompat {
         if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
             return false;
         }
-        return TameMode.byId(data.mode) != TameMode.PASSIVE;
+        return TameAutoFollowEvents.isFollowing(data);
     }
 
     private static boolean isWaystoneTeleportEligible(TamableAnimal tame, TameData data) {
