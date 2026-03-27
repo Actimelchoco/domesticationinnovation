@@ -2792,7 +2792,7 @@ public class TameCommands {
             sendInfoPage(p, "Mode",
                     "/tames mode <pet> <mode>",
                     "/tames mode <all|group|type|state> ... <mode>",
-                    "Current modes: default, default_plus, bodyguard, boss, monster_hunter, aggressive, passive.",
+                    "Current modes: default, default_plus, bodyguard, boss, monster_hunter, arena, aggressive, passive.",
                     "Modes control combat retargeting. They are separate from movement state and movement profile."
             );
         }
@@ -4429,7 +4429,7 @@ public class TameCommands {
         }
         receiver.sendSystemMessage(Component.literal("K " + d.kills + "  A " + d.assists + "  D " + d.deaths + "  Days " + days + "  ActiveDays " + Math.max(0, d.activeSurvivalDays)).withStyle(ChatFormatting.AQUA));
         receiver.sendSystemMessage(Component.literal("Mode " + TameMode.byId(d.mode).key() + "  Class " + (d.tameClass == null ? "-" : d.tameClass.id())).withStyle(ChatFormatting.GREEN));
-        receiver.sendSystemMessage(Component.literal("Group " + (d.group == null || d.group.isBlank() ? "-" : d.group)).withStyle(ChatFormatting.DARK_GREEN));
+        receiver.sendSystemMessage(Component.literal("Group " + groupLabel(d)).withStyle(ChatFormatting.DARK_GREEN));
         receiver.sendSystemMessage(Component.literal("Bed " + formatBedLocation(source.getServer(), d)).withStyle(ChatFormatting.DARK_AQUA));
         if (!detailed) {
             return;
@@ -5931,11 +5931,12 @@ public class TameCommands {
             if (data == null) {
                 continue;
             }
-            if (group.equalsIgnoreCase(data.group)) {
+            if (isInGroup(data, group)) {
                 continue;
             }
-            data.group = group;
-            changed++;
+            if (addGroupMembership(data, group)) {
+                changed++;
+            }
         }
         TameRegistry.rememberGroup(player.getUUID(), group);
         if (changed <= 0) {
@@ -5959,11 +5960,12 @@ public class TameCommands {
         }
         int changed = 0;
         for (TameData data : requested) {
-            if (data == null || data.group == null || !data.group.equalsIgnoreCase(group)) {
+            if (data == null || !isInGroup(data, group)) {
                 continue;
             }
-            data.group = "";
-            changed++;
+            if (removeGroupMembership(data, group)) {
+                changed++;
+            }
         }
         if (changed <= 0) {
             return error(player, "No tames from " + label + " were in group '" + group + "'.");
@@ -5988,11 +5990,12 @@ public class TameCommands {
         }
         int removed = 0;
         for (TameData data : members) {
-            if (data == null || data.group == null || data.group.isBlank()) {
+            if (data == null || !isInGroup(data, group)) {
                 continue;
             }
-            data.group = "";
-            removed++;
+            if (removeGroupMembership(data, group)) {
+                removed++;
+            }
         }
         if (removed <= 0) {
             if (TameRegistry.getOwnerGroups(player.getUUID()).stream().noneMatch(existing -> existing.equalsIgnoreCase(group))) {
@@ -6040,7 +6043,8 @@ public class TameCommands {
         int nextModeId = switch (TameMode.byId(selected.get(0).mode)) {
             case DEFAULT -> TameMode.BODYGUARD.id();
             case BODYGUARD -> TameMode.MONSTER_HUNTER.id();
-            case MONSTER_HUNTER -> TameMode.AGGRESSIVE.id();
+            case MONSTER_HUNTER -> TameMode.ARENA.id();
+            case ARENA -> TameMode.AGGRESSIVE.id();
             case AGGRESSIVE -> TameMode.PASSIVE.id();
             default -> TameMode.DEFAULT.id();
         };
@@ -6073,8 +6077,9 @@ public class TameCommands {
         }
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), selector.value)) {
-            data.group = "";
-            count++;
+            if (removeGroupMembership(data, selector.value)) {
+                count++;
+            }
         }
         if (count > 0) {
             TameRegistry.markDirty();
@@ -6096,7 +6101,7 @@ public class TameCommands {
                     : "-";
             player.sendSystemMessage(Component.literal("[" + data.level + "] " + data.name
                     + "  mode:" + TameMode.byId(data.mode).key()
-                    + "  group:" + (data.group == null || data.group.isBlank() ? "-" : data.group)
+                    + "  group:" + groupLabel(data)
                     + "  guard:" + guard).withStyle(ChatFormatting.AQUA));
         }
     }
@@ -6132,7 +6137,7 @@ public class TameCommands {
         if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) return false;
-        data.group = selector.value;
+        if (!addGroupMembership(data, selector.value)) return false;
         TameRegistry.markDirty();
         player.displayClientMessage(Component.literal("Drum: added " + data.name + " to group " + selector.value + ".").withStyle(ChatFormatting.GREEN), true);
         return true;
@@ -6143,9 +6148,7 @@ public class TameCommands {
         if (selector.kind != DrumSelectorKind.GROUP) return false;
         if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
         TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null || data.group == null || data.group.isBlank()) return false;
-        if (!data.group.equalsIgnoreCase(selector.value)) return false;
-        data.group = "";
+        if (data == null || !removeGroupMembership(data, selector.value)) return false;
         TameRegistry.markDirty();
         player.displayClientMessage(Component.literal("Drum: removed " + data.name + " from group " + selector.value + ".").withStyle(ChatFormatting.YELLOW), true);
         return true;
@@ -6598,7 +6601,7 @@ public class TameCommands {
         if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) return false;
-        data.group = target.selector().value;
+        if (!addGroupMembership(data, target.selector().value)) return false;
         TameRegistry.markDirty();
         player.displayClientMessage(Component.literal("Guardian tool: added " + tameDisplayName(data) + " to group " + target.selector().value + ".")
                 .withStyle(ChatFormatting.GREEN), true);
@@ -6610,9 +6613,7 @@ public class TameCommands {
         if (target == null || target.selector().kind != DrumSelectorKind.GROUP) return false;
         if (!tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) return false;
         TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null || data.group == null || data.group.isBlank()) return false;
-        if (!data.group.equalsIgnoreCase(target.selector().value)) return false;
-        data.group = "";
+        if (data == null || !removeGroupMembership(data, target.selector().value)) return false;
         TameRegistry.markDirty();
         player.displayClientMessage(Component.literal("Guardian tool: removed " + tameDisplayName(data) + " from group " + target.selector().value + ".")
                 .withStyle(ChatFormatting.YELLOW), true);
@@ -6766,8 +6767,9 @@ public class TameCommands {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (isDeadEntry(d.uuid)) continue;
-            if (d.group == null || d.group.isBlank()) continue;
-            groups.computeIfAbsent(d.group, ignored -> new ArrayList<>()).add(d);
+            for (String group : groupMemberships(d)) {
+                groups.computeIfAbsent(group, ignored -> new ArrayList<>()).add(d);
+            }
         }
         if (groups.isEmpty()) return error(p, "No groups found.");
 
@@ -8536,9 +8538,6 @@ public class TameCommands {
         if (isLoadedAnywhere(source.getServer(), data.uuid)) {
             return "already loaded";
         }
-        if (isUnloadedRespawnFallbackBlockedType(data)) {
-            return "instant unloaded tp disabled for " + recoverEntityTypeId(data);
-        }
         if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
             return "missing last known dimension";
         }
@@ -8570,11 +8569,6 @@ public class TameCommands {
             return UnloadedTpResult.queued();
         }
         return UnloadedTpResult.fail(reason + "; snapshot rebuild failed: " + recoverResult.error);
-    }
-
-    private static boolean isUnloadedRespawnFallbackBlockedType(TameData data) {
-        String typeId = recoverEntityTypeId(data);
-        return "alexsmobs:flutter".equals(typeId);
     }
 
     private static boolean isSameDimensionUnloadedRespawnFallback(ServerPlayer owner, TameData data) {
@@ -9210,7 +9204,7 @@ public class TameCommands {
         List<TameData> entries = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!includeAll && !p.getUUID().equals(d.ownerUUID)) continue;
-            if (groupFilter != null && (d.group == null || d.group.isBlank() || !d.group.equalsIgnoreCase(groupFilter))) continue;
+            if (groupFilter != null && !isInGroup(d, groupFilter)) continue;
             entries.add(d);
         }
         if (m.equals("mix") || m.equals("score")) entries.sort((a, b) -> Integer.compare(weightedCombatScore(b), weightedCombatScore(a)));
@@ -11671,7 +11665,7 @@ public class TameCommands {
                 }
                 LevelSystem.updateTameName(tame, data);
                 tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
-                TameSpawnEvents.queueDeferredStatRefresh(tame, data, 40L);
+                TameSpawnEvents.queueDeferredStatRefresh(tame, data, 1200L);
 
                 data.lastKnownDimension = level.dimension().location().toString();
                 data.lastKnownX = tame.blockPosition().getX();
@@ -11711,7 +11705,7 @@ public class TameCommands {
         }
         LevelSystem.updateTameName(tame, data);
         tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
-        TameSpawnEvents.queueDeferredStatRefresh(tame, data, 40L);
+        TameSpawnEvents.queueDeferredStatRefresh(tame, data, 1200L);
 
         data.lastKnownDimension = level.dimension().location().toString();
         data.lastKnownX = tame.blockPosition().getX();
@@ -12840,6 +12834,25 @@ public class TameCommands {
         applyMovementOverride(tame, sit ? MovementOrder.SIT : MovementOrder.FOLLOW);
     }
 
+    public static int captureMovementOrderCode(TamableAnimal tame, TameData data) {
+        MovementOrder order = resolveRepairMovementOrder(tame, data);
+        return switch (order) {
+            case FOLLOW -> 0;
+            case SIT -> 1;
+            case WANDER -> 2;
+            case GUARDIAN -> 3;
+        };
+    }
+
+    public static void applyMovementOrderCode(TamableAnimal tame, int orderCode) {
+        applyMovementOverride(tame, switch (orderCode) {
+            case 1 -> MovementOrder.SIT;
+            case 2 -> MovementOrder.WANDER;
+            case 3 -> MovementOrder.GUARDIAN;
+            default -> MovementOrder.FOLLOW;
+        });
+    }
+
     private static void applyMovementOverride(TamableAnimal tame, MovementOrder order) {
         if (tame == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
@@ -13649,10 +13662,70 @@ public class TameCommands {
         List<TameData> list = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!owner.equals(d.ownerUUID)) continue;
-            if (d.group == null || d.group.isBlank()) continue;
-            if (d.group.equalsIgnoreCase(group)) list.add(d);
+            if (isInGroup(d, group)) list.add(d);
         }
         return list;
+    }
+
+    private static Set<String> groupMemberships(TameData data) {
+        Set<String> groups = new LinkedHashSet<>();
+        if (data == null || data.group == null || data.group.isBlank()) {
+            return groups;
+        }
+        for (String raw : data.group.split("\\|")) {
+            if (raw == null) {
+                continue;
+            }
+            String trimmed = raw.trim();
+            if (!trimmed.isBlank()) {
+                groups.add(trimmed);
+            }
+        }
+        return groups;
+    }
+
+    private static boolean isInGroup(TameData data, String group) {
+        if (data == null || group == null || group.isBlank()) {
+            return false;
+        }
+        for (String existing : groupMemberships(data)) {
+            if (existing.equalsIgnoreCase(group)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean addGroupMembership(TameData data, String group) {
+        if (data == null || group == null || group.isBlank()) {
+            return false;
+        }
+        Set<String> groups = groupMemberships(data);
+        for (String existing : groups) {
+            if (existing.equalsIgnoreCase(group)) {
+                return false;
+            }
+        }
+        groups.add(group.trim());
+        data.group = String.join("|", groups);
+        return true;
+    }
+
+    private static boolean removeGroupMembership(TameData data, String group) {
+        if (data == null || group == null || group.isBlank()) {
+            return false;
+        }
+        Set<String> groups = groupMemberships(data);
+        boolean removed = groups.removeIf(existing -> existing.equalsIgnoreCase(group));
+        if (removed) {
+            data.group = String.join("|", groups);
+        }
+        return removed;
+    }
+
+    private static String groupLabel(TameData data) {
+        Set<String> groups = groupMemberships(data);
+        return groups.isEmpty() ? "-" : String.join(", ", groups);
     }
 
     private static List<TameData> ownedDeadGroup(UUID owner, String group) {
@@ -14383,8 +14456,10 @@ public class TameCommands {
             if (seen.add(group)) suggestCommandString(b, group);
         }
         for (TameData d : TameRegistry.TAMES.values()) {
-            if (!p.getUUID().equals(d.ownerUUID) || d.group == null || d.group.isBlank()) continue;
-            if (seen.add(d.group)) suggestCommandString(b, d.group);
+            if (!p.getUUID().equals(d.ownerUUID)) continue;
+            for (String group : groupMemberships(d)) {
+                if (seen.add(group)) suggestCommandString(b, group);
+            }
         }
         return b.buildFuture();
     }

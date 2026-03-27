@@ -5,6 +5,7 @@ public enum TameMode {
     BOSS(1),
     BODYGUARD(2),
     MONSTER_HUNTER(3),
+    ARENA(4),
     PASSIVE(6),
     AGGRESSIVE(8),
     DEFAULT_PLUS(9);
@@ -25,11 +26,12 @@ public enum TameMode {
             case 1 -> BOSS;
             case 2 -> BODYGUARD;
             case 3 -> MONSTER_HUNTER;
+            case 4 -> ARENA;
             case 6 -> PASSIVE;
             case 8 -> AGGRESSIVE;
             case 9 -> DEFAULT_PLUS;
             // legacy removed modes map to default_plus
-            case 4, 5, 7 -> DEFAULT_PLUS;
+            case 5, 7 -> DEFAULT_PLUS;
             default -> DEFAULT;
         };
     }

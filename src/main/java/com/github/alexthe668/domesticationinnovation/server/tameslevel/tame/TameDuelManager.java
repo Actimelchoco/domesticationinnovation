@@ -79,6 +79,7 @@ public final class TameDuelManager {
     private static final Map<UUID, DuelBattle> BATTLE_BY_ID = new HashMap<>();
     private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
     private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
+    private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
 
     private TameDuelManager() {
     }
@@ -122,7 +123,6 @@ public final class TameDuelManager {
             TEAM_A_BY_ENTITY.put(participantId, false);
             capturePreDuelTameState(server, battle, participantId);
         }
-        setupBossBars(server, battle);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -142,6 +142,10 @@ public final class TameDuelManager {
 
     public static synchronized boolean isTameInDuel(UUID tameId) {
         return isEntityInDuel(tameId);
+    }
+
+    public static synchronized boolean consumeRecentDuelElimination(UUID entityId) {
+        return entityId != null && RECENT_DUEL_ELIMINATIONS.remove(entityId);
     }
 
     public static synchronized boolean isSameDuelTeam(UUID firstId, UUID secondId) {
@@ -209,14 +213,15 @@ public final class TameDuelManager {
             for (UUID contributorId : contributors) {
                 if (contributorId == null || contributorId.equals(victimId)) continue;
                 if (killerId != null && killerId.equals(contributorId)) continue;
-                if (!battle.participants.contains(contributorId)) continue;
+                if (!battle.roster.contains(contributorId)) continue;
                 assisters.add(contributorId);
             }
             assisters.sort(Comparator.comparing(id -> entityLabel(server, id)));
         }
-        UUID duelKiller = killerId != null && battle.participants.contains(killerId) ? killerId : null;
+        UUID duelKiller = killerId != null && battle.roster.contains(killerId) ? killerId : null;
         DuelElimination elimination = new DuelElimination(victimId, duelKiller, assisters);
         battle.eliminations.add(elimination);
+        RECENT_DUEL_ELIMINATIONS.add(victimId);
         DuelStats victimStats = battle.duelStats.get(victimId);
         if (victimStats != null) {
             victimStats.deaths++;
@@ -257,7 +262,6 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            updateBossBars(server, battle);
         }
     }
 
@@ -332,7 +336,6 @@ public final class TameDuelManager {
     private static void finishBattle(MinecraftServer server, DuelBattle battle, String reason, UUID forfeitingOwner) {
         if (battle == null) return;
         BATTLE_BY_ID.remove(battle.battleId);
-        removeBossBars(battle);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
@@ -341,6 +344,7 @@ public final class TameDuelManager {
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
             TEAM_A_BY_ENTITY.remove(participantId);
+            RECENT_DUEL_ELIMINATIONS.remove(participantId);
             clearTargetForParticipant(server, participantId);
             CompoundTag snapshot = battle.tameSnapshots.get(participantId);
             if (snapshot != null && TameCommands.restoreDuelParticipantSnapshot(server, snapshot.copy())) {

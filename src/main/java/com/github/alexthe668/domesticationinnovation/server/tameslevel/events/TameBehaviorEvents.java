@@ -64,22 +64,6 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
-        TameMode mode = TameMode.byId(activeData.mode);
-        if (mode == TameMode.MONSTER_HUNTER) {
-            final LivingEntity[] nearest = new LivingEntity[1];
-            TamePerformanceProfiler.run("behavior.find_nearest_monster", () -> nearest[0] = findNearestMonster(tame, 10.0D));
-            if (nearest[0] != null && tame.getTarget() != nearest[0]) {
-                tame.setTarget(nearest[0]);
-            }
-            return;
-        }
-        if (mode == TameMode.AGGRESSIVE) {
-            final LivingEntity[] nearest = new LivingEntity[1];
-            TamePerformanceProfiler.run("behavior.find_nearest_aggressive_target", () -> nearest[0] = findNearestAggressiveTarget(tame, 10.0D));
-            if (nearest[0] != null && tame.getTarget() != nearest[0]) {
-                tame.setTarget(nearest[0]);
-            }
-        }
     }
 
     @SubscribeEvent
@@ -170,13 +154,19 @@ public class TameBehaviorEvents {
             }
             case MONSTER_HUNTER -> {
                 LivingEntity nearest = findNearestMonster(tame, 10.0D);
-                if (nearest != null) {
+                if (shouldSwitchTarget(tame, nearest)) {
+                    tame.setTarget(nearest);
+                }
+            }
+            case ARENA -> {
+                LivingEntity nearest = findNearestAggressiveTarget(tame, 64.0D);
+                if (shouldSwitchTarget(tame, nearest)) {
                     tame.setTarget(nearest);
                 }
             }
             case AGGRESSIVE -> {
                 LivingEntity nearest = findNearestAggressiveTarget(tame, 10.0D);
-                if (nearest != null) {
+                if (shouldSwitchTarget(tame, nearest)) {
                     tame.setTarget(nearest);
                 }
             }
@@ -390,6 +380,22 @@ public class TameBehaviorEvents {
     private static boolean hasValidCurrentTarget(TamableAnimal tame) {
         LivingEntity target = tame.getTarget();
         return target != null && isValidCombatTarget(tame, target);
+    }
+
+    private static boolean shouldSwitchTarget(TamableAnimal tame, LivingEntity candidate) {
+        if (tame == null || candidate == null) {
+            return false;
+        }
+        LivingEntity current = tame.getTarget();
+        if (current == null || !isValidCombatTarget(tame, current)) {
+            return true;
+        }
+        if (current == candidate) {
+            return false;
+        }
+        double currentDist = tame.distanceToSqr(current);
+        double candidateDist = tame.distanceToSqr(candidate);
+        return candidateDist + 4.0D < currentDist;
     }
 
     private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target) {

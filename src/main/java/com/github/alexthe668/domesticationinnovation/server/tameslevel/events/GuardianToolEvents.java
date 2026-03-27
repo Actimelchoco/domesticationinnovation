@@ -48,7 +48,9 @@ public class GuardianToolEvents {
                     player.level().getGameTime()
             ));
         } else {
-            TameCommands.guardianToolClearAnchorsAtBlock(player, event.getItemStack(), event.getPos());
+            if (TameCommands.guardianToolClearAnchorsAtBlock(player, event.getItemStack(), event.getPos()) > 0) {
+                consumeOne(player, event.getItemStack());
+            }
         }
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
@@ -62,9 +64,13 @@ public class GuardianToolEvents {
         if (event.getHand() != InteractionHand.MAIN_HAND) return;
         if (!isGuardianToolArrow(event.getItemStack())) return;
         if (player.isShiftKeyDown()) {
-            TameCommands.guardianToolDeploySet(player, event.getItemStack());
+            if (TameCommands.guardianToolDeploySet(player, event.getItemStack()) > 0) {
+                consumeOne(player, event.getItemStack());
+            }
         } else {
-            TameCommands.guardianToolSetNextAnchor(player, event.getItemStack(), event.getPos().above());
+            if (TameCommands.guardianToolSetNextAnchor(player, event.getItemStack(), event.getPos().above()) > 0) {
+                consumeOne(player, event.getItemStack());
+            }
         }
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
@@ -95,6 +101,7 @@ public class GuardianToolEvents {
                 ? TameCommands.guardianToolRemoveCurrentAnchorFromSet(player, stack, tame)
                 : TameCommands.guardianToolRemoveGroupTarget(player, stack, tame);
         if (changed) {
+            consumeOne(player, stack);
             event.setCanceled(true);
         }
     }
@@ -123,7 +130,9 @@ public class GuardianToolEvents {
         }
         HitResult hit = player.pick(6.0D, 0.0F, false);
         if (hit instanceof BlockHitResult blockHit && blockHit.getBlockPos().equals(hold.blockPos())) {
-            TameCommands.guardianToolQueueClearConfirm(player, player.getMainHandItem());
+            if (TameCommands.guardianToolQueueClearConfirm(player, player.getMainHandItem()) > 0) {
+                consumeOne(player, player.getMainHandItem());
+            }
         }
         LEFT_CLICK_HOLDS.remove(player.getUUID());
     }
@@ -137,9 +146,17 @@ public class GuardianToolEvents {
                 ? TameCommands.guardianToolAddCurrentAnchorToSet(player, stack, tame)
                 : TameCommands.guardianToolAddGroupTarget(player, stack, tame);
         if (changed) {
+            consumeOne(player, stack);
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setResult(Event.Result.ALLOW);
         }
+    }
+
+    private static void consumeOne(ServerPlayer player, ItemStack stack) {
+        if (player.getAbilities().instabuild || stack.isEmpty()) {
+            return;
+        }
+        stack.shrink(1);
     }
 }

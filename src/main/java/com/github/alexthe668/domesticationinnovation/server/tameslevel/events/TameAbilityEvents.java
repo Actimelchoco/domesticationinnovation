@@ -2552,6 +2552,7 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
             // DEFAULT should still allow abilities against the tame's current valid target.
             case DEFAULT -> true;
             case MONSTER_HUNTER, BOSS -> target instanceof Enemy;
+            case ARENA -> !(target instanceof Player) && !(target instanceof TamableAnimal otherTame && otherTame.isTame());
             case BODYGUARD -> (target instanceof Enemy) || isOwnerCombatPriorityTarget(tame, target);
             case DEFAULT_PLUS, AGGRESSIVE -> true;
         };

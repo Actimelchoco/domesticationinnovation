@@ -80,7 +80,7 @@ public class TameCombatEvents {
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
 
-        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID());
+        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID()) || TameDuelManager.consumeRecentDuelElimination(tame.getUUID());
         TameData data = TameRegistry.get(tame.getUUID());
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
@@ -266,17 +266,21 @@ public class TameCombatEvents {
 
     private static void processDeath(PendingDeath death) {
         LivingEntity dead = death.dead();
+        ServerLevel serverLevel = dead.level() instanceof ServerLevel level ? level : null;
+        TamableAnimal effectiveKillerTame = resolveEffectiveKillerTame(serverLevel, death);
+        UUID effectiveKillerTameUuid = effectiveKillerTame != null ? effectiveKillerTame.getUUID() : death.killerTameUuid();
         if (dead != null && TameDuelManager.isEntityInDuel(death.deadId())) {
             TameDuelManager.recordElimination(
                     dead.level().getServer(),
                     death.deadId(),
                     death.contributors(),
-                    resolveDuelKillerParticipantUuid(dead.level().getServer(), death)
+                    resolveDuelKillerParticipantUuid(dead.level().getServer(), death, effectiveKillerTameUuid)
             );
             TameDuelManager.endDuelForEntity(dead.level().getServer(), death.deadId());
         }
-        LevelSystem.distributeXP(dead, death.killer());
-        if (!(dead.level() instanceof ServerLevel serverLevel)) {
+        LivingEntity killerForXp = effectiveKillerTame != null ? effectiveKillerTame : death.killer();
+        LevelSystem.distributeXP(dead, killerForXp);
+        if (serverLevel == null) {
             return;
         }
         for (UUID tameId : death.contributors()) {
@@ -287,20 +291,48 @@ public class TameCombatEvents {
             if (data == null) {
                 continue;
             }
-            boolean wasKiller = death.killerTameUuid() != null && death.killerTameUuid().equals(tameId);
+            boolean wasKiller = effectiveKillerTameUuid != null && effectiveKillerTameUuid.equals(tameId);
             TameAbilityEvents.onKillOrAssist(tame, data, dead, wasKiller);
         }
-        debugEnemyKilled(serverLevel, dead, dead.getExperienceReward(), death.contributors(), death.killerTameUuid());
+        debugEnemyKilled(serverLevel, dead, dead.getExperienceReward(), death.contributors(), effectiveKillerTameUuid);
     }
 
-    private static UUID resolveDuelKillerParticipantUuid(MinecraftServer server, PendingDeath death) {
+    private static UUID resolveDuelKillerParticipantUuid(MinecraftServer server, PendingDeath death, UUID effectiveKillerTameUuid) {
         if (death == null) {
             return null;
         }
         if (death.killer() instanceof ServerPlayer player) {
             return player.getUUID();
         }
-        return death.killerTameUuid();
+        return effectiveKillerTameUuid;
+    }
+
+    private static TamableAnimal resolveEffectiveKillerTame(ServerLevel level, PendingDeath death) {
+        if (level == null || death == null) {
+            return null;
+        }
+        if (death.killer() instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
+        }
+        if (death.killerTameUuid() != null && level.getEntity(death.killerTameUuid()) instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
+        }
+        if (death.contributors() == null || death.contributors().isEmpty()) {
+            return null;
+        }
+        TamableAnimal best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (UUID tameId : death.contributors()) {
+            if (!(level.getEntity(tameId) instanceof TamableAnimal contributor) || !contributor.isTame() || !contributor.isAlive()) {
+                continue;
+            }
+            double dist = contributor.distanceToSqr(death.dead());
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = contributor;
+            }
+        }
+        return best;
     }
 
     private record PendingDeath(LivingEntity dead, UUID deadId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {
@@ -368,7 +400,7 @@ public class TameCombatEvents {
             String killerName = killerByOwner.getOrDefault(ownerId, "-");
             List<String> assisters = assistsByOwner.getOrDefault(ownerId, List.of());
             StringBuilder line = new StringBuilder();
-            line.append("enemyKilled true: Killed: ")
+            line.append("Killed: ")
                     .append(mobType)
                     .append("[")
                     .append(xpReward)

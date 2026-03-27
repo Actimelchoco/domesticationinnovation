@@ -28,7 +28,7 @@ public class TameSpawnEvents {
     private static final Pattern LEVEL_PREFIX =
             Pattern.compile("^\\[lvl\\s*(\\d+)\\]\\s*(.*)$", Pattern.CASE_INSENSITIVE);
     private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
-    private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 40L;
+    private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
 
     @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
@@ -269,6 +269,7 @@ public class TameSpawnEvents {
         LevelSystem.updateTameName(tame, data);
         tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
         refreshRegistrySnapshot(tame, data);
+        queueDeferredStatRefresh(tame, data, DEFERRED_STAT_REFRESH_DELAY_TICKS);
     }
 
     private static void refreshRegistrySnapshot(TamableAnimal tame, TameData data) {

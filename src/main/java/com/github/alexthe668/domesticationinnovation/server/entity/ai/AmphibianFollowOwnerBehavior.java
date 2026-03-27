@@ -80,6 +80,12 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
                     && axolotl.getTarget().isAlive()) {
                 teleportDistance = 44.0D;
             }
+            if (mode == TameMode.ARENA) {
+                if (axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
+                    return false;
+                }
+                teleportDistance = 64.0D;
+            }
             if (mode == TameMode.BODYGUARD) {
                 teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
             }

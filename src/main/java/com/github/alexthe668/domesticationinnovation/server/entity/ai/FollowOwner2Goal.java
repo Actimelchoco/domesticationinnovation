@@ -119,6 +119,12 @@ public class FollowOwner2Goal extends Goal {
                     && this.tamable.getTarget().isAlive()) {
                 teleportDistance = 44.0D;
             }
+            if (mode == TameMode.ARENA) {
+                if (this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
+                    return false;
+                }
+                teleportDistance = 64.0D;
+            }
             if (mode == TameMode.BODYGUARD) {
                 teleportDistance = Math.max(1.0D, data.bodyguardRange * 2.0D);
             }

@@ -1344,12 +1344,9 @@ public class LevelSystem {
             if ("crittersandcompanions".equals(liveType.getNamespace()) && "dragonfly".equals(liveType.getPath())) {
                 return true;
             }
-            if ("legendary_monsters".equals(liveType.getNamespace())) {
-                return true;
-            }
         }
         String typeId = data == null ? null : data.type;
-        return isDragonflyType(typeId) || isLegendaryMonstersType(typeId);
+        return isDragonflyType(typeId);
     }
 
     private static double readBaseOrDefault(TamableAnimal tame, Attribute attribute) {
