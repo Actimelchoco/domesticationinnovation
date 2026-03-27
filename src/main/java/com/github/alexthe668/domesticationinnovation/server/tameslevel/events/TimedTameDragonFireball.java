@@ -19,9 +19,9 @@ import net.minecraft.world.phys.Vec3;
 
 public class TimedTameDragonFireball extends DragonFireball {
     private static final int MAX_LIFETIME_TICKS = 80;
-    private static final double SPLASH_RADIUS = 3.0D;
-    private static final double SPLASH_KNOCKBACK = 0.65D;
-    private static final double SPLASH_LIFT = 0.18D;
+    private static final double SPLASH_RADIUS = 2.0D;
+    private static final double SPLASH_KNOCKBACK = 0.45D;
+    private static final double SPLASH_LIFT = 0.12D;
 
     public TimedTameDragonFireball(Level level, LivingEntity shooter, double offsetX, double offsetY, double offsetZ) {
         super(level, shooter, offsetX, offsetY, offsetZ);
@@ -78,6 +78,10 @@ public class TimedTameDragonFireball extends DragonFireball {
         if (this.level() instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(ParticleTypes.DRAGON_BREATH, this.getX(), this.getY(), this.getZ(), 24, 0.35D, 0.15D, 0.35D, 0.02D);
             serverLevel.sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY(), this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
+        }
+        if (shooter != null) {
+            TimedTameDragonBreathCloud cloud = new TimedTameDragonBreathCloud(this.level(), shooter, this.getX(), this.getY(), this.getZ());
+            this.level().addFreshEntity(cloud);
         }
         this.level().playSound(null, this.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 0.9F, 0.9F);
         this.discard();
