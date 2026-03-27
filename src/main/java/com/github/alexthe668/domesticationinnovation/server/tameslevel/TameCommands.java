@@ -1348,31 +1348,56 @@ public class TameCommands {
                                         .executes(ctx -> respawnPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.ARISE))))
                         .then(Commands.literal("group")
                                 .executes(ctx -> groupOverview(ctx.getSource()))
+                                .then(Commands.literal("create")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .executes(ctx -> groupCreate(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                        .executes(ctx -> groupTames(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
-                                .then(Commands.literal("delete")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                .executes(ctx -> groupDelete(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                .then(Commands.literal("add")
-                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .then(Commands.argument("name", StringArgumentType.word())
-                                                        .executes(ctx -> groupSet(ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                StringArgumentType.getString(ctx, "name"))))))
-                                .then(Commands.literal("remove")
-                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .then(Commands.argument("name", StringArgumentType.word())
-                                                        .executes(ctx -> groupRemove(ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                StringArgumentType.getString(ctx, "name"))))))
-                                .then(Commands.literal("removefromallgroups")
-                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .executes(ctx -> groupClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet"))))))
+                                        .executes(ctx -> groupTames(ctx.getSource(), StringArgumentType.getString(ctx, "name")))
+                                        .then(Commands.literal("clear")
+                                                .executes(ctx -> groupDelete(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                        .then(Commands.literal("delete")
+                                                .executes(ctx -> groupDelete(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                        .then(Commands.literal("add")
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> groupAssignAll(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                                .then(Commands.literal("group")
+                                                        .then(Commands.argument("group", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                                .executes(ctx -> groupAssignGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "group")))))
+                                                .then(Commands.literal("type")
+                                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                                .executes(ctx -> groupAssignType(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "type")))))
+                                                .then(Commands.literal("follow")
+                                                        .executes(ctx -> groupAssignState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW)))
+                                                .then(Commands.literal("sit")
+                                                        .executes(ctx -> groupAssignState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
+                                                .then(Commands.literal("wander")
+                                                        .executes(ctx -> groupAssignState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))
+                                                .then(Commands.argument("pet", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> groupAssignPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "pet")))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> groupRemoveSelectionAll(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                                .then(Commands.literal("group")
+                                                        .then(Commands.argument("group", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                                .executes(ctx -> groupRemoveSelectionGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "group")))))
+                                                .then(Commands.literal("type")
+                                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                                .executes(ctx -> groupRemoveSelectionType(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "type")))))
+                                                .then(Commands.literal("follow")
+                                                        .executes(ctx -> groupRemoveSelectionState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.FOLLOW)))
+                                                .then(Commands.literal("sit")
+                                                        .executes(ctx -> groupRemoveSelectionState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
+                                                .then(Commands.literal("wander")
+                                                        .executes(ctx -> groupRemoveSelectionState(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))
+                                                .then(Commands.argument("pet", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> groupRemoveSelectionPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "pet")))))))
 
                         .then(Commands.literal("mode")
                                 .then(Commands.literal("all")
@@ -2756,9 +2781,10 @@ public class TameCommands {
         else if (key.equals("group")) {
             sendInfoPage(p, "Group",
                     "/tames group <name>",
-                    "/tames group add <pet> <group>",
-                    "/tames group remove <pet> <group>",
-                    "/tames group removefromallgroups <pet>",
+                    "/tames group create <group>",
+                    "/tames group <group> add <pet|group <name>|type <name>|follow|sit|wander|all>",
+                    "/tames group <group> remove <pet|group <name>|type <name>|follow|sit|wander|all>",
+                    "/tames group <group> clear",
                     "Groups are owner-local labels used by selectors in movement, guardian, tp, respawn, arise, duel, and leaderboard filters."
             );
         }
@@ -5825,36 +5851,130 @@ public class TameCommands {
         return 1;
     }
 
-    private static int groupSet(CommandSourceStack source, String pet, String group) {
-        ServerPlayer p = source.getPlayer();
-        TameData d = findOwnedTame(p.getUUID(), pet);
-        if (d == null) return error(p, "Pet not found.");
-        d.group = group;
-        TameRegistry.markDirty();
-        p.sendSystemMessage(Component.literal("Group set for " + d.name + " -> " + group));
+    private static int groupCreate(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || group == null || group.isBlank()) {
+            return 0;
+        }
+        TameRegistry.rememberGroup(player.getUUID(), group);
+        player.sendSystemMessage(Component.literal("Created group '" + group + "'.").withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
-    private static int groupRemove(CommandSourceStack source, String pet, String group) {
-        ServerPlayer p = source.getPlayer();
-        TameData d = findOwnedTame(p.getUUID(), pet);
-        if (d == null) return error(p, "Pet not found.");
-        if (d.group == null || d.group.isBlank()) return error(p, d.name + " has no group.");
-        if (!d.group.equalsIgnoreCase(group)) return error(p, d.name + " is not in group " + group + ".");
-        d.group = "";
-        TameRegistry.markDirty();
-        p.sendSystemMessage(Component.literal("Removed " + d.name + " from group " + group + "."));
-        return 1;
+    private static int groupAssignPet(CommandSourceStack source, String group, String pet) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        return groupAssignBatch(source, group, List.of(data), "'" + data.name + "'");
     }
 
-    private static int groupClear(CommandSourceStack source, String pet) {
-        ServerPlayer p = source.getPlayer();
-        TameData d = findOwnedTame(p.getUUID(), pet);
-        if (d == null) return error(p, "Pet not found.");
-        d.group = "";
+    private static int groupAssignGroup(CommandSourceStack source, String group, String selectedGroup) {
+        ServerPlayer player = source.getPlayer();
+        return groupAssignBatch(source, group, ownedGroup(player.getUUID(), selectedGroup), "group '" + selectedGroup + "'");
+    }
+
+    private static int groupAssignType(CommandSourceStack source, String group, String type) {
+        ServerPlayer player = source.getPlayer();
+        return groupAssignBatch(source, group, ownedType(player.getUUID(), type), "type '" + type + "'");
+    }
+
+    private static int groupAssignState(CommandSourceStack source, String group, MovementOrder order) {
+        ServerPlayer player = source.getPlayer();
+        return groupAssignBatch(source, group, ownedState(player.getUUID(), order), movementLabel(order));
+    }
+
+    private static int groupAssignAll(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        return groupAssignBatch(source, group, ownedTames(player.getUUID()), "all");
+    }
+
+    private static int groupRemoveSelectionPet(CommandSourceStack source, String group, String pet) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        return groupRemoveBatch(source, group, List.of(data), "'" + data.name + "'");
+    }
+
+    private static int groupRemoveSelectionGroup(CommandSourceStack source, String group, String selectedGroup) {
+        ServerPlayer player = source.getPlayer();
+        return groupRemoveBatch(source, group, ownedGroup(player.getUUID(), selectedGroup), "group '" + selectedGroup + "'");
+    }
+
+    private static int groupRemoveSelectionType(CommandSourceStack source, String group, String type) {
+        ServerPlayer player = source.getPlayer();
+        return groupRemoveBatch(source, group, ownedType(player.getUUID(), type), "type '" + type + "'");
+    }
+
+    private static int groupRemoveSelectionState(CommandSourceStack source, String group, MovementOrder order) {
+        ServerPlayer player = source.getPlayer();
+        return groupRemoveBatch(source, group, ownedState(player.getUUID(), order), movementLabel(order));
+    }
+
+    private static int groupRemoveSelectionAll(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        return groupRemoveBatch(source, group, ownedTames(player.getUUID()), "all");
+    }
+
+    private static int groupAssignBatch(CommandSourceStack source, String group, List<TameData> requested, String label) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        if (group == null || group.isBlank()) {
+            return error(player, "Provide a group name.");
+        }
+        if (requested == null || requested.isEmpty()) {
+            return error(player, "No tames found for " + label + ".");
+        }
+        int changed = 0;
+        for (TameData data : requested) {
+            if (data == null) {
+                continue;
+            }
+            if (group.equalsIgnoreCase(data.group)) {
+                continue;
+            }
+            data.group = group;
+            changed++;
+        }
+        TameRegistry.rememberGroup(player.getUUID(), group);
+        if (changed <= 0) {
+            return error(player, "No tames changed for " + label + ".");
+        }
         TameRegistry.markDirty();
-        p.sendSystemMessage(Component.literal("Removed " + d.name + " from all groups."));
-        return 1;
+        player.sendSystemMessage(Component.literal("Added " + changed + " tame(s) from " + label + " to group '" + group + "'.").withStyle(ChatFormatting.GREEN));
+        return changed;
+    }
+
+    private static int groupRemoveBatch(CommandSourceStack source, String group, List<TameData> requested, String label) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        if (group == null || group.isBlank()) {
+            return error(player, "Provide a group name.");
+        }
+        if (requested == null || requested.isEmpty()) {
+            return error(player, "No tames found for " + label + ".");
+        }
+        int changed = 0;
+        for (TameData data : requested) {
+            if (data == null || data.group == null || !data.group.equalsIgnoreCase(group)) {
+                continue;
+            }
+            data.group = "";
+            changed++;
+        }
+        if (changed <= 0) {
+            return error(player, "No tames from " + label + " were in group '" + group + "'.");
+        }
+        if (ownedGroup(player.getUUID(), group).isEmpty()) {
+            TameRegistry.forgetGroup(player.getUUID(), group);
+        } else {
+            TameRegistry.markDirty();
+        }
+        player.sendSystemMessage(Component.literal("Removed " + changed + " tame(s) from group '" + group + "' using " + label + ".").withStyle(ChatFormatting.YELLOW));
+        return changed;
     }
 
     private static int groupDelete(CommandSourceStack source, String group) {
@@ -5875,11 +5995,16 @@ public class TameCommands {
             removed++;
         }
         if (removed <= 0) {
-            return error(player, "No tames in group '" + group + "'.");
+            if (TameRegistry.getOwnerGroups(player.getUUID()).stream().noneMatch(existing -> existing.equalsIgnoreCase(group))) {
+                return error(player, "No tames in group '" + group + "'.");
+            }
         }
-        TameRegistry.markDirty();
+        TameRegistry.forgetGroup(player.getUUID(), group);
+        if (removed > 0) {
+            TameRegistry.markDirty();
+        }
         player.sendSystemMessage(Component.literal("Deleted group '" + group + "' from " + removed + " tame(s).").withStyle(ChatFormatting.YELLOW));
-        return removed;
+        return Math.max(1, removed);
     }
 
     public static int drumIssueMovementCommand(ServerPlayer player, ItemStack drum, int command) {
@@ -6619,7 +6744,14 @@ public class TameCommands {
     private static int groupTames(CommandSourceStack source, String group) {
         ServerPlayer p = source.getPlayer();
         List<TameData> t = ownedGroup(p.getUUID(), group);
-        if (t.isEmpty()) return error(p, "No tames in group.");
+        if (t.isEmpty()) {
+            if (TameRegistry.getOwnerGroups(p.getUUID()).stream().noneMatch(existing -> existing.equalsIgnoreCase(group))) {
+                return error(p, "No tames in group.");
+            }
+            p.sendSystemMessage(Component.literal(group + ": ").withStyle(ChatFormatting.AQUA)
+                    .append(Component.literal("(empty)").withStyle(ChatFormatting.GRAY)));
+            return 1;
+        }
         for (TameData d : t) p.sendSystemMessage(Component.literal("- " + d.name + " [Lvl " + d.level + "]"));
         return 1;
     }
@@ -6627,6 +6759,10 @@ public class TameCommands {
     private static int groupOverview(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         Map<String, List<TameData>> groups = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (String group : TameRegistry.getOwnerGroups(p.getUUID())) {
+            if (group == null || group.isBlank()) continue;
+            groups.computeIfAbsent(group, ignored -> new ArrayList<>());
+        }
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (isDeadEntry(d.uuid)) continue;
@@ -6642,11 +6778,11 @@ public class TameCommands {
                 names.add(d.name);
             }
             names.sort(String::compareToIgnoreCase);
-            String joined = String.join(", ", names);
+            String joined = names.isEmpty() ? "(empty)" : String.join(", ", names);
             p.sendSystemMessage(
                     Component.literal(index + ". ").withStyle(ChatFormatting.GOLD)
                             .append(Component.literal(entry.getKey() + ": ").withStyle(ChatFormatting.AQUA))
-                            .append(Component.literal(joined).withStyle(ChatFormatting.YELLOW))
+                            .append(Component.literal(joined).withStyle(names.isEmpty() ? ChatFormatting.GRAY : ChatFormatting.YELLOW))
             );
             index++;
         }
@@ -14242,6 +14378,10 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         Set<String> seen = new HashSet<>();
+        for (String group : TameRegistry.getOwnerGroups(p.getUUID())) {
+            if (group == null || group.isBlank()) continue;
+            if (seen.add(group)) suggestCommandString(b, group);
+        }
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID) || d.group == null || d.group.isBlank()) continue;
             if (seen.add(d.group)) suggestCommandString(b, d.group);

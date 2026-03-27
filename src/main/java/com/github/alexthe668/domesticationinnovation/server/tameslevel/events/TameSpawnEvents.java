@@ -43,10 +43,17 @@ public class TameSpawnEvents {
 
         UUID entityTlId = TameData.readOrCreateTlId(tame);
 
-        // Normal dimension travel can temporarily expose the same UUID during transfer;
-        // if already tracked, bind identity tags and never discard the newly joined entity here.
         TameData existingByUuid = TameRegistry.get(tame.getUUID());
         if (existingByUuid != null) {
+            TamableAnimal loadedByUuid = findOtherLoadedByUuid(tame);
+            if (loadedByUuid != null) {
+                if (shouldKeepJoiningTame(tame, loadedByUuid, existingByUuid)) {
+                    loadedByUuid.discard();
+                } else {
+                    tame.discard();
+                    return;
+                }
+            }
             registerOrRestoreTame(tame, false, true);
             return;
         }
@@ -205,9 +212,9 @@ public class TameSpawnEvents {
         if (synced != null) {
             return synced;
         }
-        TameData storedFlutter = trySyncFromStoredFlutterMatch(tame, parsed);
-        if (storedFlutter != null) {
-            return storedFlutter;
+        TameData releasedFlutter = trySyncFromReleasedFlutterMatch(tame, parsed);
+        if (releasedFlutter != null) {
+            return releasedFlutter;
         }
         if (allowDeadIdentitySync) {
             TameData syncedDead = trySyncFromDeadIdentityMatch(tame, parsed);
@@ -383,7 +390,7 @@ public class TameSpawnEvents {
         return candidate;
     }
 
-    private static TameData trySyncFromStoredFlutterMatch(TamableAnimal tame, ParsedName parsed) {
+    private static TameData trySyncFromReleasedFlutterMatch(TamableAnimal tame, ParsedName parsed) {
         UUID ownerId = tame.getOwnerUUID();
         if (ownerId == null) {
             return null;
@@ -405,9 +412,10 @@ public class TameSpawnEvents {
         UUID newUuid = tame.getUUID();
         TameData candidate = null;
         for (TameData d : TameRegistry.TAMES.values()) {
-            if (d == null || d.uuid == null || d.name == null || !d.stored) continue;
+            if (d == null || d.uuid == null || d.name == null) continue;
             if (!ownerId.equals(d.ownerUUID)) continue;
             if (!sameType(tameType, d.type)) continue;
+            if (d.dead) continue;
             if (!namesOverlapByContainment(placedName, d.name)) continue;
             if (d.uuid.equals(newUuid)) continue;
             if (isUuidLoaded(tame, d.uuid)) continue;
@@ -440,7 +448,7 @@ public class TameSpawnEvents {
         LevelSystem.reapplyTypeBasePlusBonuses(tame, candidate);
         LevelSystem.updateTameName(tame, candidate);
         queueDeferredStatRefresh(tame, candidate, DEFERRED_STAT_REFRESH_DELAY_TICKS);
-        System.out.println("[TamesLevel] Synced released stored Flutter: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
+        System.out.println("[TamesLevel] Synced released Flutter to existing row: " + candidate.name + " (" + oldUuid + " -> " + newUuid + ")");
         return candidate;
     }
 

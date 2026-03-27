@@ -12,9 +12,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.projectile.EvokerFangs;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -33,6 +37,7 @@ public class TameCombatEvents {
     private static final Object DEATH_QUEUE_LOCK = new Object();
     private static final Deque<PendingDeath> PENDING_DEATHS = new ArrayDeque<>();
     private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
+    private static final Map<UUID, PendingDeath> CAPTURED_DEATHS = new HashMap<>();
     private static boolean processingDeaths = false;
 
     @SubscribeEvent
@@ -57,6 +62,9 @@ public class TameCombatEvents {
             if (death == null) {
                 return;
             }
+            synchronized (DEATH_QUEUE_LOCK) {
+                CAPTURED_DEATHS.put(death.deadId(), death);
+            }
             enqueueAndDrainDeaths(death);
         } catch (Throwable t) {
             System.err.println("[TamesLevel] onDeath error: " + t.getClass().getName() + ": " + t.getMessage());
@@ -73,8 +81,11 @@ public class TameCombatEvents {
 
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID());
         if (diedInDuel) {
-            UUID killerTameUuid = resolveKillerTameUuid(event);
-            Set<UUID> contributors = new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(tame.getUUID(), Set.of()));
+            PendingDeath captured = getCapturedDeath(tame.getUUID());
+            UUID killerTameUuid = captured != null ? captured.killerTameUuid() : resolveKillerTameUuid(event);
+            Set<UUID> contributors = captured != null
+                    ? new HashSet<>(captured.contributors())
+                    : new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(tame.getUUID(), Set.of()));
             TameDuelManager.recordElimination(tame.level().getServer(), tame.getUUID(), contributors, killerTameUuid);
         }
         TameDuelManager.endDuelForTame(tame.level().getServer(), tame.getUUID());
@@ -129,6 +140,7 @@ public class TameCombatEvents {
         if (!tame.isRemoved()) {
             tame.discard();
         }
+        clearCapturedDeath(tame.getUUID());
     }
 
     @SubscribeEvent
@@ -137,37 +149,23 @@ public class TameCombatEvents {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!TameDuelManager.isEntityInDuel(player.getUUID())) return;
 
-        UUID killerParticipantUuid = resolveKillerParticipantUuid(event);
+        PendingDeath captured = getCapturedDeath(player.getUUID());
+        UUID killerParticipantUuid = captured != null ? captured.killerTameUuid() : resolveKillerParticipantUuid(event);
         TameDuelManager.recordElimination(player.level().getServer(), player.getUUID(), Set.of(), killerParticipantUuid);
         TameDuelManager.endDuelForEntity(player.level().getServer(), player.getUUID());
+        clearCapturedDeath(player.getUUID());
     }
 
     private static TamableAnimal resolveTameAttacker(LivingHurtEvent event) {
-        if (event.getSource().getEntity() instanceof TamableAnimal tame) {
-            return tame;
-        }
-
-        if (event.getSource().getDirectEntity() instanceof OwnableEntity ownable
-                && ownable.getOwner() instanceof TamableAnimal tame) {
-            return tame;
-        }
-
-        return null;
+        return resolveTameAttacker(event.getSource());
     }
 
     private static UUID resolveKillerTameUuid(LivingDeathEvent event) {
         if (event == null || event.getSource() == null) {
             return null;
         }
-        if (event.getSource().getEntity() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame.getUUID();
-        }
-        if (event.getSource().getDirectEntity() instanceof OwnableEntity ownable
-                && ownable.getOwner() instanceof TamableAnimal tame
-                && tame.isTame()) {
-            return tame.getUUID();
-        }
-        return null;
+        TamableAnimal tame = resolveTameAttacker(event.getSource());
+        return tame != null && tame.isTame() ? tame.getUUID() : null;
     }
 
     private static UUID resolveKillerParticipantUuid(LivingDeathEvent event) {
@@ -177,13 +175,33 @@ public class TameCombatEvents {
         if (event.getSource().getEntity() instanceof ServerPlayer player) {
             return player.getUUID();
         }
-        if (event.getSource().getEntity() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame.getUUID();
+        TamableAnimal tame = resolveTameAttacker(event.getSource());
+        return tame != null && tame.isTame() ? tame.getUUID() : null;
+    }
+
+    private static TamableAnimal resolveTameAttacker(DamageSource source) {
+        if (source == null) {
+            return null;
         }
-        if (event.getSource().getDirectEntity() instanceof OwnableEntity ownable
-                && ownable.getOwner() instanceof TamableAnimal tame
-                && tame.isTame()) {
-            return tame.getUUID();
+        TamableAnimal tame = resolveTameFromEntity(source.getEntity());
+        if (tame != null) {
+            return tame;
+        }
+        return resolveTameFromEntity(source.getDirectEntity());
+    }
+
+    private static TamableAnimal resolveTameFromEntity(Entity entity) {
+        if (entity instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
+        }
+        if (entity instanceof EvokerFangs fangs && fangs.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
+        }
+        if (entity instanceof Projectile projectile && projectile.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
+        }
+        if (entity instanceof OwnableEntity ownable && ownable.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
+            return tame;
         }
         return null;
     }
@@ -227,6 +245,7 @@ public class TameCombatEvents {
                 } finally {
                     synchronized (DEATH_QUEUE_LOCK) {
                         ACTIVE_DEATHS.remove(current.deadId());
+                        CAPTURED_DEATHS.remove(current.deadId());
                         current = PENDING_DEATHS.pollFirst();
                     }
                 }
@@ -236,7 +255,26 @@ public class TameCombatEvents {
                 processingDeaths = false;
                 PENDING_DEATHS.clear();
                 ACTIVE_DEATHS.clear();
+                CAPTURED_DEATHS.clear();
             }
+        }
+    }
+
+    private static PendingDeath getCapturedDeath(UUID deadId) {
+        if (deadId == null) {
+            return null;
+        }
+        synchronized (DEATH_QUEUE_LOCK) {
+            return CAPTURED_DEATHS.get(deadId);
+        }
+    }
+
+    private static void clearCapturedDeath(UUID deadId) {
+        if (deadId == null) {
+            return;
+        }
+        synchronized (DEATH_QUEUE_LOCK) {
+            CAPTURED_DEATHS.remove(deadId);
         }
     }
 
@@ -272,11 +310,12 @@ public class TameCombatEvents {
             LivingEntity killer = null;
             UUID killerTameUuid = null;
 
-            if (event.getSource().getEntity() instanceof LivingEntity e) {
+            TamableAnimal killerTame = resolveTameAttacker(event.getSource());
+            if (killerTame != null) {
+                killer = killerTame;
+                killerTameUuid = killerTame.getUUID();
+            } else if (event.getSource().getEntity() instanceof LivingEntity e) {
                 killer = e;
-                if (e instanceof TamableAnimal tame && tame.isTame()) {
-                    killerTameUuid = tame.getUUID();
-                }
             }
             if (killerTameUuid == null
                     && event.getSource().getDirectEntity() instanceof OwnableEntity ownable

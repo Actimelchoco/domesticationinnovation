@@ -96,7 +96,6 @@ public final class TameDuelManager {
         Set<UUID> cleanB = new HashSet<>();
         for (UUID participantId : teamA) {
             if (participantId == null) continue;
-            if (teamB.contains(participantId)) continue;
             cleanA.add(participantId);
         }
         for (UUID participantId : teamB) {
@@ -381,6 +380,14 @@ public final class TameDuelManager {
         UUID killerOwner = participantOwner(battle, elimination.killerId);
         UUID victimOwner = participantOwner(battle, elimination.victimId);
 
+        if (killerOwner != null && killerOwner.equals(victimOwner)) {
+            ServerPlayer sameOwner = server.getPlayerList().getPlayer(killerOwner);
+            if (sameOwner != null) {
+                sameOwner.sendSystemMessage(positiveLine);
+            }
+            return;
+        }
+
         if (killerOwner != null) {
             ServerPlayer killerPlayer = server.getPlayerList().getPlayer(killerOwner);
             if (killerPlayer != null) {
@@ -392,11 +399,6 @@ public final class TameDuelManager {
             if (victimPlayer != null) {
                 victimPlayer.sendSystemMessage(negativeLine);
             }
-        } else if (victimOwner != null) {
-            ServerPlayer sameOwner = server.getPlayerList().getPlayer(victimOwner);
-            if (sameOwner != null) {
-                sameOwner.sendSystemMessage(positiveLine);
-            }
         }
     }
 
@@ -404,9 +406,9 @@ public final class TameDuelManager {
         if (elimination == null || elimination.victimId == null) {
             return null;
         }
-        MutableComponent line = Component.literal("Duel: ").withStyle(positive ? ChatFormatting.BLUE : ChatFormatting.RED);
+        MutableComponent line = Component.literal("Duel: ").withStyle(positive ? ChatFormatting.BLUE : ChatFormatting.YELLOW);
         if (elimination.killerId != null) {
-            line.append(Component.literal(entityLabel(server, elimination.killerId)).withStyle(ChatFormatting.BLUE))
+            line.append(Component.literal(entityLabel(server, elimination.killerId)).withStyle(ChatFormatting.GREEN))
                     .append(Component.literal(" killed ").withStyle(ChatFormatting.WHITE));
         } else {
             line.append(Component.literal("A tame killed ").withStyle(ChatFormatting.WHITE));
@@ -418,7 +420,7 @@ public final class TameDuelManager {
                 if (i > 0) {
                     line.append(Component.literal(", ").withStyle(ChatFormatting.WHITE));
                 }
-                line.append(Component.literal(entityLabel(server, elimination.assisterIds.get(i))).withStyle(ChatFormatting.WHITE));
+                line.append(Component.literal(entityLabel(server, elimination.assisterIds.get(i))).withStyle(ChatFormatting.GRAY));
             }
         }
         return line;

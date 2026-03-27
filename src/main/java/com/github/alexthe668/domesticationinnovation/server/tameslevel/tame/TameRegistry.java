@@ -11,6 +11,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,6 +33,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
+    private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static TameRegistrySavedData savedData;
 
@@ -78,6 +80,8 @@ public class TameRegistry {
         OWNER_HEALTH_SIPHON.putAll(savedData.getHealthSiphon());
         OWNER_ENTER_PORTALS_BY_THEMSELVES.clear();
         OWNER_ENTER_PORTALS_BY_THEMSELVES.putAll(savedData.getEnterPortalsByThemselves());
+        OWNER_GROUPS.clear();
+        OWNER_GROUPS.putAll(savedData.getOwnerGroups());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
@@ -224,8 +228,40 @@ public class TameRegistry {
         savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
         savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
+        savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setDirty();
+    }
+
+    public static Set<String> getOwnerGroups(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return Set.of();
+        }
+        Set<String> groups = OWNER_GROUPS.get(ownerUuid);
+        return groups == null ? Set.of() : Set.copyOf(groups);
+    }
+
+    public static void rememberGroup(UUID ownerUuid, String group) {
+        if (ownerUuid == null || group == null || group.isBlank()) {
+            return;
+        }
+        OWNER_GROUPS.computeIfAbsent(ownerUuid, ignored -> new LinkedHashSet<>()).add(group.trim());
+        markDirty();
+    }
+
+    public static void forgetGroup(UUID ownerUuid, String group) {
+        if (ownerUuid == null || group == null || group.isBlank()) {
+            return;
+        }
+        Set<String> groups = OWNER_GROUPS.get(ownerUuid);
+        if (groups == null) {
+            return;
+        }
+        groups.removeIf(existing -> existing != null && existing.equalsIgnoreCase(group.trim()));
+        if (groups.isEmpty()) {
+            OWNER_GROUPS.remove(ownerUuid);
+        }
+        markDirty();
     }
 
     public static boolean isCallOrderInvertedType(String typeId) {

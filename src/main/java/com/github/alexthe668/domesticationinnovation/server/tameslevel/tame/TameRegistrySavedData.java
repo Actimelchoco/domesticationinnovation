@@ -27,6 +27,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
     private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
+    private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
 
     public Map<UUID, TameData> getTames() {
@@ -125,6 +126,32 @@ public class TameRegistrySavedData extends SavedData {
         this.enterPortalsByThemselves.clear();
         if (enterPortalsByThemselves != null) {
             this.enterPortalsByThemselves.putAll(enterPortalsByThemselves);
+        }
+    }
+
+    public Map<UUID, Set<String>> getOwnerGroups() {
+        return ownerGroups;
+    }
+
+    public void setOwnerGroups(Map<UUID, Set<String>> ownerGroups) {
+        this.ownerGroups.clear();
+        if (ownerGroups == null) {
+            return;
+        }
+        for (Map.Entry<UUID, Set<String>> entry : ownerGroups.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Set<String> groups = new LinkedHashSet<>();
+            for (String group : entry.getValue()) {
+                if (group == null || group.isBlank()) {
+                    continue;
+                }
+                groups.add(group.trim());
+            }
+            if (!groups.isEmpty()) {
+                this.ownerGroups.put(entry.getKey(), groups);
+            }
         }
     }
 
@@ -242,6 +269,24 @@ public class TameRegistrySavedData extends SavedData {
             enterPortalsTag.add(row);
         }
         tag.put("enterPortalsByThemselves", enterPortalsTag);
+        ListTag ownerGroupsTag = new ListTag();
+        for (Map.Entry<UUID, Set<String>> entry : ownerGroups.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            ListTag groupsTag = new ListTag();
+            for (String group : entry.getValue()) {
+                if (group == null || group.isBlank()) {
+                    continue;
+                }
+                groupsTag.add(net.minecraft.nbt.StringTag.valueOf(group));
+            }
+            row.put("groups", groupsTag);
+            ownerGroupsTag.add(row);
+        }
+        tag.put("ownerGroups", ownerGroupsTag);
         ListTag invertedCallOrderTag = new ListTag();
         for (String id : invertedCallOrderTypeIds) {
             if (id == null || id.isBlank()) {
@@ -354,6 +399,27 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.enterPortalsByThemselves.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
+            }
+        }
+        if (tag.contains("ownerGroups", Tag.TAG_LIST)) {
+            ListTag ownerGroupsList = tag.getList("ownerGroups", Tag.TAG_COMPOUND);
+            for (Tag entry : ownerGroupsList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                Set<String> groups = new LinkedHashSet<>();
+                if (row.contains("groups", Tag.TAG_LIST)) {
+                    ListTag groupsTag = row.getList("groups", Tag.TAG_STRING);
+                    for (Tag groupEntry : groupsTag) {
+                        String group = groupEntry.getAsString();
+                        if (group != null && !group.isBlank()) {
+                            groups.add(group.trim());
+                        }
+                    }
+                }
+                if (!groups.isEmpty()) {
+                    data.ownerGroups.put(row.getUUID("ownerUUID"), groups);
+                }
             }
         }
 
