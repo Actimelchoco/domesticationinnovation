@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BlessfulledCompat;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
@@ -45,10 +46,14 @@ public class TameCombatEvents {
     public static void onHurt(LivingHurtEvent event) {
         if (!(event.getEntity() instanceof LivingEntity)) return;
         LivingEntity mob = event.getEntity();
+        if (event.getAmount() <= 0.0F) return;
 
         TamableAnimal tame = resolveTameAttacker(event);
         if (tame != null && tame.isTame()) {
             LevelSystem.trackDamage(mob, tame);
+            BlessfulledCompat.showDamagePopup(tame, mob, event.getAmount());
+        } else if (mob instanceof TamableAnimal targetTame && targetTame.isTame()) {
+            BlessfulledCompat.showDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
         }
 
         if (event.getSource().getEntity() instanceof ServerPlayer player) {
