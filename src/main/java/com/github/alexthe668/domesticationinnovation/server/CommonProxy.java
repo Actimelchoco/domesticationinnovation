@@ -2009,31 +2009,7 @@ public class CommonProxy {
             abilityLevel = psychicAbilityToEnchantScale(abilityLevel);
         }
 
-        int enchantLevel = switch (effectId) {
-            case "immunity_frame" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.IMMUNITY_FRAME);
-            case "deflection" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFLECTION);
-            case "chain_lightning" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.CHAIN_LIGHTNING);
-            case "frost_fang" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.FROST_FANG);
-            case "magnetic" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.MAGNETIC);
-            case "linked_inventory" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.LINKED_INVENTORY);
-            case "health_siphon" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.HEALTH_SIPHON);
-            case "bubbling" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.BUBBLING);
-            case "herding" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.SHEPHERD);
-            case "amphibious" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.AMPHIBIOUS);
-            case "void_cloud" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.VOID_CLOUD);
-            case "shadow_hands" -> 0;
-            case "disc_jockey" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DISK_JOCKEY);
-            case "warping_bite" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.WARPING_BITE);
-            case "ore_scenting" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.ORE_SCENTING);
-            case "intimidation" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.INTIMIDATION);
-            case "blazing_protection" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.BLAZING_PROTECTION);
-            case "healing_aura" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.HEALING_AURA);
-            case "rejuvenation" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.REJUVENATION);
-            case "psychic_wall" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.PSYCHIC_WALL);
-            case "defusal" -> TameableUtils.getEnchantLevel(entity, DIEnchantmentRegistry.DEFUSAL);
-            default -> 0;
-        };
-        return Math.max(Math.max(abilityLevel, attributeLevel), enchantLevel);
+        return Math.max(abilityLevel, attributeLevel);
     }
 
     private static boolean shouldApplyLegacyFrostFang(LivingEntity attacker, int level) {
