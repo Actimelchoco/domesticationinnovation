@@ -31,4 +31,9 @@ public abstract class AlexsMobsFlutterMixin {
         }
         TameSpawnEvents.markFlutterStoredFromPot(tame);
     }
+
+    @Inject(method = "m_6071_", at = @At("RETURN"), remap = false)
+    private void tl$markStoredOnPotStoreObf(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
+        tl$markStoredOnPotStore(player, hand, cir);
+    }
 }

@@ -3,16 +3,47 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
+import java.util.Comparator;
+import java.util.Set;
 import java.util.UUID;
 
 public class TameProtectionEvents {
+    private static final TagKey<EntityType<?>> ARMAGEDDON_BOSS_TAG = TagKey.create(Registries.ENTITY_TYPE, new ResourceLocation("forge", "armageddon_bosses"));
+    private static final Set<String> ARMAGEDDON_BOSS_IDS = Set.of(
+            "armageddon_mod:arion_tyrant_of_the_emerald_wrath_soldat",
+            "armageddon_mod:arion_tyrantofthe_emerald_wrath_ravager",
+            "armageddon_mod:bringer_of_doom",
+            "armageddon_mod:bringer_of_doom_p_2",
+            "armageddon_mod:eldoraththe_ancient_builder",
+            "armageddon_mod:elvenite_paladin",
+            "armageddon_mod:nyxaris_the_veil_of_oblivion",
+            "armageddon_mod:sanghor_lord_of_blood",
+            "armageddon_mod:sanghor_lord_of_bloodp_2",
+            "armageddon_mod:the_chaos",
+            "armageddon_mod:the_discord",
+            "armageddon_mod:the_famine",
+            "armageddon_mod:the_gobelin_lord",
+            "armageddon_mod:the_iron_colossus",
+            "armageddon_mod:vaedricthe_fallen_wanderer",
+            "armageddon_mod:zoranth_newborn_of_the_zenith",
+            "armageddon_mod:zoranththe_forgotten_one"
+    );
+    private static final double ARMAGEDDON_TAME_REDIRECT_RANGE = 24.0D;
+
 
     @SubscribeEvent
     public static void onAttack(LivingAttackEvent event) {
@@ -82,6 +113,9 @@ public class TameProtectionEvents {
 
     @SubscribeEvent
     public static void onLivingTick(LivingEvent.LivingTickEvent event) {
+        if (event.getEntity() instanceof Mob mob) {
+            retargetArmageddonBossToTame(mob);
+        }
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
 
@@ -116,6 +150,84 @@ public class TameProtectionEvents {
         if (TameRegistry.isProtectedAttackTarget(tame, target)) {
             tame.setTarget(null);
         }
+    }
+
+    private static void retargetArmageddonBossToTame(Mob mob) {
+        if (mob.level().isClientSide || !isArmageddonBoss(mob)) {
+            return;
+        }
+        LivingEntity currentTarget = mob.getTarget();
+        if (currentTarget instanceof TamableAnimal targetTame && targetTame.isTame() && targetTame.isAlive()) {
+            return;
+        }
+        TamableAnimal redirect = findArmageddonRedirectTarget(mob, currentTarget);
+        if (redirect == null || redirect == currentTarget) {
+            return;
+        }
+        mob.setTarget(redirect);
+    }
+
+    private static TamableAnimal findArmageddonRedirectTarget(Mob mob, LivingEntity currentTarget) {
+        LivingEntity recentAttacker = mob.getLastHurtByMob();
+        if (recentAttacker instanceof TamableAnimal recentTame && isValidArmageddonRedirectTarget(mob, recentTame)) {
+            return recentTame;
+        }
+
+        Player focusPlayer = null;
+        if (currentTarget instanceof Player player) {
+            focusPlayer = player;
+        } else if (recentAttacker instanceof Player player) {
+            focusPlayer = player;
+        } else if (currentTarget instanceof TamableAnimal tame && tame.isTame() && tame.getOwner() instanceof Player owner) {
+            focusPlayer = owner;
+        }
+        if (focusPlayer == null || focusPlayer.isCreative() || focusPlayer.isSpectator()) {
+            return null;
+        }
+
+        LivingEntity bossAttacked = mob.getLastHurtMob();
+        UUID ownerUuid = focusPlayer.getUUID();
+        return mob.level().getEntitiesOfClass(TamableAnimal.class, mob.getBoundingBox().inflate(ARMAGEDDON_TAME_REDIRECT_RANGE), tame ->
+                        isValidArmageddonRedirectTarget(mob, tame) && ownerUuid.equals(tame.getOwnerUUID()))
+                .stream()
+                .min(Comparator.<TamableAnimal>comparingInt(tame -> armageddonRedirectPriority(tame, mob, bossAttacked))
+                        .thenComparingDouble(tame -> tame.distanceToSqr(mob)))
+                .orElse(null);
+    }
+
+    private static int armageddonRedirectPriority(TamableAnimal tame, Mob boss, LivingEntity bossAttacked) {
+        int priority = 0;
+        if (tame.getTarget() == boss) {
+            priority -= 1000;
+        }
+        if (tame.getLastHurtMob() == boss || tame.getLastHurtByMob() == boss) {
+            priority -= 500;
+        }
+        if (bossAttacked == tame) {
+            priority -= 250;
+        }
+        if (tame.isOrderedToSit()) {
+            priority += 10_000;
+        }
+        return priority;
+    }
+
+    private static boolean isValidArmageddonRedirectTarget(Mob boss, TamableAnimal tame) {
+        if (tame == null || !tame.isTame() || !tame.isAlive() || tame.isOrderedToSit()) {
+            return false;
+        }
+        if (tame.getOwnerUUID() == null || TameRegistry.isProtectedAttackTarget(tame, boss)) {
+            return false;
+        }
+        return !TameDuelManager.isTameInDuel(tame.getUUID());
+    }
+
+    private static boolean isArmageddonBoss(Mob mob) {
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+        if (key == null) {
+            return false;
+        }
+        return mob.getType().is(ARMAGEDDON_BOSS_TAG) || ARMAGEDDON_BOSS_IDS.contains(key.toString());
     }
 
     private static TamableAnimal resolveTameAttacker(net.minecraft.world.entity.Entity attacker, net.minecraft.world.entity.Entity direct) {

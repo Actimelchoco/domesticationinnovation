@@ -905,45 +905,85 @@ public class TameCommands {
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
                         .then(Commands.literal("leaderboard")
-                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, 10))
+                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE)))
                                 .then(Commands.literal("everytame")
-                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, Integer.MAX_VALUE)))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE)))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), 10))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, 10))
                                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
-                                .then(Commands.literal("owned")
-                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, 10))
-                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, IntegerArgumentType.getInteger(ctx, "limit"))))
-                                        .then(Commands.literal("everytame")
-                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, Integer.MAX_VALUE)))
-                                        .then(Commands.argument("type", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestLeaderboardTypes(b))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, 10))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, StringArgumentType.getString(ctx, "name"), 10))
                                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, Integer.MAX_VALUE)))))
-                                .then(Commands.argument("type", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestLeaderboardTypes(b))
-                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, 10))
-                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, IntegerArgumentType.getInteger(ctx, "limit"))))
-                                        .then(Commands.literal("everytame")
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, Integer.MAX_VALUE)))
-                                        .then(Commands.literal("owned")
-                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, 10))
-                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                .then(Commands.literal("owned")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
                                                         .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, Integer.MAX_VALUE))))))
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE))))))
+                                .then(Commands.literal("owned")
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
+                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestLeaderboardModes(b))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))))
+                                .then(Commands.argument("type", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestLeaderboardModes(b))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
 
                         .then(Commands.literal("follow")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.FOLLOW))
@@ -2808,10 +2848,11 @@ public class TameCommands {
         String key = topic.trim().toLowerCase(Locale.ROOT);
         if (key.equals("leaderboard")) {
             sendInfoPage(p, "Leaderboard",
-                    "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|everytame]",
-                    "/tames leaderboard owned [mix|kills|deaths|assists|lvl|days] [<number>|everytame]",
+                    "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|all|everytame]",
+                    "/tames leaderboard type <typeName> [<number>|all|everytame]",
+                    "/tames leaderboard owned [mix|kills|deaths|assists|lvl|days|type <typeName>] [<number>|all|everytame]",
                     "Modes sort by weighted combat score, kills, deaths, assists, level, or days since last death.",
-                    "Leaderboard shows all owners by default. Use 'owned' to show only your tames.",
+                    "Leaderboard shows all owners by default, but only includes tames with invested XP above 0. Use 'owned' or 'type <typeName>' to filter it.",
                     "'days' means days since last death, or born day if the tame never died."
             );
         }
@@ -9258,13 +9299,15 @@ public class TameCommands {
         return key != null && PENDING_IMMEDIATE_CHUNK_TELEPORTS.containsKey(key);
     }
 
-    private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, int requestedLimit) {
+    private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit) {
         ServerPlayer p = source.getPlayer();
         String m = mode == null ? "mix" : mode.trim().toLowerCase(Locale.ROOT);
         List<TameData> entries = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!includeAll && !p.getUUID().equals(d.ownerUUID)) continue;
             if (groupFilter != null && !isInGroup(d, groupFilter)) continue;
+            if (typeFilter != null && !matchesTypeFilter(d, typeFilter)) continue;
+            if (leaderboardInvestedXp(d) <= 0) continue;
             entries.add(d);
         }
         if (m.equals("mix") || m.equals("score")) entries.sort((a, b) -> Integer.compare(weightedCombatScore(b), weightedCombatScore(a)));
@@ -9278,7 +9321,8 @@ public class TameCommands {
         int limit = Math.min(Math.max(1, requestedLimit), entries.size());
         String scope = includeAll ? "all players" : "your tames";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
-        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
+        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("score / kills / assists / deaths / days").withStyle(ChatFormatting.DARK_GRAY));
         for (int i = 0; i < limit; i++) {
             TameData d = entries.get(i);
@@ -9300,6 +9344,10 @@ public class TameCommands {
                     .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY)));
         }
         return 1;
+    }
+
+    private static int leaderboardInvestedXp(TameData data) {
+        return data == null ? 0 : Math.max(0, LevelSystem.estimateInvestedXp(data));
     }
 
     private static void sendTeleportSummary(ServerPlayer player, String label, int loaded, int unloaded, int deadSkipped, int failed, int xpCost, int crossDimension) {
@@ -14855,13 +14903,25 @@ public class TameCommands {
         return names;
     }
 
-    private static CompletableFuture<Suggestions> suggestLeaderboardTypes(SuggestionsBuilder b) {
+    private static CompletableFuture<Suggestions> suggestLeaderboardModes(SuggestionsBuilder b) {
         suggestCommandString(b, "mix");
         suggestCommandString(b, "kills");
         suggestCommandString(b, "deaths");
         suggestCommandString(b, "assists");
         suggestCommandString(b, "lvl");
         suggestCommandString(b, "days");
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestLeaderboardTameTypes(SuggestionsBuilder b) {
+        Set<String> seenPath = new HashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            String full = tameTypeId(data);
+            if (full.isBlank()) continue;
+            int sep = full.indexOf(':');
+            String path = sep >= 0 ? full.substring(sep + 1) : full;
+            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
+        }
         return b.buildFuture();
     }
 
