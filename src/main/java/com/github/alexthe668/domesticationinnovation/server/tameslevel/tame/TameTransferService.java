@@ -37,7 +37,6 @@ public final class TameTransferService {
         boolean crossDimension = !tame.level().dimension().equals(player.level().dimension());
         if (!crossDimension) {
             tame.teleportTo(player.getX(), player.getY(), player.getZ());
-            scrubTransferredTameState(tame);
             refreshLastKnown(data, tame, player.serverLevel());
             return new TransferResult(tame, false, "");
         }
@@ -63,9 +62,16 @@ public final class TameTransferService {
                 }
                 moved.setUUID(tame.getUUID());
                 moved.moveTo(pos[0], pos[1], pos[2], player.getYRot(), player.getXRot());
+                moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
                 TameRegistry.bindEntityToData(moved, data);
-                scrubTransferredTameState(moved);
+                moved.setTarget(null);
+                moved.getNavigation().stop();
+                moved.setOrderedToSit(false);
+                if (moved.isNoAi()) {
+                    moved.setNoAi(false);
+                }
+                TameGoalInstaller.installIfMissing(moved);
 
                 if (!targetLevel.addFreshEntity(moved)) {
                     continue;
@@ -107,7 +113,6 @@ public final class TameTransferService {
             tame.teleportTo(x, y, z);
             tame.setYRot(yRot);
             tame.setXRot(xRot);
-            scrubTransferredTameState(tame);
             refreshLastKnown(data, tame, targetLevel);
             return new TransferResult(tame, false, "");
         }
@@ -138,9 +143,16 @@ public final class TameTransferService {
                 }
                 moved.setUUID(tame.getUUID());
                 moved.moveTo(pos[0], pos[1], pos[2], yRot, xRot);
+                moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
                 TameRegistry.bindEntityToData(moved, data);
-                scrubTransferredTameState(moved);
+                moved.setTarget(null);
+                moved.getNavigation().stop();
+                moved.setOrderedToSit(false);
+                if (moved.isNoAi()) {
+                    moved.setNoAi(false);
+                }
+                TameGoalInstaller.installIfMissing(moved);
 
                 if (!targetLevel.addFreshEntity(moved)) {
                     continue;
@@ -162,26 +174,6 @@ public final class TameTransferService {
             }
         }
         return new TransferResult(null, true, "spawn failed in target dimension");
-    }
-
-    private static void scrubTransferredTameState(TamableAnimal tame) {
-        if (tame == null) {
-            return;
-        }
-        tame.stopRiding();
-        if (tame.isVehicle()) {
-            tame.ejectPassengers();
-        }
-        tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        tame.setTarget(null);
-        tame.getNavigation().stop();
-        tame.setOrderedToSit(false);
-        tame.setInSittingPose(false);
-        tame.setNoGravity(false);
-        if (tame.isNoAi()) {
-            tame.setNoAi(false);
-        }
-        TameGoalInstaller.installIfMissing(tame);
     }
 
     private static List<double[]> transferAttempts(ServerPlayer player) {

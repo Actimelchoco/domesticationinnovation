@@ -143,6 +143,14 @@ public class CommonProxy {
         }
     }
 
+    public static boolean queueLegacyPetTeleport(Entity entity, ServerLevel endpointWorld, UUID ownerUUID, long queuedGameTime) {
+        if (entity == null || endpointWorld == null || ownerUUID == null || entity.isRemoved()) {
+            return false;
+        }
+        teleportingPets.add(new PendingPetTeleport(entity, endpointWorld, ownerUUID, queuedGameTime));
+        return true;
+    }
+
     private static final Map<Level, CollarTickTracker> COLLAR_TICK_TRACKER_MAP = new HashMap<>();
     private static long tlMigrationLastScanned = 0L;
     private static long tlMigrationLastMatchedPayload = 0L;
@@ -330,7 +338,7 @@ public class CommonProxy {
             CollarTickTracker tracker = COLLAR_TICK_TRACKER_MAP.get(tick.level);
             tracker.tick();
         }
-        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel && serverLevel.dimension() == Level.OVERWORLD) {
+        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel) {
             List<PendingPetTeleport> remaining = new ArrayList<>();
             for (PendingPetTeleport pending : teleportingPets) {
                 if (pending == null || pending.entity == null || pending.endpointWorld == null || pending.ownerUUID == null) {
@@ -345,6 +353,10 @@ public class CommonProxy {
                 if (!(player instanceof LivingEntity livingOwner)) {
                     remaining.add(pending);
                     continue;
+                }
+                if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
+                    owner.sendSystemMessage(Component.literal("TPDBG legacy queue processing " + entity.getName().getString()
+                            + " into " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
                 }
 
                 Vec3 toPos = player.position();
@@ -373,6 +385,10 @@ public class CommonProxy {
                     moved.setDeltaMovement(Vec3.ZERO);
                     moved.getNavigation().stop();
                     moved.getNavigation().moveTo(livingOwner, 1.0D);
+                    if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
+                        owner.sendSystemMessage(Component.literal("TPDBG legacy queue spawned " + moved.getName().getString()
+                                + " at " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
+                    }
                     continue;
                 }
 
@@ -397,6 +413,10 @@ public class CommonProxy {
                 if (!spawned) {
                     remaining.add(pending);
                     continue;
+                }
+                if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
+                    owner.sendSystemMessage(Component.literal("TPDBG legacy queue spawned " + teleportedEntity.getName().getString()
+                            + " at " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
                 }
                 if (entity instanceof LivingEntity living) {
                     living.getPersistentData().putBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG, true);

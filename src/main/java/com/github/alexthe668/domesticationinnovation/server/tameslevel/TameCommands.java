@@ -84,6 +84,7 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -1778,6 +1779,13 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 ))))
+                                .then(Commands.literal("postTpStabilization")
+                                        .executes(ctx -> adminPostTpStabilizationStatus(ctx.getSource()))
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> adminSetPostTpStabilization(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
                                 .then(Commands.literal("debug")
                                         .executes(ctx -> adminDebugStatus(ctx.getSource()))
                                         .then(Commands.literal("abilityUsed")
@@ -1799,6 +1807,9 @@ public class TameCommands {
                                         .then(Commands.literal("damage")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("teleport")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugTeleport(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                         .then(Commands.literal("damageDealt")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
@@ -2117,6 +2128,7 @@ public class TameCommands {
                     TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
                     ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                     if (owner != null && data != null) {
+                        debugTeleport(owner, "unloaded chunk timeout rebuilding " + pending.tameName + " from snapshot");
                         RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
                         if (recoverResult.entity != null) {
                             if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot after chunk load timeout.", ChatFormatting.YELLOW);
@@ -2137,6 +2149,8 @@ public class TameCommands {
             }
             TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, pending.tameUuid, pending.tlId);
             if (tame != null && tame.isAlive()) {
+                ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
+                debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + sourceLevel.dimension().location());
                 teleportTameToLocation(tame, pending.target);
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleported unloaded " + pending.tameName + ".", ChatFormatting.GREEN);
@@ -2148,6 +2162,7 @@ public class TameCommands {
                 TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 if (owner != null && data != null) {
+                    debugTeleport(owner, "unloaded wait rebuilding " + pending.tameName + " from snapshot");
                     RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
                     if (recoverResult.entity != null) {
                         if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot.", ChatFormatting.YELLOW);
@@ -9250,6 +9265,17 @@ public class TameCommands {
         if (tame == null || level == null || pos == null || !tame.isAlive()) {
             return false;
         }
+        if (!tame.level().dimension().equals(level.dimension())) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null && TameData.getTlId(tame) != null) {
+                data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            }
+            clearGuardianAnchor(data);
+            long queuedGameTime = level.getServer() != null && level.getServer().overworld() != null
+                    ? level.getServer().overworld().getGameTime()
+                    : 0L;
+            return CommonProxy.queueLegacyPetTeleport(tame, level, tame.getOwnerUUID(), queuedGameTime);
+        }
         teleportTameToLocation(tame, new SpawnTarget(level, pos, yRot, xRot));
         return true;
     }
@@ -9539,6 +9565,20 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminSetDebugTeleport(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setTeleport(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Admin debug teleport set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static void debugTeleport(ServerPlayer player, String message) {
+        if (player == null || !PlayerDebugSettings.teleport(player.getUUID())) {
+            return;
+        }
+        player.sendSystemMessage(Component.literal("TPDBG " + message).withStyle(ChatFormatting.YELLOW));
+    }
+
     private static int debugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
@@ -9552,8 +9592,9 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         boolean ability = PlayerDebugSettings.abilityUsed(p.getUUID());
         boolean damage = PlayerDebugSettings.damage(p.getUUID());
+        boolean teleport = PlayerDebugSettings.teleport(p.getUUID());
         boolean perf = TamePerformanceProfiler.isEnabled();
-        p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage + ", perf: " + perf).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage + ", teleport: " + teleport + ", perf: " + perf).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -10347,6 +10388,22 @@ public class TameCommands {
         TLAdminRuntimeSettings.setHealthSiphonEnabled(enabled);
         source.sendSuccess(() -> Component.literal(
                 "Temporary admin setting: health siphon is now " + (enabled ? "ENABLED" : "DISABLED") + "."
+        ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminPostTpStabilizationStatus(CommandSourceStack source) {
+        boolean enabled = TLAdminRuntimeSettings.postTpStabilizationEnabled();
+        source.sendSuccess(() -> Component.literal(
+                "Post-teleport stabilization is currently " + (enabled ? "ENABLED" : "DISABLED") + "."
+        ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    private static int adminSetPostTpStabilization(CommandSourceStack source, boolean enabled) {
+        TLAdminRuntimeSettings.setPostTpStabilizationEnabled(enabled);
+        source.sendSuccess(() -> Component.literal(
+                "Temporary admin setting: post-teleport stabilization is now " + (enabled ? "ENABLED" : "DISABLED") + "."
         ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
         return 1;
     }

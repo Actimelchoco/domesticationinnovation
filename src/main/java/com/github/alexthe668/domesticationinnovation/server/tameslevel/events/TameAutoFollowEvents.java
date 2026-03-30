@@ -1,9 +1,12 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
+import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.nbt.CompoundTag;
@@ -188,6 +191,10 @@ public class TameAutoFollowEvents {
                 Map.Entry<UUID, StabilizeFollow> entry = stabilizeIt.next();
                 UUID tameId = entry.getKey();
                 StabilizeFollow follow = entry.getValue();
+                if (!TLAdminRuntimeSettings.postTpStabilizationEnabled()) {
+                    stabilizeIt.remove();
+                    continue;
+                }
                 if (follow == null || follow.retriesLeft <= 0 || follow.dueTick > serverTick) continue;
 
                 ServerPlayer owner = event.getServer().getPlayerList().getPlayer(follow.ownerUuid);
@@ -247,7 +254,9 @@ public class TameAutoFollowEvents {
         }
         Vec3 targetPos = follow.targetPos == null ? owner.position() : follow.targetPos;
         if (TameCommands.autoFollowTeleportLoadedToLocation(tame, targetLevel, targetPos, follow.yRot, follow.xRot)) {
-            STABILIZE_FOLLOW.put(follow.tameUuid, new StabilizeFollow(owner.getUUID(), serverTick + STABILIZE_RETRY_DELAY_TICKS, STABILIZE_MAX_RETRIES));
+            if (TLAdminRuntimeSettings.postTpStabilizationEnabled()) {
+                STABILIZE_FOLLOW.put(follow.tameUuid, new StabilizeFollow(owner.getUUID(), serverTick + STABILIZE_RETRY_DELAY_TICKS, STABILIZE_MAX_RETRIES));
+            }
         }
     }
 
@@ -283,7 +292,8 @@ public class TameAutoFollowEvents {
         if (player == null || sourceLevel == null || targetLevel == null || sourcePos == null) {
             return;
         }
-        Set<UUID> loadedCandidates = queueNearbyLoadedPets(player, sourceLevel, targetLevel, sourcePos, targetPos, yRot, xRot, delayTicks);
+        boolean crossDimension = !sourceLevel.dimension().equals(targetLevel.dimension());
+        Set<UUID> loadedCandidates = queueNearbyLoadedPets(player, sourceLevel, targetLevel, sourcePos, targetPos, yRot, xRot, delayTicks, crossDimension);
         PENDING_UNLOADED_FOLLOW.put(player.getUUID(), new PendingUnloadedFollow(
                 player.getUUID(),
                 targetLevel.dimension().location().toString(),
@@ -295,7 +305,7 @@ public class TameAutoFollowEvents {
         ));
     }
 
-    private static Set<UUID> queueNearbyLoadedPets(ServerPlayer player, ServerLevel sourceLevel, ServerLevel targetLevel, Vec3 sourcePos, Vec3 targetPos, float yRot, float xRot, int delayTicks) {
+    private static Set<UUID> queueNearbyLoadedPets(ServerPlayer player, ServerLevel sourceLevel, ServerLevel targetLevel, Vec3 sourcePos, Vec3 targetPos, float yRot, float xRot, int delayTicks, boolean crossDimension) {
         Set<UUID> queued = new HashSet<>();
         List<TamableAnimal> nearby = new ArrayList<>();
         for (TameData data : TameRegistry.getOwned(player.getUUID())) {
@@ -310,6 +320,15 @@ public class TameAutoFollowEvents {
             TameData data = TameRegistry.get(tame.getUUID());
             if (!isAutoFollowEligible(tame, data)) continue;
             queued.add(tame.getUUID());
+            if (crossDimension) {
+                if (PlayerDebugSettings.teleport(player.getUUID())) {
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "TPDBG queued loaded legacy " + tame.getName().getString() + " -> " + targetLevel.dimension().location()
+                    ).withStyle(net.minecraft.ChatFormatting.YELLOW));
+                }
+                CommonProxy.queueLegacyPetTeleport(tame, targetLevel, player.getUUID(), serverTick);
+                continue;
+            }
             PENDING_LOADED_PETS.put(tame.getUUID(), new PendingLoadedPetFollow(
                     tame.getUUID(),
                     player.getUUID(),

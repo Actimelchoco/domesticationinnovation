@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerPlayer;
@@ -37,6 +38,7 @@ public class TamePortalStabilizeEvents {
     @SubscribeEvent
     public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!TLAdminRuntimeSettings.postTpStabilizationEnabled()) return;
         PENDING_STABILIZE.put(player.getUUID(), new StabilizeState(
                 serverTick + STABILIZE_INITIAL_DELAY_TICKS,
                 STABILIZE_RETRIES
@@ -66,6 +68,10 @@ public class TamePortalStabilizeEvents {
         Iterator<Map.Entry<UUID, StabilizeState>> it = PENDING_STABILIZE.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UUID, StabilizeState> entry = it.next();
+            if (!TLAdminRuntimeSettings.postTpStabilizationEnabled()) {
+                it.remove();
+                continue;
+            }
             StabilizeState state = entry.getValue();
             if (state == null || state.retriesLeft <= 0) {
                 it.remove();

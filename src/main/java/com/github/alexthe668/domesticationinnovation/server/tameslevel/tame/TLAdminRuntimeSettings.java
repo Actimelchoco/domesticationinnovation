@@ -6,6 +6,7 @@ public final class TLAdminRuntimeSettings {
 
     private static volatile boolean friendlyFireEnabled = true;
     private static volatile boolean healthSiphonEnabled = true;
+    private static volatile boolean postTpStabilizationEnabled = true;
     private static volatile float singleTargetAbilityDamageMultiplier = 1.0F;
     private static volatile float aoeAbilityDamageMultiplier = 1.0F;
     private static volatile float abilityCountCooldownNerfPercent = 25.0F;
@@ -24,6 +25,14 @@ public final class TLAdminRuntimeSettings {
 
     public static void setHealthSiphonEnabled(boolean enabled) {
         healthSiphonEnabled = enabled;
+    }
+
+    public static boolean postTpStabilizationEnabled() {
+        return postTpStabilizationEnabled;
+    }
+
+    public static void setPostTpStabilizationEnabled(boolean enabled) {
+        postTpStabilizationEnabled = enabled;
     }
 
     public static float singleTargetAbilityDamageMultiplier() {
