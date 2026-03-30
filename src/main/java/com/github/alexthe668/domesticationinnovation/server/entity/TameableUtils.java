@@ -384,7 +384,7 @@ public class TameableUtils {
         if (listtag != null && DomesticationMod.CONFIG.isEnchantEnabled(enchantment)) {
             for (int i = 0; i < listtag.size(); ++i) {
                 CompoundTag compoundtag = listtag.getCompound(i);
-                if (isServerSideVisualFakeEnchant(entity, compoundtag)) {
+                if (shouldSkipServerSideVisualFakeEnchant(entity, enchantment, compoundtag)) {
                     continue;
                 }
                 ResourceLocation res = EnchantmentHelper.getEnchantmentId(compoundtag);
@@ -650,6 +650,13 @@ public class TameableUtils {
 
     private static boolean isServerSideVisualFakeEnchant(LivingEntity entity, CompoundTag compoundTag) {
         return !entity.level().isClientSide && isVisualFakeEnchant(compoundTag);
+    }
+
+    private static boolean shouldSkipServerSideVisualFakeEnchant(LivingEntity entity, Enchantment enchantment, CompoundTag compoundTag) {
+        if (!isServerSideVisualFakeEnchant(entity, compoundTag)) {
+            return false;
+        }
+        return enchantment != DIEnchantmentRegistry.MAGNETIC;
     }
 
     @Nullable
