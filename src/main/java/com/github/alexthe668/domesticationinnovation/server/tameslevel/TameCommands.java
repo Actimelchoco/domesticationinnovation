@@ -1698,26 +1698,6 @@ public class TameCommands {
                                                                 "setOrder",
                                                                 IntegerArgumentType.getInteger(ctx, "value")
                                                         )))))
-                                .then(Commands.literal("setCommand")
-                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .then(Commands.argument("value", IntegerArgumentType.integer())
-                                                        .executes(ctx -> adminInvokeTameIntSetter(
-                                                                ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                "setCommand",
-                                                                IntegerArgumentType.getInteger(ctx, "value")
-                                                        )))))
-                                .then(Commands.literal("setOrderedToSit")
-                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .then(Commands.argument("value", BoolArgumentType.bool())
-                                                        .executes(ctx -> adminInvokeTameBooleanSetter(
-                                                                ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                "setOrderedToSit",
-                                                                BoolArgumentType.getBool(ctx, "value")
-                                                        )))))
                                 .then(Commands.literal("setFollow")
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
