@@ -9265,17 +9265,6 @@ public class TameCommands {
         if (tame == null || level == null || pos == null || !tame.isAlive()) {
             return false;
         }
-        if (!tame.level().dimension().equals(level.dimension())) {
-            TameData data = TameRegistry.get(tame.getUUID());
-            if (data == null && TameData.getTlId(tame) != null) {
-                data = TameRegistry.getByTlId(TameData.getTlId(tame));
-            }
-            clearGuardianAnchor(data);
-            long queuedGameTime = level.getServer() != null && level.getServer().overworld() != null
-                    ? level.getServer().overworld().getGameTime()
-                    : 0L;
-            return CommonProxy.queueLegacyPetTeleport(tame, level, tame.getOwnerUUID(), queuedGameTime);
-        }
         teleportTameToLocation(tame, new SpawnTarget(level, pos, yRot, xRot));
         return true;
     }

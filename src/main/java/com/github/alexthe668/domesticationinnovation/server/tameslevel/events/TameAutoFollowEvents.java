@@ -1,11 +1,9 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
-import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -292,8 +290,7 @@ public class TameAutoFollowEvents {
         if (player == null || sourceLevel == null || targetLevel == null || sourcePos == null) {
             return;
         }
-        boolean crossDimension = !sourceLevel.dimension().equals(targetLevel.dimension());
-        Set<UUID> loadedCandidates = queueNearbyLoadedPets(player, sourceLevel, targetLevel, sourcePos, targetPos, yRot, xRot, delayTicks, crossDimension);
+        Set<UUID> loadedCandidates = queueNearbyLoadedPets(player, sourceLevel, targetLevel, sourcePos, targetPos, yRot, xRot, delayTicks);
         PENDING_UNLOADED_FOLLOW.put(player.getUUID(), new PendingUnloadedFollow(
                 player.getUUID(),
                 targetLevel.dimension().location().toString(),
@@ -305,7 +302,7 @@ public class TameAutoFollowEvents {
         ));
     }
 
-    private static Set<UUID> queueNearbyLoadedPets(ServerPlayer player, ServerLevel sourceLevel, ServerLevel targetLevel, Vec3 sourcePos, Vec3 targetPos, float yRot, float xRot, int delayTicks, boolean crossDimension) {
+    private static Set<UUID> queueNearbyLoadedPets(ServerPlayer player, ServerLevel sourceLevel, ServerLevel targetLevel, Vec3 sourcePos, Vec3 targetPos, float yRot, float xRot, int delayTicks) {
         Set<UUID> queued = new HashSet<>();
         List<TamableAnimal> nearby = new ArrayList<>();
         for (TameData data : TameRegistry.getOwned(player.getUUID())) {
@@ -320,15 +317,6 @@ public class TameAutoFollowEvents {
             TameData data = TameRegistry.get(tame.getUUID());
             if (!isAutoFollowEligible(tame, data)) continue;
             queued.add(tame.getUUID());
-            if (crossDimension) {
-                if (PlayerDebugSettings.teleport(player.getUUID())) {
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                            "TPDBG queued loaded legacy " + tame.getName().getString() + " -> " + targetLevel.dimension().location()
-                    ).withStyle(net.minecraft.ChatFormatting.YELLOW));
-                }
-                CommonProxy.queueLegacyPetTeleport(tame, targetLevel, player.getUUID(), serverTick);
-                continue;
-            }
             PENDING_LOADED_PETS.put(tame.getUUID(), new PendingLoadedPetFollow(
                     tame.getUUID(),
                     player.getUUID(),
@@ -390,9 +378,6 @@ public class TameAutoFollowEvents {
             return false;
         }
         if (data == null || data.isInactive()) {
-            return false;
-        }
-        if (data.movementOrder != 0) {
             return false;
         }
         CompoundTag snapshot = data.entitySnapshot;
