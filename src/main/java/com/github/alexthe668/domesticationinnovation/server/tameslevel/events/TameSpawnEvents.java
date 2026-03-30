@@ -50,7 +50,6 @@ public class TameSpawnEvents {
         if (existingByUuid != null) {
             TameRegistry.bindEntityToData(tame, existingByUuid);
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByUuid);
-            TameCommands.fixStaleLoadedTameOnJoin(tame);
             return;
         }
 
@@ -62,7 +61,6 @@ public class TameSpawnEvents {
                     loadedByTlId.discard();
                     TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
-                    TameCommands.fixStaleLoadedTameOnJoin(tame);
                     return;
                 } else {
                     tame.discard();
@@ -88,7 +86,6 @@ public class TameSpawnEvents {
                 if (cloneData != null) {
                     TameRegistry.rebindEntityUuid(cloneData, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
-                    TameCommands.fixStaleLoadedTameOnJoin(tame);
                     return;
                 }
             } else {
@@ -98,7 +95,6 @@ public class TameSpawnEvents {
         }
 
         registerOrRestoreTame(tame, true, true);
-        TameCommands.fixStaleLoadedTameOnJoin(tame);
     }
 
     @SubscribeEvent
