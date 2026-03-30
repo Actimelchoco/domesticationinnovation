@@ -13,11 +13,13 @@ import com.github.alexthe668.domesticationinnovation.server.misc.*;
 import com.github.alexthe668.domesticationinnovation.server.misc.trades.*;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameDrumEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePortalStabilizeEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProjectileTimeoutEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProtectionEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameRenameEvents;
@@ -105,6 +107,7 @@ import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
@@ -150,6 +153,7 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameDrumEvents.class);
         MinecraftForge.EVENT_BUS.register(GuardianToolEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
+        MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePersistenceEvents.class);
         MinecraftForge.EVENT_BUS.register(TameRenameEvents.class);
@@ -157,7 +161,23 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameWorldLoadEvents.class);
         MinecraftForge.EVENT_BUS.register(TameCommands.class);
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
+        MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
         MinecraftForge.EVENT_BUS.register(TameProjectileTimeoutEvents.class);
+        registerOptionalWaystonesCompat();
+    }
+
+    private static void registerOptionalWaystonesCompat() {
+        if (!ModList.get().isLoaded("waystones")) {
+            return;
+        }
+        try {
+            Class<?> compat = Class.forName("com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.WaystonesTeleportCompat");
+            compat.getMethod("init").invoke(null);
+            MinecraftForge.EVENT_BUS.register(compat);
+            DomesticationMod.LOGGER.info("Registered optional Waystones TL teleport compat.");
+        } catch (Throwable throwable) {
+            DomesticationMod.LOGGER.error("Failed to register optional Waystones TL teleport compat.", throwable);
+        }
     }
 
     public void serverInit() {

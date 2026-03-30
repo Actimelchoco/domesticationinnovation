@@ -4,10 +4,8 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.mojang.datafixers.util.Pair;
-import net.minecraft.nbt.CompoundTag;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.waystones.api.TeleportDestination;
 import net.blay09.mods.waystones.api.WaystoneTeleportEvent;
@@ -34,25 +32,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 public final class WaystonesTeleportCompat {
+    private static final Map<UUID, PendingWaystoneTeleport> PENDING_WAYSTONE_TELEPORTS = new HashMap<>();
     private static final Map<UUID, PendingOwnerResync> PENDING_OWNER_RESYNC = new HashMap<>();
     private static long serverTick = 0L;
 
-    private static final class PendingOwnerResync {
-        private final UUID ownerUuid;
-        private final UUID tameUuid;
-        private final ResourceKeyWrapper dimension;
-        private final long dueTick;
-
-        private PendingOwnerResync(UUID ownerUuid, UUID tameUuid, ResourceKeyWrapper dimension, long dueTick) {
-            this.ownerUuid = ownerUuid;
-            this.tameUuid = tameUuid;
-            this.dimension = dimension;
-            this.dueTick = dueTick;
-        }
+    private record PendingWaystoneTeleport(
+            UUID ownerUuid,
+            String targetDimension,
+            BlockPos targetBlock,
+            float yRot,
+            float xRot,
+            long dueTick
+    ) {
     }
 
-    private record ResourceKeyWrapper(String id) {
+    private record PendingOwnerResync(UUID ownerUuid, UUID tameUuid, String dimensionId, long dueTick) {
     }
 
     private WaystonesTeleportCompat() {
@@ -67,61 +63,116 @@ public final class WaystonesTeleportCompat {
             return;
         }
         Entity entity = event.getContext().getEntity();
-        if (!(entity instanceof ServerPlayer player) || !(player.level() instanceof ServerLevel sourceLevel)) {
+        if (!(entity instanceof ServerPlayer player) || !(player.level() instanceof ServerLevel)) {
             return;
         }
         TeleportDestination destination = event.getContext().getDestination();
         if (destination == null || destination.getLevel() == null || destination.getLocation() == null) {
             return;
         }
-        ServerLevel targetLevel = destination.getLevel();
-        Vec3 targetPos = destination.getLocation();
         Direction direction = destination.getDirection();
         float yRot = direction == null ? player.getYRot() : direction.toYRot();
         float xRot = player.getXRot();
-        BlockPos targetBlock = BlockPos.containing(targetPos);
+        BlockPos targetBlock = BlockPos.containing(destination.getLocation());
         TameAutoFollowEvents.suppressOwnerTeleportFollow(player.getUUID(), 40);
-        TameAutoFollowEvents.scheduleDimensionTpFollow(
-                player,
-                targetLevel,
-                centeredTargetPos(targetBlock),
+        PENDING_WAYSTONE_TELEPORTS.put(player.getUUID(), new PendingWaystoneTeleport(
+                player.getUUID(),
+                destination.getLevel().dimension().location().toString(),
+                targetBlock,
                 yRot,
                 xRot,
-                100
-        );
+                serverTick + 1L
+        ));
     }
 
-    private static void teleportWaystoneStyle(ServerPlayer player, TamableAnimal tame, TameData data, ServerLevel targetLevel, BlockPos targetBlock, float yRot, float xRot) {
-        if (player == null || tame == null || data == null || targetLevel == null || targetBlock == null) {
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || event.getServer() == null) {
             return;
         }
-        TamableAnimal moved = tame;
-        if (!tame.level().dimension().equals(targetLevel.dimension())) {
-            Entity changed = tame.changeDimension(targetLevel);
-            if (!(changed instanceof TamableAnimal changedTame)) {
-                return;
-            }
-            moved = changedTame;
+        serverTick++;
+        if (!PENDING_WAYSTONE_TELEPORTS.isEmpty()) {
+            PENDING_WAYSTONE_TELEPORTS.entrySet().removeIf(entry -> processWaystoneTeleport(event, entry.getValue()));
         }
-        double offsetX = (player.getRandom().nextDouble() - 0.5D) * 2.0D;
-        double offsetZ = (player.getRandom().nextDouble() - 0.5D) * 2.0D;
-        double finalX = targetBlock.getX() + 0.5D + offsetX;
-        double finalY = targetBlock.getY();
-        double finalZ = targetBlock.getZ() + 0.5D + offsetZ;
-        moved.teleportTo(finalX, finalY, finalZ);
-        moved.setYRot(yRot);
-        moved.setXRot(xRot);
-        TameRegistry.bindEntityToData(moved, data);
-        data.lastKnownDimension = targetLevel.dimension().location().toString();
-        data.lastKnownX = moved.blockPosition().getX();
-        data.lastKnownY = moved.blockPosition().getY();
-        data.lastKnownZ = moved.blockPosition().getZ();
-        data.lastKnownGameTime = targetLevel.getGameTime();
-        CompoundTag refreshedSnapshot = new CompoundTag();
-        moved.save(refreshedSnapshot);
-        data.entitySnapshot = refreshedSnapshot;
-        TameRegistry.markDirty();
-        queueOwnerResync(player, moved, targetLevel);
+        if (!PENDING_OWNER_RESYNC.isEmpty()) {
+            PENDING_OWNER_RESYNC.entrySet().removeIf(entry -> processOwnerResync(event, entry.getValue()));
+        }
+    }
+
+    private static boolean processWaystoneTeleport(TickEvent.ServerTickEvent event, PendingWaystoneTeleport pending) {
+        if (pending == null || pending.dueTick() > serverTick) {
+            return false;
+        }
+        ServerPlayer owner = event.getServer().getPlayerList().getPlayer(pending.ownerUuid());
+        if (owner == null) {
+            return true;
+        }
+        ServerLevel targetLevel = resolveTargetLevel(event, pending.targetDimension());
+        if (targetLevel == null) {
+            return true;
+        }
+
+        UUID ownerId = owner.getUUID();
+        Vec3 targetPos = centeredTargetPos(pending.targetBlock());
+        for (TameData data : TameRegistry.getOwned(ownerId)) {
+            if (!isWaystoneTeleportEligibleFromData(data, ownerId)) continue;
+
+            TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
+            if (loaded != null && loaded.isAlive()) {
+                TamableAnimal moved = teleportWaystoneStyle(owner, loaded, data, targetLevel, pending.targetBlock(), pending.yRot(), pending.xRot());
+                if (moved != null) {
+                    queueOwnerResync(owner, moved, targetLevel);
+                }
+                continue;
+            }
+            if (!TameCommands.hasPendingImmediateChunkTeleport(data)) {
+                TameCommands.autoFollowTeleportViaTpPath(owner, data, targetLevel, targetPos, pending.yRot(), pending.xRot());
+            }
+        }
+        return true;
+    }
+
+    private static TamableAnimal teleportWaystoneStyle(ServerPlayer owner, TamableAnimal tame, TameData data, ServerLevel targetLevel, BlockPos targetBlock, float yRot, float xRot) {
+        if (owner == null || tame == null || data == null || targetLevel == null || targetBlock == null) {
+            return null;
+        }
+        Vec3 basePos = centeredTargetPos(targetBlock);
+        if (tame.level().dimension().equals(targetLevel.dimension())) {
+            double offsetX = (owner.getRandom().nextDouble() - 0.5D) * 2.0D;
+            double offsetZ = (owner.getRandom().nextDouble() - 0.5D) * 2.0D;
+            tame.teleportTo(basePos.x + offsetX, basePos.y, basePos.z + offsetZ);
+            tame.setYRot(yRot);
+            tame.setXRot(xRot);
+            refreshData(data, tame, targetLevel);
+            return tame;
+        }
+
+        Vec3 targetPos = new Vec3(
+                basePos.x + (owner.getRandom().nextDouble() - 0.5D) * 2.0D,
+                basePos.y,
+                basePos.z + (owner.getRandom().nextDouble() - 0.5D) * 2.0D
+        );
+        TameAutoFollowEvents.scheduleDimensionTpFollow(owner, targetLevel, targetPos, yRot, xRot, 1);
+        return null;
+    }
+
+    private static boolean processOwnerResync(TickEvent.ServerTickEvent event, PendingOwnerResync pending) {
+        if (pending == null || pending.dueTick() > serverTick) {
+            return false;
+        }
+        ServerPlayer owner = event.getServer().getPlayerList().getPlayer(pending.ownerUuid());
+        if (owner == null) {
+            return true;
+        }
+        ServerLevel level = resolveTargetLevel(event, pending.dimensionId());
+        if (level == null || owner.level() != level) {
+            return true;
+        }
+        Entity entity = level.getEntity(pending.tameUuid());
+        if (entity instanceof TamableAnimal tame) {
+            resendEntityToOwner(owner, tame);
+        }
+        return true;
     }
 
     private static void queueOwnerResync(ServerPlayer owner, TamableAnimal tame, ServerLevel level) {
@@ -131,51 +182,9 @@ public final class WaystonesTeleportCompat {
         PENDING_OWNER_RESYNC.put(tame.getUUID(), new PendingOwnerResync(
                 owner.getUUID(),
                 tame.getUUID(),
-                new ResourceKeyWrapper(level.dimension().location().toString()),
+                level.dimension().location().toString(),
                 serverTick + 1L
         ));
-    }
-
-    @SubscribeEvent
-    public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
-        serverTick++;
-        if (PENDING_OWNER_RESYNC.isEmpty() || event.getServer() == null) {
-            return;
-        }
-        List<UUID> finished = new ArrayList<>();
-        for (Map.Entry<UUID, PendingOwnerResync> entry : PENDING_OWNER_RESYNC.entrySet()) {
-            PendingOwnerResync pending = entry.getValue();
-            if (pending == null || pending.dueTick > serverTick) {
-                continue;
-            }
-            ServerPlayer owner = event.getServer().getPlayerList().getPlayer(pending.ownerUuid);
-            if (owner == null) {
-                finished.add(entry.getKey());
-                continue;
-            }
-            ServerLevel level = null;
-            for (ServerLevel candidate : event.getServer().getAllLevels()) {
-                if (candidate.dimension().location().toString().equals(pending.dimension.id())) {
-                    level = candidate;
-                    break;
-                }
-            }
-            if (level == null) {
-                finished.add(entry.getKey());
-                continue;
-            }
-            Entity entity = level.getEntity(pending.tameUuid);
-            if (entity instanceof TamableAnimal tame && owner.level() == level) {
-                resendEntityToOwner(owner, tame);
-            }
-            finished.add(entry.getKey());
-        }
-        for (UUID uuid : finished) {
-            PENDING_OWNER_RESYNC.remove(uuid);
-        }
     }
 
     private static void resendEntityToOwner(ServerPlayer owner, TamableAnimal tame) {
@@ -204,15 +213,11 @@ public final class WaystonesTeleportCompat {
         }
     }
 
-    private static Vec3 centeredTargetPos(BlockPos targetBlock) {
-        return new Vec3(targetBlock.getX() + 0.5D, targetBlock.getY(), targetBlock.getZ() + 0.5D);
-    }
-
-    private static boolean isWaystoneTeleportEligibleFromData(TameData data) {
-        if (data == null || data.isInactive()) {
+    private static boolean isWaystoneTeleportEligibleFromData(TameData data, UUID ownerId) {
+        if (data == null || data.isInactive() || data.uuid == null) {
             return false;
         }
-        if (data.hasHome || data.wanderLock) {
+        if (!ownerId.equals(data.ownerUUID) || data.hasHome || data.wanderLock) {
             return false;
         }
         if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
@@ -221,19 +226,48 @@ public final class WaystonesTeleportCompat {
         return TameAutoFollowEvents.isFollowing(data);
     }
 
-    private static boolean isWaystoneTeleportEligible(TamableAnimal tame, TameData data) {
-        if (tame == null || data == null) {
-            return false;
+    private static TamableAnimal findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {
+        if (owner == null || owner.server == null || tameUuid == null) {
+            return null;
         }
-        if (!tame.isAlive() || !tame.isTame()) {
-            return false;
+        for (ServerLevel level : owner.server.getAllLevels()) {
+            Entity entity = level.getEntity(tameUuid);
+            if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
+            if (!owner.getUUID().equals(tame.getOwnerUUID())) continue;
+            return tame;
         }
-        if (data.hasHome || data.wanderLock) {
-            return false;
+        return null;
+    }
+
+    private static void refreshData(TameData data, TamableAnimal tame, ServerLevel level) {
+        if (data == null || tame == null || level == null) {
+            return;
         }
-        if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
-            return false;
+        TameRegistry.bindEntityToData(tame, data);
+        data.lastKnownDimension = level.dimension().location().toString();
+        data.lastKnownX = tame.blockPosition().getX();
+        data.lastKnownY = tame.blockPosition().getY();
+        data.lastKnownZ = tame.blockPosition().getZ();
+        data.lastKnownGameTime = level.getGameTime();
+        net.minecraft.nbt.CompoundTag refreshedSnapshot = new net.minecraft.nbt.CompoundTag();
+        tame.save(refreshedSnapshot);
+        data.entitySnapshot = refreshedSnapshot;
+        TameRegistry.markDirty();
+    }
+
+    private static ServerLevel resolveTargetLevel(TickEvent.ServerTickEvent event, String dimensionId) {
+        if (event == null || event.getServer() == null || dimensionId == null || dimensionId.isBlank()) {
+            return null;
         }
-        return TameAutoFollowEvents.isFollowingForTeleportCompat(tame);
+        for (ServerLevel candidate : event.getServer().getAllLevels()) {
+            if (candidate.dimension().location().toString().equals(dimensionId)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static Vec3 centeredTargetPos(BlockPos targetBlock) {
+        return new Vec3(targetBlock.getX() + 0.5D, targetBlock.getY(), targetBlock.getZ() + 0.5D);
     }
 }

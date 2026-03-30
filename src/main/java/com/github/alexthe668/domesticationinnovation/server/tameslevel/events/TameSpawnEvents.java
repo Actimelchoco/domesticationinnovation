@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
@@ -49,6 +50,7 @@ public class TameSpawnEvents {
         if (existingByUuid != null) {
             TameRegistry.bindEntityToData(tame, existingByUuid);
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByUuid);
+            TameCommands.fixStaleLoadedTameOnJoin(tame);
             return;
         }
 
@@ -60,6 +62,7 @@ public class TameSpawnEvents {
                     loadedByTlId.discard();
                     TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
+                    TameCommands.fixStaleLoadedTameOnJoin(tame);
                     return;
                 } else {
                     tame.discard();
@@ -85,6 +88,7 @@ public class TameSpawnEvents {
                 if (cloneData != null) {
                     TameRegistry.rebindEntityUuid(cloneData, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
+                    TameCommands.fixStaleLoadedTameOnJoin(tame);
                     return;
                 }
             } else {
@@ -94,6 +98,7 @@ public class TameSpawnEvents {
         }
 
         registerOrRestoreTame(tame, true, true);
+        TameCommands.fixStaleLoadedTameOnJoin(tame);
     }
 
     @SubscribeEvent

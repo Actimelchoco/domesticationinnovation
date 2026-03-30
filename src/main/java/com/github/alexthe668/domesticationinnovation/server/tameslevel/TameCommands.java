@@ -122,6 +122,7 @@ import java.nio.file.Path;
 import java.io.IOException;
 
 public class TameCommands {
+    private static final String JOIN_FIX_STALE_SKIP_TAG = "DITLJoinFixStaleSkip";
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
@@ -512,7 +513,7 @@ public class TameCommands {
                         .then(Commands.literal("inspect")
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                        .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), false))
+                                        .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true))
                                         .then(Commands.literal("long")
                                                 .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true)))))
                         .then(Commands.literal("reincarnate")
@@ -886,7 +887,13 @@ public class TameCommands {
                                                 .executes(ctx -> infoAttribute(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "name")
-                                                ))))
+                                                ))
+                                                .then(Commands.argument("level", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> infoAttribute(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "name"),
+                                                                IntegerArgumentType.getInteger(ctx, "level")
+                                                        )))))
                                 .then(Commands.literal("ability")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "ability"))
                                         .then(Commands.argument("name", StringArgumentType.word())
@@ -894,7 +901,13 @@ public class TameCommands {
                                                 .executes(ctx -> infoAbility(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "name")
-                                                ))))
+                                                ))
+                                                .then(Commands.argument("level", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> infoAbility(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "name"),
+                                                                IntegerArgumentType.getInteger(ctx, "level")
+                                                        )))))
                                 .then(Commands.literal("class")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "class"))
                                         .then(Commands.argument("name", StringArgumentType.word())
@@ -2864,8 +2877,8 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
-        p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info respawn, /tames info movement, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool stick, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info tool guardian, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
     }
@@ -2957,6 +2970,28 @@ public class TameCommands {
                     "Sneak right click tame: store its current guardian anchor in the guardian group. Sneak left click tame: remove that guardian-group anchor from the tame."
             );
         }
+        else if (key.equals("tool guardian") || key.equals("tool guardian_arrow") || key.equals("tool guardianarrow")) {
+            sendToolInfoPage(p, "Guardian",
+                    Component.literal("Item: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("renamed arrow").withStyle(ChatFormatting.GOLD)),
+                    Component.literal("Format: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("<target>: <guardianGroup>").withStyle(ChatFormatting.AQUA)),
+                    Component.literal("Set next anchor: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("right click block").withStyle(ChatFormatting.GREEN)),
+                    Component.literal("Deploy group: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("sneak right click block").withStyle(ChatFormatting.GREEN)),
+                    Component.literal("Remove anchor at block: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("left click block").withStyle(ChatFormatting.YELLOW)),
+                    Component.literal("Clear whole guardian group: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("sneak left click block for 3s").withStyle(ChatFormatting.YELLOW))
+                            .append(Component.literal(" then ").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal("/tames guardian tool confirm").withStyle(ChatFormatting.GOLD)),
+                    Component.literal("Edit groups with tame clicks: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("right click add").withStyle(ChatFormatting.GREEN))
+                            .append(Component.literal(", ").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal("left click remove").withStyle(ChatFormatting.YELLOW))
+            );
+        }
         else if (key.equals("call_stick") || key.equals("callstick")) {
             sendInfoPage(p, "CallStick",
                     "Rename a bone to a selector: all, exact tame name, 'group <group>', 'type <type>', close, nearby, follow, sit, or wander.",
@@ -2968,6 +3003,28 @@ public class TameCommands {
                     "Right click block for 5s: teleport selected tames there. Right click air for 5s: teleport them home.",
                     "Right click tame: add it to the selected group if the bone targets 'group ...'. Left click tame: remove it from that group.",
                     "The bone is consumed on use unless you are in creative, so renaming a stack lets you reuse the same selector many times."
+            );
+        }
+        else if (key.equals("tool stick") || key.equals("tool call_stick") || key.equals("tool callstick")) {
+            sendToolInfoPage(p, "Stick",
+                    Component.literal("Item: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("renamed bone").withStyle(ChatFormatting.GOLD)),
+                    Component.literal("Selectors: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("all, tame name, group <group>, type <type>, close, nearby, follow, sit, wander").withStyle(ChatFormatting.AQUA)),
+                    Component.literal("Movement command: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("right click air/block").withStyle(ChatFormatting.GREEN)),
+                    Component.literal("Cycle combat mode: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("left click air").withStyle(ChatFormatting.YELLOW)),
+                    Component.literal("Clear targets: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("left click block").withStyle(ChatFormatting.YELLOW)),
+                    Component.literal("Set guardian / passive sit: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("hold left click block 3s").withStyle(ChatFormatting.GREEN))
+                            .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal("sneak hold left click block 3s").withStyle(ChatFormatting.GREEN)),
+                    Component.literal("Teleport selected tames: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal("hold right click block 5s").withStyle(ChatFormatting.GREEN))
+                            .append(Component.literal(" or ").withStyle(ChatFormatting.GRAY))
+                            .append(Component.literal("hold right click air 5s for home").withStyle(ChatFormatting.GREEN))
             );
         }
         else if (key.equals("movement")) {
@@ -3068,8 +3125,9 @@ public class TameCommands {
         else if (key.equals("inspect")) {
             sendInfoPage(p, "Inspect",
                     "/tames inspect <pet>",
-                    "Shows live combat inspection for a loaded tame.",
-                    "Includes current base stats, class profile, exact known offensive ability numbers, support/heal mechanics, and attribute combat notes."
+                    "/tames inspect <pet> long",
+                    "The base inspect command now shows the long inspect view directly.",
+                    "Includes current base stats, class profile, exact known offensive ability numbers, support/heal mechanics, attributes, and recent level rewards."
             );
         }
         else if (key.equals("search")) {
@@ -3101,7 +3159,7 @@ public class TameCommands {
                     "## General",
                     "## "
             ));
-            p.sendSystemMessage(Component.literal("Use /tames info attribute <name> for exact doc text and scaling details.").withStyle(ChatFormatting.DARK_AQUA));
+            p.sendSystemMessage(Component.literal("Use /tames info attribute <name> for exact doc text and /tames info attribute <name> <level> for a live level preview.").withStyle(ChatFormatting.DARK_AQUA));
         }
         else if (key.equals("ability")) {
             p.sendSystemMessage(Component.literal("Ability docs (General):").withStyle(ChatFormatting.GOLD));
@@ -3110,7 +3168,7 @@ public class TameCommands {
                     "## General",
                     "## "
             ));
-            p.sendSystemMessage(Component.literal("Use /tames info ability <name> for exact doc text and scaling details.").withStyle(ChatFormatting.DARK_AQUA));
+            p.sendSystemMessage(Component.literal("Use /tames info ability <name> for exact doc text and /tames info ability <name> <level> for a live level preview.").withStyle(ChatFormatting.DARK_AQUA));
         }
         else if (key.equals("class")) {
             p.sendSystemMessage(Component.literal("Class docs (General):").withStyle(ChatFormatting.GOLD));
@@ -3139,6 +3197,18 @@ public class TameCommands {
         }
     }
 
+    private static void sendToolInfoPage(ServerPlayer player, String title, net.minecraft.network.chat.MutableComponent... lines) {
+        if (player == null) {
+            return;
+        }
+        player.sendSystemMessage(Component.literal(title + " Tool Info").withStyle(ChatFormatting.GOLD));
+        for (net.minecraft.network.chat.MutableComponent line : lines) {
+            if (line != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
     private static String capitalizeAscii(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -3147,6 +3217,10 @@ public class TameCommands {
     }
 
     private static int infoAbility(CommandSourceStack source, String abilityName) {
+        return infoAbility(source, abilityName, null);
+    }
+
+    private static int infoAbility(CommandSourceStack source, String abilityName, Integer previewLevel) {
         ServerPlayer p = source.getPlayer();
         String id = abilityName == null ? "" : abilityName.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(p, "Ability name cannot be blank.");
@@ -3163,6 +3237,9 @@ public class TameCommands {
 
         p.sendSystemMessage(Component.literal("Ability doc: " + id).withStyle(ChatFormatting.GOLD));
         sendAbilityRuntimeInfo(p, id);
+        if (previewLevel != null) {
+            sendAbilityLevelPreview(p, id, previewLevel);
+        }
         sendDocLines(p, block);
         return 1;
     }
@@ -3185,6 +3262,10 @@ public class TameCommands {
     }
 
     private static int infoAttribute(CommandSourceStack source, String attributeName) {
+        return infoAttribute(source, attributeName, null);
+    }
+
+    private static int infoAttribute(CommandSourceStack source, String attributeName, Integer previewLevel) {
         ServerPlayer p = source.getPlayer();
         String id = attributeName == null ? "" : attributeName.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(p, "Attribute name cannot be blank.");
@@ -3199,8 +3280,53 @@ public class TameCommands {
         }
 
         p.sendSystemMessage(Component.literal("Attribute doc: " + id).withStyle(ChatFormatting.GOLD));
+        if (previewLevel != null) {
+            sendAttributeLevelPreview(p, id, previewLevel);
+        }
         sendDocLines(p, block);
         return 1;
+    }
+
+    private static void sendAbilityLevelPreview(ServerPlayer player, String abilityId, int level) {
+        if (player == null || abilityId == null || abilityId.isBlank()) {
+            return;
+        }
+        int safeLevel = Math.max(1, level);
+        TameData preview = previewTameData();
+        preview.abilityLevels.put(abilityId, safeLevel);
+        preview.abilities.add(abilityId);
+        String line = buildAbilityInspectLine(null, preview, abilityId, safeLevel, true);
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        player.sendSystemMessage(Component.literal("Preview L" + safeLevel + ": " + line).withStyle(ChatFormatting.DARK_AQUA));
+        player.sendSystemMessage(Component.literal("Preview assumes no extra bonusDamage or synergistic attributes unless the line says otherwise.").withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    private static void sendAttributeLevelPreview(ServerPlayer player, String attributeId, int level) {
+        if (player == null || attributeId == null || attributeId.isBlank()) {
+            return;
+        }
+        int safeLevel = Math.max(1, level);
+        TameData preview = previewTameData();
+        preview.attributeLevels.put(attributeId, safeLevel);
+        String line = buildAttributeInspectLine(preview, attributeId, safeLevel);
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        player.sendSystemMessage(Component.literal("Preview L" + safeLevel + ": " + line).withStyle(ChatFormatting.DARK_AQUA));
+        player.sendSystemMessage(Component.literal("Preview is mechanic-focused and not tied to a specific loaded tame.").withStyle(ChatFormatting.DARK_GRAY));
+    }
+
+    private static TameData previewTameData() {
+        CompoundTag tag = new CompoundTag();
+        tag.putUUID("uuid", UUID.randomUUID());
+        tag.putUUID("ownerUUID", UUID.randomUUID());
+        tag.putString("name", "preview");
+        tag.putString("type", "minecraft:wolf");
+        tag.putInt("level", 1);
+        tag.putInt("xpToNext", 100);
+        return TameData.fromTag(tag);
     }
 
     private static int infoClass(CommandSourceStack source, String className) {
@@ -4617,8 +4743,6 @@ public class TameCommands {
                                 + "  ability " + formatWeightMapCompact(LevelSystem.classAbilityWeights(data.tameClass), 6)
                 ).withStyle(ChatFormatting.DARK_AQUA));
             }
-        } else {
-            player.sendSystemMessage(Component.literal("Use /tames inspect " + data.name + " long for full formula details.").withStyle(ChatFormatting.DARK_GRAY));
         }
 
         List<String> abilityLines = buildAbilityInspectLines(tame, data, longForm);
@@ -4921,14 +5045,29 @@ public class TameCommands {
             case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
             case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
             case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";
-            case "speed", "strength", "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "speed" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "strength" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
+            case "jump_boost" -> id + " L" + level + ": self-buff amplifier " + (level >= 5 ? "III" : level >= 3 ? "II" : "I");
             case "resistance" -> id + " L" + level + ": self Resistance " + romanAmp(defensiveAuraInfoAmplifier(Math.min(level, 30))) + "; caps at level 30";
-            case "fire_resistance", "poison_resistance" -> id + " L" + level + ": binary resistance effect";
+            case "fire_resistance" -> id + " L" + level + ": self Fire Resistance I; binary protection";
+            case "poison_resistance" -> id + " L" + level + ": immediately clears Poison when applied; binary protection";
             case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "wall_climber" -> id + ": spider-style wall climbing while pressing into vertical surfaces";
             case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
-            case "bubbling", "herding", "amphibious", "void_cloud", "charisma", "disc_jockey", "warping_bite", "ore_scenting", "gluttonous", "tethered_teleport", "muffled", "blazing_protection", "rejuvenation", "linked_inventory" ->
-                    id + " L" + level + ": utility/survival attribute; inspect is situational rather than fixed DPS";
+            case "bubbling" -> id + " L" + level + ": vs enemies under the HP cap, " + fmt(Math.min(0.60D, 0.15D * level) * 100.0D) + "% proc to trap them in a giant bubble";
+            case "herding" -> id + " L" + level + ": utility herding aura; range scales by level (roughly 8 at L1, 12 at L3, 16 at L5)";
+            case "amphibious" -> id + " L" + level + ": cancels drown/dry-out damage and grants extra land speed while aquatic";
+            case "void_cloud" -> id + " L" + level + ": negates fall and void-style fall damage";
+            case "charisma" -> id + " L" + level + ": villager trade discount support; stronger discount each level";
+            case "disc_jockey" -> id + " L" + level + ": enables jukebox-follow music utility; binary effect";
+            case "warping_bite" -> id + " L" + level + ": base attacks can chorus-teleport enemy targets; level increases proc chance, attempts, and range";
+            case "ore_scenting" -> id + " L" + level + ": ore-finding utility; binary effect";
+            case "gluttonous" -> id + " L" + level + ": guaranteed milestone utility attribute unlocked at tame level 30";
+            case "tethered_teleport" -> id + " L" + level + ": allows tethered owner-follow teleports and cross-dimension follow recovery";
+            case "muffled" -> id + " L" + level + ": sound dampening utility; binary effect";
+            case "blazing_protection" -> id + " L" + level + ": reactive flame shield; stored bars block hits, ignite attackers, and recover over time";
+            case "rejuvenation" -> id + " L" + level + ": absorbs nearby XP orbs for the tame; utility attribute";
+            case "linked_inventory" -> id + " L" + level + ": owner inventory-link utility; binary effect";
             default -> id + " L" + level + ": no inspect profile";
         };
     }
@@ -10878,14 +11017,35 @@ public class TameCommands {
             failures.add(tameDisplayName(data) + " (unknown entity type '" + typeId + "')");
             return false;
         }
-        ServerLevel level = (ServerLevel) tame.level();
+        if (!rebuildLoadedTameFromSnapshot(tame, data, false)) {
+            failures.add(tameDisplayName(data) + " (spawn failed after rebuild)");
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean rebuildLoadedTameFromSnapshot(TamableAnimal tame, TameData data, boolean markJoinSkip) {
+        if (tame == null || data == null || data.uuid == null || !(tame.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        String typeId = recoverEntityTypeId(data);
+        if (typeId.isBlank()) {
+            return false;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(typeId);
+        if (id == null) {
+            return false;
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            return false;
+        }
         Vec3 pos = tame.position();
         float yRot = tame.getYRot();
         float xRot = tame.getXRot();
         CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
         Entity created = entityType.create(level);
         if (!(created instanceof TamableAnimal rebuilt)) {
-            failures.add(tameDisplayName(data) + " (stored type is not tamable)");
             return false;
         }
         if (!snapshot.isEmpty()) {
@@ -10895,9 +11055,11 @@ public class TameCommands {
         rebuilt.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         rebuilt.setDeltaMovement(0.0D, 0.0D, 0.0D);
         enforceTamedOwnerPreserveCollar(rebuilt, data.ownerUUID);
+        if (markJoinSkip) {
+            rebuilt.getPersistentData().putBoolean(JOIN_FIX_STALE_SKIP_TAG, true);
+        }
         tame.discard();
         if (!level.addFreshEntity(rebuilt)) {
-            failures.add(tameDisplayName(data) + " (spawn failed after rebuild)");
             return false;
         }
         boolean normalized = applyTypeBasePlusBonus(rebuilt, data);
@@ -11234,7 +11396,7 @@ public class TameCommands {
         return true;
     }
 
-    private static void refreshRegistrySnapshotFor(TamableAnimal tame) {
+    public static void refreshRegistrySnapshotFor(TamableAnimal tame) {
         if (tame == null) {
             return;
         }
@@ -11254,6 +11416,24 @@ public class TameCommands {
         data.lastKnownZ = tame.blockPosition().getZ();
         data.lastKnownGameTime = tame.level().getGameTime();
         TameRegistry.markDirty();
+    }
+
+    public static void fixStaleLoadedTameOnJoin(TamableAnimal tame) {
+        if (tame == null || tame.level().isClientSide || !tame.isTame() || !tame.isAlive()) {
+            return;
+        }
+        if (tame.getPersistentData().getBoolean(JOIN_FIX_STALE_SKIP_TAG)) {
+            tame.getPersistentData().remove(JOIN_FIX_STALE_SKIP_TAG);
+            return;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null && TameData.getTlId(tame) != null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        if (data == null || data.dead) {
+            return;
+        }
+        rebuildLoadedTameFromSnapshot(tame, data, true);
     }
 
     private static int adminReloadTames(CommandSourceStack source) {
@@ -13625,8 +13805,12 @@ public class TameCommands {
         if (!result.success()) {
             return false;
         }
+        TamableAnimal moved = result.entity();
+        if (moved == null) {
+            return false;
+        }
         rememberCurrentGuardianAnchor(data);
-        applyGuardianAnchor(target.level.dimension().location().toString(), Mth.floor(target.pos.x), Mth.floor(target.pos.y), Mth.floor(target.pos.z), tame, data);
+        applyGuardianAnchor(target.level.dimension().location().toString(), Mth.floor(target.pos.x), Mth.floor(target.pos.y), Mth.floor(target.pos.z), moved, data);
         return true;
     }
 
@@ -13651,9 +13835,13 @@ public class TameCommands {
         if (!result.success()) {
             return false;
         }
-        applyMovementOverride(tame, MovementOrder.GUARDIAN);
-        refreshRegistrySnapshotFor(tame);
-        tame.getNavigation().stop();
+        TamableAnimal moved = result.entity();
+        if (moved == null) {
+            return false;
+        }
+        applyMovementOverride(moved, MovementOrder.GUARDIAN);
+        refreshRegistrySnapshotFor(moved);
+        moved.getNavigation().stop();
         data.guardianReturnTicks = 0;
         data.guardianRelaxing = false;
         data.guardianNextPhaseTick = 0L;
@@ -14988,6 +15176,8 @@ public class TameCommands {
         suggestCommandString(b, "sit");
         suggestCommandString(b, "wander");
         suggestCommandString(b, "guardian");
+        suggestCommandString(b, "tool guardian");
+        suggestCommandString(b, "tool stick");
         suggestCommandString(b, "movement");
         suggestCommandString(b, "tp");
         suggestCommandString(b, "tphome");
