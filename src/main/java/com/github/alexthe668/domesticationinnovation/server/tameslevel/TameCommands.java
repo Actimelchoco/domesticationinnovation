@@ -714,7 +714,7 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player"),
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
-                        .then(Commands.literal("duel")
+                        .then(Commands.literal("legacyduel")
                                 .then(Commands.literal("vs")
                                         .then(Commands.literal("group")
                                                 .then(Commands.argument("left", StringArgumentType.word())
@@ -1240,8 +1240,36 @@ public class TameCommands {
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource()))))
 
+                        .then(Commands.literal("duel")
+                                .then(Commands.literal("accept")
+                                        .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                .executes(ctx -> duelAcceptCompact(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "spec")
+                                                ))))
+                                .then(Commands.literal("decline")
+                                        .then(Commands.argument("player", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
+                                                .executes(ctx -> duelDecline(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "player")
+                                                ))))
+                                .then(Commands.literal("ff")
+                                        .executes(ctx -> duelForfeit(ctx.getSource())))
+                                .then(Commands.literal("inbox")
+                                        .executes(ctx -> duelInbox(ctx.getSource())))
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .executes(ctx -> duelCompact(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "spec")
+                                        ))))
                         .then(Commands.literal("info")
                                 .executes(ctx -> infoOverview(ctx.getSource()))
+                                .then(Commands.literal("tool")
+                                        .then(Commands.literal("guardian")
+                                                .executes(ctx -> infoDetail(ctx.getSource(), "tool guardian")))
+                                        .then(Commands.literal("bone")
+                                                .executes(ctx -> infoDetail(ctx.getSource(), "tool bone"))))
                                 .then(Commands.literal("attribute")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "attribute"))
                                         .then(Commands.argument("name", StringArgumentType.word())
@@ -3219,7 +3247,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool stick, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info tool guardian, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -3347,8 +3375,8 @@ public class TameCommands {
                     "The bone is consumed on use unless you are in creative, so renaming a stack lets you reuse the same selector many times."
             );
         }
-        else if (key.equals("tool stick") || key.equals("tool bone") || key.equals("tool call_stick") || key.equals("tool callstick")) {
-            sendToolInfoPage(p, "Stick",
+        else if (key.equals("tool bone") || key.equals("tool call_stick") || key.equals("tool callstick")) {
+            sendToolInfoPage(p, "Bone",
                     Component.literal("Item: ").withStyle(ChatFormatting.GRAY)
                             .append(Component.literal("renamed bone").withStyle(ChatFormatting.GOLD)),
                     Component.literal("Selectors: ").withStyle(ChatFormatting.GRAY)
@@ -3484,8 +3512,6 @@ public class TameCommands {
             sendInfoPage(p, "Duel",
                     "/tames duel <left> vs <right>",
                     "/tames duel accept <player> vs <your selection>",
-                    "/tames duel ... spectator <players|server>",
-                    "/tames duelteam ... spectator <players|server>",
                     "Compact duel selectors support comma-separated mixes like: rex, type wolf, group gang, all, follow, or myself.",
                     "If no player names are in either side, the duel starts immediately as a same-owner team duel.",
                     "If player names are included, a staged duel is created and each invited player must accept with their own selection.",
@@ -16233,7 +16259,6 @@ public class TameCommands {
         suggestCommandString(b, "wander");
         suggestCommandString(b, "guardian");
         suggestCommandString(b, "tool guardian");
-        suggestCommandString(b, "tool stick");
         suggestCommandString(b, "tool bone");
         suggestCommandString(b, "movement");
         suggestCommandString(b, "tp");
