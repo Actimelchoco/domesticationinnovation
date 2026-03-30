@@ -328,23 +328,27 @@ public class TameCommands {
 
     private static final class TeamSelection {
         private final boolean includeSelf;
-        private final DuelSelection tameSelection;
+        private final List<DuelSelection> tameSelections;
 
-        private TeamSelection(boolean includeSelf, DuelSelection tameSelection) {
+        private TeamSelection(boolean includeSelf, List<DuelSelection> tameSelections) {
             this.includeSelf = includeSelf;
-            this.tameSelection = tameSelection;
+            this.tameSelections = tameSelections == null ? List.of() : List.copyOf(tameSelections);
         }
 
         private static TeamSelection tameOnly(DuelSelection selection) {
-            return new TeamSelection(false, selection);
+            return new TeamSelection(false, selection == null ? List.of() : List.of(selection));
         }
 
         private static TeamSelection selfOnly() {
-            return new TeamSelection(true, null);
+            return new TeamSelection(true, List.of());
         }
 
         private static TeamSelection of(boolean includeSelf, DuelSelection tameSelection) {
-            return new TeamSelection(includeSelf, tameSelection);
+            return new TeamSelection(includeSelf, tameSelection == null ? List.of() : List.of(tameSelection));
+        }
+
+        private static TeamSelection of(boolean includeSelf, List<DuelSelection> tameSelections) {
+            return new TeamSelection(includeSelf, tameSelections);
         }
     }
 
@@ -507,6 +511,26 @@ public class TameCommands {
 
         private static DuelSpectatorParseResult fail(String error) {
             return new DuelSpectatorParseResult(DuelSpectators.empty(), error);
+        }
+    }
+
+    private static final class CompactDuelSideParseResult {
+        private final TeamSelection selection;
+        private final String targetPlayerName;
+        private final String error;
+
+        private CompactDuelSideParseResult(TeamSelection selection, String targetPlayerName, String error) {
+            this.selection = selection;
+            this.targetPlayerName = targetPlayerName == null ? "" : targetPlayerName.trim();
+            this.error = error == null ? "" : error;
+        }
+
+        private static CompactDuelSideParseResult ok(TeamSelection selection, String targetPlayerName) {
+            return new CompactDuelSideParseResult(selection, targetPlayerName, "");
+        }
+
+        private static CompactDuelSideParseResult fail(String error) {
+            return new CompactDuelSideParseResult(null, "", error);
         }
     }
 
@@ -993,6 +1017,11 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player")
                                                 ))))
                                 .then(Commands.literal("accept")
+                                        .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                .executes(ctx -> duelAcceptCompact(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "spec")
+                                                )))
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
                                                 .then(Commands.literal("group")
@@ -1086,7 +1115,12 @@ public class TameCommands {
                                 .then(Commands.literal("ff")
                                         .executes(ctx -> duelForfeit(ctx.getSource())))
                                 .then(Commands.literal("inbox")
-                                        .executes(ctx -> duelInbox(ctx.getSource()))))
+                                        .executes(ctx -> duelInbox(ctx.getSource())))
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .executes(ctx -> duelCompact(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "spec")
+                                        ))))
                                 .then(Commands.literal("duelteam")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
@@ -4592,7 +4626,18 @@ public class TameCommands {
         if (selection == null) {
             return error(challenger, invalidTeamSelectionMessage());
         }
+        return duelInviteTeamSelection(source, targetPlayerName, selection, spectators);
+    }
 
+    private static int duelInviteTeamSelection(CommandSourceStack source, String targetPlayerName, TeamSelection selection, DuelSpectators spectators) {
+        ServerPlayer challenger = source.getPlayer();
+        if (challenger.getName().getString().equalsIgnoreCase(targetPlayerName)) {
+            return error(challenger, "You cannot duel yourself.");
+        }
+        ServerPlayer targetPlayer = source.getServer().getPlayerList().getPlayerByName(targetPlayerName);
+        if (targetPlayer == null) {
+            return error(challenger, "Target player is not online.");
+        }
         cleanupExpiredDuelInvites();
         TeamSelectionResult challengerResult = resolveLoadedTeamSelection(source, challenger, selection);
         if (!challengerResult.error.isBlank()) return error(challenger, challengerResult.error);
@@ -4754,7 +4799,7 @@ public class TameCommands {
         DuelInvite invite = popDuelInvite(targetPlayer.getUUID(), challenger.getUUID());
         if (invite == null) return error(targetPlayer, "No pending duel invite from " + challengerName + ".");
 
-        DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), invite.challengerSelection.tameSelection);
+        DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
         List<TamableAnimal> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(targetPlayer, "Challenger selected duel tames are not loaded/alive.");
@@ -4810,6 +4855,13 @@ public class TameCommands {
 
     private static int duelAcceptTeam(CommandSourceStack source, String challengerName, String selectionSpec, DuelSpectators extraSpectators) {
         ServerPlayer targetPlayer = source.getPlayer();
+        TeamSelection targetSelection = parseTeamSelectionSpec(selectionSpec);
+        if (targetSelection == null) return error(targetPlayer, invalidTeamSelectionMessage());
+        return duelAcceptTeamSelection(source, challengerName, targetSelection, extraSpectators);
+    }
+
+    private static int duelAcceptTeamSelection(CommandSourceStack source, String challengerName, TeamSelection targetSelection, DuelSpectators extraSpectators) {
+        ServerPlayer targetPlayer = source.getPlayer();
         cleanupExpiredDuelInvites();
         ServerPlayer challenger = source.getServer().getPlayerList().getPlayerByName(challengerName);
         if (challenger == null) return error(targetPlayer, "Challenger is not online.");
@@ -4817,9 +4869,6 @@ public class TameCommands {
 
         DuelInvite invite = popDuelInvite(targetPlayer.getUUID(), challenger.getUUID());
         if (invite == null) return error(targetPlayer, "No pending duel invite from " + challengerName + ".");
-
-        TeamSelection targetSelection = parseTeamSelectionSpec(selectionSpec);
-        if (targetSelection == null) return error(targetPlayer, invalidTeamSelectionMessage());
 
         TeamSelectionResult challengerResult = resolveLoadedTeamSelection(source, challenger, invite.challengerSelection);
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
@@ -4878,7 +4927,7 @@ public class TameCommands {
         }
         popDuelInvite(targetPlayer.getUUID(), invite.challengerUuid);
 
-        DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), invite.challengerSelection.tameSelection);
+        DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
         List<TamableAnimal> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(targetPlayer, "Challenger selected duel tames are not loaded/alive.");
@@ -14790,19 +14839,30 @@ public class TameCommands {
         if (selection == null) return TeamSelectionResult.fail("Invalid duel team selection.");
         List<LivingEntity> members = new ArrayList<>();
         List<TamableAnimal> tames = new ArrayList<>();
+        Set<UUID> seen = new LinkedHashSet<>();
         if (selection.includeSelf) {
             if (!owner.isAlive()) {
                 return TeamSelectionResult.fail("You must be alive to duel as yourself.");
             }
             members.add(owner);
+            seen.add(owner.getUUID());
         }
-        if (selection.tameSelection != null) {
-            DuelSelectionResult tameResult = resolveLoadedDuelSelection(source, owner.getUUID(), selection.tameSelection);
-            if (!tameResult.error.isBlank()) {
-                return TeamSelectionResult.fail(tameResult.error);
+        if (selection.tameSelections != null && !selection.tameSelections.isEmpty()) {
+            for (DuelSelection tameSelection : selection.tameSelections) {
+                DuelSelectionResult tameResult = resolveLoadedDuelSelection(source, owner.getUUID(), tameSelection);
+                if (!tameResult.error.isBlank()) {
+                    return TeamSelectionResult.fail(tameResult.error);
+                }
+                for (TamableAnimal tame : tameResult.tames) {
+                    if (tame == null || !tame.isAlive()) {
+                        continue;
+                    }
+                    if (seen.add(tame.getUUID())) {
+                        tames.add(tame);
+                        members.add(tame);
+                    }
+                }
             }
-            tames.addAll(tameResult.tames);
-            members.addAll(tameResult.tames);
         }
         if (members.isEmpty()) {
             return TeamSelectionResult.fail("Your duel team selection is empty.");
@@ -14936,6 +14996,168 @@ public class TameCommands {
         return TeamSelection.of(includeSelf, selection);
     }
 
+    private static CompactDuelSideParseResult parseCompactDuelSide(CommandSourceStack source, ServerPlayer owner, String raw) {
+        if (owner == null) {
+            return CompactDuelSideParseResult.fail("Player required.");
+        }
+        if (raw == null || raw.trim().isBlank()) {
+            return CompactDuelSideParseResult.fail("Empty duel selection.");
+        }
+        boolean includeSelf = false;
+        String targetPlayerName = "";
+        List<DuelSelection> selections = new ArrayList<>();
+        String[] terms = raw.split(",");
+        for (String term : terms) {
+            String trimmed = term == null ? "" : term.trim();
+            if (trimmed.isBlank()) {
+                continue;
+            }
+            if (trimmed.equalsIgnoreCase("myself") || trimmed.equalsIgnoreCase(owner.getGameProfile().getName())) {
+                includeSelf = true;
+                continue;
+            }
+            ServerPlayer online = source.getServer().getPlayerList().getPlayerByName(trimmed);
+            if (online != null && !online.getUUID().equals(owner.getUUID())) {
+                if (!targetPlayerName.isBlank() && !targetPlayerName.equalsIgnoreCase(trimmed)) {
+                    return CompactDuelSideParseResult.fail("Only one opposing player can be specified per duel side.");
+                }
+                targetPlayerName = online.getGameProfile().getName();
+                continue;
+            }
+            DuelSelection selection = parseCompactDuelSelector(trimmed);
+            if (selection == null) {
+                return CompactDuelSideParseResult.fail("Invalid duel selector: " + trimmed + ".");
+            }
+            selections.add(selection);
+        }
+        TeamSelection selection = TeamSelection.of(includeSelf, selections);
+        if (!selection.includeSelf && selection.tameSelections.isEmpty() && targetPlayerName.isBlank()) {
+            return CompactDuelSideParseResult.fail("Empty duel selection.");
+        }
+        return CompactDuelSideParseResult.ok(selection, targetPlayerName);
+    }
+
+    private static DuelSelection parseCompactDuelSelector(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.equals("all")) {
+            return DuelSelection.all();
+        }
+        if (lower.equals("follow") || lower.equals("sit") || lower.equals("wander")) {
+            return DuelSelection.state(lower);
+        }
+        if (lower.startsWith("group ")) {
+            return DuelSelection.group(trimmed.substring(6).trim());
+        }
+        if (lower.startsWith("type ")) {
+            return DuelSelection.type(trimmed.substring(5).trim());
+        }
+        if (lower.startsWith("state ")) {
+            return DuelSelection.state(trimmed.substring(6).trim());
+        }
+        if (lower.startsWith("name ")) {
+            return DuelSelection.single(trimmed.substring(5).trim());
+        }
+        return DuelSelection.single(trimmed);
+    }
+
+    private static int duelCompact(CommandSourceStack source, String spec) {
+        ServerPlayer owner = source.getPlayer();
+        String[] parts = splitCompactVs(spec);
+        if (parts == null) {
+            return error(owner, "Use /tames duel <left> vs <right>.");
+        }
+        CompactDuelSideParseResult left = parseCompactDuelSide(source, owner, parts[0]);
+        if (!left.error.isBlank()) {
+            return error(owner, left.error);
+        }
+        CompactDuelSideParseResult right = parseCompactDuelSide(source, owner, parts[1]);
+        if (!right.error.isBlank()) {
+            return error(owner, right.error);
+        }
+        if (!left.targetPlayerName.isBlank()) {
+            return error(owner, "Only the right side can target another player.");
+        }
+        if (right.targetPlayerName.isBlank()) {
+            return duelStartCompactSameOwner(source, left.selection, right.selection);
+        }
+        if (right.selection.includeSelf || (right.selection.tameSelections != null && !right.selection.tameSelections.isEmpty())) {
+            return error(owner, "Cross-player shorthand currently supports /tames duel <your selection> vs <player>.");
+        }
+        return duelInviteTeamSelection(source, right.targetPlayerName, left.selection, DuelSpectators.empty());
+    }
+
+    private static int duelAcceptCompact(CommandSourceStack source, String spec) {
+        ServerPlayer targetPlayer = source.getPlayer();
+        String[] parts = splitCompactVs(spec);
+        if (parts == null) {
+            return error(targetPlayer, "Use /tames duel accept <player> vs <your selection>.");
+        }
+        String challengerName = parts[0].trim();
+        if (challengerName.isBlank()) {
+            return error(targetPlayer, "Challenger player name required before vs.");
+        }
+        CompactDuelSideParseResult right = parseCompactDuelSide(source, targetPlayer, parts[1]);
+        if (!right.error.isBlank()) {
+            return error(targetPlayer, right.error);
+        }
+        if (!right.targetPlayerName.isBlank()) {
+            return error(targetPlayer, "Accept selection cannot include another player.");
+        }
+        return duelAcceptTeamSelection(source, challengerName, right.selection, DuelSpectators.empty());
+    }
+
+    private static int duelStartCompactSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection) {
+        ServerPlayer owner = source.getPlayer();
+        TeamSelectionResult leftResult = resolveLoadedTeamSelection(source, owner, leftSelection);
+        if (!leftResult.error.isBlank()) return error(owner, leftResult.error);
+        TeamSelectionResult rightResult = resolveLoadedTeamSelection(source, owner, rightSelection);
+        if (!rightResult.error.isBlank()) return error(owner, rightResult.error);
+        if (leftResult.members.isEmpty()) return error(owner, "Left duel team has no loaded/alive members.");
+        if (rightResult.members.isEmpty()) return error(owner, "Right duel team has no loaded/alive members.");
+
+        Set<UUID> leftIds = collectLivingEntityIds(leftResult.members);
+        Set<UUID> rightIds = collectLivingEntityIds(rightResult.members);
+        Set<UUID> overlap = new HashSet<>(leftIds);
+        overlap.retainAll(rightIds);
+        if (!overlap.isEmpty()) {
+            return error(owner, "Selections overlap. Choose distinct teams.");
+        }
+
+        prepareTeamForDuel(leftResult.tames);
+        prepareTeamForDuel(rightResult.tames);
+        assignInitialDuelTargets(leftResult.tames, rightResult.members);
+        assignInitialDuelTargets(rightResult.tames, leftResult.members);
+
+        TameDuelManager.startTeamDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, Set.of(), false);
+        notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), DuelSpectators.empty(),
+                Component.literal("Duel started: " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.RED));
+        return 1;
+    }
+
+    private static String[] splitCompactVs(String spec) {
+        if (spec == null) {
+            return null;
+        }
+        String trimmed = spec.trim();
+        int marker = trimmed.toLowerCase(Locale.ROOT).indexOf(" vs ");
+        if (marker < 0) {
+            return null;
+        }
+        String left = trimmed.substring(0, marker).trim();
+        String right = trimmed.substring(marker + 4).trim();
+        if (left.isBlank() || right.isBlank()) {
+            return null;
+        }
+        return new String[]{left, right};
+    }
+
     private static DuelSpectatorParseResult parseDuelSpectators(CommandSourceStack source, String raw, UUID... excludedIds) {
         if (raw == null || raw.trim().isBlank()) {
             return DuelSpectatorParseResult.ok(DuelSpectators.empty());
@@ -15041,7 +15263,7 @@ public class TameCommands {
     }
 
     private static String invalidTeamSelectionMessage() {
-        return "Invalid team selection. Use: myself, all, group <name>, type <name>, state <follow|sit|wander>, follow, sit, wander, or name <pet>.";
+        return "Invalid team selection. Use: myself, all, group <name>, type <name>, state <follow|sit|wander>, follow, sit, wander, name <pet>, or comma-separated mixes like 'type wolf, rex'.";
     }
 
     private static Set<UUID> collectLivingEntityIds(List<? extends LivingEntity> members) {
@@ -15091,15 +15313,28 @@ public class TameCommands {
         return duelSelectionLabel(current);
     }
 
+    private static DuelSelection firstTeamDuelSelection(TeamSelection selection) {
+        if (selection == null || selection.tameSelections == null || selection.tameSelections.isEmpty()) {
+            return null;
+        }
+        return selection.tameSelections.get(0);
+    }
+
     private static String teamSelectionLabel(TeamSelection selection) {
         if (selection == null) return "selected team";
-        if (selection.includeSelf && selection.tameSelection == null) {
+        if (selection.includeSelf && (selection.tameSelections == null || selection.tameSelections.isEmpty())) {
             return "myself";
         }
-        if (!selection.includeSelf) {
-            return duelSelectionLabel(selection.tameSelection);
+        List<String> parts = new ArrayList<>();
+        if (selection.includeSelf) {
+            parts.add("myself");
         }
-        return "myself + " + duelSelectionLabel(selection.tameSelection);
+        if (selection.tameSelections != null) {
+            for (DuelSelection tameSelection : selection.tameSelections) {
+                parts.add(duelSelectionLabel(tameSelection));
+            }
+        }
+        return parts.isEmpty() ? "selected team" : String.join(", ", parts);
     }
 
     private static TamableAnimal nearestLoadedOpponent(TamableAnimal from, List<TamableAnimal> opponents) {
@@ -15603,6 +15838,8 @@ public class TameCommands {
         suggestCommandString(b, "myself");
         suggestCommandString(b, "myself all");
         suggestCommandString(b, "all");
+        suggestCommandString(b, "type wolf, rex");
+        suggestCommandString(b, "rex, roxi");
         suggestCommandString(b, "follow");
         suggestCommandString(b, "sit");
         suggestCommandString(b, "wander");
