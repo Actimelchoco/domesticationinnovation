@@ -10076,6 +10076,9 @@ public class TameCommands {
         if (owner == null || data == null || data.uuid == null || data.dead || level == null || pos == null) {
             return false;
         }
+        if (TameDuelManager.isTameInDuel(data.uuid)) {
+            return false;
+        }
         SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
         TamableAnimal loaded = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {

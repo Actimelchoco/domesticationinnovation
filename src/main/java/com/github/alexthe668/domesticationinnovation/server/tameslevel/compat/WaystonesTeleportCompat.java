@@ -4,6 +4,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.mojang.datafixers.util.Pair;
 import net.blay09.mods.balm.api.Balm;
@@ -218,6 +219,9 @@ public final class WaystonesTeleportCompat {
             return false;
         }
         if (!ownerId.equals(data.ownerUUID) || data.hasHome || data.wanderLock) {
+            return false;
+        }
+        if (TameDuelManager.isTameInDuel(data.uuid)) {
             return false;
         }
         if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {

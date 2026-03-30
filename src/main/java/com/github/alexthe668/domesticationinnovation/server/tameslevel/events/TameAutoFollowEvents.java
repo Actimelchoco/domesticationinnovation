@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
@@ -210,6 +211,7 @@ public class TameAutoFollowEvents {
                 && ownerId.equals(data.ownerUUID)
                 && !data.hasHome
                 && !data.wanderLock
+                && !TameDuelManager.isTameInDuel(data.uuid)
                 && isFollowing(data)
                 && hasTeleportCapability(data);
     }
