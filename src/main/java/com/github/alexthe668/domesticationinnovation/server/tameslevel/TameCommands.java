@@ -275,9 +275,10 @@ public class TameCommands {
         private long nextAttemptTick;
         private long chunksReadyTick;
         private final String tameName;
+        private final boolean liveEntityOnly;
         private final boolean silent;
 
-        private PendingImmediateChunkTeleport(UUID ticketId, UUID tameUuid, UUID tlId, UUID ownerUuid, ResourceKey<Level> sourceDimension, BlockPos sourcePos, SpawnTarget target, long createdTick, long nextAttemptTick, long chunksReadyTick, String tameName, boolean silent) {
+        private PendingImmediateChunkTeleport(UUID ticketId, UUID tameUuid, UUID tlId, UUID ownerUuid, ResourceKey<Level> sourceDimension, BlockPos sourcePos, SpawnTarget target, long createdTick, long nextAttemptTick, long chunksReadyTick, String tameName, boolean liveEntityOnly, boolean silent) {
             this.ticketId = ticketId;
             this.tameUuid = tameUuid;
             this.tlId = tlId;
@@ -289,6 +290,7 @@ public class TameCommands {
             this.nextAttemptTick = nextAttemptTick;
             this.chunksReadyTick = chunksReadyTick;
             this.tameName = tameName == null ? "unknown" : tameName;
+            this.liveEntityOnly = liveEntityOnly;
             this.silent = silent;
         }
     }
@@ -2125,6 +2127,11 @@ public class TameCommands {
             if (!chunksReady) {
                 if ((now - pending.createdTick) >= IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS) {
                     releaseImmediateChunkTeleport(sourceLevel, pending);
+                    if (pending.liveEntityOnly) {
+                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + ". Live entity cross-dimension teleport timed out.", ChatFormatting.RED);
+                        finished.add(entry.getKey());
+                        continue;
+                    }
                     TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
                     ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                     if (owner != null && data != null) {
@@ -2159,6 +2166,11 @@ public class TameCommands {
             }
             if (pending.chunksReadyTick >= 0L && (now - pending.chunksReadyTick) >= 10L) {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
+                if (pending.liveEntityOnly) {
+                    if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Live entity not found.", ChatFormatting.RED);
+                    finished.add(entry.getKey());
+                    continue;
+                }
                 TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 if (owner != null && data != null) {
@@ -7150,6 +7162,14 @@ public class TameCommands {
         boolean crossDimension = isCrossDimension(ta, p);
         int cost = teleportCostFor(d, crossDimension);
         if (!payTeleportXp(p, cost)) return 0;
+        if (crossDimension) {
+            if (orderOverride != null) {
+                applyMovementOverride(ta, orderOverride);
+            }
+            UnloadedTpResult queued = queueImmediateChunkTeleport((ServerLevel) ta.level(), ta.blockPosition(), d, new SpawnTarget(p.serverLevel(), p.position(), p.getYRot(), p.getXRot()), true, false);
+            if (!queued.success) return error(p, "Failed to queue cross-dimension tame teleport: " + queued.error);
+            return 1;
+        }
         teleportTameToPlayer(ta, p);
         TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (orderOverride != null && loadedAfterTeleport != null) {
@@ -8634,11 +8654,15 @@ public class TameCommands {
             return UnloadedTpResult.fail("tame is dead");
         }
         SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        boolean crossDimension = isCrossDimension(data, target.level);
         String validationError = validateUnloadedHomeTeleport(source, owner, data, target);
         if (validationError != null) {
+            if (crossDimension) {
+                return UnloadedTpResult.fail(validationError);
+            }
             return tryRebuildSnapshotTeleport(owner, target, data, validationError);
         }
-        return tryImmediateChunkLoadTeleport(source, data, target);
+        return tryImmediateChunkLoadTeleport(source, data, target, crossDimension);
     }
 
     private static String validateUnloadedHomeTeleport(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target) {
@@ -8668,11 +8692,15 @@ public class TameCommands {
         if (data == null || data.dead || (data.uuid != null && isDeadEntry(data.uuid))) {
             return UnloadedTpResult.fail("tame is dead");
         }
+        boolean crossDimension = isCrossDimension(data, target.level);
         String validationError = validateUnloadedHomeTeleport(source, owner, data, target);
         if (validationError != null) {
+            if (crossDimension) {
+                return UnloadedTpResult.fail(validationError);
+            }
             return tryRebuildSnapshotTeleport(owner, target, data, validationError);
         }
-        return tryImmediateChunkLoadTeleport(source, data, target);
+        return tryImmediateChunkLoadTeleport(source, data, target, crossDimension);
     }
 
     private static UnloadedTpResult tryRebuildSnapshotTeleport(ServerPlayer owner, SpawnTarget target, TameData data, String reason) {
@@ -8772,6 +8800,10 @@ public class TameCommands {
     }
 
     private static UnloadedTpResult tryImmediateChunkLoadTeleport(CommandSourceStack source, TameData data, SpawnTarget target) {
+        return tryImmediateChunkLoadTeleport(source, data, target, false);
+    }
+
+    private static UnloadedTpResult tryImmediateChunkLoadTeleport(CommandSourceStack source, TameData data, SpawnTarget target, boolean liveEntityOnly) {
         if (source == null || source.getServer() == null || data == null || data.uuid == null) {
             return UnloadedTpResult.fail("invalid context");
         }
@@ -8818,13 +8850,49 @@ public class TameCommands {
                 now + IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS,
                 -1L,
                 data.name,
+                liveEntityOnly,
                 false
         );
         PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
         return UnloadedTpResult.queued();
     }
 
+    private static UnloadedTpResult queueImmediateChunkTeleport(ServerLevel sourceLevel, BlockPos sourcePos, TameData data, SpawnTarget target, boolean liveEntityOnly, boolean silent) {
+        if (sourceLevel == null || sourcePos == null || data == null || data.uuid == null) {
+            return UnloadedTpResult.fail("invalid context");
+        }
+        if (target == null || target.level == null || target.pos == null) {
+            return UnloadedTpResult.fail("invalid target");
+        }
+        UUID ticketId = data.tlId != null ? data.tlId : data.uuid;
+        loadChunksAround(sourceLevel, ticketId, sourcePos, true);
+        long now = sourceLevel.getServer() != null && sourceLevel.getServer().overworld() != null
+                ? sourceLevel.getServer().overworld().getGameTime()
+                : sourceLevel.getGameTime();
+        PendingImmediateChunkTeleport pending = new PendingImmediateChunkTeleport(
+                ticketId,
+                data.uuid,
+                data.tlId,
+                data.ownerUUID,
+                sourceLevel.dimension(),
+                sourcePos,
+                target,
+                now,
+                now + IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS,
+                -1L,
+                data.name,
+                liveEntityOnly,
+                silent
+        );
+        PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
+        return UnloadedTpResult.queued();
+    }
+
     private static UnloadedTpResult tryImmediateChunkLoadTeleportSilent(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target) {
+        return tryImmediateChunkLoadTeleportSilent(source, owner, data, target, false);
+    }
+
+    private static UnloadedTpResult tryImmediateChunkLoadTeleportSilent(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target, boolean liveEntityOnly) {
         if (source == null || source.getServer() == null || owner == null || data == null || data.uuid == null) {
             return UnloadedTpResult.fail("invalid context");
         }
@@ -8838,16 +8906,25 @@ public class TameCommands {
             return UnloadedTpResult.fail("already loaded");
         }
         if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            if (liveEntityOnly) {
+                return UnloadedTpResult.fail("missing last known dimension");
+            }
             RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
             return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("missing last known dimension");
         }
         ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
         if (lastKnown == null) {
+            if (liveEntityOnly) {
+                return UnloadedTpResult.fail("invalid last known dimension");
+            }
             RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
             return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("invalid last known dimension");
         }
         ServerLevel sourceLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, lastKnown));
         if (sourceLevel == null) {
+            if (liveEntityOnly) {
+                return UnloadedTpResult.fail("source level unavailable");
+            }
             RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
             return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("source level unavailable");
         }
@@ -8883,6 +8960,7 @@ public class TameCommands {
                 now + IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS,
                 -1L,
                 data.name,
+                liveEntityOnly,
                 true
         );
         PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
@@ -9199,6 +9277,14 @@ public class TameCommands {
         return lastKnown != null && !player.level().dimension().location().equals(lastKnown);
     }
 
+    private static boolean isCrossDimension(TameData data, ServerLevel level) {
+        if (data == null || level == null || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            return false;
+        }
+        ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+        return lastKnown != null && !level.dimension().location().equals(lastKnown);
+    }
+
     private static String validateUnloadedTeleportForPlayer(CommandSourceStack source, ServerPlayer owner, TameData data) {
         if (source == null || owner == null || data == null) {
             return "invalid context";
@@ -9269,6 +9355,15 @@ public class TameCommands {
         return true;
     }
 
+    public static boolean autoFollowQueueCrossDimensionLiveTeleport(TamableAnimal tame, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (tame == null || data == null || level == null || pos == null || !tame.isAlive() || !(tame.level() instanceof ServerLevel sourceLevel)) {
+            return false;
+        }
+        SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
+        UnloadedTpResult result = queueImmediateChunkTeleport(sourceLevel, tame.blockPosition(), data, target, true, true);
+        return result.success;
+    }
+
     private static void teleportTameToLocation(TamableAnimal tame, SpawnTarget target) {
         if (tame == null || target == null || target.level == null || target.pos == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
@@ -9292,6 +9387,12 @@ public class TameCommands {
         if (owner == null || data == null || data.uuid == null || data.dead) {
             return false;
         }
+        if (data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
+            ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+            if (lastKnown != null && !owner.serverLevel().dimension().location().equals(lastKnown)) {
+                return false;
+            }
+        }
         SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
         UnloadedTpResult result = tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target);
         return result.success;
@@ -9302,7 +9403,28 @@ public class TameCommands {
             return false;
         }
         SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
-        UnloadedTpResult result = tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target);
+        boolean crossDimension = isCrossDimension(data, level);
+        if (!crossDimension && data.lastKnownDimension != null && !data.lastKnownDimension.isBlank()) {
+            ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+            if (lastKnown != null && !level.dimension().location().equals(lastKnown)) {
+                return false;
+            }
+        }
+        UnloadedTpResult result = tryImmediateChunkLoadTeleportSilent(owner.createCommandSourceStack(), owner, data, target, crossDimension);
+        return result.success;
+    }
+
+    public static boolean autoFollowTeleportViaTpPath(ServerPlayer owner, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (owner == null || data == null || data.uuid == null || data.dead || level == null || pos == null) {
+            return false;
+        }
+        SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
+        TamableAnimal loaded = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
+        if (loaded != null && loaded.isAlive()) {
+            teleportTameToLocation(loaded, target);
+            return true;
+        }
+        UnloadedTpResult result = tpUnloadedHomeViaLanternOrRecover(owner.createCommandSourceStack(), owner, data, target);
         return result.success;
     }
 

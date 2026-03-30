@@ -36,7 +36,7 @@ import java.util.UUID;
 
 public class TameAutoFollowEvents {
     private static final boolean ENABLED = true;
-    private static final int DIMENSION_FOLLOW_DELAY_TICKS = 20;
+    private static final int DIMENSION_FOLLOW_DELAY_TICKS = 100;
     private static final int COMMAND_TP_FOLLOW_DELAY_TICKS = 10;
     private static final int STABILIZE_RETRY_DELAY_TICKS = 20;
     private static final int STABILIZE_MAX_RETRIES = 20;
@@ -76,8 +76,9 @@ public class TameAutoFollowEvents {
         private final float xRot;
         private final long dueTick;
         private final Set<UUID> loadedCandidates;
+        private final boolean useTpPathForAll;
 
-        private PendingUnloadedFollow(UUID ownerUuid, String targetDimension, Vec3 targetPos, float yRot, float xRot, long dueTick, Set<UUID> loadedCandidates) {
+        private PendingUnloadedFollow(UUID ownerUuid, String targetDimension, Vec3 targetPos, float yRot, float xRot, long dueTick, Set<UUID> loadedCandidates, boolean useTpPathForAll) {
             this.ownerUuid = ownerUuid;
             this.targetDimension = targetDimension;
             this.targetPos = targetPos;
@@ -85,6 +86,7 @@ public class TameAutoFollowEvents {
             this.xRot = xRot;
             this.dueTick = dueTick;
             this.loadedCandidates = loadedCandidates;
+            this.useTpPathForAll = useTpPathForAll;
         }
     }
 
@@ -114,6 +116,13 @@ public class TameAutoFollowEvents {
         ServerLevel targetLevel = fromLevel.getServer().getLevel(event.getDimension());
         if (targetLevel == null) return;
         scheduleFollow(player, fromLevel, targetLevel, player.position(), null, player.getYRot(), player.getXRot(), DIMENSION_FOLLOW_DELAY_TICKS);
+    }
+
+    public static void scheduleDimensionTpFollow(ServerPlayer player, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot, int delayTicks) {
+        if (!ENABLED) return;
+        if (player == null || targetLevel == null) return;
+        if (!(player.level() instanceof ServerLevel sourceLevel)) return;
+        scheduleFollow(player, sourceLevel, targetLevel, player.position(), targetPos, yRot, xRot, Math.max(1, delayTicks));
     }
 
     @SubscribeEvent
@@ -168,7 +177,11 @@ public class TameAutoFollowEvents {
                     ServerLevel targetLevel = resolvePendingTargetLevel(event, player, follow);
                     Vec3 targetPos = follow.targetPos == null ? player.position() : follow.targetPos;
                     if (targetLevel != null) {
-                        executeQueuedUnloadedFollow(player, targetLevel, targetPos, follow.yRot, follow.xRot, follow.loadedCandidates);
+                        if (follow.useTpPathForAll) {
+                            executeQueuedTpFollow(player, targetLevel, targetPos, follow.yRot, follow.xRot);
+                        } else {
+                            executeQueuedUnloadedFollow(player, targetLevel, targetPos, follow.yRot, follow.xRot, follow.loadedCandidates);
+                        }
                     }
                 }
                 iterator.remove();
@@ -273,6 +286,30 @@ public class TameAutoFollowEvents {
         }
     }
 
+    private static void executeQueuedTpFollow(ServerPlayer owner, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot) {
+        if (owner == null || owner.server == null || targetLevel == null || targetPos == null) return;
+        UUID ownerId = owner.getUUID();
+        for (TameData data : TameRegistry.getOwned(ownerId)) {
+            if (data == null || data.uuid == null || data.isInactive()) continue;
+            if (!ownerId.equals(data.ownerUUID)) continue;
+            if (!isAutoFollowEligible(data)) continue;
+            TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
+            if (loaded != null && loaded.isAlive()) {
+                boolean moved = loaded.level().dimension().equals(targetLevel.dimension())
+                        ? TameCommands.autoFollowTeleportLoadedToLocation(loaded, targetLevel, targetPos, yRot, xRot)
+                        : TameCommands.autoFollowQueueCrossDimensionLiveTeleport(loaded, data, targetLevel, targetPos, yRot, xRot);
+                if (moved && TLAdminRuntimeSettings.postTpStabilizationEnabled()) {
+                    STABILIZE_FOLLOW.put(data.uuid, new StabilizeFollow(owner.getUUID(), serverTick + STABILIZE_RETRY_DELAY_TICKS, STABILIZE_MAX_RETRIES));
+                }
+                continue;
+            }
+            boolean moved = TameCommands.autoFollowTeleportUnloadedToLocation(owner, data, targetLevel, targetPos, yRot, xRot);
+            if (moved && TLAdminRuntimeSettings.postTpStabilizationEnabled()) {
+                STABILIZE_FOLLOW.put(data.uuid, new StabilizeFollow(owner.getUUID(), serverTick + STABILIZE_RETRY_DELAY_TICKS, STABILIZE_MAX_RETRIES));
+            }
+        }
+    }
+
     private static void pullUnloadedFollowingTamesToOwner(ServerPlayer owner) {
         if (owner == null || owner.server == null) return;
         UUID ownerId = owner.getUUID();
@@ -290,6 +327,19 @@ public class TameAutoFollowEvents {
         if (player == null || sourceLevel == null || targetLevel == null || sourcePos == null) {
             return;
         }
+        if (!sourceLevel.dimension().equals(targetLevel.dimension())) {
+            PENDING_UNLOADED_FOLLOW.put(player.getUUID(), new PendingUnloadedFollow(
+                    player.getUUID(),
+                    targetLevel.dimension().location().toString(),
+                    targetPos,
+                    yRot,
+                    xRot,
+                    serverTick + Math.max(1, delayTicks),
+                    Set.of(),
+                    true
+            ));
+            return;
+        }
         Set<UUID> loadedCandidates = queueNearbyLoadedPets(player, sourceLevel, targetLevel, sourcePos, targetPos, yRot, xRot, delayTicks);
         PENDING_UNLOADED_FOLLOW.put(player.getUUID(), new PendingUnloadedFollow(
                 player.getUUID(),
@@ -298,7 +348,8 @@ public class TameAutoFollowEvents {
                 yRot,
                 xRot,
                 serverTick + Math.max(1, delayTicks),
-                loadedCandidates
+                loadedCandidates,
+                false
         ));
     }
 

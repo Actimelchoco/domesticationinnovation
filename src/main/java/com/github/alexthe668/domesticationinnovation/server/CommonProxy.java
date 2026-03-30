@@ -338,7 +338,7 @@ public class CommonProxy {
             CollarTickTracker tracker = COLLAR_TICK_TRACKER_MAP.get(tick.level);
             tracker.tick();
         }
-        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel) {
+        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel && serverLevel.dimension() == Level.OVERWORLD) {
             List<PendingPetTeleport> remaining = new ArrayList<>();
             for (PendingPetTeleport pending : teleportingPets) {
                 if (pending == null || pending.entity == null || pending.endpointWorld == null || pending.ownerUUID == null) {

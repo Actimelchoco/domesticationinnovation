@@ -81,35 +81,14 @@ public final class WaystonesTeleportCompat {
         float xRot = player.getXRot();
         BlockPos targetBlock = BlockPos.containing(targetPos);
         TameAutoFollowEvents.suppressOwnerTeleportFollow(player.getUUID(), 40);
-        List<TameData> unloadedEligible = new ArrayList<>();
-
-        for (TameData data : TameRegistry.getOwned(player.getUUID())) {
-            if (data == null || data.uuid == null || data.isInactive()) {
-                continue;
-            }
-            Entity loaded = sourceLevel.getEntity(data.uuid);
-            if (!(loaded instanceof TamableAnimal tame)) {
-                if (isWaystoneTeleportEligibleFromData(data)) {
-                    unloadedEligible.add(data);
-                }
-                continue;
-            }
-            if (!isWaystoneTeleportEligible(tame, data)) {
-                continue;
-            }
-            teleportWaystoneStyle(player, tame, data, targetLevel, targetBlock, yRot, xRot);
-        }
-
-        for (TameData data : unloadedEligible) {
-            TameCommands.autoFollowTeleportUnloadedToLocation(
-                    player,
-                    data,
-                    targetLevel,
-                    centeredTargetPos(targetBlock),
-                    yRot,
-                    xRot
-            );
-        }
+        TameAutoFollowEvents.scheduleDimensionTpFollow(
+                player,
+                targetLevel,
+                centeredTargetPos(targetBlock),
+                yRot,
+                xRot,
+                100
+        );
     }
 
     private static void teleportWaystoneStyle(ServerPlayer player, TamableAnimal tame, TameData data, ServerLevel targetLevel, BlockPos targetBlock, float yRot, float xRot) {
