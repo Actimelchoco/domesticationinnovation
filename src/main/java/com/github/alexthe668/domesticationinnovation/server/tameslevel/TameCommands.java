@@ -100,6 +100,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -132,6 +133,8 @@ public class TameCommands {
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
     private static final int MAX_CLASS_REROLLS = 3;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
+    private static final Map<UUID, PendingDuelMatch> PENDING_DUEL_MATCHES = new HashMap<>();
+    private static final Map<UUID, UUID> PENDING_DUEL_MATCH_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, PendingClassReroll> PENDING_CLASS_REROLLS = new HashMap<>();
     private static final int UNLOADED_TP_TIMEOUT_TICKS = 1200;
     private static final int MORNING_LANTERN_TIMEOUT_TICKS = 200;
@@ -516,21 +519,52 @@ public class TameCommands {
 
     private static final class CompactDuelSideParseResult {
         private final TeamSelection selection;
-        private final String targetPlayerName;
+        private final List<String> targetPlayerNames;
         private final String error;
 
-        private CompactDuelSideParseResult(TeamSelection selection, String targetPlayerName, String error) {
+        private CompactDuelSideParseResult(TeamSelection selection, List<String> targetPlayerNames, String error) {
             this.selection = selection;
-            this.targetPlayerName = targetPlayerName == null ? "" : targetPlayerName.trim();
+            this.targetPlayerNames = targetPlayerNames == null ? List.of() : List.copyOf(targetPlayerNames);
             this.error = error == null ? "" : error;
         }
 
-        private static CompactDuelSideParseResult ok(TeamSelection selection, String targetPlayerName) {
-            return new CompactDuelSideParseResult(selection, targetPlayerName, "");
+        private static CompactDuelSideParseResult ok(TeamSelection selection, List<String> targetPlayerNames) {
+            return new CompactDuelSideParseResult(selection, targetPlayerNames, "");
         }
 
         private static CompactDuelSideParseResult fail(String error) {
-            return new CompactDuelSideParseResult(null, "", error);
+            return new CompactDuelSideParseResult(null, List.of(), error);
+        }
+    }
+
+    private static final class PendingDuelParticipant {
+        private final UUID playerUuid;
+        private final boolean sideA;
+        private UUID invitedBy;
+        private TeamSelection acceptedSelection;
+        private boolean accepted;
+
+        private PendingDuelParticipant(UUID playerUuid, boolean sideA, UUID invitedBy, TeamSelection acceptedSelection, boolean accepted) {
+            this.playerUuid = playerUuid;
+            this.sideA = sideA;
+            this.invitedBy = invitedBy;
+            this.acceptedSelection = acceptedSelection;
+            this.accepted = accepted;
+        }
+    }
+
+    private static final class PendingDuelMatch {
+        private final UUID matchId;
+        private final UUID initiatorUuid;
+        private final long createdAtMs;
+        private final DuelSpectators spectators;
+        private final Map<UUID, PendingDuelParticipant> participants = new LinkedHashMap<>();
+
+        private PendingDuelMatch(UUID matchId, UUID initiatorUuid, DuelSpectators spectators, long createdAtMs) {
+            this.matchId = matchId;
+            this.initiatorUuid = initiatorUuid;
+            this.spectators = spectators == null ? DuelSpectators.empty() : spectators;
+            this.createdAtMs = createdAtMs;
         }
     }
 
@@ -5029,6 +5063,13 @@ public class TameCommands {
         ServerPlayer targetPlayer = source.getPlayer();
         cleanupExpiredDuelInvites();
         ServerPlayer challenger = source.getServer().getPlayerList().getPlayerByName(challengerName);
+        PendingDuelMatch pending = findPendingDuelMatchForInvite(source, targetPlayer, challengerName);
+        if (pending != null) {
+            notifyPendingDuelCancelled(source.getServer(), pending, targetPlayer.getUUID());
+            removePendingDuelMatch(pending.matchId);
+            targetPlayer.sendSystemMessage(Component.literal("Declined staged duel invite from " + challengerName + ".").withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
         if (challenger == null) return error(targetPlayer, "Challenger is not online.");
         DuelInvite invite = popDuelInvite(targetPlayer.getUUID(), challenger.getUUID());
         if (invite == null) return error(targetPlayer, "No pending duel invite from " + challengerName + ".");
@@ -5042,16 +5083,27 @@ public class TameCommands {
         ServerPlayer targetPlayer = source.getPlayer();
         cleanupExpiredDuelInvites();
         Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(targetPlayer.getUUID());
-        if (incoming == null || incoming.isEmpty()) {
+        PendingDuelMatch pending = null;
+        UUID pendingMatchId = PENDING_DUEL_MATCH_BY_PLAYER.get(targetPlayer.getUUID());
+        if (pendingMatchId != null) {
+            pending = PENDING_DUEL_MATCHES.get(pendingMatchId);
+        }
+        if ((incoming == null || incoming.isEmpty()) && pending == null) {
             targetPlayer.sendSystemMessage(Component.literal("No pending duel invites.").withStyle(ChatFormatting.GRAY));
             return 1;
         }
 
         targetPlayer.sendSystemMessage(Component.literal("Pending duel invites:").withStyle(ChatFormatting.GOLD));
-        for (DuelInvite invite : incoming.values()) {
-            ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(invite.challengerUuid);
-            String challengerName = challenger == null ? invite.challengerUuid.toString() : challenger.getName().getString();
-            targetPlayer.sendSystemMessage(Component.literal("- " + challengerName + " using " + teamSelectionLabel(invite.challengerSelection) + duelSpectatorLabel(source.getServer(), invite.spectators)).withStyle(ChatFormatting.AQUA));
+        if (incoming != null) {
+            for (DuelInvite invite : incoming.values()) {
+                ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(invite.challengerUuid);
+                String challengerName = challenger == null ? invite.challengerUuid.toString() : challenger.getName().getString();
+                targetPlayer.sendSystemMessage(Component.literal("- " + challengerName + " using " + teamSelectionLabel(invite.challengerSelection) + duelSpectatorLabel(source.getServer(), invite.spectators)).withStyle(ChatFormatting.AQUA));
+            }
+        }
+        if (pending != null) {
+            String initiator = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, pending.initiatorUuid.toString());
+            targetPlayer.sendSystemMessage(Component.literal("- staged duel from " + initiator + " | A: " + pendingDuelSideLabel(source.getServer(), pending, true) + " | B: " + pendingDuelSideLabel(source.getServer(), pending, false)).withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         return 1;
     }
@@ -5088,6 +5140,15 @@ public class TameCommands {
         }
         for (UUID target : emptyTargets) {
             DUEL_INVITES.remove(target);
+        }
+        List<UUID> expiredMatches = new ArrayList<>();
+        for (PendingDuelMatch match : PENDING_DUEL_MATCHES.values()) {
+            if ((now - match.createdAtMs) > DUEL_INVITE_TIMEOUT_MS) {
+                expiredMatches.add(match.matchId);
+            }
+        }
+        for (UUID matchId : expiredMatches) {
+            removePendingDuelMatch(matchId);
         }
     }
 
@@ -15004,7 +15065,7 @@ public class TameCommands {
             return CompactDuelSideParseResult.fail("Empty duel selection.");
         }
         boolean includeSelf = false;
-        String targetPlayerName = "";
+        LinkedHashSet<String> targetPlayerNames = new LinkedHashSet<>();
         List<DuelSelection> selections = new ArrayList<>();
         String[] terms = raw.split(",");
         for (String term : terms) {
@@ -15018,10 +15079,7 @@ public class TameCommands {
             }
             ServerPlayer online = source.getServer().getPlayerList().getPlayerByName(trimmed);
             if (online != null && !online.getUUID().equals(owner.getUUID())) {
-                if (!targetPlayerName.isBlank() && !targetPlayerName.equalsIgnoreCase(trimmed)) {
-                    return CompactDuelSideParseResult.fail("Only one opposing player can be specified per duel side.");
-                }
-                targetPlayerName = online.getGameProfile().getName();
+                targetPlayerNames.add(online.getGameProfile().getName());
                 continue;
             }
             DuelSelection selection = parseCompactDuelSelector(trimmed);
@@ -15031,10 +15089,10 @@ public class TameCommands {
             selections.add(selection);
         }
         TeamSelection selection = TeamSelection.of(includeSelf, selections);
-        if (!selection.includeSelf && selection.tameSelections.isEmpty() && targetPlayerName.isBlank()) {
+        if (!selection.includeSelf && selection.tameSelections.isEmpty() && targetPlayerNames.isEmpty()) {
             return CompactDuelSideParseResult.fail("Empty duel selection.");
         }
-        return CompactDuelSideParseResult.ok(selection, targetPlayerName);
+        return CompactDuelSideParseResult.ok(selection, new ArrayList<>(targetPlayerNames));
     }
 
     private static DuelSelection parseCompactDuelSelector(String raw) {
@@ -15081,16 +15139,14 @@ public class TameCommands {
         if (!right.error.isBlank()) {
             return error(owner, right.error);
         }
-        if (!left.targetPlayerName.isBlank()) {
-            return error(owner, "Only the right side can target another player.");
+        if (!right.targetPlayerNames.isEmpty()
+                && (right.selection.includeSelf || (right.selection.tameSelections != null && !right.selection.tameSelections.isEmpty()))) {
+            return error(owner, "The inviting command cannot choose tames for the opposing side. Invite those players and let them accept with their own selection.");
         }
-        if (right.targetPlayerName.isBlank()) {
+        if (left.targetPlayerNames.isEmpty() && right.targetPlayerNames.isEmpty()) {
             return duelStartCompactSameOwner(source, left.selection, right.selection);
         }
-        if (right.selection.includeSelf || (right.selection.tameSelections != null && !right.selection.tameSelections.isEmpty())) {
-            return error(owner, "Cross-player shorthand currently supports /tames duel <your selection> vs <player>.");
-        }
-        return duelInviteTeamSelection(source, right.targetPlayerName, left.selection, DuelSpectators.empty());
+        return duelCreatePendingCompactMatch(source, left, right);
     }
 
     private static int duelAcceptCompact(CommandSourceStack source, String spec) {
@@ -15107,10 +15163,7 @@ public class TameCommands {
         if (!right.error.isBlank()) {
             return error(targetPlayer, right.error);
         }
-        if (!right.targetPlayerName.isBlank()) {
-            return error(targetPlayer, "Accept selection cannot include another player.");
-        }
-        return duelAcceptTeamSelection(source, challengerName, right.selection, DuelSpectators.empty());
+        return duelAcceptPendingCompactMatch(source, challengerName, right);
     }
 
     private static int duelStartCompactSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection) {
@@ -15139,6 +15192,287 @@ public class TameCommands {
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), DuelSpectators.empty(),
                 Component.literal("Duel started: " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.RED));
         return 1;
+    }
+
+    private static int duelCreatePendingCompactMatch(CommandSourceStack source, CompactDuelSideParseResult left, CompactDuelSideParseResult right) {
+        ServerPlayer owner = source.getPlayer();
+        cleanupExpiredDuelInvites();
+        if (playerHasAnyPendingDuel(owner.getUUID())) {
+            return error(owner, "You already have a pending duel invitation or staged duel.");
+        }
+        PendingDuelMatch match = new PendingDuelMatch(UUID.randomUUID(), owner.getUUID(), DuelSpectators.empty(), System.currentTimeMillis());
+        match.participants.put(owner.getUUID(), new PendingDuelParticipant(owner.getUUID(), true, owner.getUUID(), left.selection, true));
+        PENDING_DUEL_MATCHES.put(match.matchId, match);
+        PENDING_DUEL_MATCH_BY_PLAYER.put(owner.getUUID(), match.matchId);
+
+        try {
+            for (String playerName : left.targetPlayerNames) {
+                ServerPlayer player = source.getServer().getPlayerList().getPlayerByName(playerName);
+                if (player == null) {
+                    return cancelPendingMatch(source, match, "Player is not online: " + playerName + ".");
+                }
+                String conflict = addPendingDuelParticipant(source, match, player, true, owner.getUUID());
+                if (!conflict.isBlank()) {
+                    return cancelPendingMatch(source, match, conflict);
+                }
+            }
+            for (String playerName : right.targetPlayerNames) {
+                ServerPlayer player = source.getServer().getPlayerList().getPlayerByName(playerName);
+                if (player == null) {
+                    return cancelPendingMatch(source, match, "Player is not online: " + playerName + ".");
+                }
+                String conflict = addPendingDuelParticipant(source, match, player, false, owner.getUUID());
+                if (!conflict.isBlank()) {
+                    return cancelPendingMatch(source, match, conflict);
+                }
+            }
+        } catch (RuntimeException ex) {
+            return cancelPendingMatch(source, match, ex.getMessage());
+        }
+
+        notifyPendingDuelInvites(source.getServer(), match, owner.getUUID());
+        owner.sendSystemMessage(Component.literal("Created pending duel: " + teamSelectionLabel(left.selection) + " vs " + pendingDuelSideLabel(source.getServer(), match, false) + ".").withStyle(ChatFormatting.GREEN));
+        return tryStartPendingDuel(source, match);
+    }
+
+    private static int duelAcceptPendingCompactMatch(CommandSourceStack source, String challengerName, CompactDuelSideParseResult acceptedSide) {
+        ServerPlayer player = source.getPlayer();
+        cleanupExpiredDuelInvites();
+        PendingDuelMatch match = findPendingDuelMatchForInvite(source, player, challengerName);
+        if (match == null) {
+            return error(player, "No pending staged duel invite from " + challengerName + ".");
+        }
+        PendingDuelParticipant participant = match.participants.get(player.getUUID());
+        if (participant == null) {
+            return error(player, "You are not part of that pending duel.");
+        }
+        boolean sideA = participant.sideA;
+        for (String playerName : acceptedSide.targetPlayerNames) {
+            ServerPlayer ally = source.getServer().getPlayerList().getPlayerByName(playerName);
+            if (ally == null) {
+                return error(player, "Player is not online: " + playerName + ".");
+            }
+            PendingDuelParticipant existing = match.participants.get(ally.getUUID());
+            if (existing != null) {
+                if (existing.sideA != sideA) {
+                    return error(player, ally.getName().getString() + " is already on the opposing side of this duel.");
+                }
+                continue;
+            }
+            String conflict = addPendingDuelParticipant(source, match, ally, sideA, player.getUUID());
+            if (!conflict.isBlank()) {
+                return error(player, conflict);
+            }
+        }
+        participant.acceptedSelection = acceptedSide.selection;
+        participant.accepted = true;
+        player.sendSystemMessage(Component.literal("Accepted pending duel invite.").withStyle(ChatFormatting.GREEN));
+        notifyPendingDuelInvites(source.getServer(), match, player.getUUID());
+        return tryStartPendingDuel(source, match);
+    }
+
+    private static int tryStartPendingDuel(CommandSourceStack source, PendingDuelMatch match) {
+        if (match == null) {
+            return 0;
+        }
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            if (!participant.accepted || participant.acceptedSelection == null) {
+                return 1;
+            }
+        }
+        List<LivingEntity> sideAMembers = new ArrayList<>();
+        List<LivingEntity> sideBMembers = new ArrayList<>();
+        List<TamableAnimal> sideATames = new ArrayList<>();
+        List<TamableAnimal> sideBTames = new ArrayList<>();
+        Set<UUID> sideAOwners = new LinkedHashSet<>();
+        Set<UUID> sideBOwners = new LinkedHashSet<>();
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            ServerPlayer player = source.getServer().getPlayerList().getPlayer(participant.playerUuid);
+            if (player == null) {
+                return error(source.getPlayer(), "Pending duel cannot start because " + participant.playerUuid + " is offline.");
+            }
+            TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, participant.acceptedSelection);
+            if (!resolved.error.isBlank()) {
+                return error(source.getPlayer(), player.getName().getString() + ": " + resolved.error);
+            }
+            if (participant.sideA) {
+                sideAMembers.addAll(resolved.members);
+                sideATames.addAll(resolved.tames);
+                sideAOwners.add(player.getUUID());
+            } else {
+                sideBMembers.addAll(resolved.members);
+                sideBTames.addAll(resolved.tames);
+                sideBOwners.add(player.getUUID());
+            }
+        }
+        if (sideAMembers.isEmpty() || sideBMembers.isEmpty()) {
+            return error(source.getPlayer(), "Pending duel cannot start with an empty side.");
+        }
+        Set<UUID> leftIds = collectLivingEntityIds(sideAMembers);
+        Set<UUID> rightIds = collectLivingEntityIds(sideBMembers);
+        Set<UUID> overlap = new HashSet<>(leftIds);
+        overlap.retainAll(rightIds);
+        if (!overlap.isEmpty()) {
+            return error(source.getPlayer(), "Pending duel selections overlap.");
+        }
+        prepareTeamForDuel(sideATames);
+        prepareTeamForDuel(sideBTames);
+        assignInitialDuelTargets(sideATames, sideBMembers);
+        assignInitialDuelTargets(sideBTames, sideAMembers);
+        UUID ownerA = sideAOwners.iterator().next();
+        UUID ownerB = sideBOwners.iterator().next();
+        LinkedHashSet<UUID> runtimeSpectators = new LinkedHashSet<>(match.spectators.playerIds);
+        for (UUID ownerId : sideAOwners) {
+            if (!ownerId.equals(ownerA)) {
+                runtimeSpectators.add(ownerId);
+            }
+        }
+        for (UUID ownerId : sideBOwners) {
+            if (!ownerId.equals(ownerB)) {
+                runtimeSpectators.add(ownerId);
+            }
+        }
+        TameDuelManager.startTeamDuel(source.getServer(), ownerA, leftIds, ownerB, rightIds, runtimeSpectators, match.spectators.broadcastToServer);
+        notifyPendingDuelStart(source.getServer(), match);
+        removePendingDuelMatch(match.matchId);
+        return 1;
+    }
+
+    private static PendingDuelMatch findPendingDuelMatchForInvite(CommandSourceStack source, ServerPlayer player, String challengerName) {
+        UUID matchId = PENDING_DUEL_MATCH_BY_PLAYER.get(player.getUUID());
+        if (matchId == null) {
+            return null;
+        }
+        PendingDuelMatch match = PENDING_DUEL_MATCHES.get(matchId);
+        if (match == null) {
+            PENDING_DUEL_MATCH_BY_PLAYER.remove(player.getUUID());
+            return null;
+        }
+        ServerPlayer initiator = source.getServer().getPlayerList().getPlayer(match.initiatorUuid);
+        String initiatorName = initiator == null ? resolveKnownOwnerName(source.getServer(), match.initiatorUuid, "") : initiator.getGameProfile().getName();
+        if (!initiatorName.equalsIgnoreCase(challengerName)) {
+            return null;
+        }
+        return match;
+    }
+
+    private static String addPendingDuelParticipant(CommandSourceStack source, PendingDuelMatch match, ServerPlayer player, boolean sideA, UUID invitedBy) {
+        if (player == null || match == null) {
+            return "Invalid pending duel participant.";
+        }
+        PendingDuelParticipant existing = match.participants.get(player.getUUID());
+        if (existing != null) {
+            return existing.sideA == sideA ? "" : player.getName().getString() + " is already on the opposing side.";
+        }
+        if (playerHasAnyPendingDuel(player.getUUID())) {
+            return player.getName().getString() + " already has a pending duel invitation.";
+        }
+        match.participants.put(player.getUUID(), new PendingDuelParticipant(player.getUUID(), sideA, invitedBy, null, false));
+        PENDING_DUEL_MATCH_BY_PLAYER.put(player.getUUID(), match.matchId);
+        return "";
+    }
+
+    private static boolean playerHasAnyPendingDuel(UUID playerUuid) {
+        if (playerUuid == null) {
+            return false;
+        }
+        if (PENDING_DUEL_MATCH_BY_PLAYER.containsKey(playerUuid)) {
+            return true;
+        }
+        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(playerUuid);
+        return incoming != null && !incoming.isEmpty();
+    }
+
+    private static int cancelPendingMatch(CommandSourceStack source, PendingDuelMatch match, String error) {
+        removePendingDuelMatch(match == null ? null : match.matchId);
+        return error(source.getPlayer(), error);
+    }
+
+    private static void removePendingDuelMatch(UUID matchId) {
+        if (matchId == null) {
+            return;
+        }
+        PendingDuelMatch removed = PENDING_DUEL_MATCHES.remove(matchId);
+        if (removed == null) {
+            return;
+        }
+        for (UUID participantId : removed.participants.keySet()) {
+            UUID mapped = PENDING_DUEL_MATCH_BY_PLAYER.get(participantId);
+            if (matchId.equals(mapped)) {
+                PENDING_DUEL_MATCH_BY_PLAYER.remove(participantId);
+            }
+        }
+    }
+
+    private static void notifyPendingDuelInvites(MinecraftServer server, PendingDuelMatch match, UUID actorId) {
+        if (server == null || match == null) {
+            return;
+        }
+        String sideALabel = pendingDuelSideLabel(server, match, true);
+        String sideBLabel = pendingDuelSideLabel(server, match, false);
+        String initiatorName = resolveKnownOwnerName(server, match.initiatorUuid, "unknown");
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            if (participant.accepted) {
+                continue;
+            }
+            ServerPlayer player = server.getPlayerList().getPlayer(participant.playerUuid);
+            if (player == null) {
+                continue;
+            }
+            String invitedByName = resolveKnownOwnerName(server, participant.invitedBy, initiatorName);
+            player.sendSystemMessage(Component.literal(invitedByName + " invited you to a staged duel.").withStyle(ChatFormatting.GOLD));
+            player.sendSystemMessage(Component.literal("Side A: " + sideALabel).withStyle(ChatFormatting.AQUA));
+            player.sendSystemMessage(Component.literal("Side B: " + sideBLabel).withStyle(ChatFormatting.RED));
+            player.sendSystemMessage(Component.literal("Accept: /tames duel accept " + initiatorName + " vs <your tames[, allyPlayer]>").withStyle(ChatFormatting.GREEN));
+        }
+        if (actorId != null) {
+            ServerPlayer actor = server.getPlayerList().getPlayer(actorId);
+            if (actor != null) {
+                actor.sendSystemMessage(Component.literal("Pending duel roster updated. Waiting for all invited players to accept.").withStyle(ChatFormatting.YELLOW));
+            }
+        }
+    }
+
+    private static String pendingDuelSideLabel(MinecraftServer server, PendingDuelMatch match, boolean sideA) {
+        List<String> labels = new ArrayList<>();
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            if (participant.sideA != sideA) {
+                continue;
+            }
+            String playerName = resolveKnownOwnerName(server, participant.playerUuid, participant.playerUuid.toString());
+            String status = participant.accepted && participant.acceptedSelection != null
+                    ? teamSelectionLabel(participant.acceptedSelection)
+                    : "pending";
+            labels.add(playerName + " [" + status + "]");
+        }
+        return labels.isEmpty() ? "-" : String.join(", ", labels);
+    }
+
+    private static void notifyPendingDuelStart(MinecraftServer server, PendingDuelMatch match) {
+        if (server == null || match == null) {
+            return;
+        }
+        Component line = Component.literal("Duel started: " + pendingDuelSideLabel(server, match, true) + " vs " + pendingDuelSideLabel(server, match, false) + ".").withStyle(ChatFormatting.RED);
+        for (UUID participantId : match.participants.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(participantId);
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
+    private static void notifyPendingDuelCancelled(MinecraftServer server, PendingDuelMatch match, UUID decliningPlayerId) {
+        if (server == null || match == null) {
+            return;
+        }
+        String decliningName = resolveKnownOwnerName(server, decliningPlayerId, "A player");
+        Component line = Component.literal("Pending duel cancelled because " + decliningName + " declined the invitation.").withStyle(ChatFormatting.YELLOW);
+        for (UUID participantId : match.participants.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(participantId);
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
     }
 
     private static String[] splitCompactVs(String spec) {
