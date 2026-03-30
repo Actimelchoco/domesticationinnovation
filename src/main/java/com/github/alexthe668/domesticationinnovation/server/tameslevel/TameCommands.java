@@ -3482,10 +3482,15 @@ public class TameCommands {
         }
         else if (key.equals("duel")) {
             sendInfoPage(p, "Duel",
-                    "/tames duel ...",
-                    "/tames duelteam ...",
-                    "Supports player vs player, tame vs tame, and mixed player+tame team duels.",
-                    "Team selectors support myself, all, group, type, state, follow, sit, wander, and single tame names."
+                    "/tames duel <left> vs <right>",
+                    "/tames duel accept <player> vs <your selection>",
+                    "/tames duel ... spectator <players|server>",
+                    "/tames duelteam ... spectator <players|server>",
+                    "Compact duel selectors support comma-separated mixes like: rex, type wolf, group gang, all, follow, or myself.",
+                    "If no player names are in either side, the duel starts immediately as a same-owner team duel.",
+                    "If player names are included, a staged duel is created and each invited player must accept with their own selection.",
+                    "Accepted players may invite allies on their side during accept, but invited players are blocked if they already have a pending duel invite.",
+                    "The duel starts only after every invited player has accepted."
             );
         }
         else if (key.equals("debug")) {
