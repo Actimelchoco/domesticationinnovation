@@ -1278,7 +1278,7 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "name")
                                                 ))))
-                                .then(Commands.argument("command", StringArgumentType.word())
+                                .then(Commands.argument("command", StringArgumentType.greedyString())
                                         .suggests((ctx, b) -> suggestInfoTopics(b))
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
@@ -3347,7 +3347,7 @@ public class TameCommands {
                     "The bone is consumed on use unless you are in creative, so renaming a stack lets you reuse the same selector many times."
             );
         }
-        else if (key.equals("tool stick") || key.equals("tool call_stick") || key.equals("tool callstick")) {
+        else if (key.equals("tool stick") || key.equals("tool bone") || key.equals("tool call_stick") || key.equals("tool callstick")) {
             sendToolInfoPage(p, "Stick",
                     Component.literal("Item: ").withStyle(ChatFormatting.GRAY)
                             .append(Component.literal("renamed bone").withStyle(ChatFormatting.GOLD)),
@@ -16234,6 +16234,7 @@ public class TameCommands {
         suggestCommandString(b, "guardian");
         suggestCommandString(b, "tool guardian");
         suggestCommandString(b, "tool stick");
+        suggestCommandString(b, "tool bone");
         suggestCommandString(b, "movement");
         suggestCommandString(b, "tp");
         suggestCommandString(b, "tphome");
