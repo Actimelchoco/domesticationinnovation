@@ -43,18 +43,12 @@ public class TameSpawnEvents {
 
         UUID entityTlId = TameData.readOrCreateTlId(tame);
 
+        // Normal dimension travel can temporarily expose the same UUID during transfer;
+        // if already tracked, bind identity tags and never discard the newly joined entity here.
         TameData existingByUuid = TameRegistry.get(tame.getUUID());
         if (existingByUuid != null) {
-            TamableAnimal loadedByUuid = findOtherLoadedByUuid(tame);
-            if (loadedByUuid != null) {
-                if (shouldKeepJoiningTame(tame, loadedByUuid, existingByUuid)) {
-                    loadedByUuid.discard();
-                } else {
-                    tame.discard();
-                    return;
-                }
-            }
-            registerOrRestoreTame(tame, false, true);
+            TameRegistry.bindEntityToData(tame, existingByUuid);
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByUuid);
             return;
         }
 
