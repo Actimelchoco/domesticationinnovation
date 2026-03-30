@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityTravelToDimensionEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -77,6 +78,9 @@ public class TameAutoFollowEvents {
         if (data == null || data.isInactive()) {
             return false;
         }
+        if (data.movementOrder == 1 || data.movementOrder == 2 || data.movementOrder == 3) {
+            return false;
+        }
         CompoundTag snapshot = data.entitySnapshot;
         if (snapshot != null) {
             if (snapshot.contains("Sitting") && snapshot.getBoolean("Sitting")) {
@@ -87,7 +91,7 @@ public class TameAutoFollowEvents {
             }
             int command = extractCommand(snapshot);
             if (command != Integer.MIN_VALUE) {
-                return command == 2;
+                return isFollowCommand(command, data.type);
             }
         }
         return true;
@@ -95,9 +99,40 @@ public class TameAutoFollowEvents {
 
     public static boolean isFollowingForTeleportCompat(TamableAnimal tame) {
         if (tame instanceof IComandableMob commandable) {
-            return commandable.getCommand() == 2;
+            return isFollowCommand(commandable.getCommand(), typeIdFor(tame));
         }
         return !tame.isOrderedToSit();
+    }
+
+    private static boolean isFollowCommand(int command, String typeId) {
+        return command == (usesInvertedGenericCallOrder(typeId) ? 1 : 2);
+    }
+
+    private static boolean usesInvertedGenericCallOrder(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return true;
+        }
+        return !TameRegistry.isCallOrderInvertedType(normalized);
+    }
+
+    private static String typeIdFor(TamableAnimal tame) {
+        if (tame == null) {
+            return null;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key == null ? tame.getType().toString() : key.toString();
+    }
+
+    private static String normalizeTypeId(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return null;
+        }
+        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return normalized;
     }
 
     @SubscribeEvent

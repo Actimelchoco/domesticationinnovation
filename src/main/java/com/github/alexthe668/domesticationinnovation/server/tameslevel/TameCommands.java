@@ -1243,6 +1243,7 @@ public class TameCommands {
                         .then(Commands.literal("duel")
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
                                                 .executes(ctx -> duelAcceptCompact(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "spec")
@@ -1259,6 +1260,7 @@ public class TameCommands {
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource())))
                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                         .executes(ctx -> duelCompact(
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
@@ -16215,6 +16217,148 @@ public class TameCommands {
         suggestCommandString(b, "type ");
         suggestCommandString(b, "name ");
         return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestCompactDuelSpec(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) {
+            return b.buildFuture();
+        }
+        String remaining = b.getRemaining();
+        int vsIndex = compactVsIndex(remaining);
+        if (vsIndex < 0) {
+            suggestCompactDuelSide(source, owner, b, remaining, true);
+            return b.buildFuture();
+        }
+        SuggestionsBuilder rightBuilder = b.createOffset(b.getStart() + vsIndex + 4);
+        suggestCompactDuelSide(source, owner, rightBuilder, remaining.substring(vsIndex + 4), false);
+        return rightBuilder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestCompactDuelAcceptSpec(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return b.buildFuture();
+        }
+        String remaining = b.getRemaining();
+        int vsIndex = compactVsIndex(remaining);
+        if (vsIndex < 0) {
+            suggestIncomingDuelChallengers(source, b);
+            if (isExactIncomingDuelChallenger(source, remaining.trim())) {
+                SuggestionsBuilder tail = b.createOffset(b.getStart() + remaining.length());
+                tail.suggest(" vs ");
+                return tail.buildFuture();
+            }
+            return b.buildFuture();
+        }
+        SuggestionsBuilder rightBuilder = b.createOffset(b.getStart() + vsIndex + 4);
+        suggestCompactDuelSide(source, player, rightBuilder, remaining.substring(vsIndex + 4), false);
+        return rightBuilder.buildFuture();
+    }
+
+    private static void suggestCompactDuelSide(CommandSourceStack source, ServerPlayer owner, SuggestionsBuilder builder, String rawSide, boolean allowVs) {
+        if (owner == null || builder == null) {
+            return;
+        }
+        String side = rawSide == null ? "" : rawSide;
+        int commaIndex = side.lastIndexOf(',');
+        int segmentStart = commaIndex >= 0 ? commaIndex + 1 : 0;
+        while (segmentStart < side.length() && Character.isWhitespace(side.charAt(segmentStart))) {
+            segmentStart++;
+        }
+        String term = side.substring(segmentStart);
+        SuggestionsBuilder termBuilder = builder.createOffset(builder.getStart() + segmentStart);
+        String trimmedTerm = term.trim();
+        if (trimmedTerm.isBlank()) {
+            suggestCompactDuelBaseTerms(source, owner, termBuilder);
+            return;
+        }
+        String lower = trimmedTerm.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("group ")) {
+            SuggestionsBuilder groupBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.indexOf(' ') + 1);
+            suggestOwnedGroups(source, groupBuilder);
+            return;
+        }
+        if (lower.startsWith("type ")) {
+            SuggestionsBuilder typeBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.indexOf(' ') + 1);
+            suggestOwnedTypes(source, typeBuilder);
+            return;
+        }
+
+        suggestCompactDuelBaseTerms(source, owner, termBuilder);
+        if (isValidCompactDuelSideTerm(source, owner, trimmedTerm)) {
+            SuggestionsBuilder tailBuilder = builder.createOffset(builder.getStart() + side.length());
+            tailBuilder.suggest(", ");
+            if (allowVs) {
+                tailBuilder.suggest(" vs ");
+            }
+        }
+    }
+
+    private static void suggestCompactDuelBaseTerms(CommandSourceStack source, ServerPlayer owner, SuggestionsBuilder builder) {
+        suggestCommandString(builder, "group");
+        suggestCommandString(builder, "type");
+        suggestCommandString(builder, "all");
+        suggestCommandString(builder, owner.getGameProfile().getName());
+        suggestOwnedPetNamesAll(source, builder);
+        for (ServerPlayer other : source.getServer().getPlayerList().getPlayers()) {
+            if (other != null && !other.getUUID().equals(owner.getUUID())) {
+                suggestCommandString(builder, other.getGameProfile().getName());
+            }
+        }
+    }
+
+    private static boolean isValidCompactDuelSideTerm(CommandSourceStack source, ServerPlayer owner, String term) {
+        if (owner == null || term == null || term.isBlank()) {
+            return false;
+        }
+        if (term.equalsIgnoreCase(owner.getGameProfile().getName()) || term.equalsIgnoreCase("myself")) {
+            return true;
+        }
+        ServerPlayer online = source.getServer().getPlayerList().getPlayerByName(term);
+        if (online != null && !online.getUUID().equals(owner.getUUID())) {
+            return true;
+        }
+        DuelSelection selection = parseCompactDuelSelector(term);
+        if (selection == null) {
+            return false;
+        }
+        return switch (selection.kind) {
+            case ALL -> true;
+            case GROUP -> !selection.value.isBlank();
+            case TYPE -> !selection.value.isBlank();
+            case STATE -> !selection.value.isBlank();
+            case SINGLE -> findOwnedTame(owner.getUUID(), selection.value) != null;
+        };
+    }
+
+    private static boolean isExactIncomingDuelChallenger(CommandSourceStack source, String name) {
+        if (source == null || name == null || name.isBlank()) {
+            return false;
+        }
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return false;
+        }
+        cleanupExpiredDuelInvites();
+        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(player.getUUID());
+        if (incoming == null || incoming.isEmpty()) {
+            return false;
+        }
+        for (UUID challengerId : incoming.keySet()) {
+            ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(challengerId);
+            if (challenger != null && challenger.getGameProfile().getName().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int compactVsIndex(String spec) {
+        if (spec == null || spec.isBlank()) {
+            return -1;
+        }
+        return spec.toLowerCase(Locale.ROOT).indexOf(" vs ");
     }
 
     private static CompletableFuture<Suggestions> suggestDeadPetNames(CommandSourceStack source, SuggestionsBuilder b) {
