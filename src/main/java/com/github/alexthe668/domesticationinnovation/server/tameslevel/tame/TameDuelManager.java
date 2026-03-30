@@ -40,8 +40,10 @@ public final class TameDuelManager {
         private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
         private final Map<UUID, DuelStats> duelStats = new HashMap<>();
         private final Map<UUID, List<ServerBossEvent>> ownerBossBars = new HashMap<>();
+        private final Set<UUID> spectatorIds = new HashSet<>();
+        private final boolean broadcastToServer;
 
-        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB) {
+        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer) {
             this.battleId = battleId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
@@ -54,6 +56,12 @@ public final class TameDuelManager {
             this.roster.addAll(teamB);
             this.participants = new HashSet<>();
             this.participants.addAll(this.roster);
+            if (spectatorIds != null) {
+                this.spectatorIds.addAll(spectatorIds);
+            }
+            this.spectatorIds.remove(ownerA);
+            this.spectatorIds.remove(ownerB);
+            this.broadcastToServer = broadcastToServer;
         }
     }
 
@@ -88,7 +96,15 @@ public final class TameDuelManager {
         startTeamDuel(server, ownerA, tamesA, ownerB, tamesB);
     }
 
+    public static synchronized void startGroupDuel(MinecraftServer server, UUID ownerA, Set<UUID> tamesA, UUID ownerB, Set<UUID> tamesB, Set<UUID> spectatorIds, boolean broadcastToServer) {
+        startTeamDuel(server, ownerA, tamesA, ownerB, tamesB, spectatorIds, broadcastToServer);
+    }
+
     public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB) {
+        startTeamDuel(server, ownerA, teamA, ownerB, teamB, Set.of(), false);
+    }
+
+    public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer) {
         if (server == null || ownerA == null || ownerB == null) return;
         if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
@@ -111,7 +127,7 @@ public final class TameDuelManager {
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
 
         UUID battleId = UUID.randomUUID();
-        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB);
+        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer);
         BATTLE_BY_ID.put(battleId, battle);
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
@@ -370,10 +386,7 @@ public final class TameDuelManager {
                 restoredCount++;
             }
         }
-        notifyOwner(server, battle.ownerA, resultSummary, leaderboardSummary);
-        if (!battle.ownerA.equals(battle.ownerB)) {
-            notifyOwner(server, battle.ownerB, resultSummary, leaderboardSummary);
-        }
+        notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
     }
 
     private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
@@ -393,6 +406,28 @@ public final class TameDuelManager {
             for (Component line : leaderboardSummary) {
                 owner.sendSystemMessage(line);
             }
+        }
+    }
+
+    private static void notifyBattleAudience(MinecraftServer server, DuelBattle battle, List<Component> resultSummary, List<Component> leaderboardSummary) {
+        if (server == null || battle == null) {
+            return;
+        }
+        Set<UUID> recipients = new HashSet<>();
+        if (battle.ownerA != null) {
+            recipients.add(battle.ownerA);
+        }
+        if (battle.ownerB != null) {
+            recipients.add(battle.ownerB);
+        }
+        recipients.addAll(battle.spectatorIds);
+        if (battle.broadcastToServer) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                recipients.add(player.getUUID());
+            }
+        }
+        for (UUID recipientId : recipients) {
+            notifyOwner(server, recipientId, resultSummary, leaderboardSummary);
         }
     }
 
@@ -573,31 +608,41 @@ public final class TameDuelManager {
             return;
         }
         Component positiveLine = eliminationLine(server, elimination, true);
-        Component negativeLine = eliminationLine(server, elimination, false);
-        if (positiveLine == null || negativeLine == null) {
+        if (positiveLine == null) {
             return;
         }
         UUID killerOwner = participantOwner(battle, elimination.killerId);
         UUID victimOwner = participantOwner(battle, elimination.victimId);
 
         if (killerOwner != null && killerOwner.equals(victimOwner)) {
-            ServerPlayer sameOwner = server.getPlayerList().getPlayer(killerOwner);
-            if (sameOwner != null) {
-                sameOwner.sendSystemMessage(positiveLine);
-            }
+            sendBattleMessage(server, battle, positiveLine);
             return;
         }
 
-        if (killerOwner != null) {
-            ServerPlayer killerPlayer = server.getPlayerList().getPlayer(killerOwner);
-            if (killerPlayer != null) {
-                killerPlayer.sendSystemMessage(positiveLine);
+        sendBattleMessage(server, battle, positiveLine);
+    }
+
+    private static void sendBattleMessage(MinecraftServer server, DuelBattle battle, Component line) {
+        if (server == null || battle == null || line == null) {
+            return;
+        }
+        Set<UUID> recipients = new HashSet<>();
+        if (battle.ownerA != null) {
+            recipients.add(battle.ownerA);
+        }
+        if (battle.ownerB != null) {
+            recipients.add(battle.ownerB);
+        }
+        recipients.addAll(battle.spectatorIds);
+        if (battle.broadcastToServer) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                recipients.add(player.getUUID());
             }
         }
-        if (victimOwner != null && !victimOwner.equals(killerOwner)) {
-            ServerPlayer victimPlayer = server.getPlayerList().getPlayer(victimOwner);
-            if (victimPlayer != null) {
-                victimPlayer.sendSystemMessage(negativeLine);
+        for (UUID recipientId : recipients) {
+            ServerPlayer player = server.getPlayerList().getPlayer(recipientId);
+            if (player != null) {
+                player.sendSystemMessage(line);
             }
         }
     }
