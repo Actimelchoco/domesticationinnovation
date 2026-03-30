@@ -13,14 +13,12 @@ import com.github.alexthe668.domesticationinnovation.server.misc.*;
 import com.github.alexthe668.domesticationinnovation.server.misc.trades.*;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameDrumEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProjectileTimeoutEvents;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePortalStabilizeEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameProtectionEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameRenameEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
@@ -29,7 +27,6 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
 import com.google.common.collect.ImmutableSet;
@@ -108,7 +105,6 @@ import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
@@ -126,29 +122,8 @@ public class CommonProxy {
     private static final TargetingConditions ZOMBIE_TARGET = TargetingConditions.forCombat().range(32.0D);
     private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_BASE = 5.0D;
     private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_PER_LEVEL = 1.5D;
-    // Pets queued for cross-dimension transfer. Entries stay queued until owner is in target dimension.
-    public static List<PendingPetTeleport> teleportingPets = new ArrayList<>();
-
-    public static final class PendingPetTeleport {
-        public final Entity entity;
-        public final ServerLevel endpointWorld;
-        public final UUID ownerUUID;
-        public final long queuedGameTime;
-
-        public PendingPetTeleport(Entity entity, ServerLevel endpointWorld, UUID ownerUUID, long queuedGameTime) {
-            this.entity = entity;
-            this.endpointWorld = endpointWorld;
-            this.ownerUUID = ownerUUID;
-            this.queuedGameTime = queuedGameTime;
-        }
-    }
-
     public static boolean queueLegacyPetTeleport(Entity entity, ServerLevel endpointWorld, UUID ownerUUID, long queuedGameTime) {
-        if (entity == null || endpointWorld == null || ownerUUID == null || entity.isRemoved()) {
-            return false;
-        }
-        teleportingPets.add(new PendingPetTeleport(entity, endpointWorld, ownerUUID, queuedGameTime));
-        return true;
+        return false;
     }
 
     private static final Map<Level, CollarTickTracker> COLLAR_TICK_TRACKER_MAP = new HashMap<>();
@@ -175,7 +150,6 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameDrumEvents.class);
         MinecraftForge.EVENT_BUS.register(GuardianToolEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
-        MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePersistenceEvents.class);
         MinecraftForge.EVENT_BUS.register(TameRenameEvents.class);
@@ -183,23 +157,7 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameWorldLoadEvents.class);
         MinecraftForge.EVENT_BUS.register(TameCommands.class);
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
-        MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
         MinecraftForge.EVENT_BUS.register(TameProjectileTimeoutEvents.class);
-        registerOptionalWaystonesCompat();
-    }
-
-    private static void registerOptionalWaystonesCompat() {
-        if (!ModList.get().isLoaded("waystones")) {
-            return;
-        }
-        try {
-            Class<?> compat = Class.forName("com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.WaystonesTeleportCompat");
-            compat.getMethod("init").invoke(null);
-            MinecraftForge.EVENT_BUS.register(compat);
-            DomesticationMod.LOGGER.info("Registered optional Waystones TL teleport compat.");
-        } catch (Throwable throwable) {
-            DomesticationMod.LOGGER.error("Failed to register optional Waystones TL teleport compat.", throwable);
-        }
     }
 
     public void serverInit() {
@@ -337,94 +295,6 @@ public class CommonProxy {
             COLLAR_TICK_TRACKER_MAP.computeIfAbsent(tick.level, k -> new CollarTickTracker());
             CollarTickTracker tracker = COLLAR_TICK_TRACKER_MAP.get(tick.level);
             tracker.tick();
-        }
-        if (!tick.level.isClientSide && tick.level instanceof ServerLevel serverLevel && serverLevel.dimension() == Level.OVERWORLD) {
-            List<PendingPetTeleport> remaining = new ArrayList<>();
-            for (PendingPetTeleport pending : teleportingPets) {
-                if (pending == null || pending.entity == null || pending.endpointWorld == null || pending.ownerUUID == null) {
-                    continue;
-                }
-                Entity entity = pending.entity;
-                if (entity.isRemoved()) {
-                    continue;
-                }
-                ServerLevel endpointWorld = pending.endpointWorld;
-                Entity player = endpointWorld.getPlayerByUUID(pending.ownerUUID);
-                if (!(player instanceof LivingEntity livingOwner)) {
-                    remaining.add(pending);
-                    continue;
-                }
-                if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
-                    owner.sendSystemMessage(Component.literal("TPDBG legacy queue processing " + entity.getName().getString()
-                            + " into " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
-                }
-
-                Vec3 toPos = player.position();
-                EntityDimensions dimensions = entity.getDimensions(entity.getPose());
-                AABB suffocationBox = new AABB(-dimensions.width / 2.0F, 0, -dimensions.width / 2.0F, dimensions.width / 2.0F, dimensions.height, dimensions.width / 2.0F);
-                while (!endpointWorld.noCollision(entity, suffocationBox.move(toPos.x, toPos.y, toPos.z)) && toPos.y < 300) {
-                    toPos = toPos.add(0, 1, 0);
-                }
-
-                if (entity instanceof TamableAnimal tame) {
-                    TameData data = TameRegistry.get(tame.getUUID());
-                    TameTransferService.TransferResult transfer = TameTransferService.transferToLocation(
-                            tame,
-                            endpointWorld,
-                            toPos.x, toPos.y, toPos.z,
-                            entity.getYRot(), entity.getXRot(),
-                            data
-                    );
-                    if (!transfer.success() || transfer.entity() == null) {
-                        remaining.add(pending);
-                        continue;
-                    }
-                    TamableAnimal moved = transfer.entity();
-                    moved.setOrderedToSit(false);
-                    moved.setTarget(null);
-                    moved.setDeltaMovement(Vec3.ZERO);
-                    moved.getNavigation().stop();
-                    moved.getNavigation().moveTo(livingOwner, 1.0D);
-                    if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
-                        owner.sendSystemMessage(Component.literal("TPDBG legacy queue spawned " + moved.getName().getString()
-                                + " at " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
-                    }
-                    continue;
-                }
-
-                entity.unRide();
-                Entity teleportedEntity = entity.getType().create(endpointWorld);
-                if (teleportedEntity == null) {
-                    remaining.add(pending);
-                    continue;
-                }
-                teleportedEntity.restoreFrom(entity);
-                teleportedEntity.moveTo(toPos.x, toPos.y, toPos.z, entity.getYRot(), entity.getXRot());
-                teleportedEntity.setYHeadRot(entity.getYHeadRot());
-                teleportedEntity.fallDistance = 0.0F;
-                teleportedEntity.setPortalCooldown();
-                if (teleportedEntity instanceof Mob mob) {
-                    mob.setNoAi(false);
-                    mob.setTarget(null);
-                    mob.getNavigation().stop();
-                    mob.getNavigation().moveTo(livingOwner, 1.0D);
-                }
-                boolean spawned = endpointWorld.addFreshEntity(teleportedEntity);
-                if (!spawned) {
-                    remaining.add(pending);
-                    continue;
-                }
-                if (player instanceof ServerPlayer owner && PlayerDebugSettings.teleport(owner.getUUID())) {
-                    owner.sendSystemMessage(Component.literal("TPDBG legacy queue spawned " + teleportedEntity.getName().getString()
-                            + " at " + endpointWorld.dimension().location()).withStyle(ChatFormatting.YELLOW));
-                }
-                if (entity instanceof LivingEntity living) {
-                    living.getPersistentData().putBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
-                }
-                entity.remove(Entity.RemovalReason.DISCARDED);
-            }
-            teleportingPets.clear();
-            teleportingPets.addAll(remaining);
         }
     }
 
