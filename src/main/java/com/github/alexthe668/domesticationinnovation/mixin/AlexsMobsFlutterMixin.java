@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "com.github.alexthe666.alexsmobs.entity.EntityFlutter")
 public abstract class AlexsMobsFlutterMixin {
 
-    @Inject(method = "mobInteract", at = @At("RETURN"), remap = false)
+    @Inject(method = {"mobInteract", "interactMob"}, at = @At("RETURN"), remap = false, require = 0)
     private void tl$markStoredOnPotStore(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
         if (!((Object) this instanceof TamableAnimal tame)) {
             return;
@@ -32,7 +32,7 @@ public abstract class AlexsMobsFlutterMixin {
         TameSpawnEvents.markFlutterStoredFromPot(tame);
     }
 
-    @Inject(method = "m_6071_", at = @At("RETURN"), remap = false)
+    @Inject(method = "m_6071_", at = @At("RETURN"), remap = false, require = 0)
     private void tl$markStoredOnPotStoreObf(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
         tl$markStoredOnPotStore(player, hand, cir);
     }

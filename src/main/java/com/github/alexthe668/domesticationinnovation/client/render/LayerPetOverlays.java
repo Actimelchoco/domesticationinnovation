@@ -260,14 +260,15 @@ public class LayerPetOverlays extends RenderLayer {
                     matrixStackIn.popPose();
                 }
             }
-            if (TameableUtils.hasEnchant(living, DIEnchantmentRegistry.BLAZING_PROTECTION)) {
-                int bars = TameableUtils.getBlazingProtectionBars(living);
+            int bars = TameableUtils.getBlazingProtectionBars(living);
+            int visibleBars = Math.max(bars, TameableUtils.getEnchantLevel(living, DIEnchantmentRegistry.BLAZING_PROTECTION));
+            if (visibleBars > 0) {
                 float f1 = realAge * 7;
-                float seperation = 360F / (TameableUtils.getEnchantLevel(living, DIEnchantmentRegistry.BLAZING_PROTECTION) * 2F);
+                float seperation = 360F / (Math.max(1, visibleBars) * 2F);
                 VertexConsumer vertexconsumer = bufferIn.getBuffer(ForgeRenderTypes.getUnlitTranslucent(BLAZE_TEXTURE));
                 matrixStackIn.pushPose();
                 matrixStackIn.mulPose(Axis.YN.rotationDegrees(f));
-                for (int i = 0; i < bars; i++) {
+                for (int i = 0; i < visibleBars; i++) {
                     f1 += seperation;
                     matrixStackIn.pushPose();
                     matrixStackIn.mulPose(Axis.YP.rotationDegrees(f1));

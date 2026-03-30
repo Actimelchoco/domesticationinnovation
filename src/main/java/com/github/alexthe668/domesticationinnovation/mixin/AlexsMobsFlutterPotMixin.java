@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "com.github.alexthe666.alexsmobs.item.ItemFlutterPot")
 public abstract class AlexsMobsFlutterPotMixin {
 
-    @Inject(method = "placeFish", at = @At("RETURN"), remap = false)
+    @Inject(method = "placeFish", at = @At("RETURN"), remap = false, require = 0)
     private void tl$registerReleasedFlutter(ServerLevel worldIn, ItemStack stack, BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
         if (!cir.getReturnValueZ()) {
             return;

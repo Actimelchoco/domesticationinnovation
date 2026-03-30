@@ -1270,6 +1270,11 @@ public class TameAbilityEvents {
             }
         }
 
+        int chainLightningLevel = attributeLevel(data, "chain_lightning");
+        if (chainLightningLevel > 0 && tame.level() instanceof ServerLevel serverLevel && isBaseAttackHit(tame, event) && !isFriendly(tame, target)) {
+            applyChainLightning(serverLevel, tame, data, target, event.getAmount(), chainLightningLevel);
+        }
+
         int stealLevel = attributeLevel(data, "positive_effect_steal");
         if (stealLevel > 0 && tame.getRandom().nextDouble() < Math.min(0.38D, 0.08D + 0.06D * stealLevel)) {
             stealPositiveEffect(target, tame);
@@ -1444,7 +1449,7 @@ public class TameAbilityEvents {
         }
         int maxChains = 1 + levelValue;
         double chainRadius = 4.0D + Math.max(0, levelValue - 1) * 0.25D;
-        float chainDamage = aoeDamage(attributeDamageFromLevelOneBase(2.0F + levelValue, 3.0F, data, 0.50F));
+        float chainDamage = aoeDamage(Math.max(1.0F, hitDamage * 0.33F));
         spawnChainLightningVisual(level, tame, firstTarget, maxChains, chainDamage);
 
         Set<Integer> hitIds = new HashSet<>();

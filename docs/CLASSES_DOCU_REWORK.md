@@ -189,12 +189,7 @@ It is the design source of truth for class-based reward weights that should be i
   - `guardian_beam x4.4`
   - `elder_guardian_beam x4.2`
   - `wither_skull x4.0`
-  - `evoker_fangs x3.6`
-  - `lightning_strike x3.6`
-  - `ghast_fireball x3.2`
-  - `shulker_bullet x4.0`
-  - `warden_scream x3.8`
-  - `shadow_hands x4.0`
+  - `evoker_fangs x3.6`The
 
 ### `SHOOTER`
 - category chances:

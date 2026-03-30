@@ -825,7 +825,7 @@ public class CommonProxy {
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");
                 } else if (TameableUtils.getImmuneCooldown(event.getEntity()) <= 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), Math.min(100, 5 + level * 5));
-                    TameableUtils.setImmuneCooldown(event.getEntity(), 200);
+                    TameableUtils.setImmuneCooldown(event.getEntity(), 500);
                     flag = true;
                     event.setCanceled(true);
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");
@@ -901,9 +901,9 @@ public class CommonProxy {
             int bubblingLevel = getDiEffectLevel(attacker, "bubbling");
             int vampireLevel = TameableUtils.getEnchantLevel(attacker, DIEnchantmentRegistry.VAMPIRE);
 
-            if (lightningLevel > 0) {
+            if (lightningLevel > 0 && !hasTlAttributeLevel(attacker, "chain_lightning")) {
                 if (!TameableUtils.shouldBlockOffensiveDiTarget(attacker, event.getEntity())) {
-                    spawnLegacyChainLightning(attacker, event.getEntity(), lightningLevel);
+                    spawnLegacyChainLightning(attacker, event.getEntity(), lightningLevel, event.getAmount());
                 }
             }
             int frostFangLevel = getDiEffectLevel(attacker, "frost_fang");
@@ -2012,6 +2012,14 @@ public class CommonProxy {
         return Math.max(abilityLevel, attributeLevel);
     }
 
+    private static boolean hasTlAttributeLevel(LivingEntity entity, String attributeId) {
+        if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || attributeId == null || attributeId.isBlank()) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        return data != null && LevelSystem.getAttributeLevel(data, attributeId) > 0;
+    }
+
     private static boolean shouldApplyLegacyFrostFang(LivingEntity attacker, int level) {
         if (attacker == null || level <= 0) {
             return false;
@@ -2023,7 +2031,7 @@ public class CommonProxy {
         return attacker.getRandom().nextDouble() < chance;
     }
 
-    private static void spawnLegacyChainLightning(LivingEntity attacker, LivingEntity target, int level) {
+    private static void spawnLegacyChainLightning(LivingEntity attacker, LivingEntity target, int level, float hitDamage) {
         if (attacker == null || target == null || level <= 0) {
             return;
         }
@@ -2038,9 +2046,10 @@ public class CommonProxy {
                 return;
             }
             lightning.setChainsLeft(1 + level);
-            lightning.setShockDamage(extensionChainLightningDamage(attacker, level));
+            lightning.setShockDamage(extensionChainLightningDamage(hitDamage));
         } else {
             lightning.setChainsLeft(3 + level * 3);
+            lightning.setShockDamage(extensionChainLightningDamage(hitDamage));
         }
         lightning.setCreatorEntityID(attacker.getId());
         lightning.setFromEntityID(attacker.getId());
@@ -2051,15 +2060,8 @@ public class CommonProxy {
         debugDiAbilityUse(attacker, "chain_lightning");
     }
 
-    private static float extensionChainLightningDamage(LivingEntity attacker, int level) {
-        double bonusDamage = 0.0D;
-        if (attacker instanceof TamableAnimal tame && tame.isTame()) {
-            TameData data = TameRegistry.get(tame.getUUID());
-            if (data != null) {
-                bonusDamage = Math.max(0.0D, data.bonusDamage);
-            }
-        }
-        return (float) Math.max(1.0D, (2.0D + level) + (3.0D * 0.05D * 0.50D * bonusDamage));
+    private static float extensionChainLightningDamage(float hitDamage) {
+        return Math.max(1.0F, hitDamage * 0.33F);
     }
 
     private static double magneticPullStrength(int level, boolean onGround) {
