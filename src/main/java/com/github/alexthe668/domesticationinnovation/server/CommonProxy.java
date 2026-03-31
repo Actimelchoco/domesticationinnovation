@@ -668,7 +668,7 @@ public class CommonProxy {
                     }
                     time--;
                     if (time == 0) {
-                        time = -600 - event.getEntity().getRandom().nextInt(600);
+                        time = -400 - event.getEntity().getRandom().nextInt(601);
                     }
                 } else if (time < 0) {
                     time++;

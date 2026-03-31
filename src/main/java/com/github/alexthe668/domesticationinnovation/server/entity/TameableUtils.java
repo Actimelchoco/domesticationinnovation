@@ -93,6 +93,7 @@ public class TameableUtils {
         visualFakeEnchants.put("magnetic", DIEnchantmentRegistry.MAGNETIC);
         visualFakeEnchants.put("immunity_frame", DIEnchantmentRegistry.IMMUNITY_FRAME);
         visualFakeEnchants.put("health_siphon", DIEnchantmentRegistry.HEALTH_SIPHON);
+        visualFakeEnchants.put("healing_aura", DIEnchantmentRegistry.HEALING_AURA);
         visualFakeEnchants.put("void_cloud", DIEnchantmentRegistry.VOID_CLOUD);
         visualFakeEnchants.put("blazing_protection", DIEnchantmentRegistry.BLAZING_PROTECTION);
         visualFakeEnchants.put("shadow_hands", DIEnchantmentRegistry.SHADOW_HANDS);
