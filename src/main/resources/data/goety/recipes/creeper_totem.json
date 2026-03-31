@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "T T",
+    " X ",
+    "T T"
+  ],
+  "key": {
+    "T": {
+      "item": "minecraft:tnt"
+    },
+    "X": {
+      "item": "minecraft:stone"
+    }
+  },
+  "result": {
+    "item": "goety:creeper_totem"
+  }
+}

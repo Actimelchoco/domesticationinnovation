@@ -255,8 +255,6 @@ public class TameAbilityEvents {
             TameData targetData = TameRegistry.get(targetTame.getUUID());
             if (targetData == null) return;
 
-            applyBrokenDragonflyHealthDamageScaling(targetTame, targetData, event);
-
             if (!targetTame.isOrderedToSit() && !INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
                 TamePerformanceProfiler.run("feature.ally_support_responses", () -> handleAllyTameSupportResponses(targetTame, targetData, event));
             }
@@ -273,22 +271,6 @@ public class TameAbilityEvents {
             System.err.println("[TamesLevel] onHurt error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
         }
-    }
-
-    private static void applyBrokenDragonflyHealthDamageScaling(TamableAnimal tame, TameData data, LivingHurtEvent event) {
-        if (event.getAmount() <= 0.0F || tame == null || data == null || data.type == null) {
-            return;
-        }
-        if (!"crittersandcompanions:dragonfly".equals(data.type)) {
-            return;
-        }
-        double actualHpPool = Math.max(1.0D, tame.getMaxHealth());
-        double intendedHpPool = Math.max(1.0D, 4.0D + data.bonusHealth);
-        if (actualHpPool <= intendedHpPool + 0.01D) {
-            return;
-        }
-        double scale = actualHpPool / intendedHpPool;
-        event.setAmount((float) (event.getAmount() * scale));
     }
 
     @SubscribeEvent

@@ -714,7 +714,7 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player"),
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
-                        .then(Commands.literal("legacyduel")
+                        .then(Commands.literal("duelOld")
                                 .then(Commands.literal("vs")
                                         .then(Commands.literal("group")
                                                 .then(Commands.argument("left", StringArgumentType.word())
@@ -2564,7 +2564,11 @@ public class TameCommands {
                     if (recoverResult.entity != null) {
                         if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot.", ChatFormatting.YELLOW);
                     } else {
-                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Snapshot rebuild failed: " + recoverResult.error, ChatFormatting.RED);
+                        String message = "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Snapshot rebuild failed: " + recoverResult.error;
+                        if ("stored type is not tamable".equalsIgnoreCase(recoverResult.error)) {
+                            message = "Horses cannot be teleported.";
+                        }
+                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                     }
                 } else {
                     if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait.", ChatFormatting.RED);
@@ -8841,19 +8845,14 @@ public class TameCommands {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
 
-        LevelSystem.updateTameName(recovered, data);
-        recovered.setHealth(recovered.getMaxHealth());
+        boolean normalized = applyTypeBasePlusBonus(recovered, data);
+        if (!normalized) {
+            LevelSystem.updateTameName(recovered, data);
+            recovered.setHealth(recovered.getMaxHealth());
+        }
+        finalizeRespawnState(recovered, data);
 
         data.ownerUUID = p.getUUID();
-        data.lastKnownDimension = level.dimension().location().toString();
-        data.lastKnownX = recovered.blockPosition().getX();
-        data.lastKnownY = recovered.blockPosition().getY();
-        data.lastKnownZ = recovered.blockPosition().getZ();
-        data.lastKnownGameTime = level.getGameTime();
-        CompoundTag refreshedSnapshot = new CompoundTag();
-        recovered.save(refreshedSnapshot);
-        data.entitySnapshot = refreshedSnapshot;
-
         TameRegistry.markDirty();
         return RecoverResult.ok(recovered);
     }
@@ -8902,22 +8901,14 @@ public class TameCommands {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
 
-        LevelSystem.reapplyTypeBasePlusBonuses(recovered, data);
-        recovered.setHealth(recovered.getMaxHealth());
-        recovered.setTarget(null);
-        recovered.getNavigation().stop();
+        boolean normalized = applyTypeBasePlusBonus(recovered, data);
+        if (!normalized) {
+            LevelSystem.updateTameName(recovered, data);
+            recovered.setHealth(recovered.getMaxHealth());
+        }
+        finalizeRespawnState(recovered, data);
 
         data.ownerUUID = owner.getUUID();
-        data.lastKnownDimension = target.level.dimension().location().toString();
-        data.lastKnownX = recovered.blockPosition().getX();
-        data.lastKnownY = recovered.blockPosition().getY();
-        data.lastKnownZ = recovered.blockPosition().getZ();
-        data.lastKnownGameTime = target.level.getGameTime();
-        CompoundTag refreshedSnapshot = new CompoundTag();
-        TameRegistry.bindEntityToData(recovered, data);
-        recovered.save(refreshedSnapshot);
-        data.entitySnapshot = refreshedSnapshot;
-
         TameRegistry.markDirty();
         return RecoverResult.ok(recovered);
     }
