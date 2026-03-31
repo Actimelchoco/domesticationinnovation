@@ -1155,7 +1155,7 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
-                                .then(Commands.literal("duelteam")
+                                .then(Commands.literal("legacyduelteam")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
@@ -4767,10 +4767,9 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) continue;
             rightIds.add(tame.getUUID());
         }
-        Set<UUID> overlap = new HashSet<>(leftIds);
-        overlap.retainAll(rightIds);
-        if (!overlap.isEmpty()) {
-            return error(owner, "Selections overlap. Choose distinct teams.");
+        if (!leftIds.isEmpty()) {
+            rightGroup.removeIf(tame -> tame != null && leftIds.contains(tame.getUUID()));
+            rightIds.removeIf(leftIds::contains);
         }
         if (leftIds.isEmpty() || rightIds.isEmpty()) {
             return error(owner, "Selection resolved to an empty team.");
@@ -4827,10 +4826,13 @@ public class TameCommands {
 
         Set<UUID> leftIds = collectLivingEntityIds(leftResult.members);
         Set<UUID> rightIds = collectLivingEntityIds(rightResult.members);
-        Set<UUID> overlap = new HashSet<>(leftIds);
-        overlap.retainAll(rightIds);
-        if (!overlap.isEmpty()) {
-            return error(owner, "Selections overlap. Choose distinct teams.");
+        if (!leftIds.isEmpty()) {
+            rightResult.members.removeIf(member -> member != null && leftIds.contains(member.getUUID()));
+            rightResult.tames.removeIf(tame -> tame != null && leftIds.contains(tame.getUUID()));
+            rightIds.removeIf(leftIds::contains);
+        }
+        if (rightIds.isEmpty()) {
+            return error(owner, "Right duel team has no loaded/alive members after removing overlaps.");
         }
 
         prepareTeamForDuel(leftResult.tames);
@@ -15213,10 +15215,13 @@ public class TameCommands {
 
         Set<UUID> leftIds = collectLivingEntityIds(leftResult.members);
         Set<UUID> rightIds = collectLivingEntityIds(rightResult.members);
-        Set<UUID> overlap = new HashSet<>(leftIds);
-        overlap.retainAll(rightIds);
-        if (!overlap.isEmpty()) {
-            return error(owner, "Selections overlap. Choose distinct teams.");
+        if (!leftIds.isEmpty()) {
+            rightResult.members.removeIf(member -> member != null && leftIds.contains(member.getUUID()));
+            rightResult.tames.removeIf(tame -> tame != null && leftIds.contains(tame.getUUID()));
+            rightIds.removeIf(leftIds::contains);
+        }
+        if (rightIds.isEmpty()) {
+            return error(owner, "Right duel team has no loaded/alive members after removing overlaps.");
         }
 
         prepareTeamForDuel(leftResult.tames);
@@ -15346,10 +15351,13 @@ public class TameCommands {
         }
         Set<UUID> leftIds = collectLivingEntityIds(sideAMembers);
         Set<UUID> rightIds = collectLivingEntityIds(sideBMembers);
-        Set<UUID> overlap = new HashSet<>(leftIds);
-        overlap.retainAll(rightIds);
-        if (!overlap.isEmpty()) {
-            return error(source.getPlayer(), "Pending duel selections overlap.");
+        if (!leftIds.isEmpty()) {
+            sideBMembers.removeIf(member -> member != null && leftIds.contains(member.getUUID()));
+            sideBTames.removeIf(tame -> tame != null && leftIds.contains(tame.getUUID()));
+            rightIds.removeIf(leftIds::contains);
+        }
+        if (rightIds.isEmpty()) {
+            return error(source.getPlayer(), "Pending duel cannot start with an empty side after removing overlaps.");
         }
         prepareTeamForDuel(sideATames);
         prepareTeamForDuel(sideBTames);
@@ -16285,6 +16293,16 @@ public class TameCommands {
         if (lower.startsWith("type ")) {
             SuggestionsBuilder typeBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.indexOf(' ') + 1);
             suggestOwnedTypes(source, typeBuilder);
+            return;
+        }
+        if (lower.equals("group")) {
+            SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
+            tailBuilder.suggest(" ");
+            return;
+        }
+        if (lower.equals("type")) {
+            SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
+            tailBuilder.suggest(" ");
             return;
         }
 
