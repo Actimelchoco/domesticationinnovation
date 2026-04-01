@@ -16286,12 +16286,32 @@ public class TameCommands {
             suggestOwnedTypes(source, typeBuilder);
             return;
         }
+        if (lower.startsWith("name ")) {
+            SuggestionsBuilder nameBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.indexOf(' ') + 1);
+            suggestOwnedPetNamesAll(source, nameBuilder);
+            return;
+        }
+        if (lower.startsWith("state ")) {
+            SuggestionsBuilder stateBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.indexOf(' ') + 1);
+            suggestMovementStates(stateBuilder);
+            return;
+        }
         if (lower.equals("group")) {
             SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
             tailBuilder.suggest(" ");
             return;
         }
         if (lower.equals("type")) {
+            SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
+            tailBuilder.suggest(" ");
+            return;
+        }
+        if (lower.equals("name")) {
+            SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
+            tailBuilder.suggest(" ");
+            return;
+        }
+        if (lower.equals("state")) {
             SuggestionsBuilder tailBuilder = termBuilder.createOffset(termBuilder.getStart() + trimmedTerm.length());
             tailBuilder.suggest(" ");
             return;
@@ -16310,7 +16330,12 @@ public class TameCommands {
     private static void suggestCompactDuelBaseTerms(CommandSourceStack source, ServerPlayer owner, SuggestionsBuilder builder) {
         suggestCommandString(builder, "group");
         suggestCommandString(builder, "type");
+        suggestCommandString(builder, "name");
+        suggestCommandString(builder, "state");
         suggestCommandString(builder, "all");
+        suggestCommandString(builder, "follow");
+        suggestCommandString(builder, "sit");
+        suggestCommandString(builder, "wander");
         suggestCommandString(builder, owner.getGameProfile().getName());
         suggestOwnedPetNamesAll(source, builder);
         for (ServerPlayer other : source.getServer().getPlayerList().getPlayers()) {

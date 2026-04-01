@@ -1,0 +1,1994 @@
+Compiled from "TheChaosOnEntityTickUpdateProcedure.java"
+public class net.mcreator.armageddonmod.procedures.TheChaosOnEntityTickUpdateProcedure {
+  public net.mcreator.armageddonmod.procedures.TheChaosOnEntityTickUpdateProcedure();
+    Code:
+       0: aload_0
+       1: invokespecial #49                 // Method java/lang/Object."<init>":()V
+       4: return
+
+  public static void execute(net.minecraft.world.level.LevelAccessor, double, double, double, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload         7
+       2: ifnonnull     6
+       5: return
+       6: aload         7
+       8: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+      11: ldc           #61                 // String son
+      13: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+      16: ldc2_w        #68                 // double 33.0d
+      19: dcmpg
+      20: ifge          48
+      23: aload         7
+      25: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+      28: ldc           #61                 // String son
+      30: aload         7
+      32: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+      35: ldc           #61                 // String son
+      37: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+      40: dconst_1
+      41: dadd
+      42: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+      45: goto          182
+      48: aload_0
+      49: instanceof    #75                 // class net/minecraft/world/level/Level
+      52: ifeq          171
+      55: aload_0
+      56: checkcast     #75                 // class net/minecraft/world/level/Level
+      59: astore        8
+      61: aload         8
+      63: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      66: ifne          123
+      69: aload         8
+      71: aconst_null
+      72: aload         7
+      74: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      77: aload         7
+      79: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      82: aload         7
+      84: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      87: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      90: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      93: new           #103                // class net/minecraft/resources/ResourceLocation
+      96: dup
+      97: ldc           #105                // String armageddon_mod:thechaosflying
+      99: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     102: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     107: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     110: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     113: ldc           #123                // float 0.3f
+     115: ldc           #124                // float 1.6f
+     117: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+     120: goto          171
+     123: aload         8
+     125: aload         7
+     127: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     130: aload         7
+     132: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     135: aload         7
+     137: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     140: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+     143: new           #103                // class net/minecraft/resources/ResourceLocation
+     146: dup
+     147: ldc           #105                // String armageddon_mod:thechaosflying
+     149: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     152: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     157: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     160: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     163: ldc           #123                // float 0.3f
+     165: ldc           #124                // float 1.6f
+     167: iconst_0
+     168: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     171: aload         7
+     173: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     176: ldc           #61                 // String son
+     178: dconst_0
+     179: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+     182: aload         7
+     184: new           #134                // class net/minecraft/world/phys/Vec3
+     187: dup
+     188: aload         7
+     190: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     193: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     196: ldc2_w        #143                // double 0.15d
+     199: dmul
+     200: aload         7
+     202: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     205: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     208: ldc2_w        #143                // double 0.15d
+     211: dmul
+     212: aload         7
+     214: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     217: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     220: ldc2_w        #143                // double 0.15d
+     223: dmul
+     224: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     227: invokevirtual #157                // Method net/minecraft/world/entity/Entity.m_20256_:(Lnet/minecraft/world/phys/Vec3;)V
+     230: aload_0
+     231: aload         7
+     233: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     236: aload         7
+     238: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     241: ldc2_w        #158                // double 6.0d
+     244: dsub
+     245: aload         7
+     247: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     250: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     253: invokeinterface #165,  2          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_8055_:(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;
+     258: invokevirtual #170                // Method net/minecraft/world/level/block/state/BlockState.m_60815_:()Z
+     261: ifeq          304
+     264: aload         7
+     266: new           #134                // class net/minecraft/world/phys/Vec3
+     269: dup
+     270: aload         7
+     272: invokevirtual #173                // Method net/minecraft/world/entity/Entity.m_20184_:()Lnet/minecraft/world/phys/Vec3;
+     275: invokevirtual #176                // Method net/minecraft/world/phys/Vec3.m_7096_:()D
+     278: aload         7
+     280: invokevirtual #173                // Method net/minecraft/world/entity/Entity.m_20184_:()Lnet/minecraft/world/phys/Vec3;
+     283: invokevirtual #179                // Method net/minecraft/world/phys/Vec3.m_7098_:()D
+     286: ldc2_w        #180                // double 0.5d
+     289: dadd
+     290: aload         7
+     292: invokevirtual #173                // Method net/minecraft/world/entity/Entity.m_20184_:()Lnet/minecraft/world/phys/Vec3;
+     295: invokevirtual #184                // Method net/minecraft/world/phys/Vec3.m_7094_:()D
+     298: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     301: invokevirtual #157                // Method net/minecraft/world/entity/Entity.m_20256_:(Lnet/minecraft/world/phys/Vec3;)V
+     304: aload         7
+     306: instanceof    #186                // class net/minecraft/world/entity/Mob
+     309: ifeq          327
+     312: aload         7
+     314: checkcast     #186                // class net/minecraft/world/entity/Mob
+     317: astore        8
+     319: aload         8
+     321: invokevirtual #190                // Method net/minecraft/world/entity/Mob.m_5448_:()Lnet/minecraft/world/entity/LivingEntity;
+     324: goto          328
+     327: aconst_null
+     328: ifnonnull     342
+     331: aload         7
+     333: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     336: ldc           #192                // String IA
+     338: dconst_0
+     339: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+     342: aload         7
+     344: instanceof    #186                // class net/minecraft/world/entity/Mob
+     347: ifeq          365
+     350: aload         7
+     352: checkcast     #186                // class net/minecraft/world/entity/Mob
+     355: astore        8
+     357: aload         8
+     359: invokevirtual #190                // Method net/minecraft/world/entity/Mob.m_5448_:()Lnet/minecraft/world/entity/LivingEntity;
+     362: goto          366
+     365: aconst_null
+     366: ifnull        413
+     369: aload         7
+     371: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     374: ldc           #192                // String IA
+     376: aload         7
+     378: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     381: ldc           #192                // String IA
+     383: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+     386: dconst_1
+     387: dadd
+     388: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+     391: aload         7
+     393: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     396: ldc           #194                // String TargetCooldown
+     398: aload         7
+     400: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     403: ldc           #194                // String TargetCooldown
+     405: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+     408: dconst_1
+     409: dadd
+     410: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+     413: aload         7
+     415: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+     418: ifeq          436
+     421: aload         7
+     423: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+     426: astore        8
+     428: aload         8
+     430: invokevirtual #200                // Method net/minecraft/world/entity/LivingEntity.m_21223_:()F
+     433: goto          438
+     436: ldc           #201                // float -1.0f
+     438: fconst_0
+     439: fcmpg
+     440: ifgt          472
+     443: aload         7
+     445: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     448: ifeq          461
+     451: aload         7
+     453: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     456: ldc           #205                // String empty
+     458: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+     461: aload         7
+     463: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     466: ldc           #192                // String IA
+     468: dconst_0
+     469: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+     472: aload         7
+     474: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     477: ldc           #192                // String IA
+     479: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+     482: ldc2_w        #209                // double 150.0d
+     485: dcmpl
+     486: ifne          670
+     489: aload         7
+     491: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+     494: ifeq          537
+     497: aload         7
+     499: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+     502: astore        8
+     504: aload         8
+     506: invokevirtual #214                // Method net/minecraft/world/entity/LivingEntity.m_9236_:()Lnet/minecraft/world/level/Level;
+     509: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+     512: ifne          537
+     515: aload         8
+     517: new           #216                // class net/minecraft/world/effect/MobEffectInstance
+     520: dup
+     521: getstatic     #222                // Field net/minecraft/world/effect/MobEffects.f_19597_:Lnet/minecraft/world/effect/MobEffect;
+     524: bipush        70
+     526: bipush        10
+     528: iconst_1
+     529: iconst_0
+     530: invokespecial #225                // Method net/minecraft/world/effect/MobEffectInstance."<init>":(Lnet/minecraft/world/effect/MobEffect;IIZZ)V
+     533: invokevirtual #229                // Method net/minecraft/world/entity/LivingEntity.m_7292_:(Lnet/minecraft/world/effect/MobEffectInstance;)Z
+     536: pop
+     537: aload         7
+     539: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     542: ifeq          555
+     545: aload         7
+     547: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     550: ldc           #231                // String animation.the_chaos.attack1
+     552: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+     555: aload_0
+     556: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     559: ifeq          606
+     562: aload_0
+     563: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     566: astore        8
+     568: aload         8
+     570: getstatic     #239                // Field net/minecraft/core/particles/ParticleTypes.f_123784_:Lnet/minecraft/core/particles/SimpleParticleType;
+     573: aload         7
+     575: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     578: aload         7
+     580: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     583: aload         7
+     585: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     588: bipush        20
+     590: ldc2_w        #240                // double 2.0d
+     593: ldc2_w        #240                // double 2.0d
+     596: ldc2_w        #240                // double 2.0d
+     599: ldc2_w        #180                // double 0.5d
+     602: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+     605: pop
+     606: aload_0
+     607: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     610: ifeq          657
+     613: aload_0
+     614: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     617: astore        8
+     619: aload         8
+     621: getstatic     #248                // Field net/minecraft/core/particles/ParticleTypes.f_123744_:Lnet/minecraft/core/particles/SimpleParticleType;
+     624: aload         7
+     626: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     629: aload         7
+     631: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     634: aload         7
+     636: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     639: bipush        20
+     641: ldc2_w        #240                // double 2.0d
+     644: ldc2_w        #240                // double 2.0d
+     647: ldc2_w        #240                // double 2.0d
+     650: ldc2_w        #180                // double 0.5d
+     653: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+     656: pop
+     657: bipush        25
+     659: aload_0
+     660: aload         7
+     662: invokedynamic #265,  0            // InvokeDynamic #0:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     667: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     670: aload         7
+     672: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     675: ldc           #192                // String IA
+     677: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+     680: ldc2_w        #272                // double 350.0d
+     683: dcmpl
+     684: ifne          793
+     687: aload         7
+     689: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+     692: ifeq          735
+     695: aload         7
+     697: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+     700: astore        8
+     702: aload         8
+     704: invokevirtual #214                // Method net/minecraft/world/entity/LivingEntity.m_9236_:()Lnet/minecraft/world/level/Level;
+     707: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+     710: ifne          735
+     713: aload         8
+     715: new           #216                // class net/minecraft/world/effect/MobEffectInstance
+     718: dup
+     719: getstatic     #222                // Field net/minecraft/world/effect/MobEffects.f_19597_:Lnet/minecraft/world/effect/MobEffect;
+     722: bipush        40
+     724: bipush        10
+     726: iconst_1
+     727: iconst_0
+     728: invokespecial #225                // Method net/minecraft/world/effect/MobEffectInstance."<init>":(Lnet/minecraft/world/effect/MobEffect;IIZZ)V
+     731: invokevirtual #229                // Method net/minecraft/world/entity/LivingEntity.m_7292_:(Lnet/minecraft/world/effect/MobEffectInstance;)Z
+     734: pop
+     735: aload         7
+     737: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     740: ifeq          754
+     743: aload         7
+     745: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     748: ldc_w         #275                // String animation.the_chaos.attack2
+     751: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+     754: bipush        12
+     756: aload_0
+     757: aload         7
+     759: invokedynamic #280,  0            // InvokeDynamic #1:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     764: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     767: bipush        22
+     769: aload_0
+     770: aload         7
+     772: invokedynamic #285,  0            // InvokeDynamic #2:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     777: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     780: bipush        32
+     782: aload_0
+     783: aload         7
+     785: invokedynamic #290,  0            // InvokeDynamic #3:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     790: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     793: aload         7
+     795: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     798: ldc           #192                // String IA
+     800: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+     803: ldc2_w        #291                // double 550.0d
+     806: dcmpl
+     807: ifne          992
+     810: aload         7
+     812: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+     815: ifeq          858
+     818: aload         7
+     820: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+     823: astore        8
+     825: aload         8
+     827: invokevirtual #214                // Method net/minecraft/world/entity/LivingEntity.m_9236_:()Lnet/minecraft/world/level/Level;
+     830: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+     833: ifne          858
+     836: aload         8
+     838: new           #216                // class net/minecraft/world/effect/MobEffectInstance
+     841: dup
+     842: getstatic     #222                // Field net/minecraft/world/effect/MobEffects.f_19597_:Lnet/minecraft/world/effect/MobEffect;
+     845: bipush        70
+     847: bipush        10
+     849: iconst_1
+     850: iconst_0
+     851: invokespecial #225                // Method net/minecraft/world/effect/MobEffectInstance."<init>":(Lnet/minecraft/world/effect/MobEffect;IIZZ)V
+     854: invokevirtual #229                // Method net/minecraft/world/entity/LivingEntity.m_7292_:(Lnet/minecraft/world/effect/MobEffectInstance;)Z
+     857: pop
+     858: aload         7
+     860: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     863: ifeq          877
+     866: aload         7
+     868: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+     871: ldc_w         #294                // String animation.the_chaos.attack3
+     874: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+     877: aload_0
+     878: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     881: ifeq          928
+     884: aload_0
+     885: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     888: astore        8
+     890: aload         8
+     892: getstatic     #297                // Field net/minecraft/core/particles/ParticleTypes.f_175830_:Lnet/minecraft/core/particles/SimpleParticleType;
+     895: aload         7
+     897: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     900: aload         7
+     902: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     905: aload         7
+     907: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     910: bipush        20
+     912: ldc2_w        #240                // double 2.0d
+     915: ldc2_w        #240                // double 2.0d
+     918: ldc2_w        #240                // double 2.0d
+     921: ldc2_w        #180                // double 0.5d
+     924: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+     927: pop
+     928: aload_0
+     929: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     932: ifeq          979
+     935: aload_0
+     936: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     939: astore        8
+     941: aload         8
+     943: getstatic     #248                // Field net/minecraft/core/particles/ParticleTypes.f_123744_:Lnet/minecraft/core/particles/SimpleParticleType;
+     946: aload         7
+     948: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     951: aload         7
+     953: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     956: aload         7
+     958: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     961: bipush        20
+     963: ldc2_w        #240                // double 2.0d
+     966: ldc2_w        #240                // double 2.0d
+     969: ldc2_w        #240                // double 2.0d
+     972: ldc2_w        #180                // double 0.5d
+     975: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+     978: pop
+     979: bipush        10
+     981: aload_0
+     982: aload         7
+     984: invokedynamic #302,  0            // InvokeDynamic #4:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     989: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     992: aload         7
+     994: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+     997: ldc           #192                // String IA
+     999: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+    1002: ldc2_w        #303                // double 750.0d
+    1005: dcmpl
+    1006: ifne          1242
+    1009: aload         7
+    1011: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+    1014: ifeq          1057
+    1017: aload         7
+    1019: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+    1022: astore        8
+    1024: aload         8
+    1026: invokevirtual #214                // Method net/minecraft/world/entity/LivingEntity.m_9236_:()Lnet/minecraft/world/level/Level;
+    1029: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+    1032: ifne          1057
+    1035: aload         8
+    1037: new           #216                // class net/minecraft/world/effect/MobEffectInstance
+    1040: dup
+    1041: getstatic     #222                // Field net/minecraft/world/effect/MobEffects.f_19597_:Lnet/minecraft/world/effect/MobEffect;
+    1044: bipush        70
+    1046: bipush        10
+    1048: iconst_1
+    1049: iconst_0
+    1050: invokespecial #225                // Method net/minecraft/world/effect/MobEffectInstance."<init>":(Lnet/minecraft/world/effect/MobEffect;IIZZ)V
+    1053: invokevirtual #229                // Method net/minecraft/world/entity/LivingEntity.m_7292_:(Lnet/minecraft/world/effect/MobEffectInstance;)Z
+    1056: pop
+    1057: aload         7
+    1059: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+    1062: ifeq          1076
+    1065: aload         7
+    1067: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+    1070: ldc_w         #306                // String animation.the_chaos.attack4
+    1073: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+    1076: aload_0
+    1077: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+    1080: ifeq          1127
+    1083: aload_0
+    1084: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+    1087: astore        8
+    1089: aload         8
+    1091: getstatic     #239                // Field net/minecraft/core/particles/ParticleTypes.f_123784_:Lnet/minecraft/core/particles/SimpleParticleType;
+    1094: aload         7
+    1096: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+    1099: aload         7
+    1101: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+    1104: aload         7
+    1106: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+    1109: bipush        20
+    1111: ldc2_w        #240                // double 2.0d
+    1114: ldc2_w        #240                // double 2.0d
+    1117: ldc2_w        #240                // double 2.0d
+    1120: ldc2_w        #180                // double 0.5d
+    1123: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+    1126: pop
+    1127: aload_0
+    1128: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+    1131: ifeq          1178
+    1134: aload_0
+    1135: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+    1138: astore        8
+    1140: aload         8
+    1142: getstatic     #309                // Field net/minecraft/core/particles/ParticleTypes.f_123806_:Lnet/minecraft/core/particles/SimpleParticleType;
+    1145: aload         7
+    1147: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+    1150: aload         7
+    1152: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+    1155: aload         7
+    1157: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+    1160: bipush        20
+    1162: ldc2_w        #240                // double 2.0d
+    1165: ldc2_w        #240                // double 2.0d
+    1168: ldc2_w        #240                // double 2.0d
+    1171: ldc2_w        #180                // double 0.5d
+    1174: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+    1177: pop
+    1178: aload_0
+    1179: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+    1182: ifeq          1229
+    1185: aload_0
+    1186: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+    1189: astore        8
+    1191: aload         8
+    1193: getstatic     #248                // Field net/minecraft/core/particles/ParticleTypes.f_123744_:Lnet/minecraft/core/particles/SimpleParticleType;
+    1196: aload         7
+    1198: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+    1201: aload         7
+    1203: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+    1206: aload         7
+    1208: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+    1211: bipush        20
+    1213: ldc2_w        #240                // double 2.0d
+    1216: ldc2_w        #240                // double 2.0d
+    1219: ldc2_w        #240                // double 2.0d
+    1222: ldc2_w        #180                // double 0.5d
+    1225: invokevirtual #245                // Method net/minecraft/server/level/ServerLevel.m_8767_:(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I
+    1228: pop
+    1229: bipush        20
+    1231: aload         7
+    1233: aload_0
+    1234: invokedynamic #317,  0            // InvokeDynamic #5:run:(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/LevelAccessor;)Ljava/lang/Runnable;
+    1239: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+    1242: aload         7
+    1244: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+    1247: ldc           #192                // String IA
+    1249: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+    1252: ldc2_w        #318                // double 900.0d
+    1255: dcmpl
+    1256: ifne          1377
+    1259: aload         7
+    1261: instanceof    #196                // class net/minecraft/world/entity/LivingEntity
+    1264: ifeq          1307
+    1267: aload         7
+    1269: checkcast     #196                // class net/minecraft/world/entity/LivingEntity
+    1272: astore        8
+    1274: aload         8
+    1276: invokevirtual #214                // Method net/minecraft/world/entity/LivingEntity.m_9236_:()Lnet/minecraft/world/level/Level;
+    1279: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+    1282: ifne          1307
+    1285: aload         8
+    1287: new           #216                // class net/minecraft/world/effect/MobEffectInstance
+    1290: dup
+    1291: getstatic     #222                // Field net/minecraft/world/effect/MobEffects.f_19597_:Lnet/minecraft/world/effect/MobEffect;
+    1294: bipush        40
+    1296: bipush        10
+    1298: iconst_1
+    1299: iconst_0
+    1300: invokespecial #225                // Method net/minecraft/world/effect/MobEffectInstance."<init>":(Lnet/minecraft/world/effect/MobEffect;IIZZ)V
+    1303: invokevirtual #229                // Method net/minecraft/world/entity/LivingEntity.m_7292_:(Lnet/minecraft/world/effect/MobEffectInstance;)Z
+    1306: pop
+    1307: aload         7
+    1309: instanceof    #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+    1312: ifeq          1326
+    1315: aload         7
+    1317: checkcast     #203                // class net/mcreator/armageddonmod/entity/TheChaosEntity
+    1320: ldc_w         #275                // String animation.the_chaos.attack2
+    1323: invokevirtual #208                // Method net/mcreator/armageddonmod/entity/TheChaosEntity.setAnimation:(Ljava/lang/String;)V
+    1326: bipush        12
+    1328: aload_0
+    1329: aload         7
+    1331: dload_1
+    1332: dload_3
+    1333: dload         5
+    1335: invokedynamic #327,  0            // InvokeDynamic #6:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;DDD)Ljava/lang/Runnable;
+    1340: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+    1343: bipush        22
+    1345: aload_0
+    1346: aload         7
+    1348: dload_1
+    1349: dload_3
+    1350: dload         5
+    1352: invokedynamic #332,  0            // InvokeDynamic #7:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;DDD)Ljava/lang/Runnable;
+    1357: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+    1360: bipush        32
+    1362: aload_0
+    1363: aload         7
+    1365: dload_1
+    1366: dload_3
+    1367: dload         5
+    1369: invokedynamic #337,  0            // InvokeDynamic #8:run:(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;DDD)Ljava/lang/Runnable;
+    1374: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+    1377: aload         7
+    1379: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+    1382: ldc           #192                // String IA
+    1384: invokevirtual #67                 // Method net/minecraft/nbt/CompoundTag.m_128459_:(Ljava/lang/String;)D
+    1387: ldc2_w        #338                // double 1050.0d
+    1390: dcmpl
+    1391: iflt          1405
+    1394: aload         7
+    1396: invokevirtual #59                 // Method net/minecraft/world/entity/Entity.getPersistentData:()Lnet/minecraft/nbt/CompoundTag;
+    1399: ldc           #192                // String IA
+    1401: dconst_0
+    1402: invokevirtual #73                 // Method net/minecraft/nbt/CompoundTag.m_128347_:(Ljava/lang/String;D)V
+    1405: return
+
+  private static void lambda$execute$26(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity, double, double, double);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          139
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore        8
+      13: aload         8
+      15: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      18: ifne          83
+      21: aload         8
+      23: aconst_null
+      24: aload_1
+      25: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      28: aload_1
+      29: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      32: aload_1
+      33: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      36: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      39: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      42: new           #103                // class net/minecraft/resources/ResourceLocation
+      45: dup
+      46: ldc_w         #356                // String entity.wither.shoot
+      49: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      52: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      57: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      60: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      63: fconst_1
+      64: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      67: ldc2_w        #363                // double 0.8d
+      70: ldc2_w        #365                // double 1.2d
+      73: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      76: d2f
+      77: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      80: goto          139
+      83: aload         8
+      85: aload_1
+      86: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      89: aload_1
+      90: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      93: aload_1
+      94: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      97: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+     100: new           #103                // class net/minecraft/resources/ResourceLocation
+     103: dup
+     104: ldc_w         #356                // String entity.wither.shoot
+     107: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     110: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     115: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     118: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     121: fconst_1
+     122: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     125: ldc2_w        #363                // double 0.8d
+     128: ldc2_w        #365                // double 1.2d
+     131: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     134: d2f
+     135: iconst_0
+     136: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     139: aload_0
+     140: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     143: new           #134                // class net/minecraft/world/phys/Vec3
+     146: dup
+     147: aload_1
+     148: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     151: aload_1
+     152: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     155: aload_1
+     156: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     159: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     162: ldc2_w        #375                // double 16.0d
+     165: ldc2_w        #375                // double 16.0d
+     168: ldc2_w        #375                // double 16.0d
+     171: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     174: invokedynamic #394,  0            // InvokeDynamic #9:test:()Ljava/util/function/Predicate;
+     179: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     184: invokeinterface #403,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+     189: ifne          519
+     192: aload_0
+     193: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     196: ifeq          519
+     199: aload_0
+     200: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     203: astore        8
+     205: new           #35                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$12
+     208: dup
+     209: invokespecial #404                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$12."<init>":()V
+     212: aload         8
+     214: aload_1
+     215: aload_1
+     216: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     219: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     222: ldc2_w        #405                // double 10.0d
+     225: ddiv
+     226: aload_1
+     227: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     230: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     233: ldc2_w        #405                // double 10.0d
+     236: ddiv
+     237: aload_1
+     238: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     241: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     244: ldc2_w        #405                // double 10.0d
+     247: ddiv
+     248: invokevirtual #410                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$12.getFireball:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;DDD)Lnet/minecraft/world/entity/projectile/Projectile;
+     251: astore        9
+     253: aload         9
+     255: aload_1
+     256: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     259: aload_1
+     260: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     263: aload_1
+     264: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     267: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     270: aload         9
+     272: aload_0
+     273: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     276: new           #134                // class net/minecraft/world/phys/Vec3
+     279: dup
+     280: dload_2
+     281: dload         4
+     283: dload         6
+     285: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     288: ldc2_w        #375                // double 16.0d
+     291: ldc2_w        #375                // double 16.0d
+     294: ldc2_w        #375                // double 16.0d
+     297: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     300: invokedynamic #420,  0            // InvokeDynamic #10:test:()Ljava/util/function/Predicate;
+     305: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     310: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     315: new           #33                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$13
+     318: dup
+     319: invokespecial #425                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$13."<init>":()V
+     322: dload_2
+     323: dload         4
+     325: dload         6
+     327: invokevirtual #429                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$13.compareDistOf:(DDD)Ljava/util/Comparator;
+     330: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     335: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     340: aconst_null
+     341: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     344: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     347: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     350: aload_0
+     351: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     354: new           #134                // class net/minecraft/world/phys/Vec3
+     357: dup
+     358: dload_2
+     359: dload         4
+     361: dload         6
+     363: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     366: ldc2_w        #375                // double 16.0d
+     369: ldc2_w        #375                // double 16.0d
+     372: ldc2_w        #375                // double 16.0d
+     375: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     378: invokedynamic #450,  0            // InvokeDynamic #11:test:()Ljava/util/function/Predicate;
+     383: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     388: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     393: new           #31                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$14
+     396: dup
+     397: invokespecial #451                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$14."<init>":()V
+     400: dload_2
+     401: dload         4
+     403: dload         6
+     405: invokevirtual #452                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$14.compareDistOf:(DDD)Ljava/util/Comparator;
+     408: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     413: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     418: aconst_null
+     419: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     422: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     425: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     428: aload_0
+     429: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     432: new           #134                // class net/minecraft/world/phys/Vec3
+     435: dup
+     436: dload_2
+     437: dload         4
+     439: dload         6
+     441: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     444: ldc2_w        #375                // double 16.0d
+     447: ldc2_w        #375                // double 16.0d
+     450: ldc2_w        #375                // double 16.0d
+     453: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     456: invokedynamic #457,  0            // InvokeDynamic #12:test:()Ljava/util/function/Predicate;
+     461: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     466: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     471: new           #29                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$15
+     474: dup
+     475: invokespecial #458                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$15."<init>":()V
+     478: dload_2
+     479: dload         4
+     481: dload         6
+     483: invokevirtual #459                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$15.compareDistOf:(DDD)Ljava/util/Comparator;
+     486: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     491: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     496: aconst_null
+     497: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     500: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     503: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     506: fconst_2
+     507: fconst_0
+     508: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     511: aload         8
+     513: aload         9
+     515: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     518: pop
+     519: return
+
+  private static boolean lambda$execute$25(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$24(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$23(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$22(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static void lambda$execute$21(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity, double, double, double);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          139
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore        8
+      13: aload         8
+      15: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      18: ifne          83
+      21: aload         8
+      23: aconst_null
+      24: aload_1
+      25: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      28: aload_1
+      29: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      32: aload_1
+      33: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      36: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      39: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      42: new           #103                // class net/minecraft/resources/ResourceLocation
+      45: dup
+      46: ldc_w         #356                // String entity.wither.shoot
+      49: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      52: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      57: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      60: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      63: fconst_1
+      64: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      67: ldc2_w        #363                // double 0.8d
+      70: ldc2_w        #365                // double 1.2d
+      73: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      76: d2f
+      77: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      80: goto          139
+      83: aload         8
+      85: aload_1
+      86: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      89: aload_1
+      90: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      93: aload_1
+      94: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      97: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+     100: new           #103                // class net/minecraft/resources/ResourceLocation
+     103: dup
+     104: ldc_w         #356                // String entity.wither.shoot
+     107: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     110: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     115: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     118: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     121: fconst_1
+     122: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     125: ldc2_w        #363                // double 0.8d
+     128: ldc2_w        #365                // double 1.2d
+     131: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     134: d2f
+     135: iconst_0
+     136: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     139: aload_0
+     140: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     143: new           #134                // class net/minecraft/world/phys/Vec3
+     146: dup
+     147: aload_1
+     148: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     151: aload_1
+     152: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     155: aload_1
+     156: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     159: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     162: ldc2_w        #375                // double 16.0d
+     165: ldc2_w        #375                // double 16.0d
+     168: ldc2_w        #375                // double 16.0d
+     171: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     174: invokedynamic #477,  0            // InvokeDynamic #13:test:()Ljava/util/function/Predicate;
+     179: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     184: invokeinterface #403,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+     189: ifne          519
+     192: aload_0
+     193: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     196: ifeq          519
+     199: aload_0
+     200: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     203: astore        8
+     205: new           #27                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$8
+     208: dup
+     209: invokespecial #478                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$8."<init>":()V
+     212: aload         8
+     214: aload_1
+     215: aload_1
+     216: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     219: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     222: ldc2_w        #405                // double 10.0d
+     225: ddiv
+     226: aload_1
+     227: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     230: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     233: ldc2_w        #405                // double 10.0d
+     236: ddiv
+     237: aload_1
+     238: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     241: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     244: ldc2_w        #405                // double 10.0d
+     247: ddiv
+     248: invokevirtual #479                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$8.getFireball:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;DDD)Lnet/minecraft/world/entity/projectile/Projectile;
+     251: astore        9
+     253: aload         9
+     255: aload_1
+     256: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     259: aload_1
+     260: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     263: aload_1
+     264: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     267: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     270: aload         9
+     272: aload_0
+     273: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     276: new           #134                // class net/minecraft/world/phys/Vec3
+     279: dup
+     280: dload_2
+     281: dload         4
+     283: dload         6
+     285: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     288: ldc2_w        #375                // double 16.0d
+     291: ldc2_w        #375                // double 16.0d
+     294: ldc2_w        #375                // double 16.0d
+     297: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     300: invokedynamic #484,  0            // InvokeDynamic #14:test:()Ljava/util/function/Predicate;
+     305: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     310: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     315: new           #25                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$9
+     318: dup
+     319: invokespecial #485                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$9."<init>":()V
+     322: dload_2
+     323: dload         4
+     325: dload         6
+     327: invokevirtual #486                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$9.compareDistOf:(DDD)Ljava/util/Comparator;
+     330: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     335: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     340: aconst_null
+     341: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     344: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     347: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     350: aload_0
+     351: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     354: new           #134                // class net/minecraft/world/phys/Vec3
+     357: dup
+     358: dload_2
+     359: dload         4
+     361: dload         6
+     363: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     366: ldc2_w        #375                // double 16.0d
+     369: ldc2_w        #375                // double 16.0d
+     372: ldc2_w        #375                // double 16.0d
+     375: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     378: invokedynamic #491,  0            // InvokeDynamic #15:test:()Ljava/util/function/Predicate;
+     383: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     388: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     393: new           #23                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$10
+     396: dup
+     397: invokespecial #492                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$10."<init>":()V
+     400: dload_2
+     401: dload         4
+     403: dload         6
+     405: invokevirtual #493                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$10.compareDistOf:(DDD)Ljava/util/Comparator;
+     408: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     413: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     418: aconst_null
+     419: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     422: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     425: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     428: aload_0
+     429: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     432: new           #134                // class net/minecraft/world/phys/Vec3
+     435: dup
+     436: dload_2
+     437: dload         4
+     439: dload         6
+     441: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     444: ldc2_w        #375                // double 16.0d
+     447: ldc2_w        #375                // double 16.0d
+     450: ldc2_w        #375                // double 16.0d
+     453: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     456: invokedynamic #498,  0            // InvokeDynamic #16:test:()Ljava/util/function/Predicate;
+     461: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     466: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     471: new           #21                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$11
+     474: dup
+     475: invokespecial #499                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$11."<init>":()V
+     478: dload_2
+     479: dload         4
+     481: dload         6
+     483: invokevirtual #500                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$11.compareDistOf:(DDD)Ljava/util/Comparator;
+     486: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     491: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     496: aconst_null
+     497: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     500: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     503: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     506: fconst_2
+     507: fconst_0
+     508: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     511: aload         8
+     513: aload         9
+     515: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     518: pop
+     519: return
+
+  private static boolean lambda$execute$20(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$19(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$18(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$17(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static void lambda$execute$16(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity, double, double, double);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          139
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore        8
+      13: aload         8
+      15: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      18: ifne          83
+      21: aload         8
+      23: aconst_null
+      24: aload_1
+      25: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      28: aload_1
+      29: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      32: aload_1
+      33: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      36: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      39: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      42: new           #103                // class net/minecraft/resources/ResourceLocation
+      45: dup
+      46: ldc_w         #356                // String entity.wither.shoot
+      49: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      52: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      57: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      60: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      63: fconst_1
+      64: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      67: ldc2_w        #363                // double 0.8d
+      70: ldc2_w        #365                // double 1.2d
+      73: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      76: d2f
+      77: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      80: goto          139
+      83: aload         8
+      85: aload_1
+      86: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      89: aload_1
+      90: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      93: aload_1
+      94: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      97: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+     100: new           #103                // class net/minecraft/resources/ResourceLocation
+     103: dup
+     104: ldc_w         #356                // String entity.wither.shoot
+     107: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     110: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     115: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     118: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     121: fconst_1
+     122: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     125: ldc2_w        #363                // double 0.8d
+     128: ldc2_w        #365                // double 1.2d
+     131: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     134: d2f
+     135: iconst_0
+     136: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     139: aload_0
+     140: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     143: new           #134                // class net/minecraft/world/phys/Vec3
+     146: dup
+     147: aload_1
+     148: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     151: aload_1
+     152: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     155: aload_1
+     156: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     159: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     162: ldc2_w        #375                // double 16.0d
+     165: ldc2_w        #375                // double 16.0d
+     168: ldc2_w        #375                // double 16.0d
+     171: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     174: invokedynamic #505,  0            // InvokeDynamic #17:test:()Ljava/util/function/Predicate;
+     179: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     184: invokeinterface #403,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+     189: ifne          519
+     192: aload_0
+     193: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     196: ifeq          519
+     199: aload_0
+     200: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     203: astore        8
+     205: new           #19                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$4
+     208: dup
+     209: invokespecial #506                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$4."<init>":()V
+     212: aload         8
+     214: aload_1
+     215: aload_1
+     216: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     219: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     222: ldc2_w        #405                // double 10.0d
+     225: ddiv
+     226: aload_1
+     227: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     230: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     233: ldc2_w        #405                // double 10.0d
+     236: ddiv
+     237: aload_1
+     238: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     241: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     244: ldc2_w        #405                // double 10.0d
+     247: ddiv
+     248: invokevirtual #507                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$4.getFireball:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;DDD)Lnet/minecraft/world/entity/projectile/Projectile;
+     251: astore        9
+     253: aload         9
+     255: aload_1
+     256: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     259: aload_1
+     260: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     263: aload_1
+     264: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     267: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     270: aload         9
+     272: aload_0
+     273: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     276: new           #134                // class net/minecraft/world/phys/Vec3
+     279: dup
+     280: dload_2
+     281: dload         4
+     283: dload         6
+     285: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     288: ldc2_w        #375                // double 16.0d
+     291: ldc2_w        #375                // double 16.0d
+     294: ldc2_w        #375                // double 16.0d
+     297: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     300: invokedynamic #512,  0            // InvokeDynamic #18:test:()Ljava/util/function/Predicate;
+     305: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     310: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     315: new           #17                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$5
+     318: dup
+     319: invokespecial #513                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$5."<init>":()V
+     322: dload_2
+     323: dload         4
+     325: dload         6
+     327: invokevirtual #514                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$5.compareDistOf:(DDD)Ljava/util/Comparator;
+     330: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     335: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     340: aconst_null
+     341: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     344: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     347: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     350: aload_0
+     351: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     354: new           #134                // class net/minecraft/world/phys/Vec3
+     357: dup
+     358: dload_2
+     359: dload         4
+     361: dload         6
+     363: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     366: ldc2_w        #375                // double 16.0d
+     369: ldc2_w        #375                // double 16.0d
+     372: ldc2_w        #375                // double 16.0d
+     375: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     378: invokedynamic #519,  0            // InvokeDynamic #19:test:()Ljava/util/function/Predicate;
+     383: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     388: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     393: new           #15                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$6
+     396: dup
+     397: invokespecial #520                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$6."<init>":()V
+     400: dload_2
+     401: dload         4
+     403: dload         6
+     405: invokevirtual #521                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$6.compareDistOf:(DDD)Ljava/util/Comparator;
+     408: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     413: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     418: aconst_null
+     419: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     422: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     425: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     428: aload_0
+     429: ldc_w         #374                // class net/minecraft/world/entity/player/Player
+     432: new           #134                // class net/minecraft/world/phys/Vec3
+     435: dup
+     436: dload_2
+     437: dload         4
+     439: dload         6
+     441: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+     444: ldc2_w        #375                // double 16.0d
+     447: ldc2_w        #375                // double 16.0d
+     450: ldc2_w        #375                // double 16.0d
+     453: invokestatic  #382                // Method net/minecraft/world/phys/AABB.m_165882_:(Lnet/minecraft/world/phys/Vec3;DDD)Lnet/minecraft/world/phys/AABB;
+     456: invokedynamic #526,  0            // InvokeDynamic #20:test:()Ljava/util/function/Predicate;
+     461: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     466: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+     471: new           #13                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$7
+     474: dup
+     475: invokespecial #527                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$7."<init>":()V
+     478: dload_2
+     479: dload         4
+     481: dload         6
+     483: invokevirtual #528                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$7.compareDistOf:(DDD)Ljava/util/Comparator;
+     486: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+     491: invokeinterface #439,  1          // InterfaceMethod java/util/stream/Stream.findFirst:()Ljava/util/Optional;
+     496: aconst_null
+     497: invokevirtual #445                // Method java/util/Optional.orElse:(Ljava/lang/Object;)Ljava/lang/Object;
+     500: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     503: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     506: fconst_2
+     507: fconst_0
+     508: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     511: aload         8
+     513: aload         9
+     515: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     518: pop
+     519: return
+
+  private static boolean lambda$execute$15(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$14(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$13(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static boolean lambda$execute$12(net.minecraft.world.entity.player.Player);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static void lambda$execute$11(net.minecraft.world.entity.Entity, net.minecraft.world.level.LevelAccessor);
+    Code:
+       0: new           #134                // class net/minecraft/world/phys/Vec3
+       3: dup
+       4: aload_0
+       5: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+       8: aload_0
+       9: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      12: aload_0
+      13: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      16: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+      19: astore_2
+      20: aload_1
+      21: ldc           #55                 // class net/minecraft/world/entity/Entity
+      23: new           #378                // class net/minecraft/world/phys/AABB
+      26: dup
+      27: aload_2
+      28: aload_2
+      29: invokespecial #531                // Method net/minecraft/world/phys/AABB."<init>":(Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/Vec3;)V
+      32: ldc2_w        #532                // double 12.0d
+      35: invokevirtual #537                // Method net/minecraft/world/phys/AABB.m_82400_:(D)Lnet/minecraft/world/phys/AABB;
+      38: invokedynamic #543,  0            // InvokeDynamic #21:test:()Ljava/util/function/Predicate;
+      43: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+      48: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+      53: aload_2
+      54: invokedynamic #556,  0            // InvokeDynamic #22:applyAsDouble:(Lnet/minecraft/world/phys/Vec3;)Ljava/util/function/ToDoubleFunction;
+      59: invokestatic  #562                // InterfaceMethod java/util/Comparator.comparingDouble:(Ljava/util/function/ToDoubleFunction;)Ljava/util/Comparator;
+      62: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+      67: invokeinterface #566,  1          // InterfaceMethod java/util/stream/Stream.toList:()Ljava/util/List;
+      72: astore_3
+      73: aload_3
+      74: invokeinterface #570,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      79: astore        4
+      81: aload         4
+      83: invokeinterface #575,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      88: ifeq          177
+      91: aload         4
+      93: invokeinterface #579,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      98: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     101: astore        5
+     103: aload         5
+     105: instanceof    #374                // class net/minecraft/world/entity/player/Player
+     108: ifeq          174
+     111: aload_1
+     112: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     115: ifeq          174
+     118: aload_1
+     119: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     122: astore        6
+     124: getstatic     #585                // Field net/mcreator/armageddonmod/init/ArmageddonModModEntities.CHAOS_SIGIL_CIRCLE:Lnet/minecraftforge/registries/RegistryObject;
+     127: invokevirtual #590                // Method net/minecraftforge/registries/RegistryObject.get:()Ljava/lang/Object;
+     130: checkcast     #592                // class net/minecraft/world/entity/EntityType
+     133: aload         6
+     135: aload         5
+     137: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     140: aload         5
+     142: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     145: aload         5
+     147: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     150: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     153: getstatic     #598                // Field net/minecraft/world/entity/MobSpawnType.MOB_SUMMONED:Lnet/minecraft/world/entity/MobSpawnType;
+     156: invokevirtual #602                // Method net/minecraft/world/entity/EntityType.m_262496_:(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;)Lnet/minecraft/world/entity/Entity;
+     159: astore        7
+     161: aload         7
+     163: ifnull        174
+     166: aload         7
+     168: dconst_0
+     169: dconst_0
+     170: dconst_0
+     171: invokevirtual #605                // Method net/minecraft/world/entity/Entity.m_20334_:(DDD)V
+     174: goto          81
+     177: return
+
+  private static double lambda$execute$10(net.minecraft.world.phys.Vec3, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_1
+       1: aload_0
+       2: invokevirtual #616                // Method net/minecraft/world/entity/Entity.m_20238_:(Lnet/minecraft/world/phys/Vec3;)D
+       5: dreturn
+
+  private static boolean lambda$execute$9(net.minecraft.world.entity.Entity);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static void lambda$execute$8(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          135
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore_2
+      12: aload_2
+      13: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      16: ifne          80
+      19: aload_2
+      20: aconst_null
+      21: aload_1
+      22: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      25: aload_1
+      26: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      29: aload_1
+      30: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      33: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      36: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      39: new           #103                // class net/minecraft/resources/ResourceLocation
+      42: dup
+      43: ldc_w         #619                // String entity.lightning_bolt.thunder
+      46: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      49: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      54: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      57: getstatic     #622                // Field net/minecraft/sounds/SoundSource.NEUTRAL:Lnet/minecraft/sounds/SoundSource;
+      60: fconst_1
+      61: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      64: ldc2_w        #363                // double 0.8d
+      67: ldc2_w        #365                // double 1.2d
+      70: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      73: d2f
+      74: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      77: goto          135
+      80: aload_2
+      81: aload_1
+      82: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      85: aload_1
+      86: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      89: aload_1
+      90: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      93: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      96: new           #103                // class net/minecraft/resources/ResourceLocation
+      99: dup
+     100: ldc_w         #619                // String entity.lightning_bolt.thunder
+     103: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     106: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     111: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     114: getstatic     #622                // Field net/minecraft/sounds/SoundSource.NEUTRAL:Lnet/minecraft/sounds/SoundSource;
+     117: fconst_1
+     118: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     121: ldc2_w        #363                // double 0.8d
+     124: ldc2_w        #365                // double 1.2d
+     127: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     130: d2f
+     131: iconst_0
+     132: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     135: bipush        18
+     137: aload_1
+     138: aload_0
+     139: invokedynamic #627,  0            // InvokeDynamic #23:run:(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/LevelAccessor;)Ljava/lang/Runnable;
+     144: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     147: return
+
+  private static void lambda$execute$7(net.minecraft.world.entity.Entity, net.minecraft.world.level.LevelAccessor);
+    Code:
+       0: new           #134                // class net/minecraft/world/phys/Vec3
+       3: dup
+       4: aload_0
+       5: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+       8: aload_0
+       9: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      12: aload_0
+      13: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      16: invokespecial #153                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+      19: astore_2
+      20: aload_1
+      21: ldc           #55                 // class net/minecraft/world/entity/Entity
+      23: new           #378                // class net/minecraft/world/phys/AABB
+      26: dup
+      27: aload_2
+      28: aload_2
+      29: invokespecial #531                // Method net/minecraft/world/phys/AABB."<init>":(Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/Vec3;)V
+      32: ldc2_w        #532                // double 12.0d
+      35: invokevirtual #537                // Method net/minecraft/world/phys/AABB.m_82400_:(D)Lnet/minecraft/world/phys/AABB;
+      38: invokedynamic #632,  0            // InvokeDynamic #24:test:()Ljava/util/function/Predicate;
+      43: invokeinterface #398,  4          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_6443_:(Ljava/lang/Class;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+      48: invokeinterface #424,  1          // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+      53: aload_2
+      54: invokedynamic #637,  0            // InvokeDynamic #25:applyAsDouble:(Lnet/minecraft/world/phys/Vec3;)Ljava/util/function/ToDoubleFunction;
+      59: invokestatic  #562                // InterfaceMethod java/util/Comparator.comparingDouble:(Ljava/util/function/ToDoubleFunction;)Ljava/util/Comparator;
+      62: invokeinterface #435,  2          // InterfaceMethod java/util/stream/Stream.sorted:(Ljava/util/Comparator;)Ljava/util/stream/Stream;
+      67: invokeinterface #566,  1          // InterfaceMethod java/util/stream/Stream.toList:()Ljava/util/List;
+      72: astore_3
+      73: aload_3
+      74: invokeinterface #570,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      79: astore        4
+      81: aload         4
+      83: invokeinterface #575,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      88: ifeq          143
+      91: aload         4
+      93: invokeinterface #579,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      98: checkcast     #55                 // class net/minecraft/world/entity/Entity
+     101: astore        5
+     103: aload         5
+     105: instanceof    #374                // class net/minecraft/world/entity/player/Player
+     108: ifeq          140
+     111: iconst_0
+     112: istore        6
+     114: iload         6
+     116: iconst_5
+     117: if_icmpge     140
+     120: bipush        20
+     122: aload         5
+     124: aload_1
+     125: aload_0
+     126: invokedynamic #645,  0            // InvokeDynamic #26:run:(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/world/entity/Entity;)Ljava/lang/Runnable;
+     131: invokestatic  #271                // Method net/mcreator/armageddonmod/ArmageddonModMod.queueServerWork:(ILjava/lang/Runnable;)V
+     134: iinc          6, 1
+     137: goto          114
+     140: goto          81
+     143: return
+
+  private static void lambda$execute$6(net.minecraft.world.entity.Entity, net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: new           #649                // class net/minecraft/world/damagesource/DamageSource
+       4: dup
+       5: aload_1
+       6: invokeinterface #653,  1          // InterfaceMethod net/minecraft/world/level/LevelAccessor.m_9598_:()Lnet/minecraft/core/RegistryAccess;
+      11: getstatic     #659                // Field net/minecraft/core/registries/Registries.f_268580_:Lnet/minecraft/resources/ResourceKey;
+      14: invokeinterface #665,  2          // InterfaceMethod net/minecraft/core/RegistryAccess.m_175515_:(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/core/Registry;
+      19: getstatic     #670                // Field net/minecraft/world/damagesource/DamageTypes.f_268566_:Lnet/minecraft/resources/ResourceKey;
+      22: invokeinterface #676,  2          // InterfaceMethod net/minecraft/core/Registry.m_246971_:(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/core/Holder$Reference;
+      27: aload_2
+      28: invokespecial #679                // Method net/minecraft/world/damagesource/DamageSource."<init>":(Lnet/minecraft/core/Holder;Lnet/minecraft/world/entity/Entity;)V
+      31: ldc_w         #680                // float 70.0f
+      34: invokevirtual #684                // Method net/minecraft/world/entity/Entity.m_6469_:(Lnet/minecraft/world/damagesource/DamageSource;F)Z
+      37: pop
+      38: aload_1
+      39: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+      42: ifeq          92
+      45: aload_1
+      46: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+      49: astore_3
+      50: getstatic     #688                // Field net/minecraft/world/entity/EntityType.f_20465_:Lnet/minecraft/world/entity/EntityType;
+      53: aload_3
+      54: invokevirtual #692                // Method net/minecraft/world/entity/EntityType.m_20615_:(Lnet/minecraft/world/level/Level;)Lnet/minecraft/world/entity/Entity;
+      57: checkcast     #694                // class net/minecraft/world/entity/LightningBolt
+      60: astore        4
+      62: aload         4
+      64: aload_0
+      65: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      68: aload_0
+      69: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      72: aload_0
+      73: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      76: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      79: invokestatic  #698                // Method net/minecraft/world/phys/Vec3.m_82539_:(Lnet/minecraft/core/Vec3i;)Lnet/minecraft/world/phys/Vec3;
+      82: invokevirtual #701                // Method net/minecraft/world/entity/LightningBolt.m_20219_:(Lnet/minecraft/world/phys/Vec3;)V
+      85: aload_3
+      86: aload         4
+      88: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+      91: pop
+      92: return
+
+  private static double lambda$execute$5(net.minecraft.world.phys.Vec3, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_1
+       1: aload_0
+       2: invokevirtual #616                // Method net/minecraft/world/entity/Entity.m_20238_:(Lnet/minecraft/world/phys/Vec3;)D
+       5: dreturn
+
+  private static boolean lambda$execute$4(net.minecraft.world.entity.Entity);
+    Code:
+       0: iconst_1
+       1: ireturn
+
+  private static void lambda$execute$3(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          135
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore_2
+      12: aload_2
+      13: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      16: ifne          80
+      19: aload_2
+      20: aconst_null
+      21: aload_1
+      22: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      25: aload_1
+      26: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      29: aload_1
+      30: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      33: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      36: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      39: new           #103                // class net/minecraft/resources/ResourceLocation
+      42: dup
+      43: ldc_w         #704                // String entity.ghast.shoot
+      46: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      49: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      54: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      57: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      60: fconst_1
+      61: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      64: ldc2_w        #363                // double 0.8d
+      67: ldc2_w        #365                // double 1.2d
+      70: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      73: d2f
+      74: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      77: goto          135
+      80: aload_2
+      81: aload_1
+      82: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      85: aload_1
+      86: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      89: aload_1
+      90: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      93: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      96: new           #103                // class net/minecraft/resources/ResourceLocation
+      99: dup
+     100: ldc_w         #704                // String entity.ghast.shoot
+     103: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     106: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     111: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     114: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     117: fconst_1
+     118: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     121: ldc2_w        #363                // double 0.8d
+     124: ldc2_w        #365                // double 1.2d
+     127: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     130: d2f
+     131: iconst_0
+     132: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     135: aload_0
+     136: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     139: ifeq          227
+     142: aload_0
+     143: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     146: astore_2
+     147: new           #11                 // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$3
+     150: dup
+     151: invokespecial #705                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$3."<init>":()V
+     154: aload_2
+     155: aload_1
+     156: ldc_w         #706                // float 80.0f
+     159: iconst_1
+     160: invokevirtual #710                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$3.getArrow:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;FI)Lnet/minecraft/world/entity/projectile/Projectile;
+     163: astore_3
+     164: aload_3
+     165: aload_1
+     166: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     169: aload_1
+     170: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     173: aload_1
+     174: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     177: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     180: aload_3
+     181: aload_1
+     182: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     185: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     188: ldc2_w        #405                // double 10.0d
+     191: ddiv
+     192: aload_1
+     193: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     196: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     199: ldc2_w        #405                // double 10.0d
+     202: ddiv
+     203: aload_1
+     204: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     207: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     210: ldc2_w        #405                // double 10.0d
+     213: ddiv
+     214: ldc_w         #711                // float 0.5f
+     217: fconst_0
+     218: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     221: aload_2
+     222: aload_3
+     223: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     226: pop
+     227: return
+
+  private static void lambda$execute$2(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          135
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore_2
+      12: aload_2
+      13: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      16: ifne          80
+      19: aload_2
+      20: aconst_null
+      21: aload_1
+      22: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      25: aload_1
+      26: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      29: aload_1
+      30: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      33: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      36: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      39: new           #103                // class net/minecraft/resources/ResourceLocation
+      42: dup
+      43: ldc_w         #704                // String entity.ghast.shoot
+      46: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      49: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      54: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      57: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      60: fconst_1
+      61: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      64: ldc2_w        #363                // double 0.8d
+      67: ldc2_w        #365                // double 1.2d
+      70: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      73: d2f
+      74: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      77: goto          135
+      80: aload_2
+      81: aload_1
+      82: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      85: aload_1
+      86: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      89: aload_1
+      90: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      93: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      96: new           #103                // class net/minecraft/resources/ResourceLocation
+      99: dup
+     100: ldc_w         #704                // String entity.ghast.shoot
+     103: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     106: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     111: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     114: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     117: fconst_1
+     118: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     121: ldc2_w        #363                // double 0.8d
+     124: ldc2_w        #365                // double 1.2d
+     127: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     130: d2f
+     131: iconst_0
+     132: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     135: aload_0
+     136: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     139: ifeq          227
+     142: aload_0
+     143: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     146: astore_2
+     147: new           #9                  // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$2
+     150: dup
+     151: invokespecial #712                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$2."<init>":()V
+     154: aload_2
+     155: aload_1
+     156: ldc_w         #706                // float 80.0f
+     159: iconst_1
+     160: invokevirtual #713                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$2.getArrow:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;FI)Lnet/minecraft/world/entity/projectile/Projectile;
+     163: astore_3
+     164: aload_3
+     165: aload_1
+     166: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     169: aload_1
+     170: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     173: aload_1
+     174: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     177: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     180: aload_3
+     181: aload_1
+     182: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     185: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     188: ldc2_w        #405                // double 10.0d
+     191: ddiv
+     192: aload_1
+     193: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     196: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     199: ldc2_w        #405                // double 10.0d
+     202: ddiv
+     203: aload_1
+     204: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     207: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     210: ldc2_w        #405                // double 10.0d
+     213: ddiv
+     214: ldc_w         #711                // float 0.5f
+     217: fconst_0
+     218: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     221: aload_2
+     222: aload_3
+     223: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     226: pop
+     227: return
+
+  private static void lambda$execute$1(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: instanceof    #75                 // class net/minecraft/world/level/Level
+       4: ifeq          135
+       7: aload_0
+       8: checkcast     #75                 // class net/minecraft/world/level/Level
+      11: astore_2
+      12: aload_2
+      13: invokevirtual #79                 // Method net/minecraft/world/level/Level.m_5776_:()Z
+      16: ifne          80
+      19: aload_2
+      20: aconst_null
+      21: aload_1
+      22: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      25: aload_1
+      26: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      29: aload_1
+      30: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      33: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      36: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      39: new           #103                // class net/minecraft/resources/ResourceLocation
+      42: dup
+      43: ldc_w         #704                // String entity.ghast.shoot
+      46: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+      49: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+      54: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+      57: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+      60: fconst_1
+      61: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+      64: ldc2_w        #363                // double 0.8d
+      67: ldc2_w        #365                // double 1.2d
+      70: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+      73: d2f
+      74: invokevirtual #128                // Method net/minecraft/world/level/Level.m_5594_:(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V
+      77: goto          135
+      80: aload_2
+      81: aload_1
+      82: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      85: aload_1
+      86: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      89: aload_1
+      90: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      93: getstatic     #101                // Field net/minecraftforge/registries/ForgeRegistries.SOUND_EVENTS:Lnet/minecraftforge/registries/IForgeRegistry;
+      96: new           #103                // class net/minecraft/resources/ResourceLocation
+      99: dup
+     100: ldc_w         #704                // String entity.ghast.shoot
+     103: invokespecial #108                // Method net/minecraft/resources/ResourceLocation."<init>":(Ljava/lang/String;)V
+     106: invokeinterface #114,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/resources/ResourceLocation;)Ljava/lang/Object;
+     111: checkcast     #116                // class net/minecraft/sounds/SoundEvent
+     114: getstatic     #122                // Field net/minecraft/sounds/SoundSource.HOSTILE:Lnet/minecraft/sounds/SoundSource;
+     117: fconst_1
+     118: invokestatic  #362                // InterfaceMethod net/minecraft/util/RandomSource.m_216327_:()Lnet/minecraft/util/RandomSource;
+     121: ldc2_w        #363                // double 0.8d
+     124: ldc2_w        #365                // double 1.2d
+     127: invokestatic  #372                // Method net/minecraft/util/Mth.m_216263_:(Lnet/minecraft/util/RandomSource;DD)D
+     130: d2f
+     131: iconst_0
+     132: invokevirtual #132                // Method net/minecraft/world/level/Level.m_7785_:(DDDLnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FFZ)V
+     135: aload_0
+     136: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     139: ifeq          227
+     142: aload_0
+     143: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     146: astore_2
+     147: new           #7                  // class net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$1
+     150: dup
+     151: invokespecial #714                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$1."<init>":()V
+     154: aload_2
+     155: aload_1
+     156: ldc_w         #706                // float 80.0f
+     159: iconst_1
+     160: invokevirtual #715                // Method net/mcreator/armageddonmod/procedures/TheChaosOnEntityTickUpdateProcedure$1.getArrow:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;FI)Lnet/minecraft/world/entity/projectile/Projectile;
+     163: astore_3
+     164: aload_3
+     165: aload_1
+     166: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     169: aload_1
+     170: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     173: aload_1
+     174: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     177: invokevirtual #415                // Method net/minecraft/world/entity/projectile/Projectile.m_6034_:(DDD)V
+     180: aload_3
+     181: aload_1
+     182: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     185: getfield      #142                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     188: ldc2_w        #405                // double 10.0d
+     191: ddiv
+     192: aload_1
+     193: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     196: getfield      #147                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     199: ldc2_w        #405                // double 10.0d
+     202: ddiv
+     203: aload_1
+     204: invokevirtual #138                // Method net/minecraft/world/entity/Entity.m_20154_:()Lnet/minecraft/world/phys/Vec3;
+     207: getfield      #150                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     210: ldc2_w        #405                // double 10.0d
+     213: ddiv
+     214: ldc_w         #711                // float 0.5f
+     217: fconst_0
+     218: invokevirtual #463                // Method net/minecraft/world/entity/projectile/Projectile.m_6686_:(DDDFF)V
+     221: aload_2
+     222: aload_3
+     223: invokevirtual #467                // Method net/minecraft/server/level/ServerLevel.m_7967_:(Lnet/minecraft/world/entity/Entity;)Z
+     226: pop
+     227: return
+
+  private static void lambda$execute$0(net.minecraft.world.level.LevelAccessor, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_0
+       1: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+       4: ifeq          63
+       7: aload_0
+       8: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+      11: astore_2
+      12: getstatic     #718                // Field net/mcreator/armageddonmod/init/ArmageddonModModEntities.CHAOS_METEORITE_PROJECTILE:Lnet/minecraftforge/registries/RegistryObject;
+      15: invokevirtual #590                // Method net/minecraftforge/registries/RegistryObject.get:()Ljava/lang/Object;
+      18: checkcast     #592                // class net/minecraft/world/entity/EntityType
+      21: aload_2
+      22: aload_1
+      23: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      26: ldc2_w        #719                // double 4.0d
+      29: dsub
+      30: aload_1
+      31: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      34: ldc2_w        #721                // double 3.0d
+      37: dadd
+      38: aload_1
+      39: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      42: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+      45: getstatic     #598                // Field net/minecraft/world/entity/MobSpawnType.MOB_SUMMONED:Lnet/minecraft/world/entity/MobSpawnType;
+      48: invokevirtual #602                // Method net/minecraft/world/entity/EntityType.m_262496_:(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;)Lnet/minecraft/world/entity/Entity;
+      51: astore_3
+      52: aload_3
+      53: ifnull        63
+      56: aload_3
+      57: dconst_0
+      58: dconst_0
+      59: dconst_0
+      60: invokevirtual #605                // Method net/minecraft/world/entity/Entity.m_20334_:(DDD)V
+      63: aload_0
+      64: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+      67: ifeq          126
+      70: aload_0
+      71: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+      74: astore_2
+      75: getstatic     #718                // Field net/mcreator/armageddonmod/init/ArmageddonModModEntities.CHAOS_METEORITE_PROJECTILE:Lnet/minecraftforge/registries/RegistryObject;
+      78: invokevirtual #590                // Method net/minecraftforge/registries/RegistryObject.get:()Ljava/lang/Object;
+      81: checkcast     #592                // class net/minecraft/world/entity/EntityType
+      84: aload_2
+      85: aload_1
+      86: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+      89: ldc2_w        #719                // double 4.0d
+      92: dadd
+      93: aload_1
+      94: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      97: ldc2_w        #721                // double 3.0d
+     100: dadd
+     101: aload_1
+     102: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     105: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     108: getstatic     #598                // Field net/minecraft/world/entity/MobSpawnType.MOB_SUMMONED:Lnet/minecraft/world/entity/MobSpawnType;
+     111: invokevirtual #602                // Method net/minecraft/world/entity/EntityType.m_262496_:(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;)Lnet/minecraft/world/entity/Entity;
+     114: astore_3
+     115: aload_3
+     116: ifnull        126
+     119: aload_3
+     120: dconst_0
+     121: dconst_0
+     122: dconst_0
+     123: invokevirtual #605                // Method net/minecraft/world/entity/Entity.m_20334_:(DDD)V
+     126: aload_0
+     127: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     130: ifeq          189
+     133: aload_0
+     134: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     137: astore_2
+     138: getstatic     #718                // Field net/mcreator/armageddonmod/init/ArmageddonModModEntities.CHAOS_METEORITE_PROJECTILE:Lnet/minecraftforge/registries/RegistryObject;
+     141: invokevirtual #590                // Method net/minecraftforge/registries/RegistryObject.get:()Ljava/lang/Object;
+     144: checkcast     #592                // class net/minecraft/world/entity/EntityType
+     147: aload_2
+     148: aload_1
+     149: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     152: aload_1
+     153: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     156: ldc2_w        #721                // double 3.0d
+     159: dadd
+     160: aload_1
+     161: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     164: ldc2_w        #719                // double 4.0d
+     167: dadd
+     168: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     171: getstatic     #598                // Field net/minecraft/world/entity/MobSpawnType.MOB_SUMMONED:Lnet/minecraft/world/entity/MobSpawnType;
+     174: invokevirtual #602                // Method net/minecraft/world/entity/EntityType.m_262496_:(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;)Lnet/minecraft/world/entity/Entity;
+     177: astore_3
+     178: aload_3
+     179: ifnull        189
+     182: aload_3
+     183: dconst_0
+     184: dconst_0
+     185: dconst_0
+     186: invokevirtual #605                // Method net/minecraft/world/entity/Entity.m_20334_:(DDD)V
+     189: aload_0
+     190: instanceof    #233                // class net/minecraft/server/level/ServerLevel
+     193: ifeq          252
+     196: aload_0
+     197: checkcast     #233                // class net/minecraft/server/level/ServerLevel
+     200: astore_2
+     201: getstatic     #718                // Field net/mcreator/armageddonmod/init/ArmageddonModModEntities.CHAOS_METEORITE_PROJECTILE:Lnet/minecraftforge/registries/RegistryObject;
+     204: invokevirtual #590                // Method net/minecraftforge/registries/RegistryObject.get:()Ljava/lang/Object;
+     207: checkcast     #592                // class net/minecraft/world/entity/EntityType
+     210: aload_2
+     211: aload_1
+     212: invokevirtual #83                 // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     215: aload_1
+     216: invokevirtual #86                 // Method net/minecraft/world/entity/Entity.m_20186_:()D
+     219: ldc2_w        #721                // double 3.0d
+     222: dadd
+     223: aload_1
+     224: invokevirtual #89                 // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     227: ldc2_w        #719                // double 4.0d
+     230: dsub
+     231: invokestatic  #95                 // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     234: getstatic     #598                // Field net/minecraft/world/entity/MobSpawnType.MOB_SUMMONED:Lnet/minecraft/world/entity/MobSpawnType;
+     237: invokevirtual #602                // Method net/minecraft/world/entity/EntityType.m_262496_:(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;)Lnet/minecraft/world/entity/Entity;
+     240: astore_3
+     241: aload_3
+     242: ifnull        252
+     245: aload_3
+     246: dconst_0
+     247: dconst_0
+     248: dconst_0
+     249: invokevirtual #605                // Method net/minecraft/world/entity/Entity.m_20334_:(DDD)V
+     252: return
+}
