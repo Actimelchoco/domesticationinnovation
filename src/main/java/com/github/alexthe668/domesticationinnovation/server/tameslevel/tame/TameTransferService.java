@@ -37,6 +37,7 @@ public final class TameTransferService {
         boolean crossDimension = !tame.level().dimension().equals(player.level().dimension());
         if (!crossDimension) {
             tame.teleportTo(player.getX(), player.getY(), player.getZ());
+            normalizeTransferredTame(tame, data);
             refreshLastKnown(data, tame, player.serverLevel());
             return new TransferResult(tame, false, "");
         }
@@ -62,16 +63,8 @@ public final class TameTransferService {
                 }
                 moved.setUUID(tame.getUUID());
                 moved.moveTo(pos[0], pos[1], pos[2], player.getYRot(), player.getXRot());
-                moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
-                TameRegistry.bindEntityToData(moved, data);
-                moved.setTarget(null);
-                moved.getNavigation().stop();
-                moved.setOrderedToSit(false);
-                if (moved.isNoAi()) {
-                    moved.setNoAi(false);
-                }
-                TameGoalInstaller.installIfMissing(moved);
+                normalizeTransferredTame(moved, data);
 
                 if (!targetLevel.addFreshEntity(moved)) {
                     continue;
@@ -79,9 +72,6 @@ public final class TameTransferService {
                 tame.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
                 tame.discard();
                 moved.getNavigation().moveTo(player, 1.0D);
-                if (data != null) {
-                    LevelSystem.reapplyTypeBasePlusBonuses(moved, data);
-                }
                 refreshLastKnown(data, moved, targetLevel);
                 return new TransferResult(moved, true, "");
             } catch (Throwable ignored) {
@@ -113,6 +103,7 @@ public final class TameTransferService {
             tame.teleportTo(x, y, z);
             tame.setYRot(yRot);
             tame.setXRot(xRot);
+            normalizeTransferredTame(tame, data);
             refreshLastKnown(data, tame, targetLevel);
             return new TransferResult(tame, false, "");
         }
@@ -143,16 +134,8 @@ public final class TameTransferService {
                 }
                 moved.setUUID(tame.getUUID());
                 moved.moveTo(pos[0], pos[1], pos[2], yRot, xRot);
-                moved.setDeltaMovement(0.0D, 0.0D, 0.0D);
                 enforceTamedOwnerPreserveCollar(moved, ownerId, collar);
-                TameRegistry.bindEntityToData(moved, data);
-                moved.setTarget(null);
-                moved.getNavigation().stop();
-                moved.setOrderedToSit(false);
-                if (moved.isNoAi()) {
-                    moved.setNoAi(false);
-                }
-                TameGoalInstaller.installIfMissing(moved);
+                normalizeTransferredTame(moved, data);
 
                 if (!targetLevel.addFreshEntity(moved)) {
                     continue;
@@ -164,9 +147,6 @@ public final class TameTransferService {
                     if (nearest != null) {
                         moved.getNavigation().moveTo(nearest, 1.0D);
                     }
-                }
-                if (data != null) {
-                    LevelSystem.reapplyTypeBasePlusBonuses(moved, data);
                 }
                 refreshLastKnown(data, moved, targetLevel);
                 return new TransferResult(moved, true, "");
@@ -187,6 +167,34 @@ public final class TameTransferService {
         positions.add(new double[]{x, y, z + 1.5D});
         positions.add(new double[]{x, y, z - 1.5D});
         return positions;
+    }
+
+    private static void normalizeTransferredTame(TamableAnimal tame, TameData data) {
+        if (tame == null) {
+            return;
+        }
+        tame.stopRiding();
+        if (tame.isVehicle()) {
+            tame.ejectPassengers();
+        }
+        tame.fallDistance = 0.0F;
+        tame.hurtTime = 0;
+        tame.deathTime = 0;
+        tame.invulnerableTime = 0;
+        tame.setSecondsOnFire(0);
+        tame.setRemainingFireTicks(0);
+        tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        tame.setNoGravity(false);
+        tame.setNoAi(false);
+        tame.setOrderedToSit(false);
+        tame.setInSittingPose(false);
+        TameGoalInstaller.installIfMissing(tame);
+        if (data != null) {
+            TameRegistry.bindEntityToData(tame, data);
+            LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
+        }
     }
 
     private static void refreshLastKnown(TameData data, TamableAnimal tame, ServerLevel level) {

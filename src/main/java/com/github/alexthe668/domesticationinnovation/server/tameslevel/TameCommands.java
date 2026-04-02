@@ -2030,6 +2030,100 @@ public class TameCommands {
                                                                         ReviveMode.RESPAWN,
                                                                         true
                                                                 ))))
+                                                .then(Commands.literal("tp")
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> adminPlayerTeleportAll(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player")
+                                                                )))
+                                                        .then(Commands.literal("unloaded")
+                                                                .executes(ctx -> adminPlayerTeleportUnloaded(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player")
+                                                                )))
+                                                        .then(Commands.literal("follow")
+                                                                .executes(ctx -> adminPlayerTeleportByMovementState(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        MovementOrder.FOLLOW
+                                                                )))
+                                                        .then(Commands.literal("sit")
+                                                                .executes(ctx -> adminPlayerTeleportByMovementState(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        MovementOrder.SIT
+                                                                )))
+                                                        .then(Commands.literal("wander")
+                                                                .executes(ctx -> adminPlayerTeleportByMovementState(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        MovementOrder.WANDER
+                                                                )))
+                                                        .then(Commands.literal("state")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestMovementStates(b))
+                                                                        .executes(ctx -> adminPlayerTeleportByState(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.literal("group")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestPlayerOwnedGroups(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                b
+                                                                        ))
+                                                                        .executes(ctx -> adminPlayerTeleportGroup(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.literal("type")
+                                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                                        .suggests((ctx, b) -> suggestPlayerOwnedTypes(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                b
+                                                                        ))
+                                                                        .executes(ctx -> adminPlayerTeleportType(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name")
+                                                                        ))))
+                                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                                .suggests((ctx, b) -> suggestPlayerOwnedPetNames(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        b
+                                                                ))
+                                                                .executes(ctx -> adminPlayerTeleportPet(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player"),
+                                                                        StringArgumentType.getString(ctx, "name"),
+                                                                        null
+                                                                ))
+                                                                .then(Commands.literal("follow")
+                                                                        .executes(ctx -> adminPlayerTeleportPet(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                MovementOrder.FOLLOW
+                                                                        )))
+                                                                .then(Commands.literal("sit")
+                                                                        .executes(ctx -> adminPlayerTeleportPet(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                MovementOrder.SIT
+                                                                        )))
+                                                                .then(Commands.literal("wander")
+                                                                        .executes(ctx -> adminPlayerTeleportPet(
+                                                                                ctx.getSource(),
+                                                                                StringArgumentType.getString(ctx, "player"),
+                                                                                StringArgumentType.getString(ctx, "name"),
+                                                                                MovementOrder.WANDER
+                                                                        )))))
                                                 .then(Commands.literal("reincarnate")
                                                         .then(Commands.argument("name", StringArgumentType.string())
                                                                 .executes(ctx -> adminPlayerReincarnatePet(
@@ -7904,6 +7998,249 @@ public class TameCommands {
         return respawnDeadBatch(source, p, dead, mode, mode.label + " all dead tames");
     }
 
+    private static int adminPlayerTeleportPet(CommandSourceStack source, String playerName, String pet, MovementOrder orderOverride) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
+        ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return adminError(source, ownerName + " must be online for admin tp.");
+        }
+        TameData data = findOwnedTameAny(ownerId, pet);
+        if (data == null) {
+            return adminError(source, "Pet not found for " + ownerName + ".");
+        }
+        if (data.stored) {
+            return adminError(source, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
+        }
+        if (data.dead || isDeadEntry(data.uuid)) {
+            return adminError(source, tameDisplayName(data) + " is dead and cannot be teleported.");
+        }
+        TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
+        if (tame == null) {
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            if (!unloaded.success) {
+                return adminError(source, "Failed to tp unloaded tame for " + ownerName + ": " + unloaded.error);
+            }
+            TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
+            if (orderOverride != null && loadedAfterTeleport != null) {
+                applyMovementOverride(loadedAfterTeleport, orderOverride);
+            }
+            source.sendSuccess(() -> Component.literal("Admin teleported unloaded " + tameDisplayName(data) + " to " + ownerName + "."), false);
+            return 1;
+        }
+        boolean crossDimension = isCrossDimension(tame, owner);
+        if (crossDimension) {
+            if (orderOverride != null) {
+                applyMovementOverride(tame, orderOverride);
+            }
+            UnloadedTpResult queued = queueImmediateChunkTeleport(
+                    (ServerLevel) tame.level(),
+                    tame.blockPosition(),
+                    data,
+                    new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot()),
+                    true,
+                    false
+            );
+            if (!queued.success) {
+                return adminError(source, "Failed to queue cross-dimension tame teleport for " + ownerName + ": " + queued.error);
+            }
+            source.sendSuccess(() -> Component.literal("Admin queued cross-dimension teleport for " + tameDisplayName(data) + " to " + ownerName + "."), false);
+            return 1;
+        }
+        teleportTameToPlayer(tame, owner);
+        TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
+        if (orderOverride != null && loadedAfterTeleport != null) {
+            applyMovementOverride(loadedAfterTeleport, orderOverride);
+        }
+        source.sendSuccess(() -> Component.literal("Admin teleported " + tameDisplayName(data) + " to " + ownerName + "."), false);
+        return 1;
+    }
+
+    private static int adminPlayerTeleportAll(CommandSourceStack source, String playerName) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        return adminPlayerTeleportBatch(source, playerName, ownedDeadTames(ownerId).size(), "TP all", owner -> ownedTames(owner));
+    }
+
+    private static int adminPlayerTeleportUnloaded(CommandSourceStack source, String playerName) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
+        ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return adminError(source, ownerName + " must be online for admin tp.");
+        }
+
+        List<TameData> requested = ownedTames(ownerId);
+        int queued = 0;
+        int failed = 0;
+        List<String> failedQueueNames = new ArrayList<>();
+
+        for (TameData data : requested) {
+            if (data == null || data.dead) {
+                continue;
+            }
+            if (isEffectivelyLoaded(source, owner, data)) {
+                continue;
+            }
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            if (unloaded.success) {
+                queued++;
+            } else {
+                failed++;
+                failedQueueNames.add(tameDisplayName(data) + " (" + unloaded.error + ")");
+            }
+        }
+
+        sendAdminTeleportSummary(source, "Admin TP " + ownerName + " unloaded", 0, queued, ownedDeadTames(ownerId).size(), failed, 0, 0);
+        if (!failedQueueNames.isEmpty()) {
+            source.sendFailure(Component.literal("Admin unloaded tp failures for " + ownerName + ": " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+        }
+        return queued > 0 ? 1 : 0;
+    }
+
+    private static int adminPlayerTeleportGroup(CommandSourceStack source, String playerName, String group) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        if (ownedGroup(ownerId, group).isEmpty()) {
+            return adminError(source, "No tames found in group '" + group + "' for " + resolveKnownOwnerName(source.getServer(), ownerId, playerName) + ".");
+        }
+        return adminPlayerTeleportBatch(source, playerName, ownedDeadGroup(ownerId, group).size(), "TP group " + group, owner -> ownedGroup(owner, group));
+    }
+
+    private static int adminPlayerTeleportType(CommandSourceStack source, String playerName, String typeFilter) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        if (ownedType(ownerId, typeFilter).isEmpty()) {
+            return adminError(source, "No tames found for type '" + typeFilter + "' for " + resolveKnownOwnerName(source.getServer(), ownerId, playerName) + ".");
+        }
+        return adminPlayerTeleportBatch(source, playerName, ownedDeadType(ownerId, typeFilter).size(), "TP type " + typeFilter, owner -> ownedType(owner, typeFilter));
+    }
+
+    private static int adminPlayerTeleportByMovementState(CommandSourceStack source, String playerName, MovementOrder order) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        return adminPlayerTeleportBatch(source, playerName, 0, "TP " + movementLabel(order), owner -> {
+            List<TameData> requested = ownedTames(owner);
+            List<TameData> selected = new ArrayList<>();
+            for (TameData data : requested) {
+                if (data == null || data.dead) {
+                    continue;
+                }
+                TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+                if (tame == null) {
+                    if (matchesMovementOrderSnapshot(data, order)) {
+                        selected.add(data);
+                    }
+                    continue;
+                }
+                if (matchesMovementOrder(tame, order)) {
+                    selected.add(data);
+                }
+            }
+            return selected;
+        });
+    }
+
+    private static int adminPlayerTeleportByState(CommandSourceStack source, String playerName, String stateName) {
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) {
+            return adminError(source, "Invalid state. Use follow, wander, or sit.");
+        }
+        return adminPlayerTeleportByMovementState(source, playerName, order);
+    }
+
+    private interface AdminOwnerSelection {
+        List<TameData> select(UUID ownerId);
+    }
+
+    private static int adminPlayerTeleportBatch(CommandSourceStack source, String playerName, int deadSkipped, String label, AdminOwnerSelection selection) {
+        UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (ownerId == null) {
+            return adminError(source, "Unknown player: " + playerName);
+        }
+        String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
+        ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return adminError(source, ownerName + " must be online for admin tp.");
+        }
+
+        List<TameData> requested = selection.select(ownerId);
+        if (requested.isEmpty()) {
+            return adminError(source, ownerName + " has no matching tames for admin tp.");
+        }
+
+        List<TamableAnimal> loadedTargets = new ArrayList<>();
+        List<TameData> unloadedTargets = new ArrayList<>();
+        int queued = 0;
+        int failed = 0;
+        int crossDimension = 0;
+        List<String> failedNames = new ArrayList<>();
+
+        for (TameData data : requested) {
+            if (data == null || data.dead) {
+                continue;
+            }
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
+            if (tame == null) {
+                String queueError = validateUnloadedTeleportForPlayer(source, owner, data);
+                if (queueError != null) {
+                    failed++;
+                    failedNames.add(tameDisplayName(data) + " (" + queueError + ")");
+                    continue;
+                }
+                unloadedTargets.add(data);
+                if (isCrossDimension(data, owner)) {
+                    crossDimension++;
+                }
+                continue;
+            }
+            loadedTargets.add(tame);
+            if (isCrossDimension(tame, owner)) {
+                crossDimension++;
+            }
+        }
+
+        for (TamableAnimal tame : loadedTargets) {
+            teleportTameToPlayer(tame, owner);
+        }
+        for (TameData data : unloadedTargets) {
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            if (unloaded.success) {
+                queued++;
+            } else {
+                failed++;
+                failedNames.add(tameDisplayName(data) + " (" + unloaded.error + ")");
+            }
+        }
+
+        sendAdminTeleportSummary(source, "Admin " + ownerName + " " + label, loadedTargets.size(), queued, deadSkipped, failed, 0, crossDimension);
+        if (!failedNames.isEmpty()) {
+            source.sendFailure(Component.literal("Admin tp failures for " + ownerName + ": " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
+        }
+        return loadedTargets.size() + queued > 0 ? 1 : 0;
+    }
+
+    private static void sendAdminTeleportSummary(CommandSourceStack source, String label, int loaded, int unloaded, int deadSkipped, int failed, int xpCost, int crossDimension) {
+        if (source == null) {
+            return;
+        }
+        source.sendSuccess(() -> buildTeleportSummary(label, loaded, unloaded, deadSkipped, failed, xpCost, crossDimension), false);
+    }
+
     private static int adminPlayerRespawnPet(CommandSourceStack source, String playerName, String pet, ReviveMode mode, boolean reincarnateAfter) {
         UUID ownerId = resolveKnownOwnerUuid(source.getServer(), playerName);
         if (ownerId == null) {
@@ -12050,11 +12387,7 @@ public class TameCommands {
             CompoundTag snapshot = data.entitySnapshot;
             Integer command = findSnapshotCommand(snapshot);
             if (command != null) {
-                return switch (command) {
-                    case 1 -> MovementOrder.SIT;
-                    case 2 -> MovementOrder.FOLLOW;
-                    default -> data.hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
-                };
+                return resolveMovementOrderFromSnapshotCommand(command, data.type, data.hasHome);
             }
             if (snapshot != null && !snapshot.isEmpty()) {
                 if (snapshot.contains("Sitting", Tag.TAG_BYTE) && snapshot.getBoolean("Sitting")) {
@@ -13127,17 +13460,18 @@ public class TameCommands {
         if (isCarriedByOwner(server, data)) {
             return false;
         }
-        return shouldLanternRecallFromSnapshot(data.entitySnapshot);
+        return shouldLanternRecallFromSnapshot(data);
     }
 
-    private static boolean shouldLanternRecallFromSnapshot(CompoundTag snapshot) {
+    private static boolean shouldLanternRecallFromSnapshot(TameData data) {
+        CompoundTag snapshot = data == null ? null : data.entitySnapshot;
         if (snapshot == null || snapshot.isEmpty()) {
             return true;
         }
         if (DomesticationMod.CONFIG.trinaryCommandSystem.get()) {
             Integer command = findSnapshotCommand(snapshot);
             if (command != null) {
-                return command == 2;
+                return matchesSnapshotCommand(command, MovementOrder.FOLLOW, data == null ? null : data.type);
             }
         } else {
             Integer command = findSnapshotCommand(snapshot);
@@ -13179,11 +13513,7 @@ public class TameCommands {
         CompoundTag snapshot = data.entitySnapshot;
         Integer command = findSnapshotCommand(snapshot);
         if (command != null) {
-            return switch (order) {
-                case FOLLOW -> command == 2;
-                case SIT -> command == 1;
-                case WANDER, GUARDIAN -> command == 0;
-            };
+            return matchesSnapshotCommand(command, order, data.type);
         }
         boolean sitting = false;
         if (snapshot != null && !snapshot.isEmpty()) {
@@ -13854,12 +14184,13 @@ public class TameCommands {
     private static boolean matchesMovementOrder(TamableAnimal tame, MovementOrder order) {
         if (tame instanceof IComandableMob commandable) {
             int command = commandable.getCommand();
-            return switch (order) {
-                case FOLLOW -> command == 2;
-                case SIT -> command == 1 || tame.isOrderedToSit();
-                case WANDER -> command == 0;
-                case GUARDIAN -> false;
-            };
+            if (order == MovementOrder.GUARDIAN) {
+                return false;
+            }
+            if (matchesSnapshotCommand(command, order, tame)) {
+                return true;
+            }
+            return order == MovementOrder.SIT && tame.isOrderedToSit();
         }
         return switch (order) {
             case FOLLOW -> !tame.isOrderedToSit();
@@ -13875,7 +14206,49 @@ public class TameCommands {
         }
         ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
         String typeId = key == null ? tame.getType().toString() : key.toString();
-        return !TameRegistry.isCallOrderInvertedType(typeId);
+        return usesInvertedGenericCallOrder(typeId);
+    }
+
+    private static boolean usesInvertedGenericCallOrder(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return true;
+        }
+        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return !TameRegistry.isCallOrderInvertedType(normalized);
+    }
+
+    private static boolean matchesSnapshotCommand(int command, MovementOrder order, TamableAnimal tame) {
+        return matchesSnapshotCommand(command, order, tame == null ? null : entityTypeId(tame));
+    }
+
+    private static boolean matchesSnapshotCommand(int command, MovementOrder order, String typeId) {
+        int expected = switch (order) {
+            case WANDER, GUARDIAN -> 0;
+            case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 1 : 2;
+            case SIT -> usesInvertedGenericCallOrder(typeId) ? 2 : 1;
+        };
+        return command == expected;
+    }
+
+    private static MovementOrder resolveMovementOrderFromSnapshotCommand(int command, String typeId, boolean hasHome) {
+        if (matchesSnapshotCommand(command, MovementOrder.FOLLOW, typeId)) {
+            return MovementOrder.FOLLOW;
+        }
+        if (matchesSnapshotCommand(command, MovementOrder.SIT, typeId)) {
+            return MovementOrder.SIT;
+        }
+        return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+    }
+
+    private static String entityTypeId(TamableAnimal tame) {
+        if (tame == null) {
+            return null;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key == null ? tame.getType().toString() : key.toString();
     }
 
     private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
@@ -16053,12 +16426,57 @@ public class TameCommands {
         return b.buildFuture();
     }
 
+    private static CompletableFuture<Suggestions> suggestPlayerOwnedPetNames(CommandSourceStack source, String playerName, SuggestionsBuilder b) {
+        UUID ownerId = resolveKnownOwnerUuid(source == null ? null : source.getServer(), playerName);
+        if (ownerId == null) return b.buildFuture();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.name == null || data.name.isBlank()) continue;
+            if (!ownerId.equals(data.ownerUUID)) continue;
+            if (isInactiveEntry(data.uuid)) continue;
+            suggestCommandString(b, data.name);
+        }
+        return b.buildFuture();
+    }
+
     private static CompletableFuture<Suggestions> suggestOwnedPetNamesAll(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             suggestCommandString(b, d.name);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestPlayerOwnedGroups(CommandSourceStack source, String playerName, SuggestionsBuilder b) {
+        UUID ownerId = resolveKnownOwnerUuid(source == null ? null : source.getServer(), playerName);
+        if (ownerId == null) return b.buildFuture();
+        Set<String> seen = new HashSet<>();
+        for (String group : TameRegistry.getOwnerGroups(ownerId)) {
+            if (group == null || group.isBlank()) continue;
+            if (seen.add(group)) suggestCommandString(b, group);
+        }
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !ownerId.equals(data.ownerUUID)) continue;
+            for (String group : groupMemberships(data)) {
+                if (seen.add(group)) suggestCommandString(b, group);
+            }
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestPlayerOwnedTypes(CommandSourceStack source, String playerName, SuggestionsBuilder b) {
+        UUID ownerId = resolveKnownOwnerUuid(source == null ? null : source.getServer(), playerName);
+        if (ownerId == null) return b.buildFuture();
+        Set<String> seenPath = new HashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !ownerId.equals(data.ownerUUID)) continue;
+            if (isDeadEntry(data.uuid)) continue;
+            String full = tameTypeId(data);
+            if (full.isBlank()) continue;
+            int sep = full.indexOf(':');
+            String path = sep >= 0 ? full.substring(sep + 1) : full;
+            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
         }
         return b.buildFuture();
     }
