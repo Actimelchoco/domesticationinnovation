@@ -8,7 +8,14 @@ public final class TameGoalInstaller {
     }
 
     public static void installIfMissing(TamableAnimal tame) {
-        // Mode targeting now runs from TameBehaviorEvents.
+        addTargetIfMissing(tame, ProtectionZoneGoal.class, 1, new ProtectionZoneGoal(tame));
+        addTargetIfMissing(tame, PassiveModeGoal.class, 2, new PassiveModeGoal(tame));
+        addTargetIfMissing(tame, DefaultPlusModeGoal.class, 2, new DefaultPlusModeGoal(tame));
+        addTargetIfMissing(tame, BossModeGoal.class, 2, new BossModeGoal(tame));
+        addTargetIfMissing(tame, BodyguardModeGoal.class, 2, new BodyguardModeGoal(tame));
+        addTargetIfMissing(tame, MonsterHunterModeGoal.class, 2, new MonsterHunterModeGoal(tame));
+        addTargetIfMissing(tame, ArenaModeGoal.class, 2, new ArenaModeGoal(tame));
+        addTargetIfMissing(tame, AggressiveModeGoal.class, 2, new AggressiveModeGoal(tame));
     }
 
     private static void addTargetIfMissing(TamableAnimal tame, Class<? extends Goal> goalType, int priority, Goal goal) {
