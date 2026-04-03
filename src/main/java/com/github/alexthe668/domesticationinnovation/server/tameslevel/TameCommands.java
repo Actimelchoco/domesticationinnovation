@@ -111,6 +111,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 import java.util.function.Predicate;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
@@ -869,6 +870,10 @@ public class TameCommands {
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
                         .then(Commands.literal("bed")
                                 .executes(ctx -> listOwnedBeds(ctx.getSource()))
+                                .then(Commands.literal("long")
+                                        .executes(ctx -> listOwnedBedsLong(ctx.getSource())))
+                                .then(Commands.literal("noBed")
+                                        .executes(ctx -> listOwnedBedsWithoutBed(ctx.getSource())))
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("name", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
@@ -4452,20 +4457,88 @@ public class TameCommands {
             return 0;
         }
         List<TameData> withBeds = new ArrayList<>();
+        List<TameData> withoutBeds = new ArrayList<>();
         for (TameData data : ownedTames(player.getUUID())) {
-            if (data != null && data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
+            if (data == null) {
+                continue;
+            }
+            if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
                 withBeds.add(data);
+            } else {
+                withoutBeds.add(data);
+            }
+        }
+        if (withBeds.isEmpty() && withoutBeds.isEmpty()) {
+            return error(player, "You do not have any registered tames.");
+        }
+        if (!withBeds.isEmpty()) {
+            withBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
+            player.sendSystemMessage(Component.literal("---- Your Tames With Beds ----").withStyle(ChatFormatting.GOLD));
+            for (TameData data : withBeds) {
+                player.sendSystemMessage(Component.literal(tameDisplayName(data)).withStyle(bedEntryColor(source.getServer(), data)));
+            }
+        }
+        if (!withoutBeds.isEmpty()) {
+            withoutBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
+            player.sendSystemMessage(Component.literal("---- Your Tames Without Beds ----").withStyle(ChatFormatting.GOLD));
+            player.sendSystemMessage(Component.literal(formatCompactTameNameList(withoutBeds)).withStyle(ChatFormatting.GRAY));
+        }
+        return withBeds.size() + withoutBeds.size();
+    }
+
+    private static int listOwnedBedsLong(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<TameData> withBeds = new ArrayList<>();
+        List<TameData> withoutBeds = new ArrayList<>();
+        for (TameData data : ownedTames(player.getUUID())) {
+            if (data == null) {
+                continue;
+            }
+            if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
+                withBeds.add(data);
+            } else {
+                withoutBeds.add(data);
             }
         }
         if (withBeds.isEmpty()) {
-            return error(player, "None of your tames currently have a bed.");
+            if (withoutBeds.isEmpty()) {
+                return error(player, "You do not have any registered tames.");
+            }
+            player.sendSystemMessage(Component.literal("None of your tames currently have a bed.").withStyle(ChatFormatting.YELLOW));
+            player.sendSystemMessage(Component.literal("No bed: " + formatCompactTameNameList(withoutBeds)).withStyle(ChatFormatting.GRAY));
+            return withoutBeds.size();
         }
         withBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
         player.sendSystemMessage(Component.literal("---- Your Tame Beds ----").withStyle(ChatFormatting.GOLD));
         for (TameData data : withBeds) {
             player.sendSystemMessage(Component.literal(formatBedEntry(source.getServer(), data)).withStyle(bedEntryColor(source.getServer(), data)));
         }
+        if (!withoutBeds.isEmpty()) {
+            player.sendSystemMessage(Component.literal("No bed: " + formatCompactTameNameList(withoutBeds)).withStyle(ChatFormatting.GRAY));
+        }
         return withBeds.size();
+    }
+
+    private static int listOwnedBedsWithoutBed(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<TameData> withoutBeds = new ArrayList<>();
+        for (TameData data : ownedTames(player.getUUID())) {
+            if (data != null && (!data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank())) {
+                withoutBeds.add(data);
+            }
+        }
+        if (withoutBeds.isEmpty()) {
+            return error(player, "All of your tames currently have a bed.");
+        }
+        player.sendSystemMessage(Component.literal("---- Your Tames Without Beds ----").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal(formatCompactTameNameList(withoutBeds)).withStyle(ChatFormatting.GRAY));
+        return withoutBeds.size();
     }
 
     private static int setOwnedBed(CommandSourceStack source, String petName) {
@@ -4624,6 +4697,18 @@ public class TameCommands {
         String dimensionName = shortDimensionName(dimensionId, data.petBedDimension);
         String bedType = shortBedType(petBedBlockId(server, data));
         return tameDisplayName(data) + ": " + bedType + ", " + dimensionName + " [" + data.petBedX + ", " + data.petBedY + ", " + data.petBedZ + "]";
+    }
+
+    private static String formatCompactTameNameList(List<TameData> tames) {
+        if (tames == null || tames.isEmpty()) {
+            return "-";
+        }
+        return tames.stream()
+                .filter(Objects::nonNull)
+                .map(TameCommands::tameDisplayName)
+                .filter(name -> name != null && !name.isBlank())
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .collect(Collectors.joining(", "));
     }
 
     private static ChatFormatting bedEntryColor(MinecraftServer server, TameData data) {
