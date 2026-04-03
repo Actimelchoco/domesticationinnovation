@@ -33,6 +33,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAd
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -582,6 +583,219 @@ public class TameCommands {
         }
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildLegacyDuelCommand() {
+        return Commands.literal("duelOld")
+                .then(Commands.literal("vs")
+                        .then(Commands.literal("group")
+                                .then(Commands.argument("left", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelStartSameOwner(
+                                                        ctx.getSource(),
+                                                        DuelSelection.group(StringArgumentType.getString(ctx, "left")),
+                                                        DuelSelection.all()
+                                                )))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("name")
+                                                .then(Commands.argument("right", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "right"))
+                                                        ))))))
+                        .then(Commands.literal("type")
+                                .then(Commands.argument("left", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelStartSameOwner(
+                                                        ctx.getSource(),
+                                                        DuelSelection.type(StringArgumentType.getString(ctx, "left")),
+                                                        DuelSelection.all()
+                                                )))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("name")
+                                                .then(Commands.argument("right", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "right"))
+                                                        ))))))
+                        .then(Commands.literal("name")
+                                .then(Commands.argument("left", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelStartSameOwner(
+                                                        ctx.getSource(),
+                                                        DuelSelection.single(StringArgumentType.getString(ctx, "left")),
+                                                        DuelSelection.all()
+                                                )))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.group(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("right", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.type(StringArgumentType.getString(ctx, "right"))
+                                                        ))))
+                                        .then(Commands.literal("name")
+                                                .then(Commands.argument("right", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                        .executes(ctx -> duelStartSameOwner(
+                                                                ctx.getSource(),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "left")),
+                                                                DuelSelection.single(StringArgumentType.getString(ctx, "right"))
+                                                        )))))))
+                .then(Commands.literal("group")
+                        .then(Commands.argument("group", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                .executes(ctx -> duelAcceptQuickLegacy(
+                                        ctx.getSource(),
+                                        DuelSelection.group(StringArgumentType.getString(ctx, "group"))
+                                ))
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                        .executes(ctx -> duelInviteSelectionLegacy(
+                                                ctx.getSource(),
+                                                DuelSelection.group(StringArgumentType.getString(ctx, "group")),
+                                                StringArgumentType.getString(ctx, "player")
+                                        )))))
+                .then(Commands.literal("type")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                .executes(ctx -> duelAcceptQuickLegacy(
+                                        ctx.getSource(),
+                                        DuelSelection.type(StringArgumentType.getString(ctx, "type"))
+                                ))
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                        .executes(ctx -> duelInviteSelectionLegacy(
+                                                ctx.getSource(),
+                                                DuelSelection.type(StringArgumentType.getString(ctx, "type")),
+                                                StringArgumentType.getString(ctx, "player")
+                                        )))))
+                .then(Commands.literal("all")
+                        .executes(ctx -> duelAcceptQuickLegacy(ctx.getSource(), DuelSelection.all()))
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                .executes(ctx -> duelInviteSelectionLegacy(
+                                        ctx.getSource(),
+                                        DuelSelection.all(),
+                                        StringArgumentType.getString(ctx, "player")
+                                ))))
+                .then(Commands.argument("name", StringArgumentType.string())
+                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                        .executes(ctx -> duelAcceptQuickLegacy(
+                                ctx.getSource(),
+                                DuelSelection.single(StringArgumentType.getString(ctx, "name"))
+                        ))
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                .executes(ctx -> duelInviteSelectionLegacy(
+                                        ctx.getSource(),
+                                        DuelSelection.single(StringArgumentType.getString(ctx, "name")),
+                                        StringArgumentType.getString(ctx, "player")
+                                ))))
+                .then(Commands.argument("group", StringArgumentType.word())
+                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                .executes(ctx -> duelInviteSelectionLegacy(
+                                        ctx.getSource(),
+                                        DuelSelection.group(StringArgumentType.getString(ctx, "group")),
+                                        StringArgumentType.getString(ctx, "player")
+                                ))))
+                .then(Commands.literal("accept")
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("group", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> duelAcceptSelectionLegacy(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "player"),
+                                                        DuelSelection.group(StringArgumentType.getString(ctx, "group"))
+                                                ))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> duelAcceptSelectionLegacy(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "player"),
+                                                        DuelSelection.type(StringArgumentType.getString(ctx, "type"))
+                                                ))))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> duelAcceptSelectionLegacy(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "player"),
+                                                DuelSelection.all()
+                                        )))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> duelAcceptSelectionLegacy(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "player"),
+                                                DuelSelection.single(StringArgumentType.getString(ctx, "name"))
+                                        )))
+                                .then(Commands.argument("group", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                        .executes(ctx -> duelAcceptSelectionLegacy(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "player"),
+                                                DuelSelection.group(StringArgumentType.getString(ctx, "group"))
+                                        )))))
+                .then(Commands.literal("decline")
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
+                                .executes(ctx -> duelDeclineLegacy(
+                                        ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "player")
+                                ))))
+                .then(Commands.literal("ff")
+                        .executes(ctx -> duelForfeit(ctx.getSource())))
+                .then(Commands.literal("inbox")
+                        .executes(ctx -> duelInboxLegacy(ctx.getSource())));
+    }
+
     @SubscribeEvent
     public static void registerCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
@@ -714,7 +928,7 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player"),
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
-                        .then(Commands.literal("duelOld")
+                        .then(Commands.literal("_duelOldCompat")
                                 .then(Commands.literal("vs")
                                         .then(Commands.literal("group")
                                                 .then(Commands.argument("left", StringArgumentType.word())
@@ -1240,6 +1454,7 @@ public class TameCommands {
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource()))))
 
+                        .then(buildLegacyDuelCommand())
                         .then(Commands.literal("duel")
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
@@ -4729,6 +4944,10 @@ public class TameCommands {
         return duelInviteSelection(source, selection, targetPlayerName, DuelSpectators.empty());
     }
 
+    private static int duelInviteSelectionLegacy(CommandSourceStack source, DuelSelection selection, String targetPlayerName) {
+        return duelInviteSelection(source, selection, targetPlayerName, DuelSpectators.empty(), DUEL_INVITES, "duelOld");
+    }
+
     private static int duelInviteSelectionWithSpectators(CommandSourceStack source, DuelSelection selection, String targetPlayerName, String spectatorSpec) {
         DuelSpectatorParseResult parsed = parseDuelSpectators(source, spectatorSpec, source.getPlayer().getUUID());
         if (!parsed.error.isBlank()) {
@@ -4738,6 +4957,10 @@ public class TameCommands {
     }
 
     private static int duelInviteSelection(CommandSourceStack source, DuelSelection selection, String targetPlayerName, DuelSpectators spectators) {
+        return duelInviteSelection(source, selection, targetPlayerName, spectators, DUEL_INVITES, "duel");
+    }
+
+    private static int duelInviteSelection(CommandSourceStack source, DuelSelection selection, String targetPlayerName, DuelSpectators spectators, Map<UUID, Map<UUID, DuelInvite>> inviteStore, String commandLiteral) {
         ServerPlayer challenger = source.getPlayer();
         if (challenger.getName().getString().equalsIgnoreCase(targetPlayerName)) {
             return error(challenger, "You cannot duel yourself.");
@@ -4747,21 +4970,21 @@ public class TameCommands {
             return error(challenger, "Target player is not online.");
         }
 
-        cleanupExpiredDuelInvites();
+        cleanupExpiredDuelInviteStore(inviteStore);
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), selection);
         if (!challengerResult.error.isBlank()) return error(challenger, challengerResult.error);
         List<TamableAnimal> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(challenger, "Your selected duel tames are not loaded/alive.");
 
-        DUEL_INVITES.computeIfAbsent(targetPlayer.getUUID(), ignored -> new HashMap<>())
+        inviteStore.computeIfAbsent(targetPlayer.getUUID(), ignored -> new HashMap<>())
                 .put(challenger.getUUID(), new DuelInvite(challenger.getUUID(), targetPlayer.getUUID(), TeamSelection.tameOnly(selection), spectators, System.currentTimeMillis()));
 
         String challengerSelectionText = duelSelectionLabel(selection);
         challenger.sendSystemMessage(Component.literal("Sent duel invite to " + targetPlayer.getName().getString() + " using " + challengerSelectionText + ".").withStyle(ChatFormatting.GREEN));
         targetPlayer.sendSystemMessage(Component.literal(challenger.getName().getString() + " invited you to a duel with " + challengerSelectionText + "." + duelSpectatorLabel(source.getServer(), spectators)).withStyle(ChatFormatting.GOLD));
-        targetPlayer.sendSystemMessage(Component.literal("Accept: /tames duel accept " + challenger.getName().getString() + " <group|type|all|name>").withStyle(ChatFormatting.AQUA));
-        targetPlayer.sendSystemMessage(Component.literal("Quick accept: /tames duel group <group>, /tames duel type <type>, /tames duel <tamename>, /tames duel all, /tames duel team <selection>").withStyle(ChatFormatting.AQUA));
-        targetPlayer.sendSystemMessage(Component.literal("Decline: /tames duel decline " + challenger.getName().getString()).withStyle(ChatFormatting.GRAY));
+        targetPlayer.sendSystemMessage(Component.literal("Accept: /tames " + commandLiteral + " accept " + challenger.getName().getString() + " <group|type|all|name>").withStyle(ChatFormatting.AQUA));
+        targetPlayer.sendSystemMessage(Component.literal("Quick accept: /tames " + commandLiteral + " group <group>, /tames " + commandLiteral + " type <type>, /tames " + commandLiteral + " <tamename>, /tames " + commandLiteral + " all").withStyle(ChatFormatting.AQUA));
+        targetPlayer.sendSystemMessage(Component.literal("Decline: /tames " + commandLiteral + " decline " + challenger.getName().getString()).withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
@@ -4948,6 +5171,10 @@ public class TameCommands {
         return duelAcceptSelection(source, challengerName, targetSelection, DuelSpectators.empty());
     }
 
+    private static int duelAcceptSelectionLegacy(CommandSourceStack source, String challengerName, DuelSelection targetSelection) {
+        return duelAcceptSelection(source, challengerName, targetSelection, DuelSpectators.empty(), DUEL_INVITES);
+    }
+
     private static int duelAcceptSelectionWithSpectators(CommandSourceStack source, String challengerName, DuelSelection targetSelection, String spectatorSpec) {
         DuelSpectatorParseResult parsed = parseDuelSpectators(source, spectatorSpec, source.getPlayer().getUUID());
         if (!parsed.error.isBlank()) {
@@ -4957,13 +5184,17 @@ public class TameCommands {
     }
 
     private static int duelAcceptSelection(CommandSourceStack source, String challengerName, DuelSelection targetSelection, DuelSpectators extraSpectators) {
+        return duelAcceptSelection(source, challengerName, targetSelection, extraSpectators, DUEL_INVITES);
+    }
+
+    private static int duelAcceptSelection(CommandSourceStack source, String challengerName, DuelSelection targetSelection, DuelSpectators extraSpectators, Map<UUID, Map<UUID, DuelInvite>> inviteStore) {
         ServerPlayer targetPlayer = source.getPlayer();
-        cleanupExpiredDuelInvites();
+        cleanupExpiredDuelInviteStore(inviteStore);
         ServerPlayer challenger = source.getServer().getPlayerList().getPlayerByName(challengerName);
         if (challenger == null) return error(targetPlayer, "Challenger is not online.");
         if (challenger.getUUID().equals(targetPlayer.getUUID())) return error(targetPlayer, "You cannot duel yourself.");
 
-        DuelInvite invite = popDuelInvite(targetPlayer.getUUID(), challenger.getUUID());
+        DuelInvite invite = popDuelInvite(inviteStore, targetPlayer.getUUID(), challenger.getUUID());
         if (invite == null) return error(targetPlayer, "No pending duel invite from " + challengerName + ".");
 
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
@@ -5064,6 +5295,10 @@ public class TameCommands {
         return duelAcceptQuick(source, targetSelection, DuelSpectators.empty());
     }
 
+    private static int duelAcceptQuickLegacy(CommandSourceStack source, DuelSelection targetSelection) {
+        return duelAcceptQuick(source, targetSelection, DuelSpectators.empty(), DUEL_INVITES, "duelOld");
+    }
+
     private static int duelAcceptQuickWithSpectators(CommandSourceStack source, DuelSelection targetSelection, String spectatorSpec) {
         DuelSpectatorParseResult parsed = parseDuelSpectators(source, spectatorSpec, source.getPlayer().getUUID());
         if (!parsed.error.isBlank()) {
@@ -5073,26 +5308,30 @@ public class TameCommands {
     }
 
     private static int duelAcceptQuick(CommandSourceStack source, DuelSelection targetSelection, DuelSpectators extraSpectators) {
+        return duelAcceptQuick(source, targetSelection, extraSpectators, DUEL_INVITES, "duel");
+    }
+
+    private static int duelAcceptQuick(CommandSourceStack source, DuelSelection targetSelection, DuelSpectators extraSpectators, Map<UUID, Map<UUID, DuelInvite>> inviteStore, String commandLiteral) {
         ServerPlayer targetPlayer = source.getPlayer();
-        cleanupExpiredDuelInvites();
-        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(targetPlayer.getUUID());
+        cleanupExpiredDuelInviteStore(inviteStore);
+        Map<UUID, DuelInvite> incoming = inviteStore.get(targetPlayer.getUUID());
         if (incoming == null || incoming.isEmpty()) {
             return error(targetPlayer, "No pending duel invites.");
         }
         if (incoming.size() > 1) {
-            return error(targetPlayer, "Multiple duel invites pending. Use /tames duel accept <player> <group|type|all|name>.");
+            return error(targetPlayer, "Multiple duel invites pending. Use /tames " + commandLiteral + " accept <player> <group|type|all|name>.");
         }
 
         DuelInvite invite = incoming.values().iterator().next();
         ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(invite.challengerUuid);
         if (challenger == null) {
-            popDuelInvite(targetPlayer.getUUID(), invite.challengerUuid);
+            popDuelInvite(inviteStore, targetPlayer.getUUID(), invite.challengerUuid);
             return error(targetPlayer, "Challenger is not online.");
         }
         if (challenger.getUUID().equals(targetPlayer.getUUID())) {
             return error(targetPlayer, "You cannot duel yourself.");
         }
-        popDuelInvite(targetPlayer.getUUID(), invite.challengerUuid);
+        popDuelInvite(inviteStore, targetPlayer.getUUID(), invite.challengerUuid);
 
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
@@ -5193,18 +5432,26 @@ public class TameCommands {
     }
 
     private static int duelDecline(CommandSourceStack source, String challengerName) {
+        return duelDecline(source, challengerName, DUEL_INVITES, true);
+    }
+
+    private static int duelDeclineLegacy(CommandSourceStack source, String challengerName) {
+        return duelDecline(source, challengerName, DUEL_INVITES, true);
+    }
+
+    private static int duelDecline(CommandSourceStack source, String challengerName, Map<UUID, Map<UUID, DuelInvite>> inviteStore, boolean includePendingMatches) {
         ServerPlayer targetPlayer = source.getPlayer();
-        cleanupExpiredDuelInvites();
+        cleanupExpiredDuelInviteStore(inviteStore);
         ServerPlayer challenger = source.getServer().getPlayerList().getPlayerByName(challengerName);
-        PendingDuelMatch pending = findPendingDuelMatchForInvite(source, targetPlayer, challengerName);
-        if (pending != null) {
+        PendingDuelMatch pending = includePendingMatches ? findPendingDuelMatchForInvite(source, targetPlayer, challengerName) : null;
+        if (includePendingMatches && pending != null) {
             notifyPendingDuelCancelled(source.getServer(), pending, targetPlayer.getUUID());
             removePendingDuelMatch(pending.matchId);
             targetPlayer.sendSystemMessage(Component.literal("Declined staged duel invite from " + challengerName + ".").withStyle(ChatFormatting.YELLOW));
             return 1;
         }
         if (challenger == null) return error(targetPlayer, "Challenger is not online.");
-        DuelInvite invite = popDuelInvite(targetPlayer.getUUID(), challenger.getUUID());
+        DuelInvite invite = popDuelInvite(inviteStore, targetPlayer.getUUID(), challenger.getUUID());
         if (invite == null) return error(targetPlayer, "No pending duel invite from " + challengerName + ".");
 
         targetPlayer.sendSystemMessage(Component.literal("Declined duel invite from " + challengerName + ".").withStyle(ChatFormatting.YELLOW));
@@ -5213,13 +5460,23 @@ public class TameCommands {
     }
 
     private static int duelInbox(CommandSourceStack source) {
+        return duelInbox(source, DUEL_INVITES, true);
+    }
+
+    private static int duelInboxLegacy(CommandSourceStack source) {
+        return duelInbox(source, DUEL_INVITES, true);
+    }
+
+    private static int duelInbox(CommandSourceStack source, Map<UUID, Map<UUID, DuelInvite>> inviteStore, boolean includePendingMatches) {
         ServerPlayer targetPlayer = source.getPlayer();
-        cleanupExpiredDuelInvites();
-        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(targetPlayer.getUUID());
+        cleanupExpiredDuelInviteStore(inviteStore);
+        Map<UUID, DuelInvite> incoming = inviteStore.get(targetPlayer.getUUID());
         PendingDuelMatch pending = null;
-        UUID pendingMatchId = PENDING_DUEL_MATCH_BY_PLAYER.get(targetPlayer.getUUID());
-        if (pendingMatchId != null) {
-            pending = PENDING_DUEL_MATCHES.get(pendingMatchId);
+        if (includePendingMatches) {
+            UUID pendingMatchId = PENDING_DUEL_MATCH_BY_PLAYER.get(targetPlayer.getUUID());
+            if (pendingMatchId != null) {
+                pending = PENDING_DUEL_MATCHES.get(pendingMatchId);
+            }
         }
         if ((incoming == null || incoming.isEmpty()) && pending == null) {
             targetPlayer.sendSystemMessage(Component.literal("No pending duel invites.").withStyle(ChatFormatting.GRAY));
@@ -5252,28 +5509,22 @@ public class TameCommands {
     }
 
     private static DuelInvite popDuelInvite(UUID targetUuid, UUID challengerUuid) {
-        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(targetUuid);
+        return popDuelInvite(DUEL_INVITES, targetUuid, challengerUuid);
+    }
+
+    private static DuelInvite popDuelInvite(Map<UUID, Map<UUID, DuelInvite>> inviteStore, UUID targetUuid, UUID challengerUuid) {
+        Map<UUID, DuelInvite> incoming = inviteStore.get(targetUuid);
         if (incoming == null) return null;
         DuelInvite invite = incoming.remove(challengerUuid);
         if (incoming.isEmpty()) {
-            DUEL_INVITES.remove(targetUuid);
+            inviteStore.remove(targetUuid);
         }
         return invite;
     }
 
     private static void cleanupExpiredDuelInvites() {
+        cleanupExpiredDuelInviteStore(DUEL_INVITES);
         long now = System.currentTimeMillis();
-        List<UUID> emptyTargets = new ArrayList<>();
-        for (Map.Entry<UUID, Map<UUID, DuelInvite>> entry : DUEL_INVITES.entrySet()) {
-            Map<UUID, DuelInvite> incoming = entry.getValue();
-            incoming.entrySet().removeIf(e -> (now - e.getValue().createdAtMs) > DUEL_INVITE_TIMEOUT_MS);
-            if (incoming.isEmpty()) {
-                emptyTargets.add(entry.getKey());
-            }
-        }
-        for (UUID target : emptyTargets) {
-            DUEL_INVITES.remove(target);
-        }
         List<UUID> expiredMatches = new ArrayList<>();
         for (PendingDuelMatch match : PENDING_DUEL_MATCHES.values()) {
             if ((now - match.createdAtMs) > DUEL_INVITE_TIMEOUT_MS) {
@@ -5282,6 +5533,21 @@ public class TameCommands {
         }
         for (UUID matchId : expiredMatches) {
             removePendingDuelMatch(matchId);
+        }
+    }
+
+    private static void cleanupExpiredDuelInviteStore(Map<UUID, Map<UUID, DuelInvite>> inviteStore) {
+        long now = System.currentTimeMillis();
+        List<UUID> emptyTargets = new ArrayList<>();
+        for (Map.Entry<UUID, Map<UUID, DuelInvite>> entry : inviteStore.entrySet()) {
+            Map<UUID, DuelInvite> incoming = entry.getValue();
+            incoming.entrySet().removeIf(e -> (now - e.getValue().createdAtMs) > DUEL_INVITE_TIMEOUT_MS);
+            if (incoming.isEmpty()) {
+                emptyTargets.add(entry.getKey());
+            }
+        }
+        for (UUID target : emptyTargets) {
+            inviteStore.remove(target);
         }
     }
 
@@ -11288,6 +11554,13 @@ public class TameCommands {
 
     private static void mergeDuplicateIntoKeeper(TameData keeper, TameData duplicate) {
         if (keeper == null || duplicate == null) return;
+        String normalizedKeeperName = stripLevelPrefixes(keeper.name);
+        if (normalizedKeeperName.isBlank()) {
+            normalizedKeeperName = stripLevelPrefixes(duplicate.name);
+        }
+        if (!normalizedKeeperName.isBlank()) {
+            keeper.name = normalizedKeeperName;
+        }
         keeper.level = Math.max(keeper.level, duplicate.level);
         keeper.xp = Math.max(keeper.xp, duplicate.xp);
         keeper.xpToNext = Math.max(keeper.xpToNext, duplicate.xpToNext);
@@ -15758,10 +16031,20 @@ public class TameCommands {
         }
         ServerPlayer initiator = source.getServer().getPlayerList().getPlayer(match.initiatorUuid);
         String initiatorName = initiator == null ? resolveKnownOwnerName(source.getServer(), match.initiatorUuid, "") : initiator.getGameProfile().getName();
-        if (!initiatorName.equalsIgnoreCase(challengerName)) {
-            return null;
+        if (initiatorName.equalsIgnoreCase(challengerName)) {
+            return match;
         }
-        return match;
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            String participantName = resolveKnownOwnerName(source.getServer(), participant.playerUuid, "");
+            if (participantName.equalsIgnoreCase(challengerName)) {
+                return match;
+            }
+            String invitedByName = resolveKnownOwnerName(source.getServer(), participant.invitedBy, "");
+            if (invitedByName.equalsIgnoreCase(challengerName)) {
+                return match;
+            }
+        }
+        return null;
     }
 
     private static String addPendingDuelParticipant(CommandSourceStack source, PendingDuelMatch match, ServerPlayer player, boolean sideA, UUID invitedBy) {
@@ -16549,10 +16832,14 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestIncomingDuelChallengers(CommandSourceStack source, SuggestionsBuilder b) {
+        return suggestIncomingDuelChallengers(source, b, DUEL_INVITES);
+    }
+
+    private static CompletableFuture<Suggestions> suggestIncomingDuelChallengers(CommandSourceStack source, SuggestionsBuilder b, Map<UUID, Map<UUID, DuelInvite>> inviteStore) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
-        cleanupExpiredDuelInvites();
-        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(p.getUUID());
+        cleanupExpiredDuelInviteStore(inviteStore);
+        Map<UUID, DuelInvite> incoming = inviteStore.get(p.getUUID());
         if (incoming == null || incoming.isEmpty()) return b.buildFuture();
         for (UUID challengerId : incoming.keySet()) {
             ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(challengerId);
@@ -16788,6 +17075,10 @@ public class TameCommands {
     }
 
     private static boolean isExactIncomingDuelChallenger(CommandSourceStack source, String name) {
+        return isExactIncomingDuelChallenger(source, name, DUEL_INVITES);
+    }
+
+    private static boolean isExactIncomingDuelChallenger(CommandSourceStack source, String name, Map<UUID, Map<UUID, DuelInvite>> inviteStore) {
         if (source == null || name == null || name.isBlank()) {
             return false;
         }
@@ -16795,8 +17086,8 @@ public class TameCommands {
         if (player == null) {
             return false;
         }
-        cleanupExpiredDuelInvites();
-        Map<UUID, DuelInvite> incoming = DUEL_INVITES.get(player.getUUID());
+        cleanupExpiredDuelInviteStore(inviteStore);
+        Map<UUID, DuelInvite> incoming = inviteStore.get(player.getUUID());
         if (incoming == null || incoming.isEmpty()) {
             return false;
         }

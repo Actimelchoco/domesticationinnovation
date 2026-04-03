@@ -18,8 +18,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 public class TameRegistry {
+    private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
 
     public static final Map<UUID, TameData> TAMES = new HashMap<>();
     private static final Map<UUID, TameData> TL_IDS = new HashMap<>();
@@ -51,8 +53,20 @@ public class TameRegistry {
         TAMES.clear();
         TAMES.putAll(savedData.getTames());
         boolean changed = false;
+        Set<UUID> invalidIds = new HashSet<>();
+        Set<UUID> invalidTlIds = new HashSet<>();
         for (TameData data : TAMES.values()) {
             if (data == null) {
+                continue;
+            }
+            if (hasLevelPrefixName(data.name)) {
+                if (data.uuid != null) {
+                    invalidIds.add(data.uuid);
+                }
+                if (data.tlId != null) {
+                    invalidTlIds.add(data.tlId);
+                }
+                changed = true;
                 continue;
             }
             UUID before = data.tlId;
@@ -61,6 +75,7 @@ public class TameRegistry {
                 changed = true;
             }
         }
+        TAMES.entrySet().removeIf(entry -> entry.getValue() == null || hasLevelPrefixName(entry.getValue().name));
         rebuildIndexes();
         LAST_DEATHS.clear();
         LAST_DEATHS.putAll(savedData.getLastDeaths());
@@ -84,6 +99,15 @@ public class TameRegistry {
         OWNER_GROUPS.putAll(savedData.getOwnerGroups());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
+        if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
+            LAST_DEATHS.entrySet().removeIf(entry -> {
+                TameDeathRecord record = entry.getValue();
+                return record != null && ((record.uuid != null && invalidIds.contains(record.uuid))
+                        || (record.tlId != null && invalidTlIds.contains(record.tlId)));
+            });
+            DEATH_HISTORY.removeIf(record -> record != null && ((record.uuid != null && invalidIds.contains(record.uuid))
+                    || (record.tlId != null && invalidTlIds.contains(record.tlId))));
+        }
         if (DEATH_HISTORY.isEmpty() && !LAST_DEATHS.isEmpty()) {
             DEATH_HISTORY.addAll(LAST_DEATHS.values());
             changed = true;
@@ -95,6 +119,10 @@ public class TameRegistry {
 
     public static void register(TameData data) {
         if (data == null || data.uuid == null) {
+            return;
+        }
+        if (hasLevelPrefixName(data.name)) {
+            remove(data.uuid);
             return;
         }
         data.ensureTlId();
@@ -470,6 +498,28 @@ public class TameRegistry {
 
     public static boolean isInitialized() {
         return savedData != null;
+    }
+
+    public static boolean hasLevelPrefixName(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        return LEVEL_PREFIX_PATTERN.matcher(name).lookingAt();
+    }
+
+    public static String stripLevelPrefixes(String name) {
+        if (name == null) {
+            return "";
+        }
+        String cleaned = name;
+        while (true) {
+            String next = LEVEL_PREFIX_PATTERN.matcher(cleaned).replaceFirst("");
+            if (next.equals(cleaned)) {
+                break;
+            }
+            cleaned = next;
+        }
+        return cleaned.trim();
     }
 
     public static void bindEntityToData(TamableAnimal tame, TameData data) {

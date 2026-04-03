@@ -39,6 +39,8 @@ public class TameSpawnEvents {
         // only track tamed animals
         if (!tame.isTame()) return;
 
+        if (purgeInvalidPrefixedTame(tame)) return;
+
         // Always ensure goals are present for loaded tames, even if already registered.
         TameGoalInstaller.installIfMissing(tame);
 
@@ -104,6 +106,7 @@ public class TameSpawnEvents {
             // Ensure owner is available before registry dead-entry matching.
             tame.setOwnerUUID(event.getTamer().getUUID());
         }
+        if (purgeInvalidPrefixedTame(tame)) return;
 
         // Allow dead-entry identity sync so reincarnation can consume dead rows
         // instead of creating a second live entry with the same base identity.
@@ -141,6 +144,7 @@ public class TameSpawnEvents {
 
     public static TameData registerOrRestoreTame(TamableAnimal tame, boolean notifyClassIfNew, boolean allowDeadIdentitySync) {
         if (tame == null || !tame.isTame()) return null;
+        if (purgeInvalidPrefixedTame(tame)) return null;
         UUID entityTlId = TameData.readOrCreateTlId(tame);
         TameData existing = TameRegistry.get(tame.getUUID());
         if (existing != null) {
@@ -675,14 +679,7 @@ public class TameSpawnEvents {
     }
 
     private static String stripLevelPrefixes(String name) {
-        if (name == null) return "";
-        String cleaned = name;
-        while (true) {
-            String next = LEVEL_PREFIX.matcher(cleaned).replaceFirst("");
-            if (next.equals(cleaned)) break;
-            cleaned = next;
-        }
-        return cleaned.trim();
+        return TameRegistry.stripLevelPrefixes(name);
     }
 
     private static ParsedName parseName(TamableAnimal tame) {
@@ -706,4 +703,30 @@ public class TameSpawnEvents {
     }
 
     private record ParsedName(String baseName, int level) {}
+
+    private static boolean purgeInvalidPrefixedTame(TamableAnimal tame) {
+        if (tame == null || tame.level().isClientSide) {
+            return false;
+        }
+        String raw = tame.hasCustomName() && tame.getCustomName() != null
+                ? tame.getCustomName().getString()
+                : tame.getName().getString();
+        if (!TameRegistry.hasLevelPrefixName(raw)) {
+            return false;
+        }
+        TameData existing = TameRegistry.get(tame.getUUID());
+        if (existing != null) {
+            TameRegistry.remove(existing.uuid);
+            TameRegistry.removeDeathsForIdentity(existing.uuid, existing.tlId);
+        } else {
+            UUID tlId = TameData.getTlId(tame);
+            TameData byTlId = tlId == null ? null : TameRegistry.getByTlId(tlId);
+            if (byTlId != null) {
+                TameRegistry.remove(byTlId.uuid);
+                TameRegistry.removeDeathsForIdentity(byTlId.uuid, byTlId.tlId);
+            }
+        }
+        tame.discard();
+        return true;
+    }
 }

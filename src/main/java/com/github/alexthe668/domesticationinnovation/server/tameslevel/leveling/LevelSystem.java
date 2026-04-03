@@ -772,6 +772,21 @@ public class LevelSystem {
     }
 
     private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data, BaseStatReward reward, double amount) {
+        if (data != null && reward == BaseStatReward.HP && usesFixedHealthClass(data.tameClass)) {
+            convertFixedHealthBonus(data, amount, false);
+            boolean reapplied = reapplyTypeBasePlusBonuses(tame, data);
+            if (reapplied && tame != null) {
+                tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
+            }
+            TameRegistry.markDirty();
+            return new LevelRewardResult(
+                    RewardCategory.BASE_STAT,
+                    reward.name(),
+                    amount,
+                    "Armor +" + formatDouble(fixedHealthArmorAmount(amount))
+                            + ", Knockback Resistance +" + formatDouble(fixedHealthKnockbackResistAmount(amount))
+            );
+        }
         trackBonus(data, reward, amount);
         boolean reapplied = false;
         if (tame != null && data != null && isLegendaryMonstersType(data.type)) {
@@ -884,6 +899,16 @@ public class LevelSystem {
             case KNOCKBACK -> 3.0D;
             case KNOCKBACK_RESIST -> 3.0D;
         });
+        if (usesFixedHealthClass(tameClass)) {
+            double hpWeight = CLASS_WEIGHT_CONFIG.defaultBaseStatWeight(BaseStatReward.HP.id, 70.0D)
+                    * CLASS_WEIGHT_CONFIG.baseStatMultiplier(tameClass, BaseStatReward.HP.id);
+            if (reward == BaseStatReward.HP) {
+                return 0.0D;
+            }
+            if (reward == BaseStatReward.ARMOR || reward == BaseStatReward.KNOCKBACK_RESIST) {
+                base += hpWeight * 0.5D;
+            }
+        }
         return base * CLASS_WEIGHT_CONFIG.baseStatMultiplier(tameClass, reward.id);
     }
 
@@ -1306,6 +1331,7 @@ public class LevelSystem {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
             return false;
         }
+        normalizeFixedHealthBonuses(data);
         normalizeLiveTypeId(tame, data);
         Entity spawned = tame.getType().create(serverLevel);
         TamableAnimal template;
@@ -1327,14 +1353,9 @@ public class LevelSystem {
         scrubLegacyManagedModifiers(tame);
         boolean legendaryMonsters = isLegendaryMonstersType(data.type);
         Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
-        double maxHealthBase;
-        if (isDragonflyType(data.type) && forcedMaxHealth != null) {
-            maxHealthBase = forcedMaxHealth + data.bonusHealth;
-        } else {
-            maxHealthBase = forcedMaxHealth != null
-                    ? forcedMaxHealth
-                    : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
-        }
+        double maxHealthBase = forcedMaxHealth != null
+                ? forcedMaxHealth
+                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
         if (legendaryMonsters) {
             setAttributeBaseValue(tame, Attributes.MAX_HEALTH, forcedMaxHealth != null ? forcedMaxHealth : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth));
             setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage));
@@ -1440,6 +1461,52 @@ public class LevelSystem {
             return 5.0D;
         }
         return null;
+    }
+
+    private static boolean usesFixedHealthClass(TameClass tameClass) {
+        return tameClass == TameClass.UNSTABLE_GOD
+                || tameClass == TameClass.GANDALF
+                || tameClass == TameClass.VORGOTTENLUNCHBOX
+                || tameClass == TameClass.STRIKER;
+    }
+
+    private static void normalizeFixedHealthBonuses(TameData data) {
+        if (data == null || !usesFixedHealthClass(data.tameClass)) {
+            return;
+        }
+        double currentHealthBonus = data.bonusHealth;
+        double savedHealthBonus = data.savedBonusHealth;
+        if (Math.abs(currentHealthBonus) > 1.0E-6D) {
+            convertFixedHealthBonus(data, currentHealthBonus, false);
+            data.bonusHealth = 0.0D;
+        }
+        if (Math.abs(savedHealthBonus) > 1.0E-6D) {
+            convertFixedHealthBonus(data, savedHealthBonus, true);
+            data.savedBonusHealth = 0.0D;
+        }
+    }
+
+    private static void convertFixedHealthBonus(TameData data, double healthAmount, boolean saved) {
+        if (data == null || Math.abs(healthAmount) <= 1.0E-6D) {
+            return;
+        }
+        double armorAmount = fixedHealthArmorAmount(healthAmount);
+        double knockbackResistAmount = fixedHealthKnockbackResistAmount(healthAmount);
+        if (saved) {
+            data.savedBonusArmor += armorAmount;
+            data.savedBonusKnockbackResist += knockbackResistAmount;
+        } else {
+            data.bonusArmor += armorAmount;
+            data.bonusKnockbackResist += knockbackResistAmount;
+        }
+    }
+
+    private static double fixedHealthArmorAmount(double healthAmount) {
+        return healthAmount * 0.5D;
+    }
+
+    private static double fixedHealthKnockbackResistAmount(double healthAmount) {
+        return healthAmount * 0.5D * BaseStatReward.KNOCKBACK_RESIST.amount;
     }
 
     private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus) {
@@ -1715,6 +1782,7 @@ public class LevelSystem {
     }
 
     public static void storeProgressSnapshot(TameData data) {
+        normalizeFixedHealthBonuses(data);
         data.hasSavedProgress = true;
         data.savedProgressCost = estimateInvestedXp(data);
         data.savedLevel = data.level;
@@ -1957,6 +2025,7 @@ public class LevelSystem {
     }
 
     public static void resetProgress(TamableAnimal tame, TameData data) {
+        normalizeFixedHealthBonuses(data);
         storeProgressSnapshot(data);
         applyBonusDelta(tame, -data.bonusHealth, -data.bonusDamage, -data.bonusSpeed, -data.bonusArmor,
                 -data.bonusArmorToughness, -data.bonusKnockback, -data.bonusKnockbackResist);
@@ -1984,6 +2053,7 @@ public class LevelSystem {
     }
 
     public static boolean restoreProgress(TamableAnimal tame, TameData data) {
+        normalizeFixedHealthBonuses(data);
         if (!data.hasSavedProgress) {
             return false;
         }
@@ -2032,6 +2102,7 @@ public class LevelSystem {
     }
 
     public static boolean restoreHighestProgressWithoutXpCost(TamableAnimal tame, TameData data) {
+        normalizeFixedHealthBonuses(data);
         if (tame == null || data == null || !data.hasSavedProgress) {
             return false;
         }
