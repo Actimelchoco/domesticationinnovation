@@ -8805,10 +8805,13 @@ public class TameCommands {
             return 0;
         }
         String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, ownerId.toString());
+        ServerPlayer ownerPlayer = source.getServer() == null ? null : source.getServer().getPlayerList().getPlayer(ownerId);
         int success = 0;
         int failed = 0;
         int reincarnated = 0;
+        List<String> spentLabels = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
+        List<String> unaffordable = new ArrayList<>();
 
         for (TameData data : candidates) {
             if (data == null || data.uuid == null) {
@@ -8824,6 +8827,27 @@ public class TameCommands {
                 failReasons.add(data.name + " (already loaded)");
                 continue;
             }
+            int xpCost = 0;
+            int approvedItemCost = 0;
+            if (reincarnateAfter) {
+                if (ownerPlayer == null) {
+                    failed++;
+                    failReasons.add(data.name + " (owner must be online for payment)");
+                    continue;
+                }
+                xpCost = reviveXpCost(data, mode);
+                approvedItemCost = reviveApprovedItemCost(data, mode);
+                if (data.hasSavedProgress && data.level < data.savedLevel) {
+                    xpCost += LevelSystem.reincarnationXpCost(data);
+                    approvedItemCost += Math.max(1, data.savedLevel - data.level);
+                }
+                PaymentResult preview = previewPayment(ownerPlayer, xpCost, approvedItemCost, true, "respawn reincarnation");
+                if (!preview.success) {
+                    failed++;
+                    unaffordable.add(pricedTameLabel(data, paymentPriceLabel(xpCost, approvedItemCost, true)));
+                    continue;
+                }
+            }
             SpawnTarget target = resolveAdminPlayerRespawnTarget(source, ownerId, data, mode);
             if (target == null || target.level == null) {
                 failed++;
@@ -8835,6 +8859,15 @@ public class TameCommands {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
+            }
+            if (reincarnateAfter) {
+                PaymentResult payment = tryConsumePayment(ownerPlayer, xpCost, approvedItemCost, true, "respawn reincarnation");
+                if (!payment.success) {
+                    failed++;
+                    failReasons.add(data.name + " (" + payment.error + ")");
+                    continue;
+                }
+                spentLabels.add(payment.label);
             }
             if (reincarnateAfter) {
                 TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
@@ -8851,13 +8884,22 @@ public class TameCommands {
             if (!failReasons.isEmpty()) {
                 message.append(" Reasons: ").append(String.join("; ", failReasons));
             }
+            if (!unaffordable.isEmpty()) {
+                message.append(" Could not afford: ").append(String.join("; ", unaffordable)).append(".");
+            }
             return adminError(source, message.toString());
         }
         final int respawnedCount = success;
         final int reincarnatedCount = reincarnated;
+        final String spentText = spentLabels.isEmpty() ? "no cost" : String.join(", ", spentLabels);
         source.sendSuccess(() -> Component.literal(
-                label + ": " + respawnedCount + " tame(s) for " + ownerName + (reincarnateAfter ? ", " + reincarnatedCount + " restored to saved progress" : "") + " (no cost)."
+                label + ": " + respawnedCount + " tame(s) for " + ownerName
+                        + (reincarnateAfter ? ", " + reincarnatedCount + " restored to saved progress" : "")
+                        + ", paid " + spentText + "."
         ).withStyle(ChatFormatting.GREEN), true);
+        if (!unaffordable.isEmpty() && ownerPlayer != null) {
+            sendAffordabilityFailures(ownerPlayer, "Could not afford respawn reincarnation for", unaffordable);
+        }
         if (failed > 0 && !failReasons.isEmpty()) {
             source.sendFailure(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
         }
@@ -14540,22 +14582,24 @@ public class TameCommands {
     }
 
     private static boolean matchesMovementOrder(TamableAnimal tame, MovementOrder order) {
-        if (tame instanceof IComandableMob commandable) {
-            int command = commandable.getCommand();
-            if (order == MovementOrder.GUARDIAN) {
-                return false;
-            }
-            if (matchesSnapshotCommand(command, order, tame)) {
-                return true;
-            }
-            return order == MovementOrder.SIT && tame.isOrderedToSit();
+        TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+        return tame != null && currentLiveMovementOrder(tame, data) == order;
+    }
+
+    private static MovementOrder currentLiveMovementOrder(TamableAnimal tame, TameData data) {
+        if (tame == null) {
+            return MovementOrder.FOLLOW;
         }
-        return switch (order) {
-            case FOLLOW -> !tame.isOrderedToSit();
-            case SIT -> tame.isOrderedToSit();
-            case WANDER -> false;
-            case GUARDIAN -> false;
-        };
+        if (tame instanceof IComandableMob commandable) {
+            return resolveMovementOrderFromSnapshotCommand(commandable.getCommand(), entityTypeId(tame), data != null && data.hasHome);
+        }
+        if (tame.isOrderedToSit()) {
+            return MovementOrder.SIT;
+        }
+        if (data != null && data.hasHome && data.movementOrder == 3) {
+            return MovementOrder.GUARDIAN;
+        }
+        return MovementOrder.FOLLOW;
     }
 
     private static boolean usesInvertedGenericCallOrder(TamableAnimal tame) {
@@ -14583,6 +14627,14 @@ public class TameCommands {
     }
 
     private static boolean matchesSnapshotCommand(int command, MovementOrder order, String typeId) {
+        if (TameRegistry.isFollowSitOnlyType(typeId)) {
+            int sitCommand = twoStateSitCommand(typeId);
+            return switch (order) {
+                case FOLLOW -> command != sitCommand;
+                case SIT -> command == sitCommand;
+                case WANDER, GUARDIAN -> false;
+            };
+        }
         int expected = switch (order) {
             case WANDER, GUARDIAN -> 0;
             case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 1 : 2;
@@ -14599,6 +14651,10 @@ public class TameCommands {
             return MovementOrder.SIT;
         }
         return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+    }
+
+    private static int twoStateSitCommand(String typeId) {
+        return usesInvertedGenericCallOrder(typeId) ? 2 : 1;
     }
 
     private static String entityTypeId(TamableAnimal tame) {
@@ -14661,10 +14717,11 @@ public class TameCommands {
         tame.getNavigation().stop();
         if (tame instanceof IComandableMob commandableMob) {
             syncCommandableMovementState(tame, commandableMob, order);
-            boolean sit = commandableMob.getCommand() == 1;
+            MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
+            boolean sit = liveOrder == MovementOrder.SIT;
             tame.setOrderedToSit(sit);
             tame.setInSittingPose(sit);
-            if (sit || commandableMob.getCommand() == 0) {
+            if (liveOrder != MovementOrder.FOLLOW) {
                 tame.setTarget(null);
             }
         } else {
@@ -14685,6 +14742,30 @@ public class TameCommands {
         refreshRegistrySnapshotFor(tame);
     }
 
+    public static boolean syncLiveMovementStateFor(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            return false;
+        }
+        MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
+        int liveCode = switch (liveOrder) {
+            case FOLLOW -> 0;
+            case SIT -> 1;
+            case WANDER -> 2;
+            case GUARDIAN -> 3;
+        };
+        boolean changed = data.movementOrder != liveCode || !matchesMovementOrderSnapshot(data, liveOrder);
+        if (!changed) {
+            return false;
+        }
+        data.movementOrder = liveCode;
+        refreshRegistrySnapshotFor(tame);
+        return true;
+    }
+
     private static boolean usesMinimalMovementOverride(TamableAnimal tame) {
         ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
         return isLegendaryMonstersType(typeKey == null ? null : typeKey.toString());
@@ -14703,18 +14784,25 @@ public class TameCommands {
     }
 
     private static void syncCommandableMovementState(TamableAnimal tame, IComandableMob commandableMob, MovementOrder order) {
-        int desired = preferredCommandInt(order);
-        if (commandableMob.getCommand() == desired) {
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (currentLiveMovementOrder(tame, data) == order) {
             return;
         }
         if (tame.getOwner() instanceof Player owner) {
             Animal animal = tame;
-            for (int i = 0; i < 3 && commandableMob.getCommand() != desired; i++) {
+            int attempts = Math.max(3, commandCandidates(tame, order).length + 1);
+            for (int i = 0; i < attempts && currentLiveMovementOrder(tame, data) != order; i++) {
                 commandableMob.playerSetCommand(owner, animal);
             }
         }
-        if (commandableMob.getCommand() != desired) {
-            commandableMob.setCommand(desired);
+        if (currentLiveMovementOrder(tame, data) == order) {
+            return;
+        }
+        for (int candidate : commandCandidates(tame, order)) {
+            commandableMob.setCommand(candidate);
+            if (currentLiveMovementOrder(tame, data) == order) {
+                return;
+            }
         }
     }
 
@@ -14775,6 +14863,12 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {
+        if (TameRegistry.isFollowSitOnlyType(entityTypeId(tame))) {
+            return switch (order) {
+                case SIT -> twoStateSitCommand(entityTypeId(tame));
+                case FOLLOW, WANDER, GUARDIAN -> 0;
+            };
+        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> 0;
@@ -14863,6 +14957,13 @@ public class TameCommands {
     }
 
     private static int[] commandCandidates(TamableAnimal tame, MovementOrder order) {
+        if (TameRegistry.isFollowSitOnlyType(entityTypeId(tame))) {
+            int sitCommand = twoStateSitCommand(entityTypeId(tame));
+            return switch (order) {
+                case SIT -> sitCommand == 2 ? new int[]{2, 1, 0, 3} : new int[]{1, 2, 0, 3};
+                case FOLLOW, WANDER, GUARDIAN -> new int[]{0, 2, 1, 3};
+            };
+        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> new int[]{0, 1, 2, 3};

@@ -116,16 +116,19 @@ public final class WaystonesTeleportCompat {
         UUID ownerId = owner.getUUID();
         Vec3 targetPos = centeredTargetPos(pending.targetBlock());
         for (TameData data : TameRegistry.getOwned(ownerId)) {
-            if (!isWaystoneTeleportEligibleFromData(data, ownerId)) continue;
-
             TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
             if (loaded != null && loaded.isAlive()) {
+                TameCommands.syncLiveMovementStateFor(loaded);
+                if (!isWaystoneTeleportEligibleLoaded(loaded, data, ownerId)) {
+                    continue;
+                }
                 TamableAnimal moved = teleportWaystoneStyle(owner, loaded, data, targetLevel, pending.targetBlock(), pending.yRot(), pending.xRot());
                 if (moved != null) {
                     queueOwnerResync(owner, moved, targetLevel);
                 }
                 continue;
             }
+            if (!isWaystoneTeleportEligibleFromData(data, ownerId)) continue;
             if (!TameCommands.hasPendingImmediateChunkTeleport(data)) {
                 TameCommands.autoFollowTeleportViaTpPath(owner, data, targetLevel, targetPos, pending.yRot(), pending.xRot());
             }
@@ -228,6 +231,22 @@ public final class WaystonesTeleportCompat {
             return false;
         }
         return TameAutoFollowEvents.isFollowing(data);
+    }
+
+    private static boolean isWaystoneTeleportEligibleLoaded(TamableAnimal tame, TameData data, UUID ownerId) {
+        if (tame == null || data == null || data.isInactive() || data.uuid == null) {
+            return false;
+        }
+        if (!ownerId.equals(data.ownerUUID) || data.hasHome || data.wanderLock) {
+            return false;
+        }
+        if (TameDuelManager.isTameInDuel(data.uuid)) {
+            return false;
+        }
+        if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
+            return false;
+        }
+        return TameAutoFollowEvents.isFollowingForTeleportCompat(tame);
     }
 
     private static TamableAnimal findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {

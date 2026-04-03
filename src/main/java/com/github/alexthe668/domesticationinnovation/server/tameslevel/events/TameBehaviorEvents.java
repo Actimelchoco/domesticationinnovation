@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
@@ -36,6 +37,10 @@ public class TameBehaviorEvents {
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (hasInvalidTarget(tame)) {
             tame.setTarget(null);
+        }
+
+        if (tame.tickCount % 10 == 0) {
+            TameCommands.syncLiveMovementStateFor(tame);
         }
 
         if (activeData.closeMovement && tame.tickCount % 10 == 0) {

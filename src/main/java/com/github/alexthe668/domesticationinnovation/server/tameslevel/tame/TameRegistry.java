@@ -296,7 +296,15 @@ public class TameRegistry {
         if (typeId == null || typeId.isBlank()) {
             return false;
         }
-        return INVERTED_CALL_ORDER_TYPE_IDS.contains(typeId.trim().toLowerCase(java.util.Locale.ROOT));
+        return INVERTED_CALL_ORDER_TYPE_IDS.contains(normalizeTypeId(typeId));
+    }
+
+    public static boolean isFollowSitOnlyType(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        return normalized.startsWith("crittersandcompanions:");
     }
 
     public static Set<String> getCallOrderInvertedTypes() {
@@ -307,7 +315,7 @@ public class TameRegistry {
         if (typeId == null || typeId.isBlank()) {
             return false;
         }
-        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalized = normalizeTypeId(typeId);
         boolean enabled;
         if (INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized)) {
             INVERTED_CALL_ORDER_TYPE_IDS.remove(normalized);
@@ -318,6 +326,17 @@ public class TameRegistry {
         }
         markDirty();
         return enabled;
+    }
+
+    private static String normalizeTypeId(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return null;
+        }
+        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return normalized;
     }
 
     public static boolean canEnterPortalsByThemselves(UUID ownerUuid) {

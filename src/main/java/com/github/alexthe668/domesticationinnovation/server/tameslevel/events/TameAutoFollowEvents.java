@@ -106,6 +106,9 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isFollowCommand(int command, String typeId) {
+        if (TameRegistry.isFollowSitOnlyType(typeId)) {
+            return command != (usesInvertedGenericCallOrder(typeId) ? 2 : 1);
+        }
         return command == (usesInvertedGenericCallOrder(typeId) ? 1 : 2);
     }
 
