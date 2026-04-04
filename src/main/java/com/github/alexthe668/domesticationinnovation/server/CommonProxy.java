@@ -216,7 +216,9 @@ public class CommonProxy {
                 if (data != null) {
                     data.removeMatchingLanternRequests(living.getUUID());
                 }
-                ensureDiProgressEntryForTame(living, null);
+                if (!living.getPersistentData().getBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG)) {
+                    ensureDiProgressEntryForTame(living, null);
+                }
             }
         }
         sanitizeInvalidDragonflyArmor(event.getEntity());
@@ -251,7 +253,9 @@ public class CommonProxy {
     public void onAnimalTamed(AnimalTameEvent event) {
         if (!event.getAnimal().level().isClientSide) {
             UUID ownerUUID = event.getTamer() == null ? null : event.getTamer().getUUID();
-            ensureDiProgressEntryForTame(event.getAnimal(), ownerUUID);
+            if (!event.getAnimal().getPersistentData().getBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG)) {
+                ensureDiProgressEntryForTame(event.getAnimal(), ownerUUID);
+            }
         }
     }
 

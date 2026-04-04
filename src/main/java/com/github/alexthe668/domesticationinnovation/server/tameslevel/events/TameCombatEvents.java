@@ -51,9 +51,9 @@ public class TameCombatEvents {
         TamableAnimal tame = resolveTameAttacker(event);
         if (tame != null && tame.isTame()) {
             LevelSystem.trackDamage(mob, tame);
-            BlessfulledCompat.showDamagePopup(tame, mob, event.getAmount());
+            BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount());
         } else if (mob instanceof TamableAnimal targetTame && targetTame.isTame()) {
-            BlessfulledCompat.showDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
+            BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
         }
 
         if (event.getSource().getEntity() instanceof ServerPlayer player) {

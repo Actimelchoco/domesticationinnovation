@@ -133,7 +133,7 @@ public class TameData {
         this.ownerUUID = tame.getOwnerUUID();
 
         this.type = tame.getType().toString();
-        this.name = tame.hasCustomName() ? tame.getCustomName().getString() : tame.getName().getString();
+        this.name = TameRegistry.stripLevelPrefixes(tame.hasCustomName() ? tame.getCustomName().getString() : tame.getName().getString());
         this.bornDayTime = tame.level().getDayTime();
         this.lastKnownDimension = tame.level().dimension().location().toString();
         this.lastKnownX = tame.blockPosition().getX();

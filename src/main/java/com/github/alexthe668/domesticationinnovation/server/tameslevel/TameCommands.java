@@ -126,6 +126,8 @@ import java.io.IOException;
 
 public class TameCommands {
     private static final String JOIN_FIX_STALE_SKIP_TAG = "DITLJoinFixStaleSkip";
+    public static final String ADMIN_CLONE_TRANSIENT_TAG = "DITLAdminCloneTransient";
+    public static final String ADMIN_CLONE_SILENT_TAG = "DITLAdminCloneSilent";
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
@@ -1996,6 +1998,20 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedDeadPetNames(ctx.getSource(), b))
                                         .executes(ctx -> respawnPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.RESPAWN))))
+                        .then(Commands.literal("respawnReincarnated")
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> respawnAll(ctx.getSource(), ReviveMode.RESPAWN, true)))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> respawnGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.RESPAWN, true))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> respawnType(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.RESPAWN, true))))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedDeadPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> respawnPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.RESPAWN, true))))
                         .then(Commands.literal("arise")
                                 .then(Commands.literal("all")
                                         .executes(ctx -> respawnAll(ctx.getSource(), ReviveMode.ARISE)))
@@ -2575,9 +2591,16 @@ public class TameCommands {
                                                 .then(Commands.argument("index", IntegerArgumentType.integer(1))
                                                         .executes(ctx -> adminForceReincarnate(
                                                                 ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                IntegerArgumentType.getInteger(ctx, "index")
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        IntegerArgumentType.getInteger(ctx, "index")
                                                         )))))
+                                .then(Commands.literal("clone")
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                .executes(ctx -> adminClonePetFromSnapshot(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet")
+                                                ))))
                                 .then(Commands.literal("terminate")
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestAllRespawnableTameNames(b))
@@ -8322,31 +8345,47 @@ public class TameCommands {
     }
 
     private static int respawnPet(CommandSourceStack source, String pet, ReviveMode mode) {
+        return respawnPet(source, pet, mode, false);
+    }
+
+    private static int respawnPet(CommandSourceStack source, String pet, ReviveMode mode, boolean reincarnateAfter) {
         ServerPlayer p = source.getPlayer();
         TameData data = findOwnedDeadTame(p.getUUID(), pet);
         if (data == null) return error(p, "No dead tame found with that name.");
-        return respawnDeadBatch(source, p, List.of(data), mode, mode.label);
+        return respawnDeadBatch(source, p, List.of(data), mode, mode.label, reincarnateAfter);
     }
 
     private static int respawnGroup(CommandSourceStack source, String group, ReviveMode mode) {
+        return respawnGroup(source, group, mode, false);
+    }
+
+    private static int respawnGroup(CommandSourceStack source, String group, ReviveMode mode, boolean reincarnateAfter) {
         ServerPlayer p = source.getPlayer();
         List<TameData> dead = ownedDeadGroup(p.getUUID(), group);
         if (dead.isEmpty()) return error(p, "No dead tames in group '" + group + "'.");
-        return respawnDeadBatch(source, p, dead, mode, mode.label + " group '" + group + "'");
+        return respawnDeadBatch(source, p, dead, mode, mode.label + " group '" + group + "'", reincarnateAfter);
     }
 
     private static int respawnType(CommandSourceStack source, String typeFilter, ReviveMode mode) {
+        return respawnType(source, typeFilter, mode, false);
+    }
+
+    private static int respawnType(CommandSourceStack source, String typeFilter, ReviveMode mode, boolean reincarnateAfter) {
         ServerPlayer p = source.getPlayer();
         List<TameData> dead = ownedDeadType(p.getUUID(), typeFilter);
         if (dead.isEmpty()) return error(p, "No dead tames of type '" + typeFilter + "'.");
-        return respawnDeadBatch(source, p, dead, mode, mode.label + " type '" + typeFilter + "'");
+        return respawnDeadBatch(source, p, dead, mode, mode.label + " type '" + typeFilter + "'", reincarnateAfter);
     }
 
     private static int respawnAll(CommandSourceStack source, ReviveMode mode) {
+        return respawnAll(source, mode, false);
+    }
+
+    private static int respawnAll(CommandSourceStack source, ReviveMode mode, boolean reincarnateAfter) {
         ServerPlayer p = source.getPlayer();
         List<TameData> dead = ownedDeadTames(p.getUUID());
         if (dead.isEmpty()) return error(p, "You have no dead tames to respawn.");
-        return respawnDeadBatch(source, p, dead, mode, mode.label + " all dead tames");
+        return respawnDeadBatch(source, p, dead, mode, mode.label + " all dead tames", reincarnateAfter);
     }
 
     private static int adminPlayerTeleportPet(CommandSourceStack source, String playerName, String pet, MovementOrder orderOverride) {
@@ -8786,18 +8825,32 @@ public class TameCommands {
             TameData data = dead.get(i);
             int reincarnationCost = data.hasSavedProgress ? LevelSystem.reincarnationXpCost(data) : 0;
             player.sendSystemMessage(Component.literal(
-                    (i + 1) + ". [" + data.level + "] " + data.name
-                            + "  died " + formatDeathTime(data.deadUnixMillis)
-                            + "  activeDays " + Math.max(0, data.activeSurvivalDays)
-                            + "  reincarnateCost " + reincarnationCost
-                            + "  " + respawnProgressSuffix(data)
+                    (i + 1) + ". " + tameDisplayName(data)
             ).withStyle(ChatFormatting.GRAY));
             String deathMessage = latestDeathMessage(data);
-            if (!deathMessage.isBlank()) {
-                player.sendSystemMessage(Component.literal("    cause: " + deathMessage).withStyle(ChatFormatting.DARK_RED));
+            if (deathMessage.isBlank()) {
+                deathMessage = "unknown";
             }
+            player.sendSystemMessage(Component.literal(
+                    deathMessage
+                            + " (" + formatDeathTime(data.deadUnixMillis) + ") "
+                            + reincarnationCost + " xp "
+                            + graveyardLevelArrow(data)
+            ).withStyle(ChatFormatting.DARK_RED));
         }
         return 1;
+    }
+
+    private static String graveyardLevelArrow(TameData data) {
+        if (data == null) {
+            return "[1]";
+        }
+        int fromLevel = Math.max(1, data.level);
+        int toLevel = data.hasSavedProgress ? Math.max(fromLevel, data.savedLevel) : fromLevel;
+        if (toLevel == fromLevel) {
+            return "[" + fromLevel + "]";
+        }
+        return "[" + fromLevel + " -> " + toLevel + "]";
     }
 
     private static int adminPlayerRespawnDeadBatch(CommandSourceStack source, UUID ownerId, List<TameData> candidates, ReviveMode mode, String label, boolean reincarnateAfter) {
@@ -8827,27 +8880,6 @@ public class TameCommands {
                 failReasons.add(data.name + " (already loaded)");
                 continue;
             }
-            int xpCost = 0;
-            int approvedItemCost = 0;
-            if (reincarnateAfter) {
-                if (ownerPlayer == null) {
-                    failed++;
-                    failReasons.add(data.name + " (owner must be online for payment)");
-                    continue;
-                }
-                xpCost = reviveXpCost(data, mode);
-                approvedItemCost = reviveApprovedItemCost(data, mode);
-                if (data.hasSavedProgress && data.level < data.savedLevel) {
-                    xpCost += LevelSystem.reincarnationXpCost(data);
-                    approvedItemCost += Math.max(1, data.savedLevel - data.level);
-                }
-                PaymentResult preview = previewPayment(ownerPlayer, xpCost, approvedItemCost, true, "respawn reincarnation");
-                if (!preview.success) {
-                    failed++;
-                    unaffordable.add(pricedTameLabel(data, paymentPriceLabel(xpCost, approvedItemCost, true)));
-                    continue;
-                }
-            }
             SpawnTarget target = resolveAdminPlayerRespawnTarget(source, ownerId, data, mode);
             if (target == null || target.level == null) {
                 failed++;
@@ -8859,15 +8891,6 @@ public class TameCommands {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
-            }
-            if (reincarnateAfter) {
-                PaymentResult payment = tryConsumePayment(ownerPlayer, xpCost, approvedItemCost, true, "respawn reincarnation");
-                if (!payment.success) {
-                    failed++;
-                    failReasons.add(data.name + " (" + payment.error + ")");
-                    continue;
-                }
-                spentLabels.add(payment.label);
             }
             if (reincarnateAfter) {
                 TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
@@ -8891,25 +8914,22 @@ public class TameCommands {
         }
         final int respawnedCount = success;
         final int reincarnatedCount = reincarnated;
-        final String spentText = spentLabels.isEmpty() ? "no cost" : String.join(", ", spentLabels);
         source.sendSuccess(() -> Component.literal(
                 label + ": " + respawnedCount + " tame(s) for " + ownerName
                         + (reincarnateAfter ? ", " + reincarnatedCount + " restored to saved progress" : "")
-                        + ", paid " + spentText + "."
+                        + ", paid no cost."
         ).withStyle(ChatFormatting.GREEN), true);
-        if (!unaffordable.isEmpty() && ownerPlayer != null) {
-            sendAffordabilityFailures(ownerPlayer, "Could not afford respawn reincarnation for", unaffordable);
-        }
         if (failed > 0 && !failReasons.isEmpty()) {
             source.sendFailure(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
 
-    private static int respawnDeadBatch(CommandSourceStack source, ServerPlayer player, List<TameData> candidates, ReviveMode mode, String label) {
+    private static int respawnDeadBatch(CommandSourceStack source, ServerPlayer player, List<TameData> candidates, ReviveMode mode, String label, boolean reincarnateAfter) {
         if (source == null || player == null || candidates == null || candidates.isEmpty()) return 0;
         int success = 0;
         int failed = 0;
+        int reincarnated = 0;
         List<String> spentLabels = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
@@ -8930,7 +8950,11 @@ public class TameCommands {
             }
             int xpCost = reviveXpCost(data, mode);
             int approvedItemCost = reviveApprovedItemCost(data, mode);
-            PaymentResult preview = previewPayment(player, xpCost, approvedItemCost, true, mode == ReviveMode.ARISE ? "arise" : "respawn");
+            if (reincarnateAfter && data.hasSavedProgress && data.level < data.savedLevel) {
+                xpCost += LevelSystem.reincarnationXpCost(data);
+                approvedItemCost += Math.max(1, data.savedLevel - data.level);
+            }
+            PaymentResult preview = previewPayment(player, xpCost, approvedItemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!preview.success) {
                 failed++;
                 unaffordable.add(pricedTameLabel(data, paymentPriceLabel(xpCost, approvedItemCost, true)));
@@ -8948,13 +8972,20 @@ public class TameCommands {
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
             }
-            PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, true, mode == ReviveMode.ARISE ? "arise" : "respawn");
+            PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!payment.success) {
                 failed++;
                 failReasons.add(data.name + " (" + payment.error + ")");
                 continue;
             }
             spentLabels.add(payment.label);
+            if (reincarnateAfter) {
+                TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
+                if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
+                        && LevelSystem.restoreHighestProgressWithoutXpCost(respawned, data)) {
+                    reincarnated++;
+                }
+            }
             success++;
         }
 
@@ -8969,8 +9000,8 @@ public class TameCommands {
             return error(player, message.toString());
         }
         String spentText = spentLabels.isEmpty() ? "no cost" : String.join(", ", spentLabels);
-        player.sendSystemMessage(Component.literal(label + ": " + success + " tame(s), paid " + spentText + ".").withStyle(ChatFormatting.GREEN));
-        sendAffordabilityFailures(player, "Could not afford respawn for", unaffordable);
+        player.sendSystemMessage(Component.literal(label + ": " + success + " tame(s)" + (reincarnateAfter ? ", " + reincarnated + " restored to saved progress" : "") + ", paid " + spentText + ".").withStyle(ChatFormatting.GREEN));
+        sendAffordabilityFailures(player, reincarnateAfter ? "Could not afford respawn reincarnation for" : "Could not afford respawn for", unaffordable);
         if (failed > 0 && !failReasons.isEmpty()) {
             player.sendSystemMessage(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
         }
@@ -11817,6 +11848,83 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminClonePetFromSnapshot(CommandSourceStack source, String petName) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<TameData> matches = findAliveTamesByName(petName);
+        if (matches.isEmpty()) {
+            return error(player, "No alive tame found with that name.");
+        }
+        if (matches.size() > 1) {
+            return error(player, "Ambiguous tame name (" + matches.size() + " matches). Rename duplicates first.");
+        }
+        TameData data = matches.get(0);
+        if (data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
+            return error(player, "That tame has no saved snapshot.");
+        }
+        String typeId = recoverEntityTypeId(data);
+        if (typeId.isBlank()) {
+            return error(player, "Missing saved entity type.");
+        }
+        ResourceLocation id = ResourceLocation.tryParse(typeId);
+        if (id == null) {
+            return error(player, "Invalid entity type '" + typeId + "'.");
+        }
+        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            return error(player, "Unknown entity type '" + typeId + "'.");
+        }
+        Entity spawned = entityType.create(player.serverLevel());
+        if (!(spawned instanceof TamableAnimal clone)) {
+            return error(player, "Stored type is not tamable.");
+        }
+
+        CompoundTag snapshot = data.entitySnapshot.copy();
+        stripIdentityForClone(snapshot);
+        if (!snapshot.isEmpty()) {
+            clone.load(snapshot);
+        }
+
+        Vec3 spawnPos = player.position().add(1.5D, 0.0D, 0.0D);
+        clone.moveTo(spawnPos.x, spawnPos.y, spawnPos.z, player.getYRot(), player.getXRot());
+        clone.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        clone.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
+        enforceTamedOwnerPreserveCollar(clone, data.ownerUUID);
+
+        if (!player.serverLevel().addFreshEntity(clone)) {
+            return error(player, "Failed to spawn clone.");
+        }
+        source.sendSuccess(() -> Component.literal(
+                "Cloned " + tameDisplayName(data) + " from snapshot as a fresh entity."
+        ).withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static void stripIdentityForClone(CompoundTag snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) {
+            return;
+        }
+        snapshot.remove("UUID");
+        snapshot.remove("UUIDMost");
+        snapshot.remove("UUIDLeast");
+        snapshot.remove("PersistenceRequired");
+        snapshot.remove(TameData.TL_ID_TAG);
+        snapshot.remove("TLID");
+        snapshot.remove("TLRegistryUUID");
+        snapshot.remove("Passengers");
+        snapshot.remove("Leash");
+        snapshot.remove("Pos");
+        snapshot.remove("Motion");
+        snapshot.remove("Rotation");
+        snapshot.remove("SleepingX");
+        snapshot.remove("SleepingY");
+        snapshot.remove("SleepingZ");
+        snapshot.remove(ADMIN_CLONE_TRANSIENT_TAG);
+        snapshot.remove(ADMIN_CLONE_SILENT_TAG);
+    }
+
     private static int adminTerminatePet(CommandSourceStack source, String petName) {
         List<TameData> aliveMatches = findAliveTamesByName(petName);
         if (aliveMatches.size() > 1) {
@@ -14591,7 +14699,7 @@ public class TameCommands {
             return MovementOrder.FOLLOW;
         }
         if (tame instanceof IComandableMob commandable) {
-            return resolveMovementOrderFromSnapshotCommand(commandable.getCommand(), entityTypeId(tame), data != null && data.hasHome);
+            return resolveMovementOrderFromLiveCommand(tame, commandable.getCommand(), data != null && data.hasHome);
         }
         if (tame.isOrderedToSit()) {
             return MovementOrder.SIT;
@@ -14651,6 +14759,24 @@ public class TameCommands {
             return MovementOrder.SIT;
         }
         return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+    }
+
+    private static MovementOrder resolveMovementOrderFromLiveCommand(TamableAnimal tame, int command, boolean hasHome) {
+        String typeId = entityTypeId(tame);
+        if (TameRegistry.isFollowSitOnlyType(typeId)) {
+            int sitCommand = twoStateSitCommand(typeId);
+            if (tame != null && tame.isOrderedToSit()) {
+                return MovementOrder.SIT;
+            }
+            return command == sitCommand ? MovementOrder.SIT : MovementOrder.FOLLOW;
+        }
+        if (tame != null && tame.isOrderedToSit()) {
+            return MovementOrder.SIT;
+        }
+        if (command == 0) {
+            return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+        }
+        return MovementOrder.FOLLOW;
     }
 
     private static int twoStateSitCommand(String typeId) {

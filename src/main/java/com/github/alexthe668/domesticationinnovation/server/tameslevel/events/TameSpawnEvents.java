@@ -10,9 +10,12 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -29,6 +32,7 @@ public class TameSpawnEvents {
     private static final Pattern LEVEL_PREFIX =
             Pattern.compile("^\\[lvl\\s*(\\d+)\\]\\s*(.*)$", Pattern.CASE_INSENSITIVE);
     private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
+    private static final Map<UUID, PendingNewTameNotification> PENDING_NEW_TAME_NOTIFICATIONS = new HashMap<>();
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
 
     @SubscribeEvent
@@ -241,6 +245,15 @@ public class TameSpawnEvents {
         return data;
     }
 
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || PENDING_NEW_TAME_NOTIFICATIONS.isEmpty()) {
+            return;
+        }
+        MinecraftServer server = event.getServer();
+        PENDING_NEW_TAME_NOTIFICATIONS.entrySet().removeIf(entry -> trySendPendingNewTameNotification(server, entry.getKey(), entry.getValue()));
+    }
+
     public static void queueDeferredStatRefresh(TamableAnimal tame, TameData data, long delayTicks) {
         if (tame == null || data == null || tame.level().isClientSide || !LevelSystem.needsDeferredStatRefresh(tame, data)) {
             return;
@@ -295,13 +308,53 @@ public class TameSpawnEvents {
     }
 
     private static void notifyNewTameFound(TamableAnimal tame, TameData data) {
-        if (!(tame.getOwner() instanceof ServerPlayer owner)) {
+        if (!(tame.getOwner() instanceof ServerPlayer owner) || data == null) {
+            return;
+        }
+        if (tame.getPersistentData().getBoolean(TameCommands.ADMIN_CLONE_SILENT_TAG)) {
             return;
         }
         String name = data == null || data.name == null || data.name.isBlank()
                 ? tame.getName().getString()
                 : data.name;
-        owner.sendSystemMessage(Component.literal("Found new tame: " + name + ".").withStyle(ChatFormatting.AQUA));
+        long dueTick = tame.level().getGameTime() + 1L;
+        PENDING_NEW_TAME_NOTIFICATIONS.put(data.uuid, new PendingNewTameNotification(owner.getUUID(), data.uuid, data.ensureTlId(), name, dueTick));
+    }
+
+    private static boolean trySendPendingNewTameNotification(MinecraftServer server, UUID tameUuid, PendingNewTameNotification pending) {
+        if (server == null || pending == null) {
+            return true;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(pending.ownerUuid());
+        if (owner == null) {
+            return true;
+        }
+        TameData data = TameRegistry.get(tameUuid);
+        if (data == null || data.isInactive() || !pending.ownerUuid().equals(data.ownerUUID) || pending.tlId() == null || !pending.tlId().equals(data.tlId)) {
+            return true;
+        }
+        TamableAnimal loaded = findLoadedByUuid(server, tameUuid);
+        if (loaded == null || !loaded.isAlive() || loaded.isRemoved()) {
+            return true;
+        }
+        if (!(loaded.level() instanceof ServerLevel serverLevel) || serverLevel.getGameTime() < pending.dueTick()) {
+            return false;
+        }
+        owner.sendSystemMessage(Component.literal("Found new tame: " + pending.name() + ".").withStyle(ChatFormatting.AQUA));
+        return true;
+    }
+
+    private static TamableAnimal findLoadedByUuid(MinecraftServer server, UUID tameUuid) {
+        if (server == null || tameUuid == null) {
+            return null;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            if (!(level.getEntity(tameUuid) instanceof TamableAnimal tame)) {
+                continue;
+            }
+            return tame;
+        }
+        return null;
     }
 
     private static TameData trySyncFromLeveledNameMatch(TamableAnimal tame, ParsedName parsed) {
@@ -708,25 +761,26 @@ public class TameSpawnEvents {
         if (tame == null || tame.level().isClientSide) {
             return false;
         }
-        String raw = tame.hasCustomName() && tame.getCustomName() != null
-                ? tame.getCustomName().getString()
-                : tame.getName().getString();
-        if (!TameRegistry.hasLevelPrefixName(raw)) {
-            return false;
-        }
         TameData existing = TameRegistry.get(tame.getUUID());
         if (existing != null) {
+            if (!TameRegistry.hasLevelPrefixName(existing.name)) {
+                return false;
+            }
             TameRegistry.remove(existing.uuid);
             TameRegistry.removeDeathsForIdentity(existing.uuid, existing.tlId);
-        } else {
-            UUID tlId = TameData.getTlId(tame);
-            TameData byTlId = tlId == null ? null : TameRegistry.getByTlId(tlId);
-            if (byTlId != null) {
-                TameRegistry.remove(byTlId.uuid);
-                TameRegistry.removeDeathsForIdentity(byTlId.uuid, byTlId.tlId);
-            }
+            tame.discard();
+            return true;
         }
+        UUID tlId = TameData.getTlId(tame);
+        TameData byTlId = tlId == null ? null : TameRegistry.getByTlId(tlId);
+        if (byTlId == null || !TameRegistry.hasLevelPrefixName(byTlId.name)) {
+            return false;
+        }
+        TameRegistry.remove(byTlId.uuid);
+        TameRegistry.removeDeathsForIdentity(byTlId.uuid, byTlId.tlId);
         tame.discard();
         return true;
     }
+
+    private record PendingNewTameNotification(UUID ownerUuid, UUID tameUuid, UUID tlId, String name, long dueTick) {}
 }

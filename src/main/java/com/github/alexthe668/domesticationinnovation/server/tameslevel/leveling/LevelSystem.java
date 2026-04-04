@@ -550,7 +550,9 @@ public class LevelSystem {
         if (!notifyOwner) {
             return;
         }
-
+        if (tame.getPersistentData().getBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG)) {
+            return;
+        }
         if (tame.getOwner() instanceof Player owner) {
             owner.sendSystemMessage(Component.literal(
                     "§b" + data.name + " class assigned: §e" + data.tameClass.id()

@@ -12,6 +12,8 @@ import java.lang.reflect.Constructor;
 public final class BlessfulledCompat {
     private static final String MOD_ID = "blessfulled";
     private static final String POPUP_DATA_CLASS = "org.aqutheseal.blessfulled.particle.DamagePopupParticleData";
+    private static final int POPUP_TYPE_CRIT = 1;
+    private static final int POPUP_TYPE_MAGIC = 5;
 
     private static boolean resolved;
     private static boolean available;
@@ -21,15 +23,27 @@ public final class BlessfulledCompat {
     }
 
     public static void showDamagePopup(Entity attacker, LivingEntity victim, float amount) {
+        showDamagePopup(attacker, victim, amount, 6);
+    }
+
+    public static void showDamagePopup(Entity attacker, LivingEntity victim, float amount, int kind) {
         if (victim == null || amount <= 0.0F || !(victim.level() instanceof ServerLevel serverLevel)) {
             return;
         }
-        ParticleOptions popup = createDamagePopup(amount, 6);
+        ParticleOptions popup = createDamagePopup(amount, kind);
         if (popup == null) {
             return;
         }
         Vec3 pos = victim.position();
         serverLevel.sendParticles(popup, pos.x, pos.y, pos.z, 1, 0.0D, 0.0D, 0.0D, 0.0D);
+    }
+
+    public static void showTameDealtDamagePopup(Entity attacker, LivingEntity victim, float amount) {
+        showDamagePopup(attacker, victim, amount, POPUP_TYPE_MAGIC);
+    }
+
+    public static void showTameReceivedDamagePopup(Entity attacker, LivingEntity victim, float amount) {
+        showDamagePopup(attacker, victim, amount, POPUP_TYPE_CRIT);
     }
 
     private static ParticleOptions createDamagePopup(float amount, int kind) {
