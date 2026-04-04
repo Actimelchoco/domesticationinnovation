@@ -1273,6 +1273,7 @@ public class TameCommands {
                                                 ))))
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
                                                 .executes(ctx -> duelAcceptCompact(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "spec")
@@ -1372,6 +1373,7 @@ public class TameCommands {
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource())))
                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                         .executes(ctx -> duelCompact(
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
@@ -17382,21 +17384,100 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestTeamSelectionSpecs(CommandSourceStack source, SuggestionsBuilder b) {
-        suggestCommandString(b, "myself");
-        suggestCommandString(b, "myself all");
-        suggestCommandString(b, "all");
-        suggestCommandString(b, "type wolf, rex");
-        suggestCommandString(b, "rex, roxi");
-        suggestCommandString(b, "follow");
-        suggestCommandString(b, "sit");
-        suggestCommandString(b, "wander");
-        suggestCommandString(b, "state follow");
-        suggestCommandString(b, "state sit");
-        suggestCommandString(b, "state wander");
-        suggestCommandString(b, "group ");
-        suggestCommandString(b, "type ");
-        suggestCommandString(b, "name ");
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) {
+            return b.buildFuture();
+        }
+        String remaining = b.getRemaining();
+        String trimmed = remaining.trim();
+        if (trimmed.isBlank()) {
+            suggestCommandString(b, "myself");
+            suggestCommandString(b, "myself all");
+            suggestCommandString(b, "all");
+            suggestCommandString(b, "follow");
+            suggestCommandString(b, "sit");
+            suggestCommandString(b, "wander");
+            suggestCommandString(b, "state ");
+            suggestCommandString(b, "group ");
+            suggestCommandString(b, "type ");
+            suggestCommandString(b, "name ");
+            return b.buildFuture();
+        }
+
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if ("myself".equals(lower)) {
+            SuggestionsBuilder tail = b.createOffset(b.getStart() + trimmed.length());
+            tail.suggest(" all");
+            tail.suggest(" group ");
+            tail.suggest(" type ");
+            tail.suggest(" name ");
+            tail.suggest(" state ");
+            tail.suggest(" follow");
+            tail.suggest(" sit");
+            tail.suggest(" wander");
+            return tail.buildFuture();
+        }
+
+        if (lower.startsWith("myself ")) {
+            SuggestionsBuilder tail = b.createOffset(b.getStart() + "myself ".length());
+            suggestTeamSelectionTail(source, owner, tail, trimmed.substring("myself ".length()));
+            return tail.buildFuture();
+        }
+
+        suggestTeamSelectionTail(source, owner, b, trimmed);
         return b.buildFuture();
+    }
+
+    private static void suggestTeamSelectionTail(CommandSourceStack source, ServerPlayer owner, SuggestionsBuilder builder, String term) {
+        if (builder == null) {
+            return;
+        }
+        String trimmed = term == null ? "" : term.trim();
+        if (trimmed.isBlank()) {
+            suggestCommandString(builder, "all");
+            suggestCommandString(builder, "follow");
+            suggestCommandString(builder, "sit");
+            suggestCommandString(builder, "wander");
+            suggestCommandString(builder, "state ");
+            suggestCommandString(builder, "group ");
+            suggestCommandString(builder, "type ");
+            suggestCommandString(builder, "name ");
+            return;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("group ")) {
+            SuggestionsBuilder groupBuilder = builder.createOffset(builder.getStart() + trimmed.indexOf(' ') + 1);
+            suggestOwnedGroups(source, groupBuilder);
+            return;
+        }
+        if (lower.startsWith("type ")) {
+            SuggestionsBuilder typeBuilder = builder.createOffset(builder.getStart() + trimmed.indexOf(' ') + 1);
+            suggestOwnedTypes(source, typeBuilder);
+            return;
+        }
+        if (lower.startsWith("name ")) {
+            SuggestionsBuilder nameBuilder = builder.createOffset(builder.getStart() + trimmed.indexOf(' ') + 1);
+            suggestOwnedPetNamesAll(source, nameBuilder);
+            return;
+        }
+        if (lower.startsWith("state ")) {
+            SuggestionsBuilder stateBuilder = builder.createOffset(builder.getStart() + trimmed.indexOf(' ') + 1);
+            suggestMovementStates(stateBuilder);
+            return;
+        }
+        if ("group".equals(lower) || "type".equals(lower) || "name".equals(lower) || "state".equals(lower)) {
+            SuggestionsBuilder tail = builder.createOffset(builder.getStart() + trimmed.length());
+            tail.suggest(" ");
+            return;
+        }
+        suggestCommandString(builder, "all");
+        suggestCommandString(builder, "follow");
+        suggestCommandString(builder, "sit");
+        suggestCommandString(builder, "wander");
+        suggestCommandString(builder, "state ");
+        suggestCommandString(builder, "group ");
+        suggestCommandString(builder, "type ");
+        suggestCommandString(builder, "name ");
     }
 
     private static CompletableFuture<Suggestions> suggestCompactDuelSpec(CommandSourceStack source, SuggestionsBuilder b) {

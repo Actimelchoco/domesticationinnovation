@@ -400,12 +400,13 @@ public class CommonProxy {
             if (event.getEntity() instanceof Mob mob && ((magneticLevel > 0 && !mob.level().isClientSide) || magneticVisual)) {
                 Entity sucking = TameableUtils.getPetAttackTarget(mob);
                 if (!mob.level().isClientSide) {
-                    if (mob.getTarget() == null || !mob.getTarget().isAlive() || mob.getRootVehicle() instanceof GiantBubbleEntity) {
-                        if (TameableUtils.getPetAttackTargetID(mob) != -1) {
+                    LivingEntity liveTarget = mob.getTarget();
+                    if (liveTarget == null || !liveTarget.isAlive() || mob.getRootVehicle() instanceof GiantBubbleEntity) {
+                        if (!shouldRetainMagneticTarget(mob, sucking) && TameableUtils.getPetAttackTargetID(mob) != -1) {
                             TameableUtils.setPetAttackTarget(mob, -1);
                         }
                     } else {
-                        TameableUtils.setPetAttackTarget(mob, mob.getTarget().getId());
+                        TameableUtils.setPetAttackTarget(mob, liveTarget.getId());
                     }
                 } else if (magneticVisual) {
                     if (sucking != null) {
@@ -1982,6 +1983,19 @@ public class CommonProxy {
         int safeLevel = Math.max(1, level);
         double base = onGround ? 0.12D : 0.04D;
         return Math.min(onGround ? 0.32D : 0.14D, base + Math.max(0, safeLevel - 1) * (onGround ? 0.03D : 0.015D));
+    }
+
+    private static boolean shouldRetainMagneticTarget(Mob mob, Entity existingTarget) {
+        if (mob == null || existingTarget == null) {
+            return false;
+        }
+        if (!existingTarget.isAlive() || existingTarget.level() != mob.level()) {
+            return false;
+        }
+        if (mob.getRootVehicle() instanceof GiantBubbleEntity) {
+            return false;
+        }
+        return mob.distanceToSqr(existingTarget) <= 24.0D * 24.0D;
     }
 
     private static double bubblingProcChance(int level, LivingEntity target) {

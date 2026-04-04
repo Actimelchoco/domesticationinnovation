@@ -565,7 +565,7 @@ public class TameAbilityEvents {
     private static void handleDash(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "dash")) return;
         if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
-        if (target instanceof Player || target instanceof TamableAnimal) return;
+        if ((target instanceof Player || target instanceof TamableAnimal) && !isDuelOpponent(tame, target)) return;
         if (!isReady(data, "dash_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dash"));
@@ -583,7 +583,7 @@ public class TameAbilityEvents {
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, sweep)) {
             if (!nearby.isAlive()) continue;
             if (nearby == tame) continue;
-            if (nearby instanceof Player || nearby instanceof TamableAnimal) continue;
+            if ((nearby instanceof Player || nearby instanceof TamableAnimal) && !isDuelOpponent(tame, nearby)) continue;
             if (isFriendly(tame, nearby)) continue;
             LevelSystem.trackDamage(nearby, tame);
             applyInternalBonusDamage(nearby, tame, damage);
@@ -2543,7 +2543,7 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
     private static boolean shouldUseOffensiveAbilities(TamableAnimal tame, TameData data, LivingEntity target) {
         if (tame == null || data == null || target == null || !target.isAlive()) return false;
         if (isFriendly(tame, target)) return false;
-        if (target instanceof TamableAnimal otherTame && TameDuelManager.areDuelOpponents(tame.getUUID(), otherTame.getUUID())) {
+        if (isDuelOpponent(tame, target)) {
             return true;
         }
 
@@ -2566,6 +2566,12 @@ private static void applyWardenScreamPush(TamableAnimal tame, LivingEntity targe
         if (attacker == target && attacker.isAlive()) return true;
         LivingEntity attacked = owner.getLastHurtMob();
         return attacked == target && attacked.isAlive();
+    }
+
+    private static boolean isDuelOpponent(TamableAnimal tame, LivingEntity target) {
+        return tame != null
+                && target != null
+                && TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID());
     }
 
 }

@@ -581,8 +581,8 @@ public final class TameDuelManager {
         int dead = 0;
         List<UUID> ranked = new ArrayList<>();
         for (UUID participantId : teamIds) {
-            TameData data = tameDataForSummary(server, battle, participantId);
-            if (data == null) {
+            SummaryParticipant participant = participantForSummary(server, battle, participantId);
+            if (participant == null) {
                 continue;
             }
             total++;
@@ -595,10 +595,10 @@ public final class TameDuelManager {
             ranked.add(participantId);
         }
         ranked.sort((a, b) -> {
-            TameData left = tameDataForSummary(server, battle, a);
-            TameData right = tameDataForSummary(server, battle, b);
-            int leftLevel = left == null ? 1 : Math.max(1, left.level);
-            int rightLevel = right == null ? 1 : Math.max(1, right.level);
+            SummaryParticipant left = participantForSummary(server, battle, a);
+            SummaryParticipant right = participantForSummary(server, battle, b);
+            int leftLevel = left == null ? 1 : left.level();
+            int rightLevel = right == null ? 1 : right.level();
             int compare = Integer.compare(rightLevel, leftLevel);
             if (compare != 0) {
                 return compare;
@@ -709,7 +709,7 @@ public final class TameDuelManager {
         }
         List<UUID> ordered = new ArrayList<>();
         for (UUID participantId : battle.roster) {
-            if (tameDataForSummary(server, battle, participantId) != null) {
+            if (participantForSummary(server, battle, participantId) != null) {
                 ordered.add(participantId);
             }
         }
@@ -734,18 +734,20 @@ public final class TameDuelManager {
         lines.add(Component.literal("Duel results:").withStyle(ChatFormatting.GOLD));
         int rank = 1;
         for (UUID participantId : ordered) {
-            TameData data = tameDataForSummary(server, battle, participantId);
-            if (data == null) {
+            SummaryParticipant participant = participantForSummary(server, battle, participantId);
+            if (participant == null) {
                 continue;
             }
             DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
             boolean died = stats.deaths > 0;
-            String displayName = data.name == null || data.name.isBlank() ? entityLabel(server, participantId) : data.name;
             LivingEntity currentEntity = died ? null : findLoadedLivingParticipant(server, participantId);
             MutableComponent row = Component.literal(rank + ". ").withStyle(ChatFormatting.GOLD)
-                    .append(Component.literal("(" + ownerInitials(server, data.ownerUUID) + ") ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("[" + Math.max(1, data.level) + "] ").withStyle(ChatFormatting.YELLOW))
-                    .append(Component.literal(displayName + " ").withStyle(died ? ChatFormatting.DARK_RED : ChatFormatting.AQUA));
+                    .append(Component.literal("(" + ownerInitials(server, participant.ownerId()) + ") ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("[" + participant.level() + "] ").withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal(participant.displayName() + " ").withStyle(died ? ChatFormatting.DARK_RED : ChatFormatting.AQUA));
+            if (participant.player()) {
+                row = row.append(Component.literal("[player] ").withStyle(ChatFormatting.BLUE));
+            }
             if (!died && currentEntity != null) {
                 row = row.append(Component.literal("(" + formatHealth(currentEntity) + ") ").withStyle(ChatFormatting.RED));
             }
@@ -870,6 +872,38 @@ public final class TameDuelManager {
     }
 
     private record TeamBossStats(int total, int alive, int dead, List<UUID> top) {
+    }
+
+    private record SummaryParticipant(String displayName, UUID ownerId, int level, boolean player) {
+    }
+
+    private static SummaryParticipant participantForSummary(MinecraftServer server, DuelBattle battle, UUID participantId) {
+        if (participantId == null) {
+            return null;
+        }
+        ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(participantId);
+        if (player != null) {
+            return new SummaryParticipant(player.getName().getString(), player.getUUID(), Math.max(1, player.experienceLevel), true);
+        }
+        TameData live = TameRegistry.get(participantId);
+        if (live != null) {
+            String displayName = live.name == null || live.name.isBlank() ? entityLabel(server, participantId) : live.name;
+            return new SummaryParticipant(displayName, live.ownerUUID, Math.max(1, live.level), false);
+        }
+        CompoundTag snapshot = battle == null ? null : battle.tameSnapshots.get(participantId);
+        if (snapshot != null && !snapshot.isEmpty()) {
+            TameData data = TameData.fromTag(snapshot.copy());
+            String displayName = data.name == null || data.name.isBlank() ? entityLabel(server, participantId) : data.name;
+            return new SummaryParticipant(displayName, data.ownerUUID, Math.max(1, data.level), false);
+        }
+        LivingEntity loaded = findLoadedLivingParticipant(server, participantId);
+        if (loaded instanceof ServerPlayer loadedPlayer) {
+            return new SummaryParticipant(loadedPlayer.getName().getString(), loadedPlayer.getUUID(), Math.max(1, loadedPlayer.experienceLevel), true);
+        }
+        if (loaded != null) {
+            return new SummaryParticipant(entityLabel(server, participantId), participantOwner(battle, participantId), 1, false);
+        }
+        return null;
     }
 
     private static TameData tameDataForSummary(MinecraftServer server, DuelBattle battle, UUID participantId) {
