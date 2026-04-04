@@ -296,7 +296,8 @@ public class TameRegistry {
         if (typeId == null || typeId.isBlank()) {
             return false;
         }
-        return INVERTED_CALL_ORDER_TYPE_IDS.contains(normalizeTypeId(typeId));
+        String normalized = normalizeTypeId(typeId);
+        return usesInvertedCallOrderByDefault(normalized) || INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized);
     }
 
     public static boolean isFollowSitOnlyType(String typeId) {
@@ -309,6 +310,18 @@ public class TameRegistry {
 
     public static Set<String> getCallOrderInvertedTypes() {
         return Set.copyOf(INVERTED_CALL_ORDER_TYPE_IDS);
+    }
+
+    public static boolean usesInvertedCallOrderByDefault(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        int separator = normalized.indexOf(':');
+        if (separator < 0) {
+            return false;
+        }
+        return !"minecraft".equals(normalized.substring(0, separator));
     }
 
     public static boolean toggleCallOrderInvertedType(String typeId) {
@@ -326,6 +339,30 @@ public class TameRegistry {
         }
         markDirty();
         return enabled;
+    }
+
+    public static boolean addCallOrderInvertedType(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        if (!INVERTED_CALL_ORDER_TYPE_IDS.add(normalized)) {
+            return false;
+        }
+        markDirty();
+        return true;
+    }
+
+    public static boolean removeCallOrderInvertedType(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        if (!INVERTED_CALL_ORDER_TYPE_IDS.remove(normalized)) {
+            return false;
+        }
+        markDirty();
+        return true;
     }
 
     private static String normalizeTypeId(String typeId) {

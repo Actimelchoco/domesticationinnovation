@@ -1376,7 +1376,7 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
-                                .then(Commands.literal("legacyduelteam")
+                                .then(Commands.literal("duelTeamOld")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
@@ -2155,8 +2155,23 @@ public class TameCommands {
                                 .then(Commands.literal("callOrder")
                                         .then(Commands.literal("info")
                                                 .executes(ctx -> adminCallOrderInfo(ctx.getSource())))
+                                        .then(Commands.literal("add")
+                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                        .executes(ctx -> adminAddCallOrderInvert(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "typeId")
+                                                        ))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestCurrentCallOrderInvertedTypes(b))
+                                                        .executes(ctx -> adminRemoveCallOrderInvert(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "typeId")
+                                                        ))))
                                         .then(Commands.literal("invert")
                                                 .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestEntityTypes(b))
                                                         .executes(ctx -> adminToggleCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
@@ -13227,30 +13242,80 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminAddCallOrderInvert(CommandSourceStack source, String typeId) {
+        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            if (source.getPlayer() != null) {
+                return error(source.getPlayer(), "Type id required.");
+            }
+            source.sendFailure(Component.literal("Type id required."));
+            return 0;
+        }
+        boolean added = TameRegistry.addCallOrderInvertedType(normalized);
+        boolean defaultInverted = TameRegistry.usesInvertedCallOrderByDefault(normalized);
+        String message = added
+                ? "Call-order invert override added for " + normalized + "."
+                : defaultInverted
+                ? normalized + " already uses inverted call-order by default."
+                : normalized + " already has an explicit invert override.";
+        Component line = Component.literal(message).withStyle(added ? ChatFormatting.AQUA : ChatFormatting.GRAY);
+        if (source.getPlayer() != null) {
+            source.getPlayer().sendSystemMessage(line);
+        } else {
+            source.sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
+    private static int adminRemoveCallOrderInvert(CommandSourceStack source, String typeId) {
+        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            if (source.getPlayer() != null) {
+                return error(source.getPlayer(), "Type id required.");
+            }
+            source.sendFailure(Component.literal("Type id required."));
+            return 0;
+        }
+        boolean removed = TameRegistry.removeCallOrderInvertedType(normalized);
+        boolean defaultInverted = TameRegistry.usesInvertedCallOrderByDefault(normalized);
+        String message = removed
+                ? "Removed call-order invert override for " + normalized + "."
+                : defaultInverted
+                ? normalized + " still uses inverted call-order by default."
+                : normalized + " has no explicit invert override.";
+        Component line = Component.literal(message).withStyle(removed ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
+        if (source.getPlayer() != null) {
+            source.getPlayer().sendSystemMessage(line);
+        } else {
+            source.sendSuccess(() -> line, false);
+        }
+        return 1;
+    }
+
     private static int adminCallOrderInfo(CommandSourceStack source) {
-        List<String> types = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
-        types.sort(String::compareToIgnoreCase);
-        Component header = Component.literal("Call-order default: inverted generic mapping (0 wander, 1 follow, 2 sit).")
+        List<String> overrideTypes = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
+        overrideTypes.sort(String::compareToIgnoreCase);
+        Component header = Component.literal("Call-order default: modded types use inverted mapping (0 wander, 1 follow, 2 sit); minecraft types keep old mapping (0 wander, 1 sit, 2 follow).")
                 .withStyle(ChatFormatting.AQUA);
         if (source.getPlayer() != null) {
             source.getPlayer().sendSystemMessage(header);
-            if (types.isEmpty()) {
-                source.getPlayer().sendSystemMessage(Component.literal("No per-type call-order overrides are currently enabled.")
+            if (overrideTypes.isEmpty()) {
+                source.getPlayer().sendSystemMessage(Component.literal("No explicit call-order invert overrides are currently enabled.")
                         .withStyle(ChatFormatting.GRAY));
             } else {
-                source.getPlayer().sendSystemMessage(Component.literal("Override types using old mapping (0 wander, 1 sit, 2 follow):")
+                source.getPlayer().sendSystemMessage(Component.literal("Explicit invert overrides:")
                         .withStyle(ChatFormatting.GOLD));
-                for (String type : types) {
+                for (String type : overrideTypes) {
                     source.getPlayer().sendSystemMessage(Component.literal("- " + type).withStyle(ChatFormatting.YELLOW));
                 }
             }
         } else {
             source.sendSuccess(() -> header, false);
-            if (types.isEmpty()) {
-                source.sendSuccess(() -> Component.literal("No per-type call-order overrides are currently enabled."), false);
-            } else {
-                source.sendSuccess(() -> Component.literal("Override types using old mapping (0 wander, 1 sit, 2 follow): " + String.join(", ", types)), false);
-            }
+            source.sendSuccess(() -> Component.literal(
+                    overrideTypes.isEmpty()
+                            ? "Explicit invert overrides: none"
+                            : "Explicit invert overrides: " + String.join(", ", overrideTypes)
+            ), false);
         }
         return 1;
     }
@@ -17226,6 +17291,12 @@ public class TameCommands {
             }
         }
         return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestCurrentCallOrderInvertedTypes(SuggestionsBuilder b) {
+        List<String> typeIds = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
+        typeIds.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(typeIds, b);
     }
 
     private static CompletableFuture<Suggestions> suggestOwnedGuardianSetNames(CommandSourceStack source, SuggestionsBuilder b) {

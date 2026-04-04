@@ -93,6 +93,12 @@ public class TameAbilityEvents {
     private static final ThreadLocal<Boolean> INTERNAL_SUPPORT_REDIRECT = ThreadLocal.withInitial(() -> false);
     private static final ThreadLocal<List<String>> DAMAGE_DEBUG_CONTRIBUTORS = ThreadLocal.withInitial(ArrayList::new);
     private static final int MAX_WARDEN_BEAM_TARGETS = 12;
+    private static final Set<String> HEALING_SUPPORT_VISUAL_SOURCES = Set.of(
+            "healing_bottle",
+            "triage_pulse",
+            "battlefield_medic",
+            "life_gift"
+    );
     private static final OwnerProtectionAbilityModule.Hooks OWNER_PROTECTION_HOOKS = new OwnerProtectionAbilityModule.Hooks() {
         @Override
         public void debugAbilityUse(TamableAnimal tame, String ability) {
@@ -2354,7 +2360,15 @@ public class TameAbilityEvents {
     }
 
     private static void applySupportActivationVisual(TamableAnimal tame, String source) {
-        tame.addEffect(new MobEffectInstance(MobEffects.GLOWING, 40, 0, false, false, true));
+        if (!(tame.level() instanceof ServerLevel level) || !HEALING_SUPPORT_VISUAL_SOURCES.contains(source)) {
+            return;
+        }
+        for (int i = 0; i < 3; ++i) {
+            double d0 = tame.getRandom().nextGaussian() * 0.02D;
+            double d1 = tame.getRandom().nextGaussian() * 0.02D;
+            double d2 = tame.getRandom().nextGaussian() * 0.02D;
+            level.sendParticles(ParticleTypes.HEART, tame.getRandomX(1.0D), tame.getY(0.5D), tame.getRandomZ(1.0D), 3, d0, d1, d2, 0.02F);
+        }
     }
 
     private static void applyInternalBonusDamage(LivingEntity target, TamableAnimal attacker, float amount) {
