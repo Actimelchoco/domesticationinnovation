@@ -1355,8 +1355,9 @@ public class LevelSystem {
         scrubLegacyManagedModifiers(tame);
         boolean legendaryMonsters = isLegendaryMonstersType(data.type);
         Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
+        boolean addBonusHealthOnForcedBase = forcedMaxHealth != null && isDragonflyType(data.type);
         double maxHealthBase = forcedMaxHealth != null
-                ? forcedMaxHealth
+                ? forcedMaxHealth + (addBonusHealthOnForcedBase ? data.bonusHealth : 0.0D)
                 : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
         if (legendaryMonsters) {
             setAttributeBaseValue(tame, Attributes.MAX_HEALTH, forcedMaxHealth != null ? forcedMaxHealth : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth));
