@@ -1,0 +1,8 @@
+allprojects {
+    tasks.register("printMainCompileClasspath") {
+        doLast {
+            def paths = project.sourceSets.main.compileClasspath.files.collect { it.absolutePath }
+            println(paths.join(File.pathSeparator))
+        }
+    }
+}
