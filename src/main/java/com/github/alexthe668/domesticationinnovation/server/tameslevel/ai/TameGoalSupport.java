@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-final class TameGoalSupport {
+public final class TameGoalSupport {
     private static final Map<BossTargetKey, UUID> SHARED_BOSS_TARGETS = new HashMap<>();
 
     private record BossTargetKey(UUID ownerUuid, String dimensionId) {
@@ -86,6 +86,13 @@ final class TameGoalSupport {
         if (tame.getTarget() != target) {
             tame.setTarget(target);
         }
+    }
+
+    public static boolean hasSharedBossTarget(ServerLevel level, TamableAnimal tame) {
+        if (level == null || tame == null) {
+            return false;
+        }
+        return resolveSharedBossTarget(level, bossTargetKey(level, tame, owner(tame))) != null;
     }
 
     static void setBodyguardTarget(ServerLevel level, TamableAnimal tame, ServerPlayer owner, double aggroRadius, double leashDistance) {

@@ -5,9 +5,11 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -110,8 +112,15 @@ public class FollowOwner2Goal extends Goal {
         TameData data = TameRegistry.get(this.tamable.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if (mode == TameMode.BOSS && this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
-                return false;
+            if (mode == TameMode.BOSS) {
+                if (this.tamable.getTarget() != null && this.tamable.getTarget().isAlive()) {
+                    return false;
+                }
+                if (this.tamable instanceof net.minecraft.world.entity.TamableAnimal tame
+                        && this.tamable.level() instanceof ServerLevel serverLevel
+                        && TameGoalSupport.hasSharedBossTarget(serverLevel, tame)) {
+                    return false;
+                }
             }
             double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
             if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.AGGRESSIVE)

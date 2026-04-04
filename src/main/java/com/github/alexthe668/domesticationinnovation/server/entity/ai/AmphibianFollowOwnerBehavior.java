@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.entity.ai;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -71,8 +72,13 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
         TameData data = TameRegistry.get(axolotl.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if (mode == TameMode.BOSS && axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
-                return false;
+            if (mode == TameMode.BOSS) {
+                if (axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
+                    return false;
+                }
+                if (axolotl instanceof net.minecraft.world.entity.TamableAnimal tame && TameGoalSupport.hasSharedBossTarget(axolotl.level() instanceof ServerLevel serverLevel ? serverLevel : null, tame)) {
+                    return false;
+                }
             }
             double teleportDistance = data.closeMovement ? 12.0D : 24.0D;
             if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.AGGRESSIVE)
