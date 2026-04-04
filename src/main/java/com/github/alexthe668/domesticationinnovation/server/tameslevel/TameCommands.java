@@ -4496,7 +4496,7 @@ public class TameCommands {
         }
         List<TameData> withBeds = new ArrayList<>();
         List<TameData> withoutBeds = new ArrayList<>();
-        for (TameData data : ownedTames(player.getUUID())) {
+        for (TameData data : ownedTamesForBedListing(player.getUUID())) {
             if (data == null) {
                 continue;
             }
@@ -4531,7 +4531,7 @@ public class TameCommands {
         }
         List<TameData> withBeds = new ArrayList<>();
         List<TameData> withoutBeds = new ArrayList<>();
-        for (TameData data : ownedTames(player.getUUID())) {
+        for (TameData data : ownedTamesForBedListing(player.getUUID())) {
             if (data == null) {
                 continue;
             }
@@ -4566,7 +4566,7 @@ public class TameCommands {
             return 0;
         }
         List<TameData> withoutBeds = new ArrayList<>();
-        for (TameData data : ownedTames(player.getUUID())) {
+        for (TameData data : ownedTamesForBedListing(player.getUUID())) {
             if (data != null && (!data.hasPetBed || data.petBedDimension == null || data.petBedDimension.isBlank())) {
                 withoutBeds.add(data);
             }
@@ -15425,6 +15425,73 @@ public class TameCommands {
             list.add(d);
         }
         return list;
+    }
+
+    private static List<TameData> ownedTamesForBedListing(UUID owner) {
+        List<TameData> list = new ArrayList<>();
+        Set<UUID> seenTlIds = new HashSet<>();
+        Set<UUID> seenUuids = new HashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !owner.equals(data.ownerUUID)) continue;
+            if (!isDeadEntry(data.uuid)) {
+                list.add(data);
+                if (data.tlId != null) {
+                    seenTlIds.add(data.tlId);
+                }
+                if (data.uuid != null) {
+                    seenUuids.add(data.uuid);
+                }
+            }
+        }
+        for (TameDeathRecord record : TameRegistry.LAST_DEATHS.values()) {
+            if (record == null || !owner.equals(record.ownerUUID)) continue;
+            if (record.tlId != null && seenTlIds.contains(record.tlId)) continue;
+            if (record.uuid != null && seenUuids.contains(record.uuid)) continue;
+            TameData snapshotData = tameDataFromDeathRecord(record);
+            if (snapshotData == null) continue;
+            list.add(snapshotData);
+            if (snapshotData.tlId != null) {
+                seenTlIds.add(snapshotData.tlId);
+            }
+            if (snapshotData.uuid != null) {
+                seenUuids.add(snapshotData.uuid);
+            }
+        }
+        return list;
+    }
+
+    private static TameData tameDataFromDeathRecord(TameDeathRecord record) {
+        if (record == null) {
+            return null;
+        }
+        if (record.snapshot != null && !record.snapshot.isEmpty()) {
+            TameData data = TameData.fromTag(record.snapshot.copy());
+            if (data != null) {
+                if (data.uuid == null) {
+                    data.uuid = record.uuid;
+                }
+                if (data.tlId == null) {
+                    data.tlId = record.tlId;
+                }
+                if (data.ownerUUID == null) {
+                    data.ownerUUID = record.ownerUUID;
+                }
+                if (data.name == null || data.name.isBlank()) {
+                    data.name = record.name;
+                }
+                if (data.type == null || data.type.isBlank()) {
+                    data.type = record.type;
+                }
+                return data;
+            }
+        }
+        TameData fallback = TameData.fromTag(new CompoundTag());
+        fallback.uuid = record.uuid;
+        fallback.tlId = record.tlId;
+        fallback.ownerUUID = record.ownerUUID;
+        fallback.name = record.name;
+        fallback.type = record.type;
+        return fallback;
     }
 
     private static List<TameData> ownedDeadTames(UUID owner) {
