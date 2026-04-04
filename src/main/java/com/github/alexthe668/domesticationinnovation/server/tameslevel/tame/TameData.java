@@ -36,6 +36,14 @@ public class TameData {
     public int kills = 0;
     public int assists = 0;
     public int deaths = 0;
+    public int duelMmr = PlayerDuelStats.DEFAULT_MMR;
+    public int duelKills = 0;
+    public int duelAssists = 0;
+    public int duelDeaths = 0;
+    public int duelWins = 0;
+    public int duelLosses = 0;
+    public int duelCount = 0;
+    public double duelPoints = 0.0D;
     public boolean dead = false;
     public boolean stored = false;
     public long deadGameTime = 0L;
@@ -175,6 +183,14 @@ public class TameData {
         tag.putInt("kills", kills);
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
+        tag.putInt("duelMmr", Math.max(0, duelMmr));
+        tag.putInt("duelKills", Math.max(0, duelKills));
+        tag.putInt("duelAssists", Math.max(0, duelAssists));
+        tag.putInt("duelDeaths", Math.max(0, duelDeaths));
+        tag.putInt("duelWins", Math.max(0, duelWins));
+        tag.putInt("duelLosses", Math.max(0, duelLosses));
+        tag.putInt("duelCount", Math.max(0, duelCount));
+        tag.putDouble("duelPoints", Math.max(0.0D, duelPoints));
         tag.putBoolean("dead", dead);
         tag.putBoolean("stored", stored);
         tag.putLong("deadGameTime", deadGameTime);
@@ -330,6 +346,17 @@ public class TameData {
         data.kills = Math.max(0, tag.getInt("kills"));
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
+        data.duelMmr = Math.max(0, tag.getInt("duelMmr"));
+        if (data.duelMmr <= 0) {
+            data.duelMmr = PlayerDuelStats.DEFAULT_MMR;
+        }
+        data.duelKills = Math.max(0, tag.getInt("duelKills"));
+        data.duelAssists = Math.max(0, tag.getInt("duelAssists"));
+        data.duelDeaths = Math.max(0, tag.getInt("duelDeaths"));
+        data.duelWins = Math.max(0, tag.getInt("duelWins"));
+        data.duelLosses = Math.max(0, tag.getInt("duelLosses"));
+        data.duelCount = Math.max(0, tag.getInt("duelCount"));
+        data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
         data.dead = tag.getBoolean("dead");
         data.stored = tag.getBoolean("stored");
         data.deadGameTime = tag.contains("deadGameTime", Tag.TAG_LONG) ? tag.getLong("deadGameTime") : 0L;

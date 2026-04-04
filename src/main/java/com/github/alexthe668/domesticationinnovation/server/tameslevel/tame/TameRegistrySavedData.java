@@ -29,6 +29,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
+    private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -171,6 +172,25 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public Map<UUID, PlayerDuelStats> getPlayerDuelStats() {
+        return playerDuelStats;
+    }
+
+    public void setPlayerDuelStats(Map<UUID, PlayerDuelStats> playerDuelStats) {
+        this.playerDuelStats.clear();
+        if (playerDuelStats == null) {
+            return;
+        }
+        for (Map.Entry<UUID, PlayerDuelStats> entry : playerDuelStats.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            PlayerDuelStats copy = PlayerDuelStats.fromTag(entry.getValue().toTag());
+            copy.playerUuid = entry.getKey();
+            this.playerDuelStats.put(entry.getKey(), copy);
+        }
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         ListTag tamesTag = new ListTag();
@@ -295,6 +315,14 @@ public class TameRegistrySavedData extends SavedData {
             invertedCallOrderTag.add(net.minecraft.nbt.StringTag.valueOf(id));
         }
         tag.put("invertedCallOrderTypeIds", invertedCallOrderTag);
+        ListTag playerDuelStatsTag = new ListTag();
+        for (PlayerDuelStats stats : playerDuelStats.values()) {
+            if (stats == null || stats.playerUuid == null) {
+                continue;
+            }
+            playerDuelStatsTag.add(stats.toTag());
+        }
+        tag.put("playerDuelStats", playerDuelStatsTag);
         return tag;
     }
 
@@ -431,6 +459,18 @@ public class TameRegistrySavedData extends SavedData {
                     if (id != null && !id.isBlank()) {
                         data.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
                     }
+                }
+            }
+        }
+        if (tag.contains("playerDuelStats", Tag.TAG_LIST)) {
+            ListTag playerDuelStatsList = tag.getList("playerDuelStats", Tag.TAG_COMPOUND);
+            for (Tag entry : playerDuelStatsList) {
+                if (!(entry instanceof CompoundTag row)) {
+                    continue;
+                }
+                PlayerDuelStats stats = PlayerDuelStats.fromTag(row);
+                if (stats.playerUuid != null) {
+                    data.playerDuelStats.put(stats.playerUuid, stats);
                 }
             }
         }

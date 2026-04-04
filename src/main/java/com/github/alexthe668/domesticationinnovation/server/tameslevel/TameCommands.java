@@ -25,6 +25,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.No
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDuelStats;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
@@ -54,6 +55,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -1612,10 +1614,91 @@ public class TameCommands {
                                                 .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10))
                                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
                                                         .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
+
+                        .then(Commands.literal("duelleaderboard")
+                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10))
+                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE)))
+                                .then(Commands.literal("everytame")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE)))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, IntegerArgumentType.getInteger(ctx, "limit"))))
                                                 .then(Commands.literal("all")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                .then(Commands.literal("owned")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE))))))
+                                .then(Commands.literal("owned")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
+                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestDuelLeaderboardModes(b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))))
+                                .then(Commands.argument("type", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestDuelLeaderboardModes(b))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, 10))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, Integer.MAX_VALUE)))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
 
                         .then(Commands.literal("follow")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.FOLLOW))
@@ -9270,40 +9353,22 @@ public class TameCommands {
         if (loaded != null) {
             loaded.discard();
         }
-        String typeId = recoverEntityTypeId(snapshot);
-        if (typeId.isBlank()) {
-            return false;
-        }
-        ResourceLocation entityId = ResourceLocation.tryParse(typeId);
-        if (entityId == null) {
-            return false;
-        }
-        EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(entityId);
-        if (entityType == null) {
-            return false;
-        }
         SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
         if (target == null || target.level == null || target.pos == null) {
             return false;
         }
-        Entity created = entityType.create(target.level);
-        if (!(created instanceof TamableAnimal restored)) {
-            return false;
-        }
-        CompoundTag entitySnapshot = snapshot.entitySnapshot == null ? new CompoundTag() : snapshot.entitySnapshot.copy();
-        if (!entitySnapshot.isEmpty()) {
-            restored.load(entitySnapshot);
-        }
-        restored.setUUID(snapshot.uuid);
-        TameData.syncTlIdToEntity(restored, snapshot.tlId);
-        restored.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
-        enforceTamedOwnerPreserveCollar(restored, snapshot.ownerUUID);
-        if (!target.level.addFreshEntity(restored)) {
-            return false;
-        }
-        TameGoalInstaller.installIfMissing(restored);
+        snapshot.dead = false;
+        snapshot.stored = false;
         TameRegistry.register(snapshot);
-        TameRegistry.markDirty();
+        RespawnResult result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+        if (!result.success) {
+            return false;
+        }
+        TamableAnimal restored = findLoadedTameByUuid(server, snapshot.uuid);
+        if (restored != null) {
+            TameData.syncTlIdToEntity(restored, snapshot.tlId);
+            TameGoalInstaller.installIfMissing(restored);
+        }
         return true;
     }
 
@@ -10879,6 +10944,10 @@ public class TameCommands {
         return key != null && PENDING_IMMEDIATE_CHUNK_TELEPORTS.containsKey(key);
     }
 
+    private record DuelLeaderboardEntry(UUID participantId, UUID ownerUuid, String name, String type, String group, int level, boolean player,
+                                        int mmr, int wins, int losses, int duelCount, int kills, int assists, int deaths, double totalPoints) {
+    }
+
     private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit) {
         ServerPlayer p = source.getPlayer();
         String m = mode == null ? "mix" : mode.trim().toLowerCase(Locale.ROOT);
@@ -10924,6 +10993,157 @@ public class TameCommands {
                     .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY)));
         }
         return 1;
+    }
+
+    private static int duelLeaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit) {
+        ServerPlayer p = source.getPlayer();
+        String m = mode == null ? "mmr" : mode.trim().toLowerCase(Locale.ROOT);
+        List<DuelLeaderboardEntry> entries = new ArrayList<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !hasRecordedDuelStats(data)) continue;
+            if (!includeAll && !p.getUUID().equals(data.ownerUUID)) continue;
+            if (groupFilter != null && !isInGroup(data, groupFilter)) continue;
+            if (typeFilter != null && !matchesTypeFilter(data, typeFilter)) continue;
+            entries.add(new DuelLeaderboardEntry(
+                    data.uuid,
+                    data.ownerUUID,
+                    data.name,
+                    data.type,
+                    data.group,
+                    data.level,
+                    false,
+                    Math.max(0, data.duelMmr),
+                    Math.max(0, data.duelWins),
+                    Math.max(0, data.duelLosses),
+                    Math.max(0, data.duelCount),
+                    Math.max(0, data.duelKills),
+                    Math.max(0, data.duelAssists),
+                    Math.max(0, data.duelDeaths),
+                    Math.max(0.0D, data.duelPoints)
+            ));
+        }
+        for (Map.Entry<UUID, PlayerDuelStats> entry : TameRegistry.getPlayerDuelStats().entrySet()) {
+            UUID playerId = entry.getKey();
+            PlayerDuelStats stats = entry.getValue();
+            if (playerId == null || stats == null || !hasRecordedDuelStats(stats)) continue;
+            if (!includeAll && !p.getUUID().equals(playerId)) continue;
+            if (groupFilter != null || typeFilter != null) continue;
+            entries.add(new DuelLeaderboardEntry(
+                    playerId,
+                    playerId,
+                    resolveDuelPlayerName(source.getServer(), playerId, stats),
+                    "minecraft:player",
+                    "",
+                    0,
+                    true,
+                    Math.max(0, stats.duelMmr),
+                    Math.max(0, stats.duelWins),
+                    Math.max(0, stats.duelLosses),
+                    Math.max(0, stats.duelCount),
+                    Math.max(0, stats.duelKills),
+                    Math.max(0, stats.duelAssists),
+                    Math.max(0, stats.duelDeaths),
+                    Math.max(0.0D, stats.duelPoints)
+            ));
+        }
+
+        sortDuelLeaderboardEntries(entries, m);
+        if (entries.isEmpty()) return error(p, "No duel leaderboard entries found.");
+        int limit = Math.min(Math.max(1, requestedLimit), entries.size());
+        String scope = includeAll ? "all players" : "your duel entries";
+        String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
+        String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
+        p.sendSystemMessage(Component.literal("---- Duel Leaderboard (" + m + ") | " + scope + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("mmr / wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
+        for (int i = 0; i < limit; i++) {
+            DuelLeaderboardEntry entry = entries.get(i);
+            MutableComponent line = Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal("(" + ownerInitials(source.getServer(), entry.ownerUuid()) + ") ").withStyle(ChatFormatting.GRAY));
+            if (entry.player()) {
+                line = line.append(Component.literal("[P] ").withStyle(ChatFormatting.BLUE));
+            } else {
+                line = line.append(Component.literal("[" + Math.max(1, entry.level()) + "] ").withStyle(ChatFormatting.YELLOW));
+            }
+            line = line.append(Component.literal(entry.name() + " ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.mmr())).withStyle(ChatFormatting.GOLD))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.wins())).withStyle(ChatFormatting.GREEN))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.losses())).withStyle(ChatFormatting.RED))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.duelCount())).withStyle(ChatFormatting.DARK_AQUA))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.kills())).withStyle(ChatFormatting.RED))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.assists())).withStyle(ChatFormatting.GREEN))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(String.valueOf(entry.deaths())).withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(formatDuelLeaderboardPoints(entry.totalPoints())).withStyle(ChatFormatting.LIGHT_PURPLE))
+                    .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY));
+            p.sendSystemMessage(line);
+        }
+        return 1;
+    }
+
+    private static void sortDuelLeaderboardEntries(List<DuelLeaderboardEntry> entries, String mode) {
+        if (entries == null || entries.isEmpty()) {
+            return;
+        }
+        String normalized = mode == null ? "mmr" : mode.trim().toLowerCase(Locale.ROOT);
+        Comparator<DuelLeaderboardEntry> comparator;
+        if (normalized.equals("kills")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::kills).reversed();
+        else if (normalized.equals("deaths")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::deaths).reversed();
+        else if (normalized.equals("assists")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::assists).reversed();
+        else if (normalized.equals("wins")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::wins).reversed();
+        else if (normalized.equals("losses")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::losses).reversed();
+        else if (normalized.equals("duels") || normalized.equals("duelcount") || normalized.equals("count")) comparator = Comparator.comparingInt(DuelLeaderboardEntry::duelCount).reversed();
+        else if (normalized.equals("points")) comparator = Comparator.comparingDouble(DuelLeaderboardEntry::totalPoints).reversed();
+        else comparator = Comparator.comparingInt(DuelLeaderboardEntry::mmr).reversed();
+        comparator = comparator
+                .thenComparing((left, right) -> Integer.compare(right.kills(), left.kills()))
+                .thenComparing((left, right) -> Integer.compare(right.assists(), left.assists()))
+                .thenComparing(entry -> entry.name().toLowerCase(Locale.ROOT));
+        entries.sort(comparator);
+    }
+
+    private static boolean hasRecordedDuelStats(TameData data) {
+        return data != null && (data.duelCount > 0 || data.duelKills > 0 || data.duelAssists > 0 || data.duelDeaths > 0
+                || data.duelWins > 0 || data.duelLosses > 0 || data.duelPoints > 0.0D || data.duelMmr != PlayerDuelStats.DEFAULT_MMR);
+    }
+
+    private static boolean hasRecordedDuelStats(PlayerDuelStats data) {
+        return data != null && (data.duelCount > 0 || data.duelKills > 0 || data.duelAssists > 0 || data.duelDeaths > 0
+                || data.duelWins > 0 || data.duelLosses > 0 || data.duelPoints > 0.0D || data.duelMmr != PlayerDuelStats.DEFAULT_MMR);
+    }
+
+    private static String resolveDuelPlayerName(MinecraftServer server, UUID playerId, PlayerDuelStats stats) {
+        if (server != null) {
+            ServerPlayer live = server.getPlayerList().getPlayer(playerId);
+            if (live != null) {
+                TameRegistry.getOrCreatePlayerDuelStats(playerId, live.getGameProfile().getName());
+                return live.getGameProfile().getName();
+            }
+            if (server.getProfileCache() != null && playerId != null) {
+                Optional<GameProfile> profile = server.getProfileCache().get(playerId);
+                if (profile.isPresent() && profile.get().getName() != null && !profile.get().getName().isBlank()) {
+                    return profile.get().getName();
+                }
+            }
+        }
+        if (stats != null && stats.lastKnownName != null && !stats.lastKnownName.isBlank()) {
+            return stats.lastKnownName;
+        }
+        return playerId == null ? "unknown" : playerId.toString();
+    }
+
+    private static String formatDuelLeaderboardPoints(double value) {
+        double rounded = Math.rint(value);
+        if (Math.abs(value - rounded) < 0.0001D) {
+            return Integer.toString((int) rounded);
+        }
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     private static int leaderboardInvestedXp(TameData data) {
@@ -17794,6 +18014,18 @@ public class TameCommands {
         suggestCommandString(b, "assists");
         suggestCommandString(b, "lvl");
         suggestCommandString(b, "days");
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestDuelLeaderboardModes(SuggestionsBuilder b) {
+        suggestCommandString(b, "mmr");
+        suggestCommandString(b, "kills");
+        suggestCommandString(b, "deaths");
+        suggestCommandString(b, "assists");
+        suggestCommandString(b, "wins");
+        suggestCommandString(b, "losses");
+        suggestCommandString(b, "duels");
+        suggestCommandString(b, "points");
         return b.buildFuture();
     }
 

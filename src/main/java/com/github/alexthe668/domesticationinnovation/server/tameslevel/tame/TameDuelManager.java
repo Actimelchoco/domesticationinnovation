@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class TameDuelManager {
+    private static final double DUEL_MMR_K = 48.0D;
 
     private static final class DuelBattle {
         private final UUID battleId;
@@ -377,6 +378,7 @@ public final class TameDuelManager {
     private static void finishBattle(MinecraftServer server, DuelBattle battle, String reason, UUID forfeitingOwner) {
         if (battle == null) return;
         BATTLE_BY_ID.remove(battle.battleId);
+        persistBattleStatsAndMmr(server, battle, forfeitingOwner);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
@@ -713,23 +715,7 @@ public final class TameDuelManager {
                 ordered.add(participantId);
             }
         }
-        ordered.sort((a, b) -> {
-            DuelStats statsA = battle.duelStats.getOrDefault(a, new DuelStats());
-            DuelStats statsB = battle.duelStats.getOrDefault(b, new DuelStats());
-            int scoreCompare = Double.compare(statsB.points, statsA.points);
-            if (scoreCompare != 0) {
-                return scoreCompare;
-            }
-            int killsCompare = Integer.compare(statsB.kills, statsA.kills);
-            if (killsCompare != 0) {
-                return killsCompare;
-            }
-            int assistsCompare = Integer.compare(statsB.assists, statsA.assists);
-            if (assistsCompare != 0) {
-                return assistsCompare;
-            }
-            return entityLabel(server, a).compareToIgnoreCase(entityLabel(server, b));
-        });
+        ordered.sort((a, b) -> compareBattlePlacement(server, battle, a, b));
 
         lines.add(Component.literal("Duel results:").withStyle(ChatFormatting.GOLD));
         int rank = 1;
@@ -1006,12 +992,204 @@ public final class TameDuelManager {
         return String.format(java.util.Locale.ROOT, "%.1f", value);
     }
 
+    private static int compareBattlePlacement(MinecraftServer server, DuelBattle battle, UUID leftId, UUID rightId) {
+        DuelStats left = battle.duelStats.getOrDefault(leftId, new DuelStats());
+        DuelStats right = battle.duelStats.getOrDefault(rightId, new DuelStats());
+        int survivalCompare = Integer.compare(left.deaths, right.deaths);
+        if (survivalCompare != 0) {
+            return survivalCompare;
+        }
+        int scoreCompare = Double.compare(right.points, left.points);
+        if (scoreCompare != 0) {
+            return scoreCompare;
+        }
+        int killsCompare = Integer.compare(right.kills, left.kills);
+        if (killsCompare != 0) {
+            return killsCompare;
+        }
+        int assistsCompare = Integer.compare(right.assists, left.assists);
+        if (assistsCompare != 0) {
+            return assistsCompare;
+        }
+        return entityLabel(server, leftId).compareToIgnoreCase(entityLabel(server, rightId));
+    }
+
+    private static void persistBattleStatsAndMmr(MinecraftServer server, DuelBattle battle, UUID forfeitingOwner) {
+        if (server == null || battle == null || battle.roster.isEmpty()) {
+            return;
+        }
+        List<UUID> placements = new ArrayList<>(battle.roster);
+        placements.removeIf(id -> participantForSummary(server, battle, id) == null);
+        placements.sort((a, b) -> compareBattlePlacement(server, battle, a, b));
+        if (placements.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, Integer> placementIndex = new HashMap<>();
+        for (int i = 0; i < placements.size(); i++) {
+            placementIndex.put(placements.get(i), i + 1);
+        }
+
+        boolean teamAWon = didTeamWin(server, battle, true, forfeitingOwner);
+        int poolMagnitude = computeTeamMmrPool(battle, teamAWon);
+        Map<UUID, Integer> deltas = new HashMap<>();
+        distributeTeamMmr(server, battle, battle.originalTeamA, placementIndex, placements.size(), teamAWon, poolMagnitude, deltas);
+        distributeTeamMmr(server, battle, battle.originalTeamB, placementIndex, placements.size(), !teamAWon, poolMagnitude, deltas);
+
+        for (UUID participantId : battle.roster) {
+            DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
+            int mmrDelta = deltas.getOrDefault(participantId, 0);
+            boolean won = battle.originalTeamA.contains(participantId) ? teamAWon : !teamAWon;
+            applyPersistentParticipantStats(server, battle, participantId, stats, mmrDelta, won);
+        }
+        TameRegistry.markDirty();
+    }
+
+    private static boolean didTeamWin(MinecraftServer server, DuelBattle battle, boolean teamA, UUID forfeitingOwner) {
+        if (battle == null) {
+            return false;
+        }
+        UUID ownerId = teamA ? battle.ownerA : battle.ownerB;
+        UUID otherOwnerId = teamA ? battle.ownerB : battle.ownerA;
+        if (forfeitingOwner != null) {
+            if (forfeitingOwner.equals(ownerId) && !forfeitingOwner.equals(otherOwnerId)) {
+                return false;
+            }
+            if (forfeitingOwner.equals(otherOwnerId) && !forfeitingOwner.equals(ownerId)) {
+                return true;
+            }
+        }
+        if (battle.teamA.isEmpty() != battle.teamB.isEmpty()) {
+            return teamA ? !battle.teamA.isEmpty() : !battle.teamB.isEmpty();
+        }
+        TeamResult teamAResult = summarizeTeam(server, battle, battle.originalTeamA, battle.ownerA, "A");
+        TeamResult teamBResult = summarizeTeam(server, battle, battle.originalTeamB, battle.ownerB, "B");
+        TeamResult winner = determineWinningTeam(teamAResult, teamBResult, forfeitingOwner);
+        return teamA ? winner == teamAResult : winner == teamBResult;
+    }
+
+    private static int computeTeamMmrPool(DuelBattle battle, boolean teamAWon) {
+        if (battle == null) {
+            return 0;
+        }
+        double teamATotal = teamMmrTotal(battle.originalTeamA);
+        double teamBTotal = teamMmrTotal(battle.originalTeamB);
+        double expectedA = expectedTeamScore(teamATotal, teamBTotal);
+        double actualA = teamAWon ? 1.0D : 0.0D;
+        double swing = Math.abs(actualA - expectedA);
+        int participants = Math.max(2, battle.roster.size());
+        return Math.max(1, (int) Math.round(DUEL_MMR_K * swing * (participants / 2.0D)));
+    }
+
+    private static double teamMmrTotal(Set<UUID> participantIds) {
+        if (participantIds == null || participantIds.isEmpty()) {
+            return 0.0D;
+        }
+        double total = 0.0D;
+        for (UUID participantId : participantIds) {
+            total += participantCurrentMmr(participantId);
+        }
+        return total;
+    }
+
+    private static double expectedTeamScore(double ownMmr, double otherMmr) {
+        return 1.0D / (1.0D + Math.pow(10.0D, (otherMmr - ownMmr) / 400.0D));
+    }
+
+    private static int participantCurrentMmr(UUID participantId) {
+        if (participantId == null) {
+            return PlayerDuelStats.DEFAULT_MMR;
+        }
+        TameData tame = TameRegistry.get(participantId);
+        if (tame != null) {
+            return Math.max(0, tame.duelMmr);
+        }
+        PlayerDuelStats player = TameRegistry.getPlayerDuelStats().get(participantId);
+        if (player != null) {
+            return Math.max(0, player.duelMmr);
+        }
+        return PlayerDuelStats.DEFAULT_MMR;
+    }
+
+    private static void distributeTeamMmr(MinecraftServer server, DuelBattle battle, Set<UUID> teamIds, Map<UUID, Integer> placementIndex, int participantCount, boolean won, int poolMagnitude, Map<UUID, Integer> deltas) {
+        if (teamIds == null || teamIds.isEmpty() || poolMagnitude <= 0) {
+            return;
+        }
+        List<UUID> ordered = new ArrayList<>();
+        for (UUID participantId : teamIds) {
+            if (placementIndex.containsKey(participantId)) {
+                ordered.add(participantId);
+            }
+        }
+        if (ordered.isEmpty()) {
+            return;
+        }
+        double totalWeight = 0.0D;
+        for (UUID participantId : ordered) {
+            totalWeight += placementWeight(placementIndex.getOrDefault(participantId, participantCount), participantCount, won);
+        }
+        if (totalWeight <= 0.0D) {
+            return;
+        }
+        int signedPool = won ? poolMagnitude : -poolMagnitude;
+        int applied = 0;
+        for (int i = 0; i < ordered.size(); i++) {
+            UUID participantId = ordered.get(i);
+            double weight = placementWeight(placementIndex.getOrDefault(participantId, participantCount), participantCount, won);
+            int share = (i == ordered.size() - 1)
+                    ? (signedPool - applied)
+                    : (int) Math.round((signedPool * weight) / totalWeight);
+            applied += share;
+            deltas.merge(participantId, share, Integer::sum);
+        }
+    }
+
+    private static double placementWeight(int placement, int participantCount, boolean won) {
+        int normalizedPlacement = Math.max(1, Math.min(participantCount, placement));
+        return won ? (participantCount - normalizedPlacement + 1) : normalizedPlacement;
+    }
+
+    private static void applyPersistentParticipantStats(MinecraftServer server, DuelBattle battle, UUID participantId, DuelStats stats, int mmrDelta, boolean won) {
+        if (participantId == null || stats == null) {
+            return;
+        }
+        TameData tame = TameRegistry.get(participantId);
+        if (tame != null) {
+            double creditedPoints = Math.max(0.0D, stats.points);
+            if (stats.deaths > 0) {
+                creditedPoints *= 0.9D;
+            }
+            tame.duelMmr = Math.max(0, tame.duelMmr + mmrDelta);
+            tame.duelKills += Math.max(0, stats.kills);
+            tame.duelAssists += Math.max(0, stats.assists);
+            tame.duelDeaths += Math.max(0, stats.deaths);
+            tame.duelWins += won ? 1 : 0;
+            tame.duelLosses += won ? 0 : 1;
+            tame.duelCount += 1;
+            tame.duelPoints += creditedPoints;
+            return;
+        }
+        String resolvedName = entityLabel(server, participantId);
+        PlayerDuelStats playerStats = TameRegistry.getOrCreatePlayerDuelStats(participantId, resolvedName);
+        if (playerStats == null) {
+            return;
+        }
+        playerStats.duelMmr = Math.max(0, playerStats.duelMmr + mmrDelta);
+        playerStats.duelKills += Math.max(0, stats.kills);
+        playerStats.duelAssists += Math.max(0, stats.assists);
+        playerStats.duelDeaths += Math.max(0, stats.deaths);
+        playerStats.duelWins += won ? 1 : 0;
+        playerStats.duelLosses += won ? 0 : 1;
+        playerStats.duelCount += 1;
+        playerStats.duelPoints += Math.max(0.0D, stats.points);
+    }
+
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
         if (battle == null || elimination == null || elimination.victimId == null) {
             return;
         }
-        TameData victimData = tameDataForSummary(server, battle, elimination.victimId);
-        double pointsPool = victimData == null ? 0.0D : Math.max(1, victimData.level);
+        SummaryParticipant victimData = participantForSummary(server, battle, elimination.victimId);
+        double pointsPool = victimData == null ? 0.0D : Math.max(1, victimData.level());
         UUID killerId = elimination.killerId;
         int assisterSlots = elimination.assisterIds == null ? 0 : elimination.assisterIds.size();
         double killerBasePoints = 0.0D;

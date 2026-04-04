@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTa
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.google.common.collect.ImmutableMap;
@@ -72,6 +73,10 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
         TameData data = TameRegistry.get(axolotl.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
+            if (axolotl instanceof net.minecraft.world.entity.TamableAnimal tame
+                    && TameDuelManager.isEntityInDuel(tame.getUUID())) {
+                return false;
+            }
             if (mode == TameMode.BOSS) {
                 if (axolotl.getTarget() != null && axolotl.getTarget().isAlive()) {
                     return false;

@@ -37,6 +37,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
+    private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -99,6 +100,8 @@ public class TameRegistry {
         OWNER_GROUPS.putAll(savedData.getOwnerGroups());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
+        PLAYER_DUEL_STATS.clear();
+        PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
             LAST_DEATHS.entrySet().removeIf(entry -> {
                 TameDeathRecord record = entry.getValue();
@@ -258,7 +261,28 @@ public class TameRegistry {
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
         savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
+        savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setDirty();
+    }
+
+    public static PlayerDuelStats getOrCreatePlayerDuelStats(UUID playerUuid, String lastKnownName) {
+        if (playerUuid == null) {
+            return null;
+        }
+        PlayerDuelStats stats = PLAYER_DUEL_STATS.computeIfAbsent(playerUuid, ignored -> {
+            PlayerDuelStats created = new PlayerDuelStats();
+            created.playerUuid = playerUuid;
+            return created;
+        });
+        if (lastKnownName != null && !lastKnownName.isBlank() && !lastKnownName.equals(stats.lastKnownName)) {
+            stats.lastKnownName = lastKnownName;
+            markDirty();
+        }
+        return stats;
+    }
+
+    public static Map<UUID, PlayerDuelStats> getPlayerDuelStats() {
+        return Map.copyOf(PLAYER_DUEL_STATS);
     }
 
     public static Set<String> getOwnerGroups(UUID ownerUuid) {
