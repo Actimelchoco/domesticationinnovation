@@ -12,6 +12,7 @@ import java.lang.reflect.Constructor;
 public final class BlessfulledCompat {
     private static final String MOD_ID = "blessfulled";
     private static final String POPUP_DATA_CLASS = "org.aqutheseal.blessfulled.particle.DamagePopupParticleData";
+    private static final int POPUP_TYPE_DEFAULT = 0;
     private static final int POPUP_TYPE_CRIT = 1;
     private static final int POPUP_TYPE_MAGIC = 5;
 
@@ -39,11 +40,11 @@ public final class BlessfulledCompat {
     }
 
     public static void showTameDealtDamagePopup(Entity attacker, LivingEntity victim, float amount) {
-        showDamagePopup(attacker, victim, amount, POPUP_TYPE_MAGIC);
+        showDamagePopup(attacker, victim, amount, POPUP_TYPE_DEFAULT);
     }
 
     public static void showTameReceivedDamagePopup(Entity attacker, LivingEntity victim, float amount) {
-        showDamagePopup(attacker, victim, amount, POPUP_TYPE_CRIT);
+        showDamagePopup(attacker, victim, amount, POPUP_TYPE_MAGIC);
     }
 
     private static ParticleOptions createDamagePopup(float amount, int kind) {

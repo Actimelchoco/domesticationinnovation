@@ -14,6 +14,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
@@ -64,12 +65,12 @@ public class TameSpawnEvents {
             TamableAnimal loadedByTlId = findOtherLoadedByTlId(tame, entityTlId);
             if (loadedByTlId != null) {
                 if (shouldKeepJoiningTame(tame, loadedByTlId, existingByTlId)) {
-                    loadedByTlId.discard();
+                    forceRemoveTameEntity(loadedByTlId);
                     TameRegistry.rebindEntityUuid(existingByTlId, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
                     return;
                 } else {
-                    tame.discard();
+                    forceRemoveTameEntity(tame);
                     return;
                 }
             }
@@ -79,7 +80,7 @@ public class TameSpawnEvents {
         if (existing != null) {
             // If a copy with the same UUID is already active and this UUID is not yet tracked,
             // treat this join as a duplicate materialization and discard it.
-            tame.discard();
+            forceRemoveTameEntity(tame);
             return;
         }
 
@@ -88,14 +89,14 @@ public class TameSpawnEvents {
         if (clone != null) {
             if (shouldKeepJoiningIdentityClone(tame, clone, parsed)) {
                 TameData cloneData = TameRegistry.get(clone.getUUID());
-                clone.discard();
+                forceRemoveTameEntity(clone);
                 if (cloneData != null) {
                     TameRegistry.rebindEntityUuid(cloneData, tame.getUUID());
                     registerOrRestoreTame(tame, false, true);
                     return;
                 }
             } else {
-                tame.discard();
+                forceRemoveTameEntity(tame);
                 return;
             }
         }
@@ -768,7 +769,7 @@ public class TameSpawnEvents {
             }
             TameRegistry.remove(existing.uuid);
             TameRegistry.removeDeathsForIdentity(existing.uuid, existing.tlId);
-            tame.discard();
+            forceRemoveTameEntity(tame);
             return true;
         }
         UUID tlId = TameData.getTlId(tame);
@@ -778,8 +779,31 @@ public class TameSpawnEvents {
         }
         TameRegistry.remove(byTlId.uuid);
         TameRegistry.removeDeathsForIdentity(byTlId.uuid, byTlId.tlId);
-        tame.discard();
+        forceRemoveTameEntity(tame);
         return true;
+    }
+
+    private static void forceRemoveTameEntity(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
+        tame.setTarget(null);
+        tame.getNavigation().stop();
+        if (tame.isAlive()) {
+            try {
+                tame.kill();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (!tame.isRemoved()) {
+            try {
+                tame.remove(Entity.RemovalReason.KILLED);
+            } catch (Throwable ignored) {
+            }
+        }
+        if (!tame.isRemoved()) {
+            tame.discard();
+        }
     }
 
     private record PendingNewTameNotification(UUID ownerUuid, UUID tameUuid, UUID tlId, String name, long dueTick) {}
