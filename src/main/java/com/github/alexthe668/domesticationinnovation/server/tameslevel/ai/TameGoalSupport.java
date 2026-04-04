@@ -13,7 +13,16 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Skeleton;
 import net.minecraft.world.phys.AABB;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 final class TameGoalSupport {
+    private static final Map<BossTargetKey, UUID> SHARED_BOSS_TARGETS = new HashMap<>();
+
+    private record BossTargetKey(UUID ownerUuid, String dimensionId) {
+    }
+
     private TameGoalSupport() {
     }
 
@@ -49,15 +58,34 @@ final class TameGoalSupport {
     }
 
     static void setBossTarget(ServerLevel level, TamableAnimal tame, ServerPlayer owner) {
-        LivingEntity current = tame.getTarget();
-        if (current != null && current.isAlive()) {
+        BossTargetKey key = bossTargetKey(level, tame, owner);
+        if (key == null) {
             return;
         }
+
         double x = owner != null ? owner.getX() : tame.getX();
         double y = owner != null ? owner.getY() : tame.getY();
         double z = owner != null ? owner.getZ() : tame.getZ();
-        LivingEntity target = findBestHostile(level, x, y, z, 96.0D, true);
-        if (target != null) tame.setTarget(target);
+        LivingEntity locked = resolveSharedBossTarget(level, key);
+        LivingEntity current = isValidBossTarget(level, tame.getTarget()) ? tame.getTarget() : null;
+        LivingEntity target = locked != null ? locked : current;
+        LivingEntity candidate = findBestHostile(level, x, y, z, 96.0D, true);
+        if (target == null || !isValidBossTarget(level, target)) {
+            target = candidate;
+        } else if (candidate != null && candidate != target && candidate.getMaxHealth() > target.getMaxHealth()) {
+            target = candidate;
+        }
+
+        if (target == null || !isValidBossTarget(level, target)) {
+            SHARED_BOSS_TARGETS.remove(key);
+            tame.setTarget(null);
+            return;
+        }
+
+        SHARED_BOSS_TARGETS.put(key, target.getUUID());
+        if (tame.getTarget() != target) {
+            tame.setTarget(target);
+        }
     }
 
     static void setBodyguardTarget(ServerLevel level, TamableAnimal tame, ServerPlayer owner, double aggroRadius, double leashDistance) {
@@ -221,5 +249,36 @@ final class TameGoalSupport {
         if (!(living instanceof Enemy)) return false;
         if (living instanceof TamableAnimal tame && tame.isTame()) return false;
         return !(living instanceof net.minecraft.world.entity.player.Player);
+    }
+
+    private static BossTargetKey bossTargetKey(ServerLevel level, TamableAnimal tame, ServerPlayer owner) {
+        if (level == null || tame == null) {
+            return null;
+        }
+        UUID ownerUuid = owner != null ? owner.getUUID() : tame.getOwnerUUID();
+        if (ownerUuid == null) {
+            return null;
+        }
+        return new BossTargetKey(ownerUuid, level.dimension().location().toString());
+    }
+
+    private static LivingEntity resolveSharedBossTarget(ServerLevel level, BossTargetKey key) {
+        if (level == null || key == null) {
+            return null;
+        }
+        UUID targetUuid = SHARED_BOSS_TARGETS.get(key);
+        if (targetUuid == null) {
+            return null;
+        }
+        Entity entity = level.getEntity(targetUuid);
+        if (!(entity instanceof LivingEntity living) || !isValidBossTarget(level, living)) {
+            SHARED_BOSS_TARGETS.remove(key);
+            return null;
+        }
+        return living;
+    }
+
+    private static boolean isValidBossTarget(ServerLevel level, LivingEntity target) {
+        return target != null && target.level() == level && isHostileTarget(target);
     }
 }

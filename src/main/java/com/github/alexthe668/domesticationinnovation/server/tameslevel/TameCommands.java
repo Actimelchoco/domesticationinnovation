@@ -14694,6 +14694,11 @@ public class TameCommands {
         return tame != null && currentLiveMovementOrder(tame, data) == order;
     }
 
+    public static boolean isLiveFollowing(TamableAnimal tame) {
+        TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+        return tame != null && currentLiveMovementOrder(tame, data) == MovementOrder.FOLLOW;
+    }
+
     private static MovementOrder currentLiveMovementOrder(TamableAnimal tame, TameData data) {
         if (tame == null) {
             return MovementOrder.FOLLOW;

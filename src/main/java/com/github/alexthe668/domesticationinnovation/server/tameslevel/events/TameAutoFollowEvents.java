@@ -1,6 +1,5 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
-import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
@@ -21,8 +20,6 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityTravelToDimensionEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.registries.ForgeRegistries;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -99,10 +96,7 @@ public class TameAutoFollowEvents {
     }
 
     public static boolean isFollowingForTeleportCompat(TamableAnimal tame) {
-        if (tame instanceof IComandableMob commandable) {
-            return isFollowCommand(commandable.getCommand(), typeIdFor(tame));
-        }
-        return !tame.isOrderedToSit();
+        return TameCommands.isLiveFollowing(tame);
     }
 
     private static boolean isFollowCommand(int command, String typeId) {
@@ -118,14 +112,6 @@ public class TameAutoFollowEvents {
             return true;
         }
         return !TameRegistry.isCallOrderInvertedType(normalized);
-    }
-
-    private static String typeIdFor(TamableAnimal tame) {
-        if (tame == null) {
-            return null;
-        }
-        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        return key == null ? tame.getType().toString() : key.toString();
     }
 
     private static String normalizeTypeId(String typeId) {
@@ -183,13 +169,14 @@ public class TameAutoFollowEvents {
         }
         UUID ownerId = owner.getUUID();
         for (TameData data : TameRegistry.getOwned(ownerId)) {
-            if (!isAutoFollowEligible(data, ownerId)) continue;
-
             TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
             if (loaded != null && loaded.isAlive()) {
+                TameCommands.syncLiveMovementStateFor(loaded);
+                if (!isAutoFollowEligibleLoaded(loaded, data, ownerId)) continue;
                 teleportLoadedTame(owner, loaded, data, targetLevel, targetPos, yRot, xRot);
                 continue;
             }
+            if (!isAutoFollowEligible(data, ownerId)) continue;
             if (!TameCommands.hasPendingImmediateChunkTeleport(data)) {
                 TameCommands.autoFollowTeleportViaTpPath(owner, data, targetLevel, targetPos, yRot, xRot);
             }
@@ -216,6 +203,19 @@ public class TameAutoFollowEvents {
                 && !data.wanderLock
                 && !TameDuelManager.isTameInDuel(data.uuid)
                 && isFollowing(data)
+                && hasTeleportCapability(data);
+    }
+
+    private static boolean isAutoFollowEligibleLoaded(TamableAnimal tame, TameData data, UUID ownerId) {
+        return data != null
+                && tame != null
+                && data.uuid != null
+                && ownerId != null
+                && ownerId.equals(data.ownerUUID)
+                && !data.hasHome
+                && !data.wanderLock
+                && !TameDuelManager.isTameInDuel(data.uuid)
+                && TameCommands.isLiveFollowing(tame)
                 && hasTeleportCapability(data);
     }
 
