@@ -7,6 +7,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.TamableAnimal;
 
 final class BossModeGoal extends AbstractModeGoal {
+    private static final int BOSS_SCAN_INTERVAL = 40;
+
     BossModeGoal(TamableAnimal tame) {
         super(tame);
     }
@@ -20,5 +22,15 @@ final class BossModeGoal extends AbstractModeGoal {
     protected void tickMode(ServerLevel level, TameData data) {
         ServerPlayer owner = TameGoalSupport.owner(tame);
         TameGoalSupport.setBossTarget(level, tame, owner);
+    }
+
+    @Override
+    protected int tickInterval() {
+        return BOSS_SCAN_INTERVAL;
+    }
+
+    @Override
+    protected boolean retainLiveTarget() {
+        return false;
     }
 }

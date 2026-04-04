@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
@@ -41,6 +42,7 @@ public class TameBehaviorEvents {
 
         if (tame.tickCount % 10 == 0) {
             TameCommands.syncLiveMovementStateFor(tame);
+            TamePerformanceProfiler.run("behavior.boss_movement_override", () -> handleBossMovementOverride(tame, activeData));
         }
 
         if (activeData.closeMovement && tame.tickCount % 10 == 0) {
@@ -224,6 +226,22 @@ public class TameBehaviorEvents {
         if (distanceSqr > 2.5D * 2.5D) {
             tame.getNavigation().moveTo(owner, 1.15D);
         }
+    }
+
+    private static void handleBossMovementOverride(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        if (TameMode.byId(data.mode) != TameMode.BOSS) {
+            return;
+        }
+        boolean hasBossTarget = TameGoalSupport.hasSharedBossTarget(serverLevel, tame)
+                || hasValidCurrentTarget(tame);
+        int desiredOrderCode = hasBossTarget ? 2 : 0;
+        if (data.movementOrder == desiredOrderCode) {
+            return;
+        }
+        TameCommands.applyMovementOrderCode(tame, desiredOrderCode);
     }
 
     private static boolean hasInvalidTarget(TamableAnimal tame) {
