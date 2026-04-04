@@ -51,7 +51,8 @@ public class TameCombatEvents {
         TamableAnimal tame = resolveTameAttacker(event);
         if (tame != null && tame.isTame()) {
             LevelSystem.trackDamage(mob, tame);
-            BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount());
+            boolean duelPink = TameDuelManager.isTameInDuel(tame.getUUID()) && !TameDuelManager.isTeamAEntity(tame.getUUID());
+            BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount(), duelPink);
         } else if (mob instanceof TamableAnimal targetTame && targetTame.isTame()) {
             BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
         }

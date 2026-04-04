@@ -180,6 +180,14 @@ public final class TameDuelManager {
         return firstTeamA != null && firstTeamA.equals(secondTeamA);
     }
 
+    public static synchronized boolean isTeamAEntity(UUID entityId) {
+        if (entityId == null) {
+            return false;
+        }
+        Boolean teamA = TEAM_A_BY_ENTITY.get(entityId);
+        return teamA != null && teamA;
+    }
+
     public static synchronized boolean canProvideSupport(UUID supporterId, UUID beneficiaryId) {
         if (supporterId == null || beneficiaryId == null) {
             return true;

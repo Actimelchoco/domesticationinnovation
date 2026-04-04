@@ -43,6 +43,10 @@ public final class BlessfulledCompat {
         showDamagePopup(attacker, victim, amount, POPUP_TYPE_DEFAULT);
     }
 
+    public static void showTameDealtDamagePopup(Entity attacker, LivingEntity victim, float amount, boolean pink) {
+        showDamagePopup(attacker, victim, amount, pink ? POPUP_TYPE_MAGIC : POPUP_TYPE_DEFAULT);
+    }
+
     public static void showTameReceivedDamagePopup(Entity attacker, LivingEntity victim, float amount) {
         showDamagePopup(attacker, victim, amount, POPUP_TYPE_MAGIC);
     }
