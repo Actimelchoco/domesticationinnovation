@@ -10,6 +10,7 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegis
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -1011,7 +1012,10 @@ public class TameableUtils {
 
     public static void attractAnimals(LivingEntity attractor, int max) {
         if ((attractor.tickCount + attractor.getId()) % 8 == 0) {
-            Predicate<Entity> notOnTeam = (animal) -> !hasSameOwnerAs((LivingEntity) animal, attractor) && animal.distanceTo(attractor) > 3 + attractor.getBbWidth() * 1.6F;
+            Predicate<Entity> notOnTeam = (animal) ->
+                    !hasSameOwnerAs((LivingEntity) animal, attractor)
+                            && animal.distanceTo(attractor) > 3 + attractor.getBbWidth() * 1.6F
+                            && (TLAdminRuntimeSettings.herdingAffectsTames() || !isTamed(animal));
             List<Animal> list = attractor.level().getEntitiesOfClass(Animal.class, attractor.getBoundingBox().inflate(16, 8, 16), EntitySelector.NO_SPECTATORS.and(notOnTeam));
             list.sort(Comparator.comparingDouble(attractor::distanceToSqr));
             for (int i = 0; i < Math.min(max, list.size()); i++) {

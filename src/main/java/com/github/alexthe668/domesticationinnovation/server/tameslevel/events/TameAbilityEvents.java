@@ -135,13 +135,6 @@ public class TameAbilityEvents {
                     revivedDeadEntry = true;
                 }
 
-                if (TameMode.byId(data.mode) == TameMode.PASSIVE) {
-                    if (tame.getTarget() != null) {
-                        tame.setTarget(null);
-                    }
-                    continue;
-                }
-
                 LivingEntity target = tame.getTarget();
                 if ((target == null || !target.isAlive() || isFriendly(tame, target))
                         && level.getServer() != null
@@ -151,6 +144,12 @@ public class TameAbilityEvents {
                         tame.setTarget(duelTarget);
                         target = duelTarget;
                     }
+                }
+                if (TameMode.byId(data.mode) == TameMode.PASSIVE && !isDuelOpponent(tame, target)) {
+                    if (tame.getTarget() != null) {
+                        tame.setTarget(null);
+                    }
+                    continue;
                 }
                 final LivingEntity currentTarget = target;
                 long now = level.getGameTime();
@@ -239,7 +238,7 @@ public class TameAbilityEvents {
             if (attackerTame != null && attackerTame.isTame()) {
                 TameData attackerData = TameRegistry.get(attackerTame.getUUID());
                 if (attackerData != null
-                        && TameMode.byId(attackerData.mode) != TameMode.PASSIVE
+                        && (TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
                         && !isProtectedPassiveWildlife(event.getEntity())
                         && !INTERNAL_BONUS_DAMAGE.get()) {

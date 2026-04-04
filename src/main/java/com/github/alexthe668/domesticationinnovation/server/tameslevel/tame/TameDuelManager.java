@@ -853,16 +853,16 @@ public final class TameDuelManager {
             if (participant == null) {
                 continue;
             }
-            DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
-            if (stats.deaths > 0) {
-                died++;
-            } else {
-                survived++;
-            }
             if (!participant.player()) {
                 TameData data = tameDataForSummary(server, battle, participantId);
                 if (data == null) {
                     continue;
+                }
+                DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
+                if (stats.deaths > 0) {
+                    died++;
+                } else {
+                    survived++;
                 }
                 tameCount++;
                 int level = Math.max(1, data.level);

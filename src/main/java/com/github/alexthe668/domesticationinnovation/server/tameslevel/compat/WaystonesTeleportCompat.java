@@ -147,7 +147,6 @@ public final class WaystonesTeleportCompat {
             tame.teleportTo(basePos.x + offsetX, basePos.y, basePos.z + offsetZ);
             tame.setYRot(yRot);
             tame.setXRot(xRot);
-            TameCommands.applySitFollowOverride(tame, false);
             refreshData(data, tame, targetLevel);
             return tame;
         }

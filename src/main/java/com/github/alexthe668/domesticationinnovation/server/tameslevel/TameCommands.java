@@ -135,7 +135,6 @@ public class TameCommands {
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
     private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "old docus");
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
-    private static final long DUEL_INVITE_TIMEOUT_MS = 120_000L;
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
     private static final int MAX_CLASS_REROLLS = 3;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
@@ -903,6 +902,10 @@ public class TameCommands {
                         .then(Commands.literal("healthSiphon")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("herding")
+                                .requires(source -> source.hasPermission(2))
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setHerdingAffectsTames(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("enterPortalsByThemselves")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -1283,6 +1286,13 @@ public class TameCommands {
                                                 )))
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
+                                                .then(Commands.literal("vs")
+                                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                                .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
+                                                                .executes(ctx -> duelAcceptCompact(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "player") + " vs " + StringArgumentType.getString(ctx, "selection")
+                                                                ))))
                                                 .then(Commands.literal("group")
                                                         .then(Commands.argument("group", StringArgumentType.word())
                                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -2030,6 +2040,33 @@ public class TameCommands {
                                                 .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
                                         .then(Commands.literal("wander")
                                                 .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))))
+                        .then(Commands.literal("dueltp")
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> duelTeleportAll(ctx.getSource())))
+                                .then(Commands.literal("follow")
+                                        .executes(ctx -> duelTeleportByMovementState(ctx.getSource(), MovementOrder.FOLLOW)))
+                                .then(Commands.literal("sit")
+                                        .executes(ctx -> duelTeleportByMovementState(ctx.getSource(), MovementOrder.SIT)))
+                                .then(Commands.literal("wander")
+                                        .executes(ctx -> duelTeleportByMovementState(ctx.getSource(), MovementOrder.WANDER)))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> duelTeleportByState(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name")
+                                                ))))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> duelGroupTp(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> duelTypeTp(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> duelTeleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("tphome")
                                 .then(Commands.literal("all")
                                         .executes(ctx -> teleportAllHome(ctx.getSource())))
@@ -4629,6 +4666,14 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setHerdingAffectsTames(CommandSourceStack source, boolean enabled) {
+        TLAdminRuntimeSettings.setHerdingAffectsTames(enabled);
+        source.sendSuccess(() -> Component.literal(
+                "Herding affecting tames is now " + (enabled ? "ENABLED" : "DISABLED") + "."
+        ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private static int setEnterPortalsByThemselves(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
@@ -5798,24 +5843,12 @@ public class TameCommands {
 
     private static void cleanupExpiredDuelInvites() {
         cleanupExpiredDuelInviteStore(DUEL_INVITES);
-        long now = System.currentTimeMillis();
-        List<UUID> expiredMatches = new ArrayList<>();
-        for (PendingDuelMatch match : PENDING_DUEL_MATCHES.values()) {
-            if ((now - match.createdAtMs) > DUEL_INVITE_TIMEOUT_MS) {
-                expiredMatches.add(match.matchId);
-            }
-        }
-        for (UUID matchId : expiredMatches) {
-            removePendingDuelMatch(matchId);
-        }
     }
 
     private static void cleanupExpiredDuelInviteStore(Map<UUID, Map<UUID, DuelInvite>> inviteStore) {
-        long now = System.currentTimeMillis();
         List<UUID> emptyTargets = new ArrayList<>();
         for (Map.Entry<UUID, Map<UUID, DuelInvite>> entry : inviteStore.entrySet()) {
             Map<UUID, DuelInvite> incoming = entry.getValue();
-            incoming.entrySet().removeIf(e -> (now - e.getValue().createdAtMs) > DUEL_INVITE_TIMEOUT_MS);
             if (incoming.isEmpty()) {
                 emptyTargets.add(entry.getKey());
             }
@@ -8245,9 +8278,14 @@ public class TameCommands {
         List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
+        int skippedDuel = 0;
         int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -8279,6 +8317,7 @@ public class TameCommands {
         }
         sendTeleportSummary(p, "TP group " + group, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -8299,9 +8338,14 @@ public class TameCommands {
         List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
+        int skippedDuel = 0;
         int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -8333,6 +8377,7 @@ public class TameCommands {
         }
         sendTeleportSummary(p, "TP type " + typeFilter, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -8356,28 +8401,40 @@ public class TameCommands {
     private static int groupMovementState(CommandSourceStack source, String group, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         int count = 0;
+        int skippedDuel = 0;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
             Entity e = p.serverLevel().getEntity(d.uuid);
             if (e instanceof TamableAnimal ta && ta.isTame()) {
+                if (isDuelLocked(ta)) {
+                    skippedDuel++;
+                    continue;
+                }
                 applyMovementOverride(ta, order);
                 count++;
             }
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames in group to " + movementLabel(order) + "."));
+        sendDuelCommandSkipNotice(p, skippedDuel, "movement");
         return 1;
     }
 
     private static int typeMovementState(CommandSourceStack source, String typeFilter, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         int count = 0;
+        int skippedDuel = 0;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
             Entity e = p.serverLevel().getEntity(d.uuid);
             if (e instanceof TamableAnimal ta && ta.isTame()) {
+                if (isDuelLocked(ta)) {
+                    skippedDuel++;
+                    continue;
+                }
                 applyMovementOverride(ta, order);
                 count++;
             }
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames of type '" + typeFilter + "' to " + movementLabel(order) + "."));
+        sendDuelCommandSkipNotice(p, skippedDuel, "movement");
         return 1;
     }
 
@@ -8399,6 +8456,7 @@ public class TameCommands {
         if (d == null) return error(p, "Pet not found.");
         Entity e = p.serverLevel().getEntity(d.uuid);
         if (!(e instanceof TamableAnimal ta) || !ta.isTame()) return error(p, "Pet is not loaded.");
+        if (isDuelLocked(ta)) return error(p, "That tame is in a duel. Use /tames dueltp for emergency duel teleports.");
         applyMovementOverride(ta, order);
         p.sendSystemMessage(Component.literal("Set " + d.name + " to " + movementLabel(order) + "."));
         return 1;
@@ -8418,24 +8476,36 @@ public class TameCommands {
     private static int setMovementState(CommandSourceStack source, boolean nearbyOnly, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         int count = 0;
+        int skippedDuel = 0;
         for (TamableAnimal ta : p.level().getEntitiesOfClass(TamableAnimal.class, p.getBoundingBox().inflate(nearbyOnly ? 32 : 500))) {
             if (!ta.isTame() || !p.getUUID().equals(ta.getOwnerUUID())) continue;
+            if (isDuelLocked(ta)) {
+                skippedDuel++;
+                continue;
+            }
             applyMovementOverride(ta, order);
             count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames to " + movementLabel(order) + "."));
+        sendDuelCommandSkipNotice(p, skippedDuel, "movement");
         return 1;
     }
 
     private static int setMovementStateAllLoaded(CommandSourceStack source, MovementOrder order) {
         ServerPlayer p = source.getPlayer();
         int count = 0;
+        int skippedDuel = 0;
         for (TamableAnimal tame : loadedOwnedAllTames(source, p.getUUID())) {
             if (!tame.isTame()) continue;
+            if (isDuelLocked(tame)) {
+                skippedDuel++;
+                continue;
+            }
             applyMovementOverride(tame, order);
             count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " loaded tames to " + movementLabel(order) + "."));
+        sendDuelCommandSkipNotice(p, skippedDuel, "movement");
         return 1;
     }
 
@@ -8443,6 +8513,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
+        if (isDuelLocked(d)) return error(p, tameDisplayName(d) + " is in a duel. Use /tames dueltp.");
         if (d.stored) return error(p, tameDisplayName(d) + " is stored and can only be recovered with admin respawn.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -8490,6 +8561,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (isDuelLocked(data)) return error(player, tameDisplayName(data) + " is in a duel. Use /tames dueltp.");
         if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         return teleportHomeBatch(source, player, List.of(data), "TPHome " + data.name, ownedDeadTames(player.getUUID()).stream().anyMatch(d -> Objects.equals(d.uuid, data.uuid)) ? 1 : 0);
@@ -9370,6 +9442,28 @@ public class TameCommands {
         return true;
     }
 
+    public static boolean respawnDeadTameNextToOwner(MinecraftServer server, UUID tameUuid) {
+        if (server == null || tameUuid == null) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tameUuid);
+        if (data == null || !data.dead || data.ownerUUID == null) {
+            return false;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+        if (owner == null) {
+            return false;
+        }
+        Vec3 spawnPos = owner.position().add(1.5D, 0.0D, 0.0D);
+        RespawnResult result = respawnDeadTameAtServer(data, owner.serverLevel(), spawnPos, owner.getYRot(), owner.getXRot());
+        if (!result.success) {
+            return false;
+        }
+        clearMatchingDiBedRespawnRequests(server, data);
+        TameRegistry.markDirty();
+        return true;
+    }
+
     public static boolean resetDuelCombatState(MinecraftServer server, UUID tameUuid) {
         if (server == null || tameUuid == null) {
             return false;
@@ -9870,9 +9964,14 @@ public class TameCommands {
         List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
+        int skippedDuel = 0;
         int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -9904,6 +10003,7 @@ public class TameCommands {
         }
         sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTames(p.getUUID()).size(), queueFailed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -9952,10 +10052,15 @@ public class TameCommands {
         int cost = 0;
         int crossDimension = 0;
         ResourceLocation dimensionId = fromDimension.dimension().location();
+        int skippedDuel = 0;
         int xpBudget = currentXpPoints(p);
 
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -10000,6 +10105,7 @@ public class TameCommands {
         }
         sendTeleportSummary(p, "TP dim " + dimensionId, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -10011,10 +10117,15 @@ public class TameCommands {
         List<TameData> requested = ownedTames(p.getUUID());
         int queued = 0;
         int failed = 0;
+        int skippedDuel = 0;
         List<String> failedQueueNames = new ArrayList<>();
 
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             if (isEffectivelyLoaded(source, p, d)) {
@@ -10030,6 +10141,7 @@ public class TameCommands {
         }
 
         sendTeleportSummary(p, "TP unloaded", 0, queued, ownedDeadTames(p.getUUID()).size(), failed, 0, 0);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
         }
@@ -10041,10 +10153,15 @@ public class TameCommands {
         List<TameData> requested = ownedTames(player.getUUID());
         int queued = 0;
         int failed = 0;
+        int skippedDuel = 0;
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : requested) {
             if (data == null || data.dead || isEffectivelyLoaded(source, player, data)) {
+                continue;
+            }
+            if (isDuelLocked(data)) {
+                skippedDuel++;
                 continue;
             }
             SpawnTarget target = resolveRespawnTarget(source, player, data, false);
@@ -10063,6 +10180,7 @@ public class TameCommands {
         }
 
         sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTames(player.getUUID()).size(), failed, 0, 0);
+        sendDuelCommandSkipNotice(player, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Unloaded tphome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -10665,6 +10783,7 @@ public class TameCommands {
         List<SpawnTarget> unloadedDestinations = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
+        int skippedDuel = 0;
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : requested) {
@@ -10672,6 +10791,10 @@ public class TameCommands {
                 continue;
             }
             if (data.dead) {
+                continue;
+            }
+            if (isDuelLocked(data)) {
+                skippedDuel++;
                 continue;
             }
             SpawnTarget target = resolveRespawnTarget(source, player, data, false);
@@ -10708,6 +10831,7 @@ public class TameCommands {
             }
         }
         sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, 0, 0);
+        sendDuelCommandSkipNotice(player, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("TPHome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -10725,11 +10849,16 @@ public class TameCommands {
         int failed = 0;
         int queued = 0;
         int crossDimension = 0;
+        int skippedDuel = 0;
         List<String> unaffordable = new ArrayList<>();
         List<String> failedNames = new ArrayList<>();
         int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
+                continue;
+            }
+            if (isDuelLocked(d)) {
+                skippedDuel++;
                 continue;
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -10780,6 +10909,7 @@ public class TameCommands {
         }
         sendTeleportSummary(p, "TP " + movementLabel(order), loadedTargets.size(), queued, 0, failed, cost, crossDimension);
         sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("TP " + movementLabel(order) + " failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -10819,6 +10949,120 @@ public class TameCommands {
         MovementOrder order = parseMovementOrder(stateName);
         if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
         return teleportByMovementStateHome(source, order);
+    }
+
+    private static int duelTeleportPet(CommandSourceStack source, String pet) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTameAny(player.getUUID(), pet);
+        if (data == null) return error(player, "Pet not found.");
+        if (!isDuelLocked(data)) return error(player, tameDisplayName(data) + " is not currently in a duel.");
+        TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+        if (tame == null || !tame.isAlive()) return error(player, tameDisplayName(data) + " is not loaded/alive for duel tp.");
+        duelTeleportLoadedToPlayer(source, player, tame);
+        player.sendSystemMessage(Component.literal("Duel teleported " + tameDisplayName(data) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int duelTeleportAll(CommandSourceStack source) {
+        return duelTeleportBatch(source, ownedTames(source.getPlayer().getUUID()), "DuelTP all");
+    }
+
+    private static int duelGroupTp(CommandSourceStack source, String group) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> requested = ownedGroup(player.getUUID(), group);
+        if (requested.isEmpty()) return error(player, "No tames found in group '" + group + "'.");
+        return duelTeleportBatch(source, requested, "DuelTP group " + group);
+    }
+
+    private static int duelTypeTp(CommandSourceStack source, String typeFilter) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> requested = ownedType(player.getUUID(), typeFilter);
+        if (requested.isEmpty()) return error(player, "No tames found for type '" + typeFilter + "'.");
+        return duelTeleportBatch(source, requested, "DuelTP type " + typeFilter);
+    }
+
+    private static int duelTeleportByMovementState(CommandSourceStack source, MovementOrder order) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> requested = new ArrayList<>();
+        for (TameData data : ownedTames(player.getUUID())) {
+            if (data == null || data.dead || !isDuelLocked(data)) {
+                continue;
+            }
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            if (matchesMovementOrder(tame, order)) {
+                requested.add(data);
+            }
+        }
+        return duelTeleportBatch(source, requested, "DuelTP " + movementLabel(order));
+    }
+
+    private static int duelTeleportByState(CommandSourceStack source, String stateName) {
+        ServerPlayer player = source.getPlayer();
+        MovementOrder order = parseMovementOrder(stateName);
+        if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
+        return duelTeleportByMovementState(source, order);
+    }
+
+    private static int duelTeleportBatch(CommandSourceStack source, List<TameData> requested, String label) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        int moved = 0;
+        int skippedNotInDuel = 0;
+        int failed = 0;
+        List<String> failedNames = new ArrayList<>();
+        for (TameData data : requested) {
+            if (data == null || data.dead) {
+                continue;
+            }
+            if (!isDuelLocked(data)) {
+                skippedNotInDuel++;
+                continue;
+            }
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+            if (tame == null || !tame.isAlive()) {
+                failed++;
+                failedNames.add(tameDisplayName(data) + " (not loaded/alive)");
+                continue;
+            }
+            duelTeleportLoadedToPlayer(source, player, tame);
+            moved++;
+        }
+        if (moved <= 0 && failed <= 0 && skippedNotInDuel > 0) {
+            return error(player, "No selected tames are currently in a duel.");
+        }
+        player.sendSystemMessage(buildTeleportSummary(label, moved, 0, 0, failed, 0, 0));
+        if (skippedNotInDuel > 0) {
+            player.sendSystemMessage(Component.literal("Skipped " + skippedNotInDuel + " tames that are not in a duel.").withStyle(ChatFormatting.GRAY));
+        }
+        if (!failedNames.isEmpty()) {
+            player.sendSystemMessage(Component.literal("DuelTP failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
+        }
+        return moved > 0 ? 1 : 0;
+    }
+
+    private static void duelTeleportLoadedToPlayer(CommandSourceStack source, ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || !tame.isAlive()) {
+            return;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        clearGuardianAnchor(data);
+        TameTransferService.TransferResult result = TameTransferService.transferToPlayer(tame, player, data);
+        if (!result.success()) {
+            System.err.println("[TamesLevel] Duel teleport failed for tame " + tame.getUUID() + ": " + result.error());
+            return;
+        }
+        TamableAnimal moved = result.entity();
+        if (moved != null) {
+            LivingEntity duelTarget = TameDuelManager.findNearestLoadedOpponent(source.getServer(), moved);
+            if (duelTarget != null && duelTarget.isAlive()) {
+                moved.setTarget(duelTarget);
+            }
+        }
     }
 
     private static boolean payTeleportXp(ServerPlayer player, int cost) {
@@ -15144,6 +15388,24 @@ public class TameCommands {
         return tame != null && currentLiveMovementOrder(tame, data) == order;
     }
 
+    private static boolean isDuelLocked(TameData data) {
+        return data != null && data.uuid != null && TameDuelManager.isEntityInDuel(data.uuid);
+    }
+
+    private static boolean isDuelLocked(TamableAnimal tame) {
+        return tame != null && TameDuelManager.isEntityInDuel(tame.getUUID());
+    }
+
+    private static void sendDuelCommandSkipNotice(ServerPlayer player, int skippedDuel, String commandKind) {
+        if (player == null || skippedDuel <= 0) {
+            return;
+        }
+        String kind = commandKind == null || commandKind.isBlank() ? "command" : commandKind;
+        player.sendSystemMessage(Component.literal(
+                "Skipped " + skippedDuel + " duel tame" + (skippedDuel == 1 ? "" : "s") + " for " + kind + ". Use /tames dueltp for emergency duel teleports."
+        ).withStyle(ChatFormatting.GRAY));
+    }
+
     public static boolean isLiveFollowing(TamableAnimal tame) {
         TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
         return tame != null && currentLiveMovementOrder(tame, data) == MovementOrder.FOLLOW;
@@ -15158,6 +15420,10 @@ public class TameCommands {
         }
         if (tame.isOrderedToSit()) {
             return MovementOrder.SIT;
+        }
+        MovementOrder external = resolveExternalMovementOrder(tame, data);
+        if (external != null) {
+            return external;
         }
         if (data != null && data.hasHome && data.movementOrder == 3) {
             return MovementOrder.GUARDIAN;
@@ -15228,10 +15494,83 @@ public class TameCommands {
         if (tame != null && tame.isOrderedToSit()) {
             return MovementOrder.SIT;
         }
-        if (command == 0) {
-            return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+        if (matchesSnapshotCommand(command, MovementOrder.FOLLOW, typeId)) {
+            return MovementOrder.FOLLOW;
         }
-        return MovementOrder.FOLLOW;
+        if (matchesSnapshotCommand(command, MovementOrder.SIT, typeId)) {
+            return MovementOrder.SIT;
+        }
+        return hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+    }
+
+    private static MovementOrder resolveExternalMovementOrder(TamableAnimal tame, TameData data) {
+        Integer command = tryReadExternalInt(tame, "getCommand");
+        if (command == null) command = tryReadExternalInt(tame, "getPetCommand");
+        if (command == null) command = tryReadExternalInt(tame, "getOrder");
+        if (command == null) command = tryReadExternalInt(tame, "getMode");
+        if (command != null) {
+            return resolveMovementOrderFromLiveCommand(tame, command, data != null && data.hasHome);
+        }
+
+        Boolean wandering = tryReadExternalBoolean(tame, "isWandering");
+        if (wandering == null) wandering = tryReadExternalBoolean(tame, "getWandering");
+        if (wandering == null) wandering = tryReadExternalBoolean(tame, "isWander");
+        if (wandering == null) wandering = tryReadExternalBoolean(tame, "getWander");
+        if (Boolean.TRUE.equals(wandering)) {
+            return data != null && data.hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+        }
+
+        Boolean sitting = tryReadExternalBoolean(tame, "isSitting");
+        if (sitting == null) sitting = tryReadExternalBoolean(tame, "getSitting");
+        if (sitting == null) sitting = tryReadExternalBoolean(tame, "isSit");
+        if (sitting == null) sitting = tryReadExternalBoolean(tame, "getSit");
+        if (Boolean.TRUE.equals(sitting)) {
+            return MovementOrder.SIT;
+        }
+
+        Boolean following = tryReadExternalBoolean(tame, "isFollowing");
+        if (following == null) following = tryReadExternalBoolean(tame, "getFollowing");
+        if (following == null) following = tryReadExternalBoolean(tame, "isFollow");
+        if (following == null) following = tryReadExternalBoolean(tame, "getFollow");
+        if (following != null) {
+            return following ? MovementOrder.FOLLOW : (data != null && data.hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER);
+        }
+
+        if (data != null) {
+            return switch (data.movementOrder) {
+                case 1 -> MovementOrder.SIT;
+                case 2 -> MovementOrder.WANDER;
+                case 3 -> MovementOrder.GUARDIAN;
+                default -> null;
+            };
+        }
+        return null;
+    }
+
+    private static Boolean tryReadExternalBoolean(TamableAnimal tame, String methodName) {
+        try {
+            Method m = tame.getClass().getMethod(methodName);
+            m.setAccessible(true);
+            Object value = m.invoke(tame);
+            if (value instanceof Boolean bool) {
+                return bool;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static Integer tryReadExternalInt(TamableAnimal tame, String methodName) {
+        try {
+            Method m = tame.getClass().getMethod(methodName);
+            m.setAccessible(true);
+            Object value = m.invoke(tame);
+            if (value instanceof Number number) {
+                return number.intValue();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private static int twoStateSitCommand(String typeId) {
@@ -15249,6 +15588,7 @@ public class TameCommands {
     private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
         List<TamableAnimal> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
+            if (isDuelLocked(data)) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
             if (tame == null || !tame.isAlive()) continue;
             if (!matchesMovementOrder(tame, order)) continue;

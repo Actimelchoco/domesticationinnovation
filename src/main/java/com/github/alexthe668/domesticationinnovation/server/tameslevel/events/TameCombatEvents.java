@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BlessfulledCompat;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
@@ -11,6 +12,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,6 +30,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -42,11 +45,16 @@ import java.util.Set;
 import java.util.UUID;
 
 public class TameCombatEvents {
+    private record PendingInstantRespawn(UUID tameUuid, long dueTick, int retriesRemaining) {
+    }
+
     private static final Object DEATH_QUEUE_LOCK = new Object();
     private static final Deque<PendingDeath> PENDING_DEATHS = new ArrayDeque<>();
     private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
     private static final Map<UUID, PendingDeath> CAPTURED_DEATHS = new HashMap<>();
+    private static final Map<UUID, PendingInstantRespawn> PENDING_INSTANT_RESPAWNS = new HashMap<>();
     private static boolean processingDeaths = false;
+    private static long serverTick = 0L;
 
     @SubscribeEvent
     public static void onHurt(LivingHurtEvent event) {
@@ -154,6 +162,45 @@ public class TameCombatEvents {
             tame.discard();
         }
         clearCapturedDeath(tame.getUUID());
+        if (shouldInstantRebuildNearOwner(tame, data, diedInDuel) && tame.level().getServer() != null) {
+            scheduleInstantRespawn(tame.getUUID(), 2, 20);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || event.getServer() == null) {
+            return;
+        }
+        serverTick++;
+        if (PENDING_INSTANT_RESPAWNS.isEmpty()) {
+            return;
+        }
+        List<UUID> finished = new ArrayList<>();
+        for (Map.Entry<UUID, PendingInstantRespawn> entry : PENDING_INSTANT_RESPAWNS.entrySet()) {
+            PendingInstantRespawn pending = entry.getValue();
+            if (pending == null || pending.tameUuid() == null) {
+                finished.add(entry.getKey());
+                continue;
+            }
+            if (pending.dueTick() > serverTick) {
+                continue;
+            }
+            TameData data = TameRegistry.get(pending.tameUuid());
+            if (data == null || !data.dead) {
+                finished.add(entry.getKey());
+                continue;
+            }
+            boolean rebuilt = TameCommands.respawnDeadTameNextToOwner(event.getServer(), pending.tameUuid());
+            if (rebuilt || pending.retriesRemaining() <= 0) {
+                finished.add(entry.getKey());
+                continue;
+            }
+            entry.setValue(new PendingInstantRespawn(pending.tameUuid(), serverTick + 2L, pending.retriesRemaining() - 1));
+        }
+        for (UUID tameUuid : finished) {
+            PENDING_INSTANT_RESPAWNS.remove(tameUuid);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -295,6 +342,27 @@ public class TameCombatEvents {
                 Component.literal("[Tames] ").withStyle(ChatFormatting.DARK_RED)
                         .append(Component.literal(line).withStyle(ChatFormatting.RED))
         );
+    }
+
+    private static boolean shouldInstantRebuildNearOwner(TamableAnimal tame, TameData data, boolean diedInDuel) {
+        if (tame == null || data == null || diedInDuel || data.ownerUUID == null) {
+            return false;
+        }
+        ResourceLocation key = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        String typeId = key == null ? tame.getType().toString() : key.toString();
+        return "mutantmonsters:creeper_minion".equalsIgnoreCase(typeId)
+                || "entity.mutantmonsters.creeper_minion".equalsIgnoreCase(typeId);
+    }
+
+    private static void scheduleInstantRespawn(UUID tameUuid, int delayTicks, int retries) {
+        if (tameUuid == null) {
+            return;
+        }
+        PENDING_INSTANT_RESPAWNS.put(tameUuid, new PendingInstantRespawn(
+                tameUuid,
+                serverTick + Math.max(1, delayTicks),
+                Math.max(0, retries)
+        ));
     }
 
     private static void enqueueAndDrainDeaths(PendingDeath death) {
@@ -451,12 +519,14 @@ public class TameCombatEvents {
                 killerTameUuid = tame.getUUID();
             }
 
+            Set<UUID> contributors = new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(dead.getUUID(), Set.of()));
+            contributors.addAll(LevelSystem.mobOwnerDamageTracker.getOrDefault(dead.getUUID(), Set.of()));
             return new PendingDeath(
                     dead,
                     dead.getUUID(),
                     killer,
                     killerTameUuid,
-                    new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(dead.getUUID(), Set.of()))
+                    contributors
             );
         }
     }
