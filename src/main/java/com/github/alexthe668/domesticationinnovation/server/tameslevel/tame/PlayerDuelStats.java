@@ -6,7 +6,7 @@ import net.minecraft.nbt.Tag;
 import java.util.UUID;
 
 public class PlayerDuelStats {
-    public static final int DEFAULT_MMR = 600;
+    public static final int DEFAULT_MMR = 1000;
 
     public UUID playerUuid;
     public String lastKnownName = "";

@@ -39,6 +39,7 @@ public final class TameDuelManager {
         private final Set<UUID> participants;
         private final List<DuelElimination> eliminations = new ArrayList<>();
         private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
+        private final Map<UUID, CompoundTag> playerSnapshots = new HashMap<>();
         private final Map<UUID, DuelStats> duelStats = new HashMap<>();
         private final Map<UUID, List<ServerBossEvent>> ownerBossBars = new HashMap<>();
         private final Set<UUID> spectatorIds = new HashSet<>();
@@ -133,13 +134,13 @@ public final class TameDuelManager {
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, true);
-            capturePreDuelTameState(server, battle, participantId);
+            capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
         for (UUID participantId : cleanB) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, false);
-            capturePreDuelTameState(server, battle, participantId);
+            capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
     }
@@ -389,10 +390,15 @@ public final class TameDuelManager {
             TEAM_A_BY_ENTITY.remove(participantId);
             RECENT_DUEL_ELIMINATIONS.remove(participantId);
             clearTargetForParticipant(server, participantId);
-            CompoundTag snapshot = battle.tameSnapshots.get(participantId);
-            if (snapshot != null && TameCommands.restoreDuelParticipantSnapshot(server, snapshot.copy())) {
+            CompoundTag playerSnapshot = battle.playerSnapshots.get(participantId);
+            if (playerSnapshot != null && TameCommands.restoreDuelPlayerSnapshot(server, participantId, playerSnapshot.copy())) {
                 restoredCount++;
-            } else if (snapshot == null && TameCommands.resetDuelCombatState(server, participantId)) {
+                continue;
+            }
+            CompoundTag tameSnapshot = battle.tameSnapshots.get(participantId);
+            if (tameSnapshot != null && TameCommands.restoreDuelParticipantSnapshot(server, tameSnapshot.copy())) {
+                restoredCount++;
+            } else if (tameSnapshot == null && playerSnapshot == null && TameCommands.resetDuelCombatState(server, participantId)) {
                 restoredCount++;
             }
         }
@@ -728,14 +734,17 @@ public final class TameDuelManager {
             boolean died = stats.deaths > 0;
             LivingEntity currentEntity = died ? null : findLoadedLivingParticipant(server, participantId);
             MutableComponent row = Component.literal(rank + ". ").withStyle(ChatFormatting.GOLD)
-                    .append(Component.literal("(" + ownerInitials(server, participant.ownerId()) + ") ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("[" + participant.level() + "] ").withStyle(ChatFormatting.YELLOW))
-                    .append(Component.literal(participant.displayName() + " ").withStyle(died ? ChatFormatting.DARK_RED : ChatFormatting.AQUA));
+                    .append(Component.literal("(" + ownerInitials(server, participant.ownerId()) + ") ").withStyle(ChatFormatting.GRAY));
             if (participant.player()) {
-                row = row.append(Component.literal("[player] ").withStyle(ChatFormatting.BLUE));
+                row = row.append(Component.literal("[P] ").withStyle(ChatFormatting.BLUE));
+            } else {
+                row = row.append(Component.literal("[" + participant.level() + "] ").withStyle(ChatFormatting.YELLOW));
             }
+            row = row.append(Component.literal(participant.displayName() + " ").withStyle(died ? ChatFormatting.DARK_RED : ChatFormatting.AQUA));
             if (!died && currentEntity != null) {
                 row = row.append(Component.literal("(" + formatHealth(currentEntity) + ") ").withStyle(ChatFormatting.RED));
+            } else if (died) {
+                row = row.append(Component.literal("(dead) ").withStyle(ChatFormatting.DARK_RED));
             }
             row = row
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
@@ -812,22 +821,28 @@ public final class TameDuelManager {
         UUID highestId = null;
         int highestLevel = Integer.MIN_VALUE;
         for (UUID participantId : teamIds) {
-            TameData data = tameDataForSummary(server, battle, participantId);
-            if (data == null) {
+            SummaryParticipant participant = participantForSummary(server, battle, participantId);
+            if (participant == null) {
                 continue;
             }
-            tameCount++;
-            int level = Math.max(1, data.level);
-            totalLevel += level;
             DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
             if (stats.deaths > 0) {
                 died++;
             } else {
                 survived++;
             }
-            if (level > highestLevel) {
-                highestLevel = level;
-                highestId = participantId;
+            if (!participant.player()) {
+                TameData data = tameDataForSummary(server, battle, participantId);
+                if (data == null) {
+                    continue;
+                }
+                tameCount++;
+                int level = Math.max(1, data.level);
+                totalLevel += level;
+                if (level > highestLevel) {
+                    highestLevel = level;
+                    highestId = participantId;
+                }
             }
         }
         String displayName = teamDisplayName(server, battle, ownerId, highestId, fallbackName);
@@ -904,8 +919,16 @@ public final class TameDuelManager {
         return null;
     }
 
-    private static void capturePreDuelTameState(MinecraftServer server, DuelBattle battle, UUID participantId) {
+    private static void capturePreDuelParticipantState(MinecraftServer server, DuelBattle battle, UUID participantId) {
         if (server == null || battle == null || participantId == null) {
+            return;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(participantId);
+        if (player != null) {
+            CompoundTag playerSnapshot = new CompoundTag();
+            player.saveWithoutId(playerSnapshot);
+            battle.playerSnapshots.put(participantId, playerSnapshot);
+            battle.duelStats.putIfAbsent(participantId, new DuelStats());
             return;
         }
         TameData data = TameRegistry.get(participantId);

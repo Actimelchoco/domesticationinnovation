@@ -285,6 +285,24 @@ public class TameRegistry {
         return Map.copyOf(PLAYER_DUEL_STATS);
     }
 
+    public static void resetAllDuelStats() {
+        for (TameData data : TAMES.values()) {
+            if (data == null) {
+                continue;
+            }
+            data.duelMmr = PlayerDuelStats.DEFAULT_MMR;
+            data.duelKills = 0;
+            data.duelAssists = 0;
+            data.duelDeaths = 0;
+            data.duelWins = 0;
+            data.duelLosses = 0;
+            data.duelCount = 0;
+            data.duelPoints = 0.0D;
+        }
+        PLAYER_DUEL_STATS.clear();
+        markDirty();
+    }
+
     public static Set<String> getOwnerGroups(UUID ownerUuid) {
         if (ownerUuid == null) {
             return Set.of();

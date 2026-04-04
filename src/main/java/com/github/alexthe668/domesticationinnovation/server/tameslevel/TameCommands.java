@@ -938,6 +938,7 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
                         .then(Commands.literal("_duelOldCompat")
+                                .requires(source -> false)
                                 .then(Commands.literal("vs")
                                         .then(Commands.literal("group")
                                                 .then(Commands.argument("left", StringArgumentType.word())
@@ -1467,6 +1468,51 @@ public class TameCommands {
 
                         .then(buildLegacyDuelCommand())
                         .then(Commands.literal("duel")
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> duelCompact(ctx.getSource(), "all")))
+                                .then(Commands.literal("follow")
+                                        .executes(ctx -> duelCompact(ctx.getSource(), "follow")))
+                                .then(Commands.literal("sit")
+                                        .executes(ctx -> duelCompact(ctx.getSource(), "sit")))
+                                .then(Commands.literal("wander")
+                                        .executes(ctx -> duelCompact(ctx.getSource(), "wander")))
+                                .then(Commands.literal("myself")
+                                        .executes(ctx -> duelCompact(ctx.getSource(), "myself")))
+                                .then(Commands.literal("player")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                                .executes(ctx -> duelCompact(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name")
+                                                ))))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> duelCompact(
+                                                        ctx.getSource(),
+                                                        "group " + StringArgumentType.getString(ctx, "name")
+                                                ))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> duelCompact(
+                                                        ctx.getSource(),
+                                                        "type " + StringArgumentType.getString(ctx, "name")
+                                                ))))
+                                .then(Commands.literal("name")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> duelCompact(
+                                                        ctx.getSource(),
+                                                        "name " + StringArgumentType.getString(ctx, "name")
+                                                ))))
+                                .then(Commands.literal("state")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestMovementStates(b))
+                                                .executes(ctx -> duelCompact(
+                                                        ctx.getSource(),
+                                                        "state " + StringArgumentType.getString(ctx, "name")
+                                                ))))
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
@@ -2218,6 +2264,8 @@ public class TameCommands {
 
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
+                                .then(Commands.literal("resetDuelLeaderboards")
+                                        .executes(ctx -> adminResetDuelLeaderboards(ctx.getSource())))
                                 .then(Commands.literal("reloadTames")
                                         .executes(ctx -> adminReloadTames(ctx.getSource())))
                                 .then(Commands.literal("repair")
@@ -3690,8 +3738,8 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
-        p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info tool guardian, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info tool guardian, /tames info duel accept, /tames info duel duelleaderboard, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
     }
@@ -3707,6 +3755,18 @@ public class TameCommands {
                     "Modes sort by weighted combat score, kills, deaths, assists, level, or days since last death.",
                     "Leaderboard shows all owners by default, but only includes tames with invested XP above 0. Use 'owned' or 'type <typeName>' to filter it.",
                     "'days' means days since last death, or born day if the tame never died."
+            );
+        }
+        else if (key.equals("duelleaderboard") || key.equals("duel duelleaderboard") || key.equals("duel leaderboard")) {
+            sendInfoPage(p, "DuelLeaderboard",
+                    "/tames duelleaderboard [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame]",
+                    "/tames duelleaderboard owned [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame]",
+                    "/tames duelleaderboard group <group> [<number>|all|everytame]",
+                    "/tames duelleaderboard type <typeName> [<number>|all|everytame]",
+                    "Shows duel-ranked tames and players together.",
+                    "Row order is: mmr / wins / losses / duels / kills / assists / deaths / points.",
+                    "Only participants with at least 1 recorded duel are shown.",
+                    "MMR is team-based, uses summed team MMR, and is split within each team by performance placement."
             );
         }
         else if (key.equals("deaths")) {
@@ -3953,13 +4013,64 @@ public class TameCommands {
         }
         else if (key.equals("duel")) {
             sendInfoPage(p, "Duel",
-                    "/tames duel <left> vs <right>",
+                    "/tames duel <selection> [vs <selection>]",
+                    "/tames info duel duel",
+                    "/tames info duel accept",
+                    "/tames info duel duelleaderboard",
+                    "Duels are TL's ranked PvP/PvE team-fight system for both players and tames.",
+                    "A duel can be same-owner practice, direct player-vs-player, or multi-player team duels depending on the selectors used.",
+                    "Use the duel subtopics for the exact command forms."
+            );
+        }
+        else if (key.equals("duel duel")) {
+            sendInfoPage(p, "Duel Start",
+                    "/tames duel all",
+                    "/tames duel follow",
+                    "/tames duel group <group>",
+                    "/tames duel type <type>",
+                    "/tames duel name <pet>",
+                    "/tames duel state <follow|sit|wander>",
+                    "/tames duel <left selectors> vs <right selectors>",
+                    "Compact duel selectors support comma-separated mixes like: name rex, type minecraft:wolf, group gang, all, follow, sit, wander, myself, or another player's name.",
+                    "If no player name appears, the duel starts immediately as a same-owner duel/team duel.",
+                    "If player names appear, invites are created and those players must accept before the battle starts."
+            );
+        }
+        else if (key.equals("duel accept")) {
+            sendInfoPage(p, "Duel Accept",
                     "/tames duel accept <player> vs <your selection>",
-                    "Compact duel selectors support comma-separated mixes like: rex, type wolf, group gang, all, follow, or myself.",
-                    "If no player names are in either side, the duel starts immediately as a same-owner team duel.",
-                    "If player names are included, a staged duel is created and each invited player must accept with their own selection.",
-                    "Accepted players may invite allies on their side during accept, but invited players are blocked if they already have a pending duel invite.",
-                    "The duel starts only after every invited player has accepted."
+                    "/tames duel accept <playerName> vs group <group>, name <pet>",
+                    "Accepts a pending duel invite and supplies your side's selection.",
+                    "The right side after 'vs' is your roster.",
+                    "The duel starts once every invited player has accepted."
+            );
+        }
+        else if (key.equals("duel decline")) {
+            sendInfoPage(p, "Duel Decline",
+                    "/tames duel decline <player>",
+                    "Declines a pending duel invite from that player."
+            );
+        }
+        else if (key.equals("duel ff") || key.equals("duel forfeit")) {
+            sendInfoPage(p, "Duel Forfeit",
+                    "/tames duel ff",
+                    "Forfeits your currently active duel."
+            );
+        }
+        else if (key.equals("duel inbox")) {
+            sendInfoPage(p, "Duel Inbox",
+                    "/tames duel inbox",
+                    "Shows your currently pending duel invites."
+            );
+        }
+        else if (key.equals("duel duelleaderboard") || key.equals("duel leaderboard")) {
+            sendInfoPage(p, "Duel DuelLeaderboard",
+                    "/tames duelleaderboard",
+                    "/tames duelleaderboard owned",
+                    "/tames duelleaderboard group <group>",
+                    "/tames duelleaderboard type <type>",
+                    "Shows the duel ranking for both players and tames.",
+                    "Sorting modes are mmr, wins, losses, duels, kills, assists, deaths, and points."
             );
         }
         else if (key.equals("debug")) {
@@ -9357,6 +9468,7 @@ public class TameCommands {
         if (target == null || target.level == null || target.pos == null) {
             return false;
         }
+        copyPersistentDuelStats(TameRegistry.get(snapshot.uuid), snapshot);
         snapshot.dead = false;
         snapshot.stored = false;
         TameRegistry.register(snapshot);
@@ -9370,6 +9482,47 @@ public class TameCommands {
             TameGoalInstaller.installIfMissing(restored);
         }
         return true;
+    }
+
+    public static boolean restoreDuelPlayerSnapshot(MinecraftServer server, UUID playerUuid, CompoundTag playerSnapshot) {
+        if (server == null || playerUuid == null || playerSnapshot == null || playerSnapshot.isEmpty()) {
+            return false;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(playerUuid);
+        if (player == null) {
+            return false;
+        }
+        Vec3 currentPos = player.position();
+        Vec3 currentMotion = player.getDeltaMovement();
+        float currentYRot = player.getYRot();
+        float currentXRot = player.getXRot();
+        boolean hadNoPhysics = player.noPhysics;
+        player.stopRiding();
+        player.load(playerSnapshot.copy());
+        player.teleportTo(currentPos.x, currentPos.y, currentPos.z);
+        player.setYRot(currentYRot);
+        player.setXRot(currentXRot);
+        player.setYHeadRot(currentYRot);
+        player.setYBodyRot(currentYRot);
+        player.setDeltaMovement(currentMotion);
+        player.noPhysics = hadNoPhysics;
+        player.containerMenu.broadcastChanges();
+        player.inventoryMenu.broadcastChanges();
+        return true;
+    }
+
+    private static void copyPersistentDuelStats(TameData from, TameData into) {
+        if (from == null || into == null) {
+            return;
+        }
+        into.duelMmr = from.duelMmr;
+        into.duelKills = from.duelKills;
+        into.duelAssists = from.duelAssists;
+        into.duelDeaths = from.duelDeaths;
+        into.duelWins = from.duelWins;
+        into.duelLosses = from.duelLosses;
+        into.duelCount = from.duelCount;
+        into.duelPoints = from.duelPoints;
     }
 
     private static SpawnTarget resolveDuelRespawnTarget(MinecraftServer server, TameData data) {
@@ -11109,13 +11262,11 @@ public class TameCommands {
     }
 
     private static boolean hasRecordedDuelStats(TameData data) {
-        return data != null && (data.duelCount > 0 || data.duelKills > 0 || data.duelAssists > 0 || data.duelDeaths > 0
-                || data.duelWins > 0 || data.duelLosses > 0 || data.duelPoints > 0.0D || data.duelMmr != PlayerDuelStats.DEFAULT_MMR);
+        return data != null && data.duelCount > 0;
     }
 
     private static boolean hasRecordedDuelStats(PlayerDuelStats data) {
-        return data != null && (data.duelCount > 0 || data.duelKills > 0 || data.duelAssists > 0 || data.duelDeaths > 0
-                || data.duelWins > 0 || data.duelLosses > 0 || data.duelPoints > 0.0D || data.duelMmr != PlayerDuelStats.DEFAULT_MMR);
+        return data != null && data.duelCount > 0;
     }
 
     private static String resolveDuelPlayerName(MinecraftServer server, UUID playerId, PlayerDuelStats stats) {
@@ -11676,6 +11827,21 @@ public class TameCommands {
         final int deathCount = resetDeaths;
         final int clearedRequests = clearedRespawnRequests;
         source.sendSuccess(() -> Component.literal("Server progress fully wiped: " + dataCount + " tame entries, " + deathCount + " death-history entries, " + clearedRequests + " queued bed respawns, and " + loadedCount + " loaded tames normalized to base stats."), true);
+        return 1;
+    }
+
+    private static int adminResetDuelLeaderboards(CommandSourceStack source) {
+        int tameEntries = 0;
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data != null && data.duelCount > 0) {
+                tameEntries++;
+            }
+        }
+        int playerEntries = TameRegistry.getPlayerDuelStats().size();
+        TameRegistry.resetAllDuelStats();
+        final int finalTameEntries = tameEntries;
+        final int finalPlayerEntries = playerEntries;
+        source.sendSuccess(() -> Component.literal("Reset duel leaderboard data for " + finalTameEntries + " tames and " + finalPlayerEntries + " players.").withStyle(ChatFormatting.YELLOW), true);
         return 1;
     }
 
@@ -17913,6 +18079,7 @@ public class TameCommands {
 
     private static CompletableFuture<Suggestions> suggestInfoTopics(SuggestionsBuilder b) {
         suggestCommandString(b, "leaderboard");
+        suggestCommandString(b, "duelleaderboard");
         suggestCommandString(b, "deaths");
         suggestCommandString(b, "loaded");
         suggestCommandString(b, "stat");
@@ -17934,6 +18101,12 @@ public class TameCommands {
         suggestCommandString(b, "inspect");
         suggestCommandString(b, "search");
         suggestCommandString(b, "duel");
+        suggestCommandString(b, "duel duel");
+        suggestCommandString(b, "duel accept");
+        suggestCommandString(b, "duel decline");
+        suggestCommandString(b, "duel ff");
+        suggestCommandString(b, "duel inbox");
+        suggestCommandString(b, "duel duelleaderboard");
         suggestCommandString(b, "debug");
         suggestCommandString(b, "attribute");
         suggestCommandString(b, "ability");
