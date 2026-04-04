@@ -14,14 +14,19 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -77,6 +82,15 @@ public class TameCombatEvents {
             System.err.println("[TamesLevel] onDeath error: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace();
         }
+    }
+
+    @SubscribeEvent
+    public static void onTameDrops(LivingDropsEvent event) {
+        if (event == null || !(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+            return;
+        }
+        List<ItemStack> allowed = collectRetainedDeathItems(tame);
+        event.getDrops().removeIf(drop -> !shouldKeepDrop(drop, allowed));
     }
 
     @SubscribeEvent
@@ -196,6 +210,53 @@ public class TameCombatEvents {
             return tame;
         }
         return null;
+    }
+
+    private static List<ItemStack> collectRetainedDeathItems(TamableAnimal tame) {
+        List<ItemStack> allowed = new ArrayList<>();
+        if (tame == null) {
+            return allowed;
+        }
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = tame.getItemBySlot(slot);
+            if (!stack.isEmpty()) {
+                allowed.add(stack.copy());
+            }
+        }
+        if (tame instanceof Container container) {
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                ItemStack stack = container.getItem(slot);
+                if (!stack.isEmpty()) {
+                    allowed.add(stack.copy());
+                }
+            }
+        }
+        return allowed;
+    }
+
+    private static boolean shouldKeepDrop(ItemEntity drop, List<ItemStack> allowed) {
+        if (drop == null) {
+            return false;
+        }
+        ItemStack stack = drop.getItem();
+        if (stack.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < allowed.size(); i++) {
+            ItemStack candidate = allowed.get(i);
+            if (!ItemStack.isSameItemSameTags(stack, candidate)) {
+                continue;
+            }
+            if (candidate.getCount() < stack.getCount()) {
+                continue;
+            }
+            candidate.shrink(stack.getCount());
+            if (candidate.isEmpty()) {
+                allowed.remove(i);
+            }
+            return true;
+        }
+        return false;
     }
 
     private static void notifyOwnerOfDeath(TamableAnimal tame, TameData data, String deathMessage) {
