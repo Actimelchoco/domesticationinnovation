@@ -253,6 +253,7 @@ public class TameAutoFollowEvents {
             tame.fallDistance = 0.0F;
             tame.setPortalCooldown();
             TameGoalInstaller.installIfMissing(tame);
+            TameCommands.applySitFollowOverride(tame, false);
             refreshData(data, tame, targetLevel);
             return;
         }
@@ -283,6 +284,7 @@ public class TameAutoFollowEvents {
         }
         tame.discard();
         TameCommands.refreshLoadedTameStatsAfterRebuild(moved, data, false);
+        TameCommands.applySitFollowOverride(moved, false);
     }
 
     private static void refreshData(TameData data, TamableAnimal tame, ServerLevel level) {

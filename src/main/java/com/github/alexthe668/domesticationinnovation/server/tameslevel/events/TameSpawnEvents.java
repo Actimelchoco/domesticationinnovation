@@ -787,6 +787,7 @@ public class TameSpawnEvents {
         if (tame == null) {
             return;
         }
+        boolean silentClone = tame.getPersistentData().getBoolean(TameCommands.ADMIN_CLONE_SILENT_TAG);
         tame.setTarget(null);
         tame.getNavigation().stop();
         if (tame.isAlive()) {
@@ -794,6 +795,9 @@ public class TameSpawnEvents {
                 tame.kill();
             } catch (Throwable ignored) {
             }
+        }
+        if (silentClone) {
+            return;
         }
         if (!tame.isRemoved()) {
             try {

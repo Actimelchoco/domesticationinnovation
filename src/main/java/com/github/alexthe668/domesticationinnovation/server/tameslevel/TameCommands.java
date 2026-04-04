@@ -10744,6 +10744,11 @@ public class TameCommands {
         TameTransferService.TransferResult result = TameTransferService.transferToPlayer(tame, player, data);
         if (!result.success()) {
             System.err.println("[TamesLevel] Command teleport failed for tame " + tame.getUUID() + ": " + result.error());
+            return;
+        }
+        TamableAnimal moved = result.entity();
+        if (moved != null) {
+            applyMovementOverride(moved, MovementOrder.FOLLOW);
         }
     }
 
@@ -10833,9 +10838,19 @@ public class TameCommands {
         TamableAnimal loaded = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
             teleportTameToLocation(loaded, target);
+            TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
+            if (moved != null) {
+                applyMovementOverride(moved, MovementOrder.FOLLOW);
+            }
             return true;
         }
         UnloadedTpResult result = tpUnloadedHomeViaLanternOrRecover(owner.createCommandSourceStack(), owner, data, target);
+        if (result.success) {
+            TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
+            if (moved != null) {
+                applyMovementOverride(moved, MovementOrder.FOLLOW);
+            }
+        }
         return result.success;
     }
 
@@ -14810,7 +14825,7 @@ public class TameCommands {
         return list;
     }
 
-    private static void applySitFollowOverride(TamableAnimal tame, boolean sit) {
+    public static void applySitFollowOverride(TamableAnimal tame, boolean sit) {
         applyMovementOverride(tame, sit ? MovementOrder.SIT : MovementOrder.FOLLOW);
     }
 
