@@ -111,7 +111,7 @@ public class TameAutoFollowEvents {
         if (normalized == null || normalized.isBlank()) {
             return true;
         }
-        return !TameRegistry.isCallOrderInvertedType(normalized);
+        return TameRegistry.isCallOrderInvertedType(normalized);
     }
 
     private static String normalizeTypeId(String typeId) {

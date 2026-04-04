@@ -28,6 +28,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayDeque;
@@ -155,11 +156,32 @@ public class TameCombatEvents {
         clearCapturedDeath(tame.getUUID());
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onPlayerDeath(LivingDeathEvent event) {
         if (event.isCanceled()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!TameDuelManager.isEntityInDuel(player.getUUID())) return;
+        PendingDeath death = PendingDeath.capture(event);
+        if (death == null) {
+            return;
+        }
+        event.setCanceled(true);
+        player.setHealth(Math.max(1.0F, player.getMaxHealth()));
+        player.removeAllEffects();
+        player.setSecondsOnFire(0);
+        player.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        player.invulnerableTime = Math.max(player.invulnerableTime, 20);
+        player.hurtMarked = true;
+        MinecraftServer server = player.getServer();
+        if (server != null) {
+            TameDuelManager.recordElimination(
+                    server,
+                    player.getUUID(),
+                    death.contributors(),
+                    resolveDuelKillerParticipantUuid(server, death, death.killerTameUuid())
+            );
+            TameDuelManager.endDuelForEntity(server, player.getUUID());
+        }
     }
 
     private static TamableAnimal resolveTameAttacker(LivingHurtEvent event) {

@@ -1468,51 +1468,6 @@ public class TameCommands {
 
                         .then(buildLegacyDuelCommand())
                         .then(Commands.literal("duel")
-                                .then(Commands.literal("all")
-                                        .executes(ctx -> duelCompact(ctx.getSource(), "all")))
-                                .then(Commands.literal("follow")
-                                        .executes(ctx -> duelCompact(ctx.getSource(), "follow")))
-                                .then(Commands.literal("sit")
-                                        .executes(ctx -> duelCompact(ctx.getSource(), "sit")))
-                                .then(Commands.literal("wander")
-                                        .executes(ctx -> duelCompact(ctx.getSource(), "wander")))
-                                .then(Commands.literal("myself")
-                                        .executes(ctx -> duelCompact(ctx.getSource(), "myself")))
-                                .then(Commands.literal("player")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
-                                                .executes(ctx -> duelCompact(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "name")
-                                                ))))
-                                .then(Commands.literal("group")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                .executes(ctx -> duelCompact(
-                                                        ctx.getSource(),
-                                                        "group " + StringArgumentType.getString(ctx, "name")
-                                                ))))
-                                .then(Commands.literal("type")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> duelCompact(
-                                                        ctx.getSource(),
-                                                        "type " + StringArgumentType.getString(ctx, "name")
-                                                ))))
-                                .then(Commands.literal("name")
-                                        .then(Commands.argument("name", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                                .executes(ctx -> duelCompact(
-                                                        ctx.getSource(),
-                                                        "name " + StringArgumentType.getString(ctx, "name")
-                                                ))))
-                                .then(Commands.literal("state")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestMovementStates(b))
-                                                .executes(ctx -> duelCompact(
-                                                        ctx.getSource(),
-                                                        "state " + StringArgumentType.getString(ctx, "name")
-                                                ))))
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
@@ -6393,8 +6348,7 @@ public class TameCommands {
         }
         ResourceLocation dimensionId = ResourceLocation.tryParse(data.petBedDimension);
         String dimensionName = shortDimensionName(dimensionId, data.petBedDimension);
-        String bedType = shortBedType(petBedBlockId(server, data));
-        return bedType + " " + dimensionName + " [" + data.petBedX + ", " + data.petBedY + ", " + data.petBedZ + "]";
+        return dimensionName + "(" + data.petBedX + ", " + data.petBedY + ", " + data.petBedZ + ")";
     }
 
     private static String shortDimensionName(ResourceLocation dimensionId, String fallback) {
@@ -11133,6 +11087,8 @@ public class TameCommands {
                     .append(Component.literal("(" + ownerInitials(source.getServer(), d.ownerUUID) + ") ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("[" + d.level + "] ").withStyle(ChatFormatting.YELLOW))
                     .append(Component.literal(d.name + " ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("(" + shortEntityTypeName(d.type) + ")").withStyle(ChatFormatting.DARK_GRAY)));
+            p.sendSystemMessage(Component.literal("   ").withStyle(ChatFormatting.DARK_GRAY)
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal(String.valueOf(score)).withStyle(ChatFormatting.LIGHT_PURPLE))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
@@ -11218,6 +11174,9 @@ public class TameCommands {
                 line = line.append(Component.literal("[" + Math.max(1, entry.level()) + "] ").withStyle(ChatFormatting.YELLOW));
             }
             line = line.append(Component.literal(entry.name() + " ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("(" + shortEntityTypeName(entry.type()) + ")").withStyle(ChatFormatting.DARK_GRAY));
+            p.sendSystemMessage(line);
+            line = Component.literal("   ").withStyle(ChatFormatting.DARK_GRAY)
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal(String.valueOf(entry.mmr())).withStyle(ChatFormatting.GOLD))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
@@ -11295,6 +11254,26 @@ public class TameCommands {
             return Integer.toString((int) rounded);
         }
         return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private static String shortEntityTypeName(String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return "unknown";
+        }
+        String normalized = rawType.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        int colon = normalized.indexOf(':');
+        String path = colon >= 0 ? normalized.substring(colon + 1) : normalized;
+        if (path.isBlank()) {
+            return normalized;
+        }
+        int slash = path.lastIndexOf('/');
+        if (slash >= 0 && slash < path.length() - 1) {
+            path = path.substring(slash + 1);
+        }
+        return capitalizeWords(path.replace('_', ' '));
     }
 
     private static int leaderboardInvestedXp(TameData data) {
@@ -15203,7 +15182,7 @@ public class TameCommands {
         if (normalized.startsWith("entity.")) {
             normalized = normalized.substring("entity.".length());
         }
-        return !TameRegistry.isCallOrderInvertedType(normalized);
+        return TameRegistry.isCallOrderInvertedType(normalized);
     }
 
     private static boolean matchesSnapshotCommand(int command, MovementOrder order, TamableAnimal tame) {

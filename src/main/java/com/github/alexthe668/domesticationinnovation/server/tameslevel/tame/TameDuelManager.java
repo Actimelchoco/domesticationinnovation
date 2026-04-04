@@ -380,6 +380,7 @@ public final class TameDuelManager {
         if (battle == null) return;
         BATTLE_BY_ID.remove(battle.battleId);
         persistBattleStatsAndMmr(server, battle, forfeitingOwner);
+        refreshStoredDuelSnapshotsFromRegistry(battle);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
@@ -403,6 +404,33 @@ public final class TameDuelManager {
             }
         }
         notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
+    }
+
+    private static void refreshStoredDuelSnapshotsFromRegistry(DuelBattle battle) {
+        if (battle == null || battle.tameSnapshots.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, CompoundTag> entry : battle.tameSnapshots.entrySet()) {
+            UUID participantId = entry.getKey();
+            CompoundTag snapshotTag = entry.getValue();
+            if (participantId == null || snapshotTag == null || snapshotTag.isEmpty()) {
+                continue;
+            }
+            TameData persisted = TameRegistry.get(participantId);
+            if (persisted == null) {
+                continue;
+            }
+            TameData snapshot = TameData.fromTag(snapshotTag.copy());
+            snapshot.duelMmr = persisted.duelMmr;
+            snapshot.duelKills = persisted.duelKills;
+            snapshot.duelAssists = persisted.duelAssists;
+            snapshot.duelDeaths = persisted.duelDeaths;
+            snapshot.duelWins = persisted.duelWins;
+            snapshot.duelLosses = persisted.duelLosses;
+            snapshot.duelCount = persisted.duelCount;
+            snapshot.duelPoints = persisted.duelPoints;
+            entry.setValue(snapshot.toTag());
+        }
     }
 
     private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
