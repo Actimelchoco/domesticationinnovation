@@ -282,7 +282,7 @@ public class TameAutoFollowEvents {
             return;
         }
         tame.discard();
-        refreshData(data, moved, targetLevel);
+        TameCommands.refreshLoadedTameStatsAfterRebuild(moved, data, false);
     }
 
     private static void refreshData(TameData data, TamableAnimal tame, ServerLevel level) {

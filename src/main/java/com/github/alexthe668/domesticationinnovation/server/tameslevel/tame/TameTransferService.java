@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
@@ -72,7 +73,7 @@ public final class TameTransferService {
                 tame.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
                 tame.discard();
                 moved.getNavigation().moveTo(player, 1.0D);
-                refreshLastKnown(data, moved, targetLevel);
+                TameCommands.refreshLoadedTameStatsAfterRebuild(moved, data, false);
                 return new TransferResult(moved, true, "");
             } catch (Throwable ignored) {
                 // retry at another nearby position
@@ -148,7 +149,7 @@ public final class TameTransferService {
                         moved.getNavigation().moveTo(nearest, 1.0D);
                     }
                 }
-                refreshLastKnown(data, moved, targetLevel);
+                TameCommands.refreshLoadedTameStatsAfterRebuild(moved, data, false);
                 return new TransferResult(moved, true, "");
             } catch (Throwable ignored) {
             }

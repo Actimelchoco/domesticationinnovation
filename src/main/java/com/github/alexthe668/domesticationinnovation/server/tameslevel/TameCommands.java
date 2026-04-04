@@ -9354,11 +9354,7 @@ public class TameCommands {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
         }
 
-        boolean normalized = applyTypeBasePlusBonus(respawned, data);
-        if (!normalized) {
-            LevelSystem.updateTameName(respawned, data);
-            respawned.setHealth(respawned.getMaxHealth());
-        }
+        refreshLoadedTameStatsAfterRebuild(respawned, data, true);
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRespawnState(respawned, data);
         return RespawnResult.ok();
@@ -13501,7 +13497,7 @@ public class TameCommands {
         return fixedCount > 0 ? fixedCount : 1;
     }
 
-    private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
+    public static boolean refreshLoadedTameStatsAfterRebuild(TamableAnimal tame, TameData data, boolean fullHeal) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
             return false;
         }
@@ -13516,7 +13512,10 @@ public class TameCommands {
             return false;
         }
         LevelSystem.updateTameName(tame, data);
-        tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
+        float nextHealth = fullHeal
+                ? (float) tame.getMaxHealth()
+                : (float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth());
+        tame.setHealth(nextHealth);
         TameSpawnEvents.queueDeferredStatRefresh(tame, data, 1200L);
 
         data.lastKnownDimension = level.dimension().location().toString();
@@ -13528,6 +13527,10 @@ public class TameCommands {
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
         return true;
+    }
+
+    private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
+        return refreshLoadedTameStatsAfterRebuild(tame, data, false);
     }
 
     private static int adminSetTameStat(CommandSourceStack source, String petName, String stat, int value) {
