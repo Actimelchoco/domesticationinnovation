@@ -55,6 +55,7 @@ public class TameableUtils {
     private static final String COLLAR_TAG = "HasPetCollar";
     private static final String IMMUNITY_TIME_TAG = "PetImmunityTimer";
     private static final String IMMUNITY_COOLDOWN_TAG = "PetImmunityCooldown";
+    private static final String IMMUNITY_LAST_PROC_TICK_TAG = "PetImmunityLastProcTick";
     private static final String FROZEN_TIME_TAG = "PetFrozenTime";
     private static final String FROZEN_LEVEL_TAG = "PetFrozenLevel";
     private static final String ATTACK_TARGET_ENTITY = "PetAttackTarget";
@@ -734,6 +735,17 @@ public class TameableUtils {
     public static void setImmuneCooldown(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
         tag.putInt(IMMUNITY_COOLDOWN_TAG, time);
+        sync(enchanted, tag);
+    }
+
+    public static long getImmuneLastProcTick(LivingEntity enchanted) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        return tag.contains(IMMUNITY_LAST_PROC_TICK_TAG, 4) ? tag.getLong(IMMUNITY_LAST_PROC_TICK_TAG) : Long.MIN_VALUE;
+    }
+
+    public static void setImmuneLastProcTick(LivingEntity enchanted, long tick) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putLong(IMMUNITY_LAST_PROC_TICK_TAG, tick);
         sync(enchanted, tag);
     }
 
