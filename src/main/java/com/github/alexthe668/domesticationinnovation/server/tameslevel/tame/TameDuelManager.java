@@ -359,6 +359,8 @@ public final class TameDuelManager {
         if (tame == null || !tame.isAlive()) {
             return;
         }
+        // Prevent vanilla follow-owner recovery from yanking duel tames back to their owner.
+        TameCommands.applyMovementOrderCode(tame, 2);
         tame.setOrderedToSit(false);
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);

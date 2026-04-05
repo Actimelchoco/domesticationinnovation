@@ -19119,9 +19119,7 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (currentLiveMovementOrder(tame, TameRegistry.get(id)) != MovementOrder.SIT) {
-                applyMovementOverride(tame, MovementOrder.SIT);
-            }
+            applyMovementOverride(tame, MovementOrder.SIT);
             tame.setTarget(null);
             tame.getNavigation().stop();
         }
