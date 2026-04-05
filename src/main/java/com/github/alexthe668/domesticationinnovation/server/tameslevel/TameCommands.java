@@ -16691,6 +16691,25 @@ public class TameCommands {
         });
     }
 
+    public static boolean cycleCompatInteractionMovementOrder(ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || !tame.isTame()) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
+            return false;
+        }
+        MovementOrder current = currentLiveMovementOrder(tame, data);
+        MovementOrder next = switch (current) {
+            case FOLLOW, GUARDIAN -> MovementOrder.SIT;
+            case SIT -> MovementOrder.WANDER;
+            case WANDER -> MovementOrder.FOLLOW;
+        };
+        applyMovementOverride(tame, next);
+        player.sendSystemMessage(Component.literal(tameDisplayName(data) + ": " + movementLabel(next) + ".").withStyle(ChatFormatting.YELLOW), true);
+        return true;
+    }
+
     private static void applyMovementOverride(TamableAnimal tame, MovementOrder order) {
         if (tame == null) return;
         TameData data = TameRegistry.get(tame.getUUID());

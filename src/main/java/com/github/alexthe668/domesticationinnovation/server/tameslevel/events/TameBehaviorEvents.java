@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport;
@@ -42,6 +43,7 @@ public class TameBehaviorEvents {
 
         if (tame.tickCount % 10 == 0) {
             TameCommands.syncLiveMovementStateFor(tame);
+            syncCompatMovementOwnerLink(tame, activeData);
             TamePerformanceProfiler.run("behavior.boss_movement_override", () -> handleBossMovementOverride(tame, activeData));
         }
 
@@ -66,6 +68,33 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
+    }
+
+    private static void syncCompatMovementOwnerLink(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null || data.ownerUUID == null || !isCompatMovementOwnerLinkType(tame)) {
+            return;
+        }
+        if (data.movementOrder == 0) {
+            if (TameableUtils.getOwnerUUIDOf(tame) == null) {
+                TameableUtils.setOwnerUUIDOf(tame, data.ownerUUID);
+            }
+            return;
+        }
+        if (TameableUtils.getOwnerUUIDOf(tame) != null) {
+            TameableUtils.setOwnerUUIDOf(tame, null);
+        }
+    }
+
+    private static boolean isCompatMovementOwnerLinkType(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (key == null) {
+            return false;
+        }
+        String namespace = key.getNamespace();
+        return "crittersandcompanions".equals(namespace) || "legendary_monsters".equals(namespace);
     }
 
     @SubscribeEvent
