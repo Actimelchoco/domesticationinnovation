@@ -95,7 +95,10 @@ public class PetshopStructurePoolElement extends LegacySinglePoolElement {
                 break;
             case "petshop_chest":
                 levelAccessor.setBlock(structureBlockInfo.pos(), Blocks.AIR.defaultBlockState(), 2);
-                RandomizableContainerBlockEntity.setLootTable(levelAccessor, random, structureBlockInfo.pos().below(), CHEST);
+                if (levelAccessor.getBlockEntity(structureBlockInfo.pos().below()) instanceof RandomizableContainerBlockEntity container) {
+                    container.setLootTable(CHEST, random.nextLong());
+                    container.setChanged();
+                }
                 break;
             case "petshop_cage_0"://wolf, rabbit or cat
                 spawnAnimalsAt(levelAccessor, structureBlockInfo.pos(), 1 + random.nextInt(2), random, cage0Mobs);

@@ -222,7 +222,7 @@ public final class WaystonesTeleportCompat {
         if (player == null || packet == null || player.connection == null) {
             return;
         }
-        player.connection.f_9742_.send(packet);
+        player.connection.send(packet);
     }
 
     private static boolean isWaystoneTeleportEligibleFromData(TameData data, UUID ownerId) {

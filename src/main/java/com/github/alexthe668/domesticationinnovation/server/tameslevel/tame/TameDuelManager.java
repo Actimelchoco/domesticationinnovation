@@ -530,7 +530,7 @@ public final class TameDuelManager {
         if (player == null || packet == null || player.connection == null) {
             return;
         }
-        player.connection.f_9742_.send(packet);
+        player.connection.send(packet);
     }
 
     private static PlayerTeam duelGlowTeam(UUID viewerId, boolean teamA) {

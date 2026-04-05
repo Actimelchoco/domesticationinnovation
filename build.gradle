@@ -36,13 +36,13 @@ apply plugin: 'org.spongepowered.mixin'
 
 version = '1.7.1-1.20.1'
 group = 'com.github.alexthe668' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = 'domesticationinnovation-tameslevel-extension-v20.1'
+archivesBaseName = 'domesticationinnovation-tameslevel-extension-v20.3'
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 println('Java: ' + System.getProperty('java.version') + ' JVM: ' + System.getProperty('java.vm.version') + '(' + System.getProperty('java.vendor') + ') Arch: ' + System.getProperty('os.arch'))
 minecraft {
-    mappings channel: 'official', version: '1.20.2'
+    mappings channel: 'official', version: '1.20.1'
     accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
 
     // Default run configurations.
