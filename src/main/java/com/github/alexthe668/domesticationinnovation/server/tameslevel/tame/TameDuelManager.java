@@ -962,10 +962,10 @@ public final class TameDuelManager {
                     survived++;
                 }
                 tameCount++;
-                int level = Math.max(1, data.level);
-                totalLevel += level;
-                if (level > highestLevel) {
-                    highestLevel = level;
+                int evaluation = duelEvaluationForParticipant(server, battle, participantId);
+                totalLevel += evaluation;
+                if (evaluation > highestLevel) {
+                    highestLevel = evaluation;
                     highestId = participantId;
                 }
             }
@@ -1274,6 +1274,29 @@ public final class TameDuelManager {
         return PlayerDuelStats.DEFAULT_MMR;
     }
 
+    private static int duelEvaluationForParticipant(MinecraftServer server, DuelBattle battle, UUID participantId) {
+        SummaryParticipant participant = participantForSummary(server, battle, participantId);
+        if (participant == null) {
+            return 0;
+        }
+        return Math.max(1, participant.level()) + Math.max(0, participantStoredDuelMmr(participantId));
+    }
+
+    private static int participantStoredDuelMmr(UUID participantId) {
+        if (participantId == null) {
+            return 0;
+        }
+        TameData tame = TameRegistry.get(participantId);
+        if (tame != null) {
+            return Math.max(0, tame.duelMmr);
+        }
+        PlayerDuelStats player = TameRegistry.getPlayerDuelStats().get(participantId);
+        if (player != null) {
+            return Math.max(0, player.duelMmr);
+        }
+        return 0;
+    }
+
     private static int playerMmrWeightFromSnapshot(CompoundTag snapshot) {
         return playerMmrWeightFromStats(
                 readPlayerAttribute(snapshot, "minecraft:generic.max_health", 20.0D),
@@ -1387,8 +1410,7 @@ public final class TameDuelManager {
         if (battle == null || elimination == null || elimination.victimId == null) {
             return;
         }
-        SummaryParticipant victimData = participantForSummary(server, battle, elimination.victimId);
-        double pointsPool = victimData == null ? 0.0D : Math.max(1, victimData.level());
+        double pointsPool = Math.max(1.0D, duelEvaluationForParticipant(server, battle, elimination.victimId));
         UUID killerId = elimination.killerId;
         int assisterSlots = elimination.assisterIds == null ? 0 : elimination.assisterIds.size();
         double killerBasePoints = 0.0D;
