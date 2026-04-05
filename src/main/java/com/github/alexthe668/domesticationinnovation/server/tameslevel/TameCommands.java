@@ -26,6 +26,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDuelStats;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameArenaRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
@@ -482,13 +483,15 @@ public class TameCommands {
         private final UUID targetUuid;
         private final TeamSelection challengerSelection;
         private final DuelSpectators spectators;
+        private final String arenaName;
         private final long createdAtMs;
 
-        private DuelInvite(UUID challengerUuid, UUID targetUuid, TeamSelection challengerSelection, DuelSpectators spectators, long createdAtMs) {
+        private DuelInvite(UUID challengerUuid, UUID targetUuid, TeamSelection challengerSelection, DuelSpectators spectators, String arenaName, long createdAtMs) {
             this.challengerUuid = challengerUuid;
             this.targetUuid = targetUuid;
             this.challengerSelection = challengerSelection;
             this.spectators = spectators == null ? DuelSpectators.empty() : spectators;
+            this.arenaName = arenaName == null ? "" : arenaName;
             this.createdAtMs = createdAtMs;
         }
     }
@@ -570,12 +573,14 @@ public class TameCommands {
         private final UUID initiatorUuid;
         private final long createdAtMs;
         private final DuelSpectators spectators;
+        private final String arenaName;
         private final Map<UUID, PendingDuelParticipant> participants = new LinkedHashMap<>();
 
-        private PendingDuelMatch(UUID matchId, UUID initiatorUuid, DuelSpectators spectators, long createdAtMs) {
+        private PendingDuelMatch(UUID matchId, UUID initiatorUuid, DuelSpectators spectators, String arenaName, long createdAtMs) {
             this.matchId = matchId;
             this.initiatorUuid = initiatorUuid;
             this.spectators = spectators == null ? DuelSpectators.empty() : spectators;
+            this.arenaName = arenaName == null ? "" : arenaName;
             this.createdAtMs = createdAtMs;
         }
     }
@@ -599,15 +604,17 @@ public class TameCommands {
         private final UUID initiatorUuid;
         private final UUID targetPlayerUuid;
         private final boolean initiatorSideA;
+        private final String arenaName;
         private final TeamSelection initiatorSelection;
         private TeamSelection targetSelection;
 
-        private PendingDuelSession(UUID sessionId, UUID initiatorUuid, UUID targetPlayerUuid, boolean initiatorSideA, TeamSelection initiatorSelection) {
+        private PendingDuelSession(UUID sessionId, UUID initiatorUuid, UUID targetPlayerUuid, boolean initiatorSideA, TeamSelection initiatorSelection, String arenaName) {
             this.sessionId = sessionId;
             this.initiatorUuid = initiatorUuid;
             this.targetPlayerUuid = targetPlayerUuid;
             this.initiatorSideA = initiatorSideA;
             this.initiatorSelection = initiatorSelection;
+            this.arenaName = arenaName == null ? "" : arenaName;
         }
     }
 
@@ -615,23 +622,29 @@ public class TameCommands {
         private final UUID sessionId;
         private final UUID ownerA;
         private final UUID ownerB;
+        private final String arenaName;
         private final LinkedHashSet<UUID> poolA;
         private final LinkedHashSet<UUID> poolB;
         private final SpawnTarget spawnA;
         private final SpawnTarget spawnB;
+        private final SpawnTarget waitingA;
+        private final SpawnTarget waitingB;
         private Set<UUID> currentRoundA = Set.of();
         private Set<UUID> currentRoundB = Set.of();
         private long roundStartedAtTick = -1L;
         private long nextRoundAtTick = -1L;
 
-        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB) {
+        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName) {
             this.sessionId = sessionId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
+            this.arenaName = arenaName == null ? "" : arenaName;
             this.poolA = new LinkedHashSet<>(poolA);
             this.poolB = new LinkedHashSet<>(poolB);
             this.spawnA = spawnA;
             this.spawnB = spawnB;
+            this.waitingA = waitingA;
+            this.waitingB = waitingB;
         }
     }
 
@@ -1010,6 +1023,42 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player"),
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
+                        .then(Commands.literal("arena")
+                                .executes(ctx -> listArenas(ctx.getSource()))
+                                .then(Commands.literal("create")
+                                        .then(Commands.argument("arenaName", StringArgumentType.word())
+                                                .executes(ctx -> createArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))))
+                                .then(Commands.literal("delete")
+                                        .then(Commands.argument("arenaName", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestArenaNames(ctx.getSource(), b))
+                                                .executes(ctx -> deleteArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))))
+                                .then(Commands.argument("arenaName", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestArenaNames(ctx.getSource(), b))
+                                        .executes(ctx -> showArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))
+                                        .then(Commands.literal("setA")
+                                                .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "A")))
+                                        .then(Commands.literal("setB")
+                                                .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "B")))
+                                        .then(Commands.literal("setWaitingA")
+                                                .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingA")))
+                                        .then(Commands.literal("setWaitingB")
+                                                .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingB")))
+                                        .then(Commands.literal("duel")
+                                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                                        .executes(ctx -> duelCompactAtArena(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "arenaName"),
+                                                                StringArgumentType.getString(ctx, "spec")
+                                                        ))))
+                                        .then(Commands.literal("duelSession")
+                                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                                        .executes(ctx -> duelSessionCompactAtArena(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "arenaName"),
+                                                                StringArgumentType.getString(ctx, "spec")
+                                                        ))))))
                         .then(Commands.literal("_duelOldCompat")
                                 .requires(source -> false)
                                 .then(Commands.literal("vs")
@@ -1502,12 +1551,24 @@ public class TameCommands {
                                                 .executes(ctx -> setDuelAssistMessages(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("killNotification")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelKillNotifications(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
                                                 )))))
                         .then(Commands.literal("duelTogge")
                                 .executes(ctx -> duelToggleStatus(ctx.getSource()))
                                 .then(Commands.literal("assistsMessages")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDuelAssistMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("killNotification")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelKillNotifications(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 )))))
@@ -5512,7 +5573,7 @@ public class TameCommands {
         if (challengerGroup.isEmpty()) return error(challenger, "Your selected duel tames are not loaded/alive.");
 
         inviteStore.computeIfAbsent(targetPlayer.getUUID(), ignored -> new HashMap<>())
-                .put(challenger.getUUID(), new DuelInvite(challenger.getUUID(), targetPlayer.getUUID(), TeamSelection.tameOnly(selection), spectators, System.currentTimeMillis()));
+                .put(challenger.getUUID(), new DuelInvite(challenger.getUUID(), targetPlayer.getUUID(), TeamSelection.tameOnly(selection), spectators, "", System.currentTimeMillis()));
 
         String challengerSelectionText = duelSelectionLabel(selection);
         challenger.sendSystemMessage(Component.literal("Sent duel invite to " + targetPlayer.getName().getString() + " using " + challengerSelectionText + ".").withStyle(ChatFormatting.GREEN));
@@ -5567,7 +5628,7 @@ public class TameCommands {
         if (challengerResult.members.isEmpty()) return error(challenger, "Your selected duel team has no loaded/alive members.");
 
         DUEL_INVITES.computeIfAbsent(targetPlayer.getUUID(), ignored -> new HashMap<>())
-                .put(challenger.getUUID(), new DuelInvite(challenger.getUUID(), targetPlayer.getUUID(), selection, spectators, System.currentTimeMillis()));
+                .put(challenger.getUUID(), new DuelInvite(challenger.getUUID(), targetPlayer.getUUID(), selection, spectators, "", System.currentTimeMillis()));
 
         String challengerSelectionText = teamSelectionLabel(selection);
         challenger.sendSystemMessage(Component.literal("Sent duel invite to " + targetPlayer.getName().getString() + " using " + challengerSelectionText + ".").withStyle(ChatFormatting.GREEN));
@@ -5648,7 +5709,7 @@ public class TameCommands {
 
         TameDuelManager.startGroupDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, spectators.playerIds, spectators.broadcastToServer);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), spectators,
-                Component.literal("Duel started: " + sameOwnerDuelSelectionLabel(leftSelection, rightSelection, true) + " vs " + sameOwnerDuelSelectionLabel(leftSelection, rightSelection, false) + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(new ArrayList<>(leftGroup), new ArrayList<>(rightGroup))).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -5698,7 +5759,7 @@ public class TameCommands {
 
         TameDuelManager.startTeamDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, spectators.playerIds, spectators.broadcastToServer);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), spectators,
-                Component.literal("Duel started: " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(leftResult.members, rightResult.members)).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -5767,10 +5828,8 @@ public class TameCommands {
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
-        String challengerSelectionText = teamSelectionLabel(invite.challengerSelection);
-        String targetSelectionText = duelSelectionLabel(targetSelection);
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal("Duel started: " + challengerSelectionText + " vs " + targetSelectionText + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup))).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -5819,10 +5878,8 @@ public class TameCommands {
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startTeamDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
-        String challengerSelectionText = teamSelectionLabel(invite.challengerSelection);
-        String targetSelectionText = teamSelectionLabel(targetSelection);
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal("Duel started: " + challengerSelectionText + " vs " + targetSelectionText + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(challengerResult.members, targetResult.members)).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -5899,10 +5956,8 @@ public class TameCommands {
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
-        String challengerSelectionText = teamSelectionLabel(invite.challengerSelection);
-        String targetSelectionText = duelSelectionLabel(targetSelection);
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal("Duel started: " + challengerSelectionText + " vs " + targetSelectionText + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup))).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -5959,10 +6014,8 @@ public class TameCommands {
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startTeamDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
-        String challengerSelectionText = teamSelectionLabel(invite.challengerSelection);
-        String targetSelectionText = teamSelectionLabel(targetSelection);
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal("Duel started: " + challengerSelectionText + " vs " + targetSelectionText + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(challengerResult.members, targetResult.members)).withStyle(ChatFormatting.RED));
         return 1;
     }
 
@@ -6028,7 +6081,7 @@ public class TameCommands {
         }
         if (pending != null) {
             String initiator = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, pending.initiatorUuid.toString());
-            targetPlayer.sendSystemMessage(Component.literal("- staged duel from " + initiator + " | A: " + pendingDuelSideLabel(source.getServer(), pending, true) + " | B: " + pendingDuelSideLabel(source.getServer(), pending, false)).withStyle(ChatFormatting.LIGHT_PURPLE));
+            targetPlayer.sendSystemMessage(Component.literal("- staged duel" + arenaLabel(pending.arenaName) + " from " + initiator + " | A: " + pendingDuelSideLabel(source.getServer(), pending, true) + " | B: " + pendingDuelSideLabel(source.getServer(), pending, false)).withStyle(ChatFormatting.LIGHT_PURPLE));
         }
         return 1;
     }
@@ -6047,6 +6100,14 @@ public class TameCommands {
     }
 
     private static int duelSessionCompact(CommandSourceStack source, String spec) {
+        return duelSessionCompact(source, spec, "");
+    }
+
+    private static int duelSessionCompactAtArena(CommandSourceStack source, String arenaName, String spec) {
+        return duelSessionCompact(source, spec, arenaName);
+    }
+
+    private static int duelSessionCompact(CommandSourceStack source, String spec, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         String[] parts = splitCompactVs(spec);
         if (parts == null) {
@@ -6061,9 +6122,9 @@ public class TameCommands {
             return error(owner, right.error);
         }
         if (left.targetPlayerNames.isEmpty() && right.targetPlayerNames.isEmpty()) {
-            return duelSessionStartSameOwner(source, left.selection, right.selection);
+            return duelSessionStartSameOwner(source, left.selection, right.selection, arenaName);
         }
-        return duelSessionCreatePendingCompact(source, left, right);
+        return duelSessionCreatePendingCompact(source, left, right, arenaName);
     }
 
     private static int duelSessionAcceptCompact(CommandSourceStack source, String spec) {
@@ -6087,6 +6148,10 @@ public class TameCommands {
     }
 
     private static int duelSessionStartSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection) {
+        return duelSessionStartSameOwner(source, leftSelection, rightSelection, "");
+    }
+
+    private static int duelSessionStartSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         TeamSelectionResult leftResult = resolveLoadedTeamSelection(source, owner, leftSelection);
         if (!leftResult.error.isBlank()) return error(owner, leftResult.error);
@@ -6098,27 +6163,41 @@ public class TameCommands {
         if (poolA.isEmpty() || poolB.isEmpty()) {
             return error(owner, "Both duel session sides need at least one unique loaded/alive participant.");
         }
+        ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), arenaName, true);
+        if (arenaName != null && !arenaName.isBlank() && arena == null) {
+            return error(owner, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
+        }
         ActiveDuelSession session = new ActiveDuelSession(
                 UUID.randomUUID(),
                 owner.getUUID(),
                 owner.getUUID(),
                 poolA,
                 poolB,
-                duelSessionSpawn(owner),
-                duelSessionSpawn(owner)
+                arena == null ? duelSessionSpawn(owner) : arena.spawnA,
+                arena == null ? duelSessionSpawn(owner) : arena.spawnB,
+                arena == null ? null : arena.waitingA,
+                arena == null ? null : arena.waitingB,
+                normalizeArenaName(arenaName)
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
         }
-        owner.sendSystemMessage(Component.literal("Duel session started: " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.GREEN));
+        owner.sendSystemMessage(Component.literal("Duel session started" + arenaLabel(arenaName) + ": " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.GREEN));
         startNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
 
     private static int duelSessionCreatePendingCompact(CommandSourceStack source, CompactDuelSideParseResult left, CompactDuelSideParseResult right) {
+        return duelSessionCreatePendingCompact(source, left, right, "");
+    }
+
+    private static int duelSessionCreatePendingCompact(CommandSourceStack source, CompactDuelSideParseResult left, CompactDuelSideParseResult right, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         if (playerHasAnyPendingDuelSession(owner.getUUID())) {
             return error(owner, "You already have a pending duel session invite.");
+        }
+        if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, true) == null) {
+            return error(owner, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
         }
 
         boolean leftIsInvite = left.targetPlayerNames.size() == 1 && !left.selection.includeSelf && left.selection.tameSelections.isEmpty();
@@ -6140,13 +6219,13 @@ public class TameCommands {
         if (playerHasAnyPendingDuelSession(target.getUUID()) || ACTIVE_DUEL_SESSION_BY_PLAYER.containsKey(target.getUUID())) {
             return error(owner, target.getGameProfile().getName() + " already has a pending or active duel session.");
         }
-        PendingDuelSession session = new PendingDuelSession(UUID.randomUUID(), owner.getUUID(), target.getUUID(), initiatorSideA, initiatorSelection);
+        PendingDuelSession session = new PendingDuelSession(UUID.randomUUID(), owner.getUUID(), target.getUUID(), initiatorSideA, initiatorSelection, normalizeArenaName(arenaName));
         PENDING_DUEL_SESSIONS.put(session.sessionId, session);
         PENDING_DUEL_SESSION_BY_PLAYER.put(owner.getUUID(), session.sessionId);
         PENDING_DUEL_SESSION_BY_PLAYER.put(target.getUUID(), session.sessionId);
-        target.sendSystemMessage(Component.literal(owner.getGameProfile().getName() + " invited you to a duel session.").withStyle(ChatFormatting.GOLD));
+        target.sendSystemMessage(Component.literal(owner.getGameProfile().getName() + " invited you to a duel session" + arenaLabel(session.arenaName) + ".").withStyle(ChatFormatting.GOLD));
         target.sendSystemMessage(Component.literal("Accept: /tames duelSession accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
-        owner.sendSystemMessage(Component.literal("Created duel session invite for " + target.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
+        owner.sendSystemMessage(Component.literal("Created duel session invite" + arenaLabel(session.arenaName) + " for " + target.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
@@ -6179,6 +6258,11 @@ public class TameCommands {
         if (poolA.isEmpty() || poolB.isEmpty()) {
             return error(player, "Both duel session sides need at least one unique loaded/alive participant.");
         }
+        ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), pending.arenaName, true);
+        if (!pending.arenaName.isBlank() && arena == null) {
+            removePendingDuelSession(pending.sessionId);
+            return error(player, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
+        }
 
         ActiveDuelSession session = new ActiveDuelSession(
                 pending.sessionId,
@@ -6186,15 +6270,18 @@ public class TameCommands {
                 pending.initiatorSideA ? player.getUUID() : initiator.getUUID(),
                 poolA,
                 poolB,
-                duelSessionSpawn(pending.initiatorSideA ? initiator : player),
-                duelSessionSpawn(pending.initiatorSideA ? player : initiator)
+                arena == null ? duelSessionSpawn(pending.initiatorSideA ? initiator : player) : arena.spawnA,
+                arena == null ? duelSessionSpawn(pending.initiatorSideA ? player : initiator) : arena.spawnB,
+                arena == null ? null : arena.waitingA,
+                arena == null ? null : arena.waitingB,
+                pending.arenaName
         );
         removePendingDuelSession(pending.sessionId);
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(player, "A duel or duel session is already active for one of those players.");
         }
-        initiator.sendSystemMessage(Component.literal("Duel session accepted by " + player.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
-        player.sendSystemMessage(Component.literal("Accepted duel session invite from " + initiator.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
+        initiator.sendSystemMessage(Component.literal("Duel session" + arenaLabel(pending.arenaName) + " accepted by " + player.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Accepted duel session invite" + arenaLabel(pending.arenaName) + " from " + initiator.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         startNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
@@ -6222,7 +6309,7 @@ public class TameCommands {
                 continue;
             }
             String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "unknown");
-            lines.add(Component.literal("- " + initiatorName + " invited you to a duel session.").withStyle(ChatFormatting.AQUA));
+            lines.add(Component.literal("- " + initiatorName + " invited you to a duel session" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.AQUA));
         }
         if (lines.isEmpty()) {
             return error(player, "No pending duel session invites.");
@@ -9680,6 +9767,7 @@ public class TameCommands {
     }
 
     private record SpawnTarget(ServerLevel level, Vec3 pos, float yRot, float xRot) {}
+    private record ArenaSpawnSet(String arenaName, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB) {}
 
     private static SpawnTarget resolveRespawnTarget(CommandSourceStack source, ServerPlayer player, TameData data, boolean toMe) {
         if (toMe || data == null) {
@@ -12173,10 +12261,18 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDuelKillNotifications(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelKillNotifications(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel kill notifications set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int duelToggleStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages).withStyle(ChatFormatting.YELLOW));
+        boolean killNotifications = PlayerDebugSettings.duelKillNotifications(p.getUUID());
+        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -17576,6 +17672,14 @@ public class TameCommands {
     }
 
     private static int duelCompact(CommandSourceStack source, String spec) {
+        return duelCompact(source, spec, "");
+    }
+
+    private static int duelCompactAtArena(CommandSourceStack source, String arenaName, String spec) {
+        return duelCompact(source, spec, arenaName);
+    }
+
+    private static int duelCompact(CommandSourceStack source, String spec, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         String[] parts = splitCompactVs(spec);
         if (parts == null) {
@@ -17594,9 +17698,9 @@ public class TameCommands {
             return error(owner, "The inviting command cannot choose tames for the opposing side. Invite those players and let them accept with their own selection.");
         }
         if (left.targetPlayerNames.isEmpty() && right.targetPlayerNames.isEmpty()) {
-            return duelStartCompactSameOwner(source, left.selection, right.selection);
+            return duelStartCompactSameOwner(source, left.selection, right.selection, arenaName);
         }
-        return duelCreatePendingCompactMatch(source, left, right);
+        return duelCreatePendingCompactMatch(source, left, right, arenaName);
     }
 
     private static int duelAcceptCompact(CommandSourceStack source, String spec) {
@@ -17617,6 +17721,10 @@ public class TameCommands {
     }
 
     private static int duelStartCompactSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection) {
+        return duelStartCompactSameOwner(source, leftSelection, rightSelection, "");
+    }
+
+    private static int duelStartCompactSameOwner(CommandSourceStack source, TeamSelection leftSelection, TeamSelection rightSelection, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         TeamSelectionResult leftResult = resolveLoadedTeamSelection(source, owner, leftSelection);
         if (!leftResult.error.isBlank()) return error(owner, leftResult.error);
@@ -17635,25 +17743,36 @@ public class TameCommands {
         if (rightIds.isEmpty()) {
             return error(owner, "Right duel team has no loaded/alive members after removing overlaps.");
         }
+        if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, false) == null) {
+            return error(owner, "Arena is missing required setA/setB positions.");
+        }
 
         prepareTeamForDuel(leftResult.tames);
         prepareTeamForDuel(rightResult.tames);
+        teleportArenaMembers(source.getServer(), arenaName, leftResult.members, rightResult.members);
         assignInitialDuelTargets(leftResult.tames, rightResult.members);
         assignInitialDuelTargets(rightResult.tames, leftResult.members);
 
         TameDuelManager.startTeamDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, Set.of(), false);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), DuelSpectators.empty(),
-                Component.literal("Duel started: " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.RED));
+                Component.literal(duelStartedLabel(leftResult.members, rightResult.members)).withStyle(ChatFormatting.RED));
         return 1;
     }
 
     private static int duelCreatePendingCompactMatch(CommandSourceStack source, CompactDuelSideParseResult left, CompactDuelSideParseResult right) {
+        return duelCreatePendingCompactMatch(source, left, right, "");
+    }
+
+    private static int duelCreatePendingCompactMatch(CommandSourceStack source, CompactDuelSideParseResult left, CompactDuelSideParseResult right, String arenaName) {
         ServerPlayer owner = source.getPlayer();
         cleanupExpiredDuelInvites();
         if (playerHasAnyPendingDuel(owner.getUUID())) {
             return error(owner, "You already have a pending duel invitation or staged duel.");
         }
-        PendingDuelMatch match = new PendingDuelMatch(UUID.randomUUID(), owner.getUUID(), DuelSpectators.empty(), System.currentTimeMillis());
+        if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, false) == null) {
+            return error(owner, "Arena is missing required setA/setB positions.");
+        }
+        PendingDuelMatch match = new PendingDuelMatch(UUID.randomUUID(), owner.getUUID(), DuelSpectators.empty(), normalizeArenaName(arenaName), System.currentTimeMillis());
         match.participants.put(owner.getUUID(), new PendingDuelParticipant(owner.getUUID(), true, owner.getUUID(), left.selection, true));
         PENDING_DUEL_MATCHES.put(match.matchId, match);
         PENDING_DUEL_MATCH_BY_PLAYER.put(owner.getUUID(), match.matchId);
@@ -17684,7 +17803,7 @@ public class TameCommands {
         }
 
         notifyPendingDuelInvites(source.getServer(), match, owner.getUUID());
-        owner.sendSystemMessage(Component.literal("Created pending duel: " + teamSelectionLabel(left.selection) + " vs " + pendingDuelSideLabel(source.getServer(), match, false) + ".").withStyle(ChatFormatting.GREEN));
+        owner.sendSystemMessage(Component.literal("Created pending duel" + arenaLabel(match.arenaName) + ": " + teamSelectionLabel(left.selection) + " vs " + pendingDuelSideLabel(source.getServer(), match, false) + ".").withStyle(ChatFormatting.GREEN));
         return tryStartPendingDuel(source, match);
     }
 
@@ -17727,6 +17846,9 @@ public class TameCommands {
     private static int tryStartPendingDuel(CommandSourceStack source, PendingDuelMatch match) {
         if (match == null) {
             return 0;
+        }
+        if (!match.arenaName.isBlank() && resolveArenaSpawns(source.getServer(), match.arenaName, false) == null) {
+            return error(source.getPlayer(), "Arena is missing required setA/setB positions.");
         }
         for (PendingDuelParticipant participant : match.participants.values()) {
             if (!participant.accepted || participant.acceptedSelection == null) {
@@ -17773,6 +17895,7 @@ public class TameCommands {
         }
         prepareTeamForDuel(sideATames);
         prepareTeamForDuel(sideBTames);
+        teleportArenaMembers(source.getServer(), match.arenaName, sideAMembers, sideBMembers);
         assignInitialDuelTargets(sideATames, sideBMembers);
         assignInitialDuelTargets(sideBTames, sideAMembers);
         UUID ownerA = sideAOwners.iterator().next();
@@ -17886,7 +18009,7 @@ public class TameCommands {
                 continue;
             }
             String invitedByName = resolveKnownOwnerName(server, participant.invitedBy, initiatorName);
-            player.sendSystemMessage(Component.literal(invitedByName + " invited you to a staged duel.").withStyle(ChatFormatting.GOLD));
+            player.sendSystemMessage(Component.literal(invitedByName + " invited you to a staged duel" + arenaLabel(match.arenaName) + ".").withStyle(ChatFormatting.GOLD));
             player.sendSystemMessage(Component.literal("Side A: " + sideALabel).withStyle(ChatFormatting.AQUA));
             player.sendSystemMessage(Component.literal("Side B: " + sideBLabel).withStyle(ChatFormatting.RED));
             player.sendSystemMessage(Component.literal("Accept: /tames duel accept " + initiatorName + " vs <your tames[, allyPlayer]>").withStyle(ChatFormatting.GREEN));
@@ -17918,7 +18041,7 @@ public class TameCommands {
         if (server == null || match == null) {
             return;
         }
-        Component line = Component.literal("Duel started: " + pendingDuelSideLabel(server, match, true) + " vs " + pendingDuelSideLabel(server, match, false) + ".").withStyle(ChatFormatting.RED);
+        Component line = Component.literal(duelStartedLabel(sideMembersForPendingDuel(server, match, true), sideMembersForPendingDuel(server, match, false))).withStyle(ChatFormatting.RED);
         for (UUID participantId : match.participants.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(participantId);
             if (player != null) {
@@ -18024,6 +18147,212 @@ public class TameCommands {
         return new SpawnTarget(level, new Vec3(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D), player.getYRot(), player.getXRot());
     }
 
+    private static void initArenaRegistry(MinecraftServer server) {
+        TameArenaRegistry.init(server);
+    }
+
+    private static String normalizeArenaName(String arenaName) {
+        return TameArenaRegistry.normalizeName(arenaName);
+    }
+
+    private static String arenaLabel(String arenaName) {
+        return arenaName == null || arenaName.isBlank() ? "" : " at arena " + arenaName;
+    }
+
+    private static int listArenas(CommandSourceStack source) {
+        initArenaRegistry(source.getServer());
+        List<String> names = TameArenaRegistry.getArenaNames();
+        ServerPlayer player = source.getPlayer();
+        if (names.isEmpty()) {
+            player.sendSystemMessage(Component.literal("No arenas configured.").withStyle(ChatFormatting.GRAY));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("Arenas: " + String.join(", ", names)).withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    private static int showArena(CommandSourceStack source, String arenaName) {
+        initArenaRegistry(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        TameArenaRegistry.TameArena arena = TameArenaRegistry.getArena(arenaName);
+        if (arena == null) {
+            return error(player, "Arena does not exist: " + arenaName + ".");
+        }
+        player.sendSystemMessage(Component.literal("Arena " + arena.name() + ":").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("A: " + arenaPointLabel(arena.spawnA())).withStyle(ChatFormatting.AQUA));
+        player.sendSystemMessage(Component.literal("B: " + arenaPointLabel(arena.spawnB())).withStyle(ChatFormatting.RED));
+        player.sendSystemMessage(Component.literal("WaitingA: " + arenaPointLabel(arena.waitingA())).withStyle(ChatFormatting.YELLOW));
+        player.sendSystemMessage(Component.literal("WaitingB: " + arenaPointLabel(arena.waitingB())).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int createArena(CommandSourceStack source, String arenaName) {
+        initArenaRegistry(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        String normalized = normalizeArenaName(arenaName);
+        if (normalized.isBlank()) {
+            return error(player, "Arena name cannot be blank.");
+        }
+        if (!TameArenaRegistry.createArena(normalized)) {
+            return error(player, "Arena already exists: " + normalized + ".");
+        }
+        player.sendSystemMessage(Component.literal("Created arena " + normalized + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int deleteArena(CommandSourceStack source, String arenaName) {
+        initArenaRegistry(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        String normalized = normalizeArenaName(arenaName);
+        if (!TameArenaRegistry.deleteArena(normalized)) {
+            return error(player, "Arena does not exist: " + normalized + ".");
+        }
+        player.sendSystemMessage(Component.literal("Deleted arena " + normalized + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setArenaSpawn(CommandSourceStack source, String arenaName, String slot) {
+        initArenaRegistry(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        String normalized = normalizeArenaName(arenaName);
+        TameArenaRegistry.TameArena existing = TameArenaRegistry.getArena(normalized);
+        if (existing == null) {
+            return error(player, "Arena does not exist: " + normalized + ".");
+        }
+        ResourceLocation dimensionId = player.serverLevel().dimension().location();
+        TameArenaRegistry.ArenaPoint point = new TameArenaRegistry.ArenaPoint(
+                dimensionId.toString(),
+                player.getX(),
+                player.getY(),
+                player.getZ(),
+                player.getYRot(),
+                player.getXRot()
+        );
+        TameArenaRegistry.TameArena updated;
+        updated = switch (slot) {
+            case "A" -> TameArenaRegistry.setSpawnA(normalized, point);
+            case "B" -> TameArenaRegistry.setSpawnB(normalized, point);
+            case "waitingA" -> TameArenaRegistry.setWaitingA(normalized, point);
+            case "waitingB" -> TameArenaRegistry.setWaitingB(normalized, point);
+            default -> null;
+        };
+        if (updated == null) {
+            return error(player, "Failed to update arena " + normalized + ".");
+        }
+        player.sendSystemMessage(Component.literal("Set " + slot + " for arena " + normalized + " to " + arenaPointLabel(point) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static String arenaPointLabel(TameArenaRegistry.ArenaPoint point) {
+        if (point == null || !point.isValid()) {
+            return "unset";
+        }
+        return point.dimensionId() + " @ " + fmt(point.x()) + ", " + fmt(point.y()) + ", " + fmt(point.z());
+    }
+
+    private static String duelStartedLabel(List<? extends LivingEntity> teamA, List<? extends LivingEntity> teamB) {
+        return "Duel Started: " + duelMemberNames(teamA) + " vs " + duelMemberNames(teamB) + ".";
+    }
+
+    private static String duelMemberNames(List<? extends LivingEntity> members) {
+        if (members == null || members.isEmpty()) {
+            return "-";
+        }
+        List<String> names = new ArrayList<>();
+        for (LivingEntity member : members) {
+            if (member == null) {
+                continue;
+            }
+            String name = member.getName().getString();
+            if (name != null && !name.isBlank()) {
+                names.add(name);
+            }
+        }
+        return names.isEmpty() ? "-" : String.join(", ", names);
+    }
+
+    private static List<LivingEntity> sideMembersForPendingDuel(MinecraftServer server, PendingDuelMatch match, boolean sideA) {
+        List<LivingEntity> members = new ArrayList<>();
+        if (server == null || match == null) {
+            return members;
+        }
+        for (PendingDuelParticipant participant : match.participants.values()) {
+            if (participant == null || participant.sideA != sideA || !participant.accepted || participant.acceptedSelection == null) {
+                continue;
+            }
+            ServerPlayer player = server.getPlayerList().getPlayer(participant.playerUuid);
+            if (player == null) {
+                continue;
+            }
+            TeamSelectionResult resolved = resolveLoadedTeamSelection(player.createCommandSourceStack(), player, participant.acceptedSelection);
+            if (!resolved.error.isBlank()) {
+                continue;
+            }
+            members.addAll(resolved.members);
+        }
+        return members;
+    }
+
+    private static ArenaSpawnSet resolveArenaSpawns(MinecraftServer server, String arenaName, boolean requireWaiting) {
+        String normalized = normalizeArenaName(arenaName);
+        if (server == null || normalized.isBlank()) {
+            return null;
+        }
+        initArenaRegistry(server);
+        TameArenaRegistry.TameArena arena = TameArenaRegistry.getArena(normalized);
+        if (arena == null || arena.spawnA() == null || arena.spawnB() == null) {
+            return null;
+        }
+        if (requireWaiting && (arena.waitingA() == null || arena.waitingB() == null)) {
+            return null;
+        }
+        SpawnTarget spawnA = toSpawnTarget(server, arena.spawnA());
+        SpawnTarget spawnB = toSpawnTarget(server, arena.spawnB());
+        SpawnTarget waitingA = toSpawnTarget(server, arena.waitingA());
+        SpawnTarget waitingB = toSpawnTarget(server, arena.waitingB());
+        if (spawnA == null || spawnB == null || (requireWaiting && (waitingA == null || waitingB == null))) {
+            return null;
+        }
+        return new ArenaSpawnSet(normalized, spawnA, spawnB, waitingA, waitingB);
+    }
+
+    private static SpawnTarget toSpawnTarget(MinecraftServer server, TameArenaRegistry.ArenaPoint point) {
+        if (server == null || point == null || !point.isValid()) {
+            return null;
+        }
+        ResourceLocation dimensionId = ResourceLocation.tryParse(point.dimensionId());
+        if (dimensionId == null) {
+            return null;
+        }
+        ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
+        if (level == null) {
+            return null;
+        }
+        return new SpawnTarget(level, new Vec3(point.x(), point.y(), point.z()), point.yRot(), point.xRot());
+    }
+
+    private static void teleportArenaMembers(MinecraftServer server, String arenaName, List<? extends LivingEntity> sideAMembers, List<? extends LivingEntity> sideBMembers) {
+        ArenaSpawnSet arena = resolveArenaSpawns(server, arenaName, false);
+        if (arena == null) {
+            return;
+        }
+        teleportArenaSide(sideAMembers, arena.spawnA);
+        teleportArenaSide(sideBMembers, arena.spawnB);
+    }
+
+    private static void teleportArenaSide(List<? extends LivingEntity> members, SpawnTarget target) {
+        if (members == null || target == null) {
+            return;
+        }
+        for (LivingEntity member : members) {
+            if (member instanceof ServerPlayer player) {
+                player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
+            } else if (member instanceof TamableAnimal tame) {
+                teleportTameToLocation(tame, target);
+            }
+        }
+    }
+
     private static void processDuelSessions(MinecraftServer server) {
         if (server == null || ACTIVE_DUEL_SESSIONS.isEmpty()) {
             return;
@@ -18089,7 +18418,7 @@ public class TameCommands {
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        notifyDuelSessionOwners(server, session, Component.literal("Duel session round started: " + round.teamA.size() + " vs " + round.teamB.size() + ".").withStyle(ChatFormatting.RED));
+        notifyDuelSessionOwners(server, session, Component.literal("Duel session round started" + arenaLabel(session.arenaName) + ": " + round.teamA.size() + " vs " + round.teamB.size() + ".").withStyle(ChatFormatting.RED));
         return true;
     }
 
@@ -18098,7 +18427,7 @@ public class TameCommands {
             return null;
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        boolean oneVOne = random.nextBoolean() || availableA.size() < 2 || availableB.size() < 2;
+        boolean oneVOne = random.nextDouble() < 0.70D || availableA.size() < 2 || availableB.size() < 2;
         boolean seedA = random.nextBoolean();
         List<UUID> seedPool = new ArrayList<>(seedA ? availableA : availableB);
         List<UUID> chasePool = new ArrayList<>(seedA ? availableB : availableA);
@@ -18242,11 +18571,11 @@ public class TameCommands {
         }
         Set<UUID> active = new HashSet<>(roundA);
         active.addAll(roundB);
-        teleportSessionPoolHome(server, session.ownerA, session.poolA, active);
+        teleportSessionPoolHome(server, session.ownerA, session.poolA, active, session.waitingA);
         if (!Objects.equals(session.ownerA, session.ownerB)) {
-            teleportSessionPoolHome(server, session.ownerB, session.poolB, active);
+            teleportSessionPoolHome(server, session.ownerB, session.poolB, active, session.waitingB);
         } else {
-            teleportSessionPoolHome(server, session.ownerB, session.poolB, active);
+            teleportSessionPoolHome(server, session.ownerB, session.poolB, active, session.waitingB);
         }
     }
 
@@ -18285,7 +18614,7 @@ public class TameCommands {
         }
     }
 
-    private static void teleportSessionPoolHome(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound) {
+    private static void teleportSessionPoolHome(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound, SpawnTarget waitingTarget) {
         if (server == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
@@ -18306,6 +18635,10 @@ public class TameCommands {
                 }
                 TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
                 if (tame == null || !tame.isAlive()) {
+                    continue;
+                }
+                if (waitingTarget != null) {
+                    teleportTameToLocation(tame, waitingTarget);
                     continue;
                 }
                 SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
@@ -19060,6 +19393,11 @@ public class TameCommands {
 
     private static CompletableFuture<Suggestions> suggestIncomingDuelChallengers(CommandSourceStack source, SuggestionsBuilder b) {
         return suggestIncomingDuelChallengers(source, b, DUEL_INVITES);
+    }
+
+    private static CompletableFuture<Suggestions> suggestArenaNames(CommandSourceStack source, SuggestionsBuilder b) {
+        initArenaRegistry(source.getServer());
+        return SharedSuggestionProvider.suggest(TameArenaRegistry.getArenaNames(), b);
     }
 
     private static CompletableFuture<Suggestions> suggestIncomingDuelSessionChallengers(CommandSourceStack source, SuggestionsBuilder b) {

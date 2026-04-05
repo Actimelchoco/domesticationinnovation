@@ -805,6 +805,9 @@ public final class TameDuelManager {
         for (UUID recipientId : recipients) {
             ServerPlayer player = server.getPlayerList().getPlayer(recipientId);
             if (player != null) {
+                if (!PlayerDebugSettings.duelKillNotifications(recipientId)) {
+                    continue;
+                }
                 Component line = eliminationLine(server, elimination, positive, PlayerDebugSettings.duelAssistMessages(recipientId));
                 if (line == null) {
                     continue;
@@ -896,8 +899,6 @@ public final class TameDuelManager {
             row = row.append(Component.literal(participant.displayName() + " ").withStyle(died ? ChatFormatting.DARK_RED : ChatFormatting.AQUA));
             if (!died && currentEntity != null) {
                 row = row.append(Component.literal("(" + formatHealth(currentEntity) + ") ").withStyle(ChatFormatting.RED));
-            } else if (died) {
-                row = row.append(Component.literal("(dead) ").withStyle(ChatFormatting.DARK_RED));
             }
             row = row
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
