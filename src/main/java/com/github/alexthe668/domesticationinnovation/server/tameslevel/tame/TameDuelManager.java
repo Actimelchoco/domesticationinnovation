@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
@@ -947,8 +948,8 @@ public final class TameDuelManager {
         if (teamA.died != teamB.died) {
             return teamA.died < teamB.died ? teamA : teamB;
         }
-        if (teamA.totalLevel != teamB.totalLevel) {
-            return teamA.totalLevel >= teamB.totalLevel ? teamA : teamB;
+        if (teamA.totalMmr != teamB.totalMmr) {
+            return teamA.totalMmr >= teamB.totalMmr ? teamA : teamB;
         }
         return teamA;
     }
@@ -956,10 +957,10 @@ public final class TameDuelManager {
     private static MutableComponent buildWinnerLoserLine(String label, TeamResult team, boolean winner) {
         MutableComponent line = Component.literal(label + ": ").withStyle(winner ? ChatFormatting.GREEN : ChatFormatting.RED)
                 .append(Component.literal(team.displayName).withStyle(winner ? ChatFormatting.AQUA : ChatFormatting.GRAY))
-                .append(Component.literal(" tames:").withStyle(ChatFormatting.WHITE))
-                .append(Component.literal(String.valueOf(team.tameCount)).withStyle(winner ? ChatFormatting.YELLOW : ChatFormatting.RED))
+                .append(Component.literal(" participants Count:").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(String.valueOf(team.participantCount)).withStyle(winner ? ChatFormatting.YELLOW : ChatFormatting.RED))
                 .append(Component.literal(" total mmr:").withStyle(ChatFormatting.WHITE))
-                .append(Component.literal(String.valueOf(team.totalLevel)).withStyle(ChatFormatting.YELLOW));
+                .append(Component.literal(String.valueOf(team.totalMmr)).withStyle(ChatFormatting.YELLOW));
         if (winner) {
             line.append(Component.literal(" Survived:").withStyle(ChatFormatting.WHITE))
                     .append(Component.literal(String.valueOf(team.survived)).withStyle(ChatFormatting.GREEN))
@@ -970,8 +971,8 @@ public final class TameDuelManager {
     }
 
     private static TeamResult summarizeTeam(MinecraftServer server, DuelBattle battle, Set<UUID> teamIds, UUID ownerId, String fallbackName) {
-        int tameCount = 0;
-        int totalLevel = 0;
+        int participantCount = 0;
+        int totalMmr = 0;
         int survived = 0;
         int died = 0;
         UUID highestId = null;
@@ -981,28 +982,22 @@ public final class TameDuelManager {
             if (participant == null) {
                 continue;
             }
-            if (!participant.player()) {
-                TameData data = tameDataForSummary(server, battle, participantId);
-                if (data == null) {
-                    continue;
-                }
-                DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
-                if (stats.deaths > 0) {
-                    died++;
-                } else {
-                    survived++;
-                }
-                tameCount++;
-                int evaluation = duelEvaluationForParticipant(server, battle, participantId);
-                totalLevel += evaluation;
-                if (evaluation > highestLevel) {
-                    highestLevel = evaluation;
-                    highestId = participantId;
-                }
+            DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
+            if (stats.deaths > 0) {
+                died++;
+            } else {
+                survived++;
+            }
+            participantCount++;
+            int evaluation = participantStoredDuelMmr(participantId);
+            totalMmr += Math.max(1, evaluation);
+            if (!participant.player() && evaluation > highestLevel) {
+                highestLevel = evaluation;
+                highestId = participantId;
             }
         }
         String displayName = teamDisplayName(server, battle, ownerId, highestId, fallbackName);
-        return new TeamResult(ownerId, displayName, tameCount, totalLevel, survived, died);
+        return new TeamResult(ownerId, displayName, participantCount, totalMmr, survived, died);
     }
 
     private static String teamDisplayName(MinecraftServer server, DuelBattle battle, UUID ownerId, UUID highestId, String fallbackName) {
@@ -1025,7 +1020,7 @@ public final class TameDuelManager {
         return "Team " + fallbackName;
     }
 
-    private record TeamResult(UUID ownerId, String displayName, int tameCount, int totalLevel, int survived, int died) {
+    private record TeamResult(UUID ownerId, String displayName, int participantCount, int totalMmr, int survived, int died) {
     }
 
     private record TeamBossStats(int total, int alive, int dead, List<UUID> top) {
@@ -1306,15 +1301,21 @@ public final class TameDuelManager {
         }
         ServerPlayer livePlayer = server == null ? null : server.getPlayerList().getPlayer(participantId);
         if (livePlayer != null) {
-            return playerMmrWeightFromStats(livePlayer.getMaxHealth(), livePlayer.getArmorValue(), livePlayer.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS));
+            PlayerDuelStats playerStats = TameRegistry.getPlayerDuelStats().get(participantId);
+            if (playerStats != null) {
+                return Math.max(0, playerStats.duelMmr);
+            }
         }
         CompoundTag snapshot = battle == null ? null : battle.playerSnapshots.get(participantId);
         if (snapshot != null && !snapshot.isEmpty()) {
-            return playerMmrWeightFromSnapshot(snapshot);
+            PlayerDuelStats playerStats = TameRegistry.getPlayerDuelStats().get(participantId);
+            if (playerStats != null) {
+                return Math.max(0, playerStats.duelMmr);
+            }
         }
         PlayerDuelStats player = TameRegistry.getPlayerDuelStats().get(participantId);
         if (player != null) {
-            return playerMmrWeightFromStats(20.0F, 0.0D, 0.0D);
+            return Math.max(0, player.duelMmr);
         }
         return PlayerDuelStats.DEFAULT_MMR;
     }
@@ -1430,6 +1431,7 @@ public final class TameDuelManager {
             tame.duelLosses += won ? 0 : 1;
             tame.duelCount += 1;
             tame.duelPoints += creditedPoints;
+            grantDuelXp(server, participantId, tame, mmrDelta, won);
             return;
         }
         String resolvedName = entityLabel(server, participantId);
@@ -1445,6 +1447,31 @@ public final class TameDuelManager {
         playerStats.duelLosses += won ? 0 : 1;
         playerStats.duelCount += 1;
         playerStats.duelPoints += Math.max(0.0D, stats.points);
+    }
+
+    private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, boolean won) {
+        if (participantId == null || tame == null) {
+            return;
+        }
+        int xpReward = duelXpReward(mmrDelta, won);
+        if (xpReward <= 0) {
+            return;
+        }
+        TamableAnimal loadedTame = findLoadedTame(server, participantId);
+        if (loadedTame != null) {
+            LevelSystem.grantXP(loadedTame, tame, xpReward);
+            return;
+        }
+        tame.xp = Math.max(0, tame.xp + xpReward);
+        tame.xpToNext = Math.max(1, LevelSystem.xpRequiredForLevel(Math.max(1, tame.level)));
+        TameRegistry.markDirty();
+    }
+
+    private static int duelXpReward(int mmrDelta, boolean won) {
+        if (!won) {
+            return 1;
+        }
+        return Math.max(1, Math.max(0, mmrDelta) / 10);
     }
 
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {

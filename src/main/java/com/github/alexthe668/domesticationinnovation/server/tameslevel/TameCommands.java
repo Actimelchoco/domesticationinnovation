@@ -144,6 +144,8 @@ public class TameCommands {
     private static final Map<UUID, UUID> PENDING_DUEL_MATCH_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, PendingDuelSession> PENDING_DUEL_SESSIONS = new HashMap<>();
     private static final Map<UUID, UUID> PENDING_DUEL_SESSION_BY_PLAYER = new HashMap<>();
+    private static final Map<UUID, PendingFfaDuelSession> PENDING_DUEL_SESSION_FFA = new HashMap<>();
+    private static final Map<UUID, UUID> PENDING_DUEL_SESSION_FFA_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, ActiveDuelSession> ACTIVE_DUEL_SESSIONS = new HashMap<>();
     private static final Map<UUID, UUID> ACTIVE_DUEL_SESSION_BY_PLAYER = new HashMap<>();
     private static final Set<UUID> SUPPRESSED_UNLOADED_TELEPORT_MESSAGES = new HashSet<>();
@@ -618,11 +620,40 @@ public class TameCommands {
         }
     }
 
+    private static final class PendingFfaParticipant {
+        private final UUID playerUuid;
+        private final UUID invitedBy;
+        private TeamSelection acceptedSelection;
+        private boolean accepted;
+
+        private PendingFfaParticipant(UUID playerUuid, UUID invitedBy, TeamSelection acceptedSelection, boolean accepted) {
+            this.playerUuid = playerUuid;
+            this.invitedBy = invitedBy;
+            this.acceptedSelection = acceptedSelection;
+            this.accepted = accepted;
+        }
+    }
+
+    private static final class PendingFfaDuelSession {
+        private final UUID sessionId;
+        private final UUID initiatorUuid;
+        private final String arenaName;
+        private final Map<UUID, PendingFfaParticipant> participants = new LinkedHashMap<>();
+
+        private PendingFfaDuelSession(UUID sessionId, UUID initiatorUuid, String arenaName) {
+            this.sessionId = sessionId;
+            this.initiatorUuid = initiatorUuid;
+            this.arenaName = arenaName == null ? "" : arenaName;
+        }
+    }
+
     private static final class ActiveDuelSession {
         private final UUID sessionId;
         private final UUID ownerA;
         private final UUID ownerB;
         private final String arenaName;
+        private final boolean freeForAll;
+        private final LinkedHashSet<UUID> sessionPlayers;
         private final LinkedHashSet<UUID> poolA;
         private final LinkedHashSet<UUID> poolB;
         private final SpawnTarget spawnA;
@@ -633,12 +664,15 @@ public class TameCommands {
         private Set<UUID> currentRoundB = Set.of();
         private long roundStartedAtTick = -1L;
         private long nextRoundAtTick = -1L;
+        private long nextIdleSitSyncTick = 0L;
 
-        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName) {
+        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> sessionPlayers, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName, boolean freeForAll) {
             this.sessionId = sessionId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
             this.arenaName = arenaName == null ? "" : arenaName;
+            this.freeForAll = freeForAll;
+            this.sessionPlayers = new LinkedHashSet<>(sessionPlayers == null ? Set.of(ownerA, ownerB) : sessionPlayers);
             this.poolA = new LinkedHashSet<>(poolA);
             this.poolB = new LinkedHashSet<>(poolB);
             this.spawnA = spawnA;
@@ -1055,6 +1089,14 @@ public class TameCommands {
                                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                                         .executes(ctx -> duelSessionCompactAtArena(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "arenaName"),
+                                                                StringArgumentType.getString(ctx, "spec")
+                                                        ))))
+                                        .then(Commands.literal("duelSessionFFA")
+                                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                                        .executes(ctx -> duelSessionFfaCompactAtArena(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "arenaName"),
                                                                 StringArgumentType.getString(ctx, "spec")
@@ -1543,6 +1585,31 @@ public class TameCommands {
                                         .executes(ctx -> duelSessionCompact(
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
+                                        ))))
+                        .then(Commands.literal("duelSessionFFA")
+                                .then(Commands.literal("accept")
+                                        .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestCompactDuelSessionAcceptSpec(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionFfaAcceptCompact(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "spec")
+                                                ))))
+                                .then(Commands.literal("decline")
+                                        .then(Commands.argument("player", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestIncomingDuelSessionFfaChallengers(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionFfaDecline(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "player")
+                                                ))))
+                                .then(Commands.literal("inbox")
+                                        .executes(ctx -> duelSessionFfaInbox(ctx.getSource())))
+                                .then(Commands.literal("ff")
+                                        .executes(ctx -> duelSessionForfeit(ctx.getSource())))
+                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSessionFfaSelection(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionFfaCompact(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "selection")
                                         ))))
                         .then(Commands.literal("duelToggle")
                                 .executes(ctx -> duelToggleStatus(ctx.getSource()))
@@ -6171,13 +6238,15 @@ public class TameCommands {
                 UUID.randomUUID(),
                 owner.getUUID(),
                 owner.getUUID(),
+                Set.of(owner.getUUID()),
                 poolA,
                 poolB,
                 arena == null ? duelSessionSpawn(owner) : arena.spawnA,
                 arena == null ? duelSessionSpawn(owner) : arena.spawnB,
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
-                normalizeArenaName(arenaName)
+                normalizeArenaName(arenaName),
+                false
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
@@ -6268,13 +6337,15 @@ public class TameCommands {
                 pending.sessionId,
                 pending.initiatorSideA ? initiator.getUUID() : player.getUUID(),
                 pending.initiatorSideA ? player.getUUID() : initiator.getUUID(),
+                Set.of(initiator.getUUID(), player.getUUID()),
                 poolA,
                 poolB,
                 arena == null ? duelSessionSpawn(pending.initiatorSideA ? initiator : player) : arena.spawnA,
                 arena == null ? duelSessionSpawn(pending.initiatorSideA ? player : initiator) : arena.spawnB,
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
-                pending.arenaName
+                pending.arenaName,
+                false
         );
         removePendingDuelSession(pending.sessionId);
         if (!registerActiveDuelSession(source.getServer(), session)) {
@@ -6321,6 +6392,230 @@ public class TameCommands {
         return 1;
     }
 
+    private static int duelSessionFfaCompact(CommandSourceStack source, String selectionSpec) {
+        return duelSessionFfaCompact(source, selectionSpec, "");
+    }
+
+    private static int duelSessionFfaCompactAtArena(CommandSourceStack source, String arenaName, String selectionSpec) {
+        return duelSessionFfaCompact(source, selectionSpec, arenaName);
+    }
+
+    private static int duelSessionFfaCompact(CommandSourceStack source, String selectionSpec, String arenaName) {
+        ServerPlayer owner = source.getPlayer();
+        CompactDuelSideParseResult parsed = parseCompactDuelSide(source, owner, selectionSpec);
+        if (!parsed.error.isBlank()) {
+            return error(owner, parsed.error);
+        }
+        if (parsed.targetPlayerNames.isEmpty()) {
+            return duelSessionFfaStartSameOwner(source, parsed.selection, arenaName);
+        }
+        return duelSessionFfaCreatePending(source, parsed, arenaName);
+    }
+
+    private static int duelSessionFfaStartSameOwner(CommandSourceStack source, TeamSelection selection) {
+        return duelSessionFfaStartSameOwner(source, selection, "");
+    }
+
+    private static int duelSessionFfaStartSameOwner(CommandSourceStack source, TeamSelection selection, String arenaName) {
+        ServerPlayer owner = source.getPlayer();
+        TeamSelectionResult resolved = resolveLoadedTeamSelection(source, owner, selection);
+        if (!resolved.error.isBlank()) return error(owner, resolved.error);
+        Set<UUID> pool = collectLivingEntityIds(resolved.members);
+        if (pool.size() < 2) {
+            return error(owner, "duelSessionFFA needs at least two unique loaded/alive participants.");
+        }
+        ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), arenaName, true);
+        if (arenaName != null && !arenaName.isBlank() && arena == null) {
+            return error(owner, "Arena duel session FFA requires setA, setB, setWaitingA, and setWaitingB.");
+        }
+        ActiveDuelSession session = new ActiveDuelSession(
+                UUID.randomUUID(),
+                owner.getUUID(),
+                owner.getUUID(),
+                Set.of(owner.getUUID()),
+                pool,
+                Set.of(),
+                arena == null ? duelSessionSpawn(owner) : arena.spawnA,
+                arena == null ? duelSessionSpawn(owner) : arena.spawnB,
+                arena == null ? null : arena.waitingA,
+                arena == null ? null : arena.waitingB,
+                normalizeArenaName(arenaName),
+                true
+        );
+        if (!registerActiveDuelSession(source.getServer(), session)) {
+            return error(owner, "A duel or duel session is already active for one of those players.");
+        }
+        owner.sendSystemMessage(Component.literal("Duel session FFA started" + arenaLabel(arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
+        startNextDuelSessionRound(source.getServer(), session);
+        return 1;
+    }
+
+    private static int duelSessionFfaCreatePending(CommandSourceStack source, CompactDuelSideParseResult parsed) {
+        return duelSessionFfaCreatePending(source, parsed, "");
+    }
+
+    private static int duelSessionFfaCreatePending(CommandSourceStack source, CompactDuelSideParseResult parsed, String arenaName) {
+        ServerPlayer owner = source.getPlayer();
+        if (playerHasAnyPendingDuelSession(owner.getUUID()) || playerHasAnyPendingFfaDuelSession(owner.getUUID())) {
+            return error(owner, "You already have a pending duel session invite.");
+        }
+        if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, true) == null) {
+            return error(owner, "Arena duel session FFA requires setA, setB, setWaitingA, and setWaitingB.");
+        }
+        PendingFfaDuelSession pending = new PendingFfaDuelSession(UUID.randomUUID(), owner.getUUID(), normalizeArenaName(arenaName));
+        pending.participants.put(owner.getUUID(), new PendingFfaParticipant(owner.getUUID(), owner.getUUID(), parsed.selection, true));
+        PENDING_DUEL_SESSION_FFA.put(pending.sessionId, pending);
+        PENDING_DUEL_SESSION_FFA_BY_PLAYER.put(owner.getUUID(), pending.sessionId);
+        for (String playerName : parsed.targetPlayerNames) {
+            ServerPlayer target = source.getServer().getPlayerList().getPlayerByName(playerName);
+            if (target == null) {
+                removePendingFfaDuelSession(pending.sessionId);
+                return error(owner, "Player is not online: " + playerName + ".");
+            }
+            if (playerHasAnyPendingDuelSession(target.getUUID()) || playerHasAnyPendingFfaDuelSession(target.getUUID()) || ACTIVE_DUEL_SESSION_BY_PLAYER.containsKey(target.getUUID())) {
+                removePendingFfaDuelSession(pending.sessionId);
+                return error(owner, target.getGameProfile().getName() + " already has a pending or active duel session.");
+            }
+            pending.participants.put(target.getUUID(), new PendingFfaParticipant(target.getUUID(), owner.getUUID(), null, false));
+            PENDING_DUEL_SESSION_FFA_BY_PLAYER.put(target.getUUID(), pending.sessionId);
+            target.sendSystemMessage(Component.literal(owner.getGameProfile().getName() + " invited you to a duel session FFA" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.GOLD));
+            target.sendSystemMessage(Component.literal("Accept: /tames duelSessionFFA accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
+        }
+        owner.sendSystemMessage(Component.literal("Created duel session FFA invite" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int duelSessionFfaAcceptCompact(CommandSourceStack source, String spec) {
+        ServerPlayer player = source.getPlayer();
+        String[] parts = splitCompactVs(spec);
+        if (parts == null) {
+            return error(player, "Use /tames duelSessionFFA accept <player> vs <your selection>.");
+        }
+        CompactDuelSideParseResult accepted = parseCompactDuelSide(source, player, parts[1]);
+        if (!accepted.error.isBlank()) {
+            return error(player, accepted.error);
+        }
+        if (!accepted.targetPlayerNames.isEmpty()) {
+            return error(player, "FFA acceptance only supports your own selection.");
+        }
+        return duelSessionFfaAcceptPending(source, parts[0].trim(), accepted.selection);
+    }
+
+    private static int duelSessionFfaAcceptPending(CommandSourceStack source, String challengerName, TeamSelection acceptedSelection) {
+        ServerPlayer player = source.getPlayer();
+        PendingFfaDuelSession pending = findPendingFfaDuelSessionForInvite(source, player, challengerName);
+        if (pending == null) {
+            return error(player, "No pending duel session FFA invite from " + challengerName + ".");
+        }
+        PendingFfaParticipant participant = pending.participants.get(player.getUUID());
+        if (participant == null) {
+            return error(player, "You are not part of that duel session FFA.");
+        }
+        participant.acceptedSelection = acceptedSelection;
+        participant.accepted = true;
+        return tryStartPendingFfaDuelSession(source, pending);
+    }
+
+    private static int tryStartPendingFfaDuelSession(CommandSourceStack source, PendingFfaDuelSession pending) {
+        if (pending == null) {
+            return 0;
+        }
+        for (PendingFfaParticipant participant : pending.participants.values()) {
+            if (!participant.accepted || participant.acceptedSelection == null) {
+                return 1;
+            }
+        }
+        LinkedHashSet<UUID> pool = new LinkedHashSet<>();
+        LinkedHashSet<UUID> sessionPlayers = new LinkedHashSet<>();
+        ServerPlayer initiator = source.getServer().getPlayerList().getPlayer(pending.initiatorUuid);
+        ServerPlayer second = initiator;
+        for (PendingFfaParticipant participant : pending.participants.values()) {
+            ServerPlayer player = source.getServer().getPlayerList().getPlayer(participant.playerUuid);
+            if (player == null) {
+                removePendingFfaDuelSession(pending.sessionId);
+                return error(source.getPlayer(), "Pending duel session FFA cannot start because a player went offline.");
+            }
+            TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, participant.acceptedSelection);
+            if (!resolved.error.isBlank()) {
+                return error(source.getPlayer(), player.getGameProfile().getName() + ": " + resolved.error);
+            }
+            pool.addAll(collectLivingEntityIds(resolved.members));
+            sessionPlayers.add(player.getUUID());
+            if (second == null || second.getUUID().equals(initiator == null ? null : initiator.getUUID())) {
+                if (initiator == null || !player.getUUID().equals(initiator.getUUID())) {
+                    second = player;
+                }
+            }
+        }
+        if (initiator == null) {
+            removePendingFfaDuelSession(pending.sessionId);
+            return error(source.getPlayer(), "The duel session FFA inviter is no longer online.");
+        }
+        if (pool.size() < 2) {
+            return error(source.getPlayer(), "duelSessionFFA needs at least two unique loaded/alive participants.");
+        }
+        if (second == null) {
+            second = initiator;
+        }
+        ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), pending.arenaName, true);
+        if (!pending.arenaName.isBlank() && arena == null) {
+            removePendingFfaDuelSession(pending.sessionId);
+            return error(source.getPlayer(), "Arena duel session FFA is missing spawn or waiting points.");
+        }
+        ActiveDuelSession session = new ActiveDuelSession(
+                pending.sessionId,
+                initiator.getUUID(),
+                second.getUUID(),
+                sessionPlayers,
+                pool,
+                Set.of(),
+                arena == null ? duelSessionSpawn(initiator) : arena.spawnA,
+                arena == null ? duelSessionSpawn(second) : arena.spawnB,
+                arena == null ? null : arena.waitingA,
+                arena == null ? null : arena.waitingB,
+                pending.arenaName,
+                true
+        );
+        removePendingFfaDuelSession(pending.sessionId);
+        if (!registerActiveDuelSession(source.getServer(), session)) {
+            return error(source.getPlayer(), "A duel or duel session is already active for one of those players.");
+        }
+        notifyDuelSessionOwners(source.getServer(), session, Component.literal("Duel session FFA started" + arenaLabel(pending.arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
+        startNextDuelSessionRound(source.getServer(), session);
+        return 1;
+    }
+
+    private static int duelSessionFfaDecline(CommandSourceStack source, String challengerName) {
+        ServerPlayer player = source.getPlayer();
+        PendingFfaDuelSession pending = findPendingFfaDuelSessionForInvite(source, player, challengerName);
+        if (pending == null) {
+            return error(player, "No pending duel session FFA invite from " + challengerName + ".");
+        }
+        removePendingFfaDuelSession(pending.sessionId);
+        notifyPendingFfaDuelSessionCancelled(source.getServer(), pending, player.getUUID());
+        return 1;
+    }
+
+    private static int duelSessionFfaInbox(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        List<Component> lines = new ArrayList<>();
+        for (PendingFfaDuelSession pending : PENDING_DUEL_SESSION_FFA.values()) {
+            if (pending == null || !pending.participants.containsKey(player.getUUID()) || player.getUUID().equals(pending.initiatorUuid)) {
+                continue;
+            }
+            String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "unknown");
+            lines.add(Component.literal("- " + initiatorName + " invited you to a duel session FFA" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.AQUA));
+        }
+        if (lines.isEmpty()) {
+            return error(player, "No pending duel session FFA invites.");
+        }
+        player.sendSystemMessage(Component.literal("Pending duel session FFA invites:").withStyle(ChatFormatting.GOLD));
+        for (Component line : lines) {
+            player.sendSystemMessage(line);
+        }
+        return 1;
+    }
+
     private static int duelSessionForfeit(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         UUID sessionId = ACTIVE_DUEL_SESSION_BY_PLAYER.get(player.getUUID());
@@ -6330,9 +6625,8 @@ public class TameCommands {
         ActiveDuelSession session = ACTIVE_DUEL_SESSIONS.remove(sessionId);
         unregisterActiveDuelSession(session);
         if (session != null) {
-            TameDuelManager.endDuelsForOwner(source.getServer(), session.ownerA);
-            if (!Objects.equals(session.ownerA, session.ownerB)) {
-                TameDuelManager.endDuelsForOwner(source.getServer(), session.ownerB);
+            for (UUID playerId : session.sessionPlayers) {
+                TameDuelManager.endDuelsForOwner(source.getServer(), playerId);
             }
             notifyDuelSessionOwners(source.getServer(), session, Component.literal("Duel session ended.").withStyle(ChatFormatting.YELLOW));
         }
@@ -6347,7 +6641,15 @@ public class TameCommands {
         if (session == null || session.currentRoundA.isEmpty() || session.currentRoundB.isEmpty()) {
             return false;
         }
-        boolean sideA = player.getUUID().equals(session.ownerA) || Objects.equals(session.ownerA, session.ownerB);
+        boolean sideA;
+        if (!session.freeForAll) {
+            sideA = player.getUUID().equals(session.ownerA) || Objects.equals(session.ownerA, session.ownerB);
+        } else {
+            sideA = ownsAnyRoundParticipant(source.getServer(), player.getUUID(), session.currentRoundA);
+            if (!sideA && !ownsAnyRoundParticipant(source.getServer(), player.getUUID(), session.currentRoundB)) {
+                return false;
+            }
+        }
         Set<UUID> losing = sideA ? session.currentRoundA : session.currentRoundB;
         boolean ended = forceEndDuelSessionSide(source.getServer(), losing);
         if (ended) {
@@ -11746,21 +12048,80 @@ public class TameCommands {
 
     private static void teleportTameToLocation(TamableAnimal tame, SpawnTarget target) {
         if (tame == null || target == null || target.level == null || target.pos == null) return;
+        SpawnTarget resolvedTarget = findSafeTameTeleportTarget(tame, target);
+        if (resolvedTarget == null) {
+            resolvedTarget = target;
+        }
         TameData data = TameRegistry.get(tame.getUUID());
         clearGuardianAnchor(data);
         TameTransferService.TransferResult result = TameTransferService.transferToLocation(
                 tame,
-                target.level,
-                target.pos.x,
-                target.pos.y,
-                target.pos.z,
-                target.yRot,
-                target.xRot,
+                resolvedTarget.level,
+                resolvedTarget.pos.x,
+                resolvedTarget.pos.y,
+                resolvedTarget.pos.z,
+                resolvedTarget.yRot,
+                resolvedTarget.xRot,
                 data
         );
         if (!result.success()) {
             System.err.println("[TamesLevel] Command tphome failed for tame " + tame.getUUID() + ": " + result.error());
         }
+    }
+
+    private static SpawnTarget findSafeTameTeleportTarget(TamableAnimal tame, SpawnTarget target) {
+        if (tame == null || target == null || target.level == null || target.pos == null) {
+            return target;
+        }
+        int baseX = Mth.floor(target.pos.x);
+        int baseY = Mth.floor(target.pos.y);
+        int baseZ = Mth.floor(target.pos.z);
+        int hash = Math.floorMod(tame.getUUID().hashCode(), 25);
+        List<BlockPos> candidates = new ArrayList<>(25);
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                        continue;
+                    }
+                    candidates.add(new BlockPos(baseX + dx, baseY, baseZ + dz));
+                }
+            }
+        }
+        if (!candidates.isEmpty()) {
+            java.util.Collections.rotate(candidates, hash);
+        }
+        for (BlockPos candidate : candidates) {
+            SpawnTarget safe = safeTeleportTargetAt(tame, target, candidate);
+            if (safe != null) {
+                return safe;
+            }
+        }
+        return target;
+    }
+
+    private static SpawnTarget safeTeleportTargetAt(TamableAnimal tame, SpawnTarget original, BlockPos candidateBase) {
+        if (tame == null || original == null || original.level == null || candidateBase == null) {
+            return null;
+        }
+        ServerLevel level = original.level;
+        for (int dy = -1; dy <= 1; dy++) {
+            BlockPos feet = candidateBase.offset(0, dy, 0);
+            BlockPos head = feet.above();
+            if (!level.getBlockState(feet).canBeReplaced() || !level.getBlockState(head).canBeReplaced()) {
+                continue;
+            }
+            Vec3 pos = new Vec3(feet.getX() + 0.5D, feet.getY(), feet.getZ() + 0.5D);
+            AABB box = tame.getDimensions(tame.getPose()).makeBoundingBox(pos.x, pos.y, pos.z);
+            if (!level.noCollision(tame, box)) {
+                continue;
+            }
+            if (!level.getEntities(tame, box.inflate(0.05D), entity -> entity instanceof LivingEntity && entity.isAlive()).isEmpty()) {
+                continue;
+            }
+            return new SpawnTarget(level, pos, original.yRot, original.xRot);
+        }
+        return null;
     }
 
     public static boolean autoFollowTeleportUnloadedToOwner(ServerPlayer owner, TameData data) {
@@ -11942,8 +12303,16 @@ public class TameCommands {
         String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
         p.sendSystemMessage(Component.literal("---- Duel Leaderboard (" + m + ") | " + scope + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("mmr / wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
+        String activeRankBucket = null;
         for (int i = 0; i < limit; i++) {
             DuelLeaderboardEntry entry = entries.get(i);
+            if (m.equals("mmr")) {
+                DuelLeaderboardRankBucket rankBucket = duelLeaderboardRankBucket(entry.mmr());
+                if (!rankBucket.label().equals(activeRankBucket)) {
+                    activeRankBucket = rankBucket.label();
+                    p.sendSystemMessage(Component.literal("---" + activeRankBucket + ":---").withStyle(rankBucket.color()));
+                }
+            }
             MutableComponent line = Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
                     .append(Component.literal("(" + ownerInitials(source.getServer(), entry.ownerUuid()) + ") ").withStyle(ChatFormatting.GRAY));
             if (entry.player()) {
@@ -11975,6 +12344,44 @@ public class TameCommands {
             p.sendSystemMessage(line);
         }
         return 1;
+    }
+
+    private record DuelLeaderboardRankBucket(String label, ChatFormatting color, int minMmr) {
+    }
+
+    private static final List<DuelLeaderboardRankBucket> DUEL_LEADERBOARD_RANKS = List.of(
+            new DuelLeaderboardRankBucket("SSL", ChatFormatting.LIGHT_PURPLE, 1900),
+            new DuelLeaderboardRankBucket("GC3", ChatFormatting.RED, 1800),
+            new DuelLeaderboardRankBucket("GC2", ChatFormatting.RED, 1700),
+            new DuelLeaderboardRankBucket("GC1", ChatFormatting.RED, 1600),
+            new DuelLeaderboardRankBucket("C3", ChatFormatting.DARK_PURPLE, 1500),
+            new DuelLeaderboardRankBucket("C2", ChatFormatting.DARK_PURPLE, 1400),
+            new DuelLeaderboardRankBucket("C1", ChatFormatting.DARK_PURPLE, 1300),
+            new DuelLeaderboardRankBucket("D3", ChatFormatting.AQUA, 1200),
+            new DuelLeaderboardRankBucket("D2", ChatFormatting.AQUA, 1125),
+            new DuelLeaderboardRankBucket("D1", ChatFormatting.AQUA, 1050),
+            new DuelLeaderboardRankBucket("P3", ChatFormatting.BLUE, 975),
+            new DuelLeaderboardRankBucket("P2", ChatFormatting.BLUE, 900),
+            new DuelLeaderboardRankBucket("P1", ChatFormatting.BLUE, 825),
+            new DuelLeaderboardRankBucket("G3", ChatFormatting.GOLD, 750),
+            new DuelLeaderboardRankBucket("G2", ChatFormatting.GOLD, 675),
+            new DuelLeaderboardRankBucket("G1", ChatFormatting.GOLD, 600),
+            new DuelLeaderboardRankBucket("S3", ChatFormatting.GRAY, 525),
+            new DuelLeaderboardRankBucket("S2", ChatFormatting.GRAY, 450),
+            new DuelLeaderboardRankBucket("S1", ChatFormatting.GRAY, 375),
+            new DuelLeaderboardRankBucket("B3", ChatFormatting.DARK_RED, 250),
+            new DuelLeaderboardRankBucket("B2", ChatFormatting.DARK_RED, 125),
+            new DuelLeaderboardRankBucket("B1", ChatFormatting.DARK_RED, Integer.MIN_VALUE)
+    );
+
+    private static DuelLeaderboardRankBucket duelLeaderboardRankBucket(int mmr) {
+        int safeMmr = Math.max(0, mmr);
+        for (DuelLeaderboardRankBucket bucket : DUEL_LEADERBOARD_RANKS) {
+            if (safeMmr >= bucket.minMmr()) {
+                return bucket;
+            }
+        }
+        return DUEL_LEADERBOARD_RANKS.get(DUEL_LEADERBOARD_RANKS.size() - 1);
     }
 
     private static void sortDuelLeaderboardEntries(List<DuelLeaderboardEntry> entries, String mode) {
@@ -18081,8 +18488,55 @@ public class TameCommands {
         return null;
     }
 
+    private static PendingFfaDuelSession findPendingFfaDuelSessionForInvite(CommandSourceStack source, ServerPlayer player, String challengerName) {
+        UUID sessionId = PENDING_DUEL_SESSION_FFA_BY_PLAYER.get(player.getUUID());
+        if (sessionId == null) {
+            return null;
+        }
+        PendingFfaDuelSession pending = PENDING_DUEL_SESSION_FFA.get(sessionId);
+        if (pending == null) {
+            PENDING_DUEL_SESSION_FFA_BY_PLAYER.remove(player.getUUID());
+            return null;
+        }
+        String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+        return initiatorName.equalsIgnoreCase(challengerName) ? pending : null;
+    }
+
+    private static boolean playerHasAnyPendingFfaDuelSession(UUID playerUuid) {
+        return playerUuid != null && PENDING_DUEL_SESSION_FFA_BY_PLAYER.containsKey(playerUuid);
+    }
+
+    private static void removePendingFfaDuelSession(UUID sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+        PendingFfaDuelSession removed = PENDING_DUEL_SESSION_FFA.remove(sessionId);
+        if (removed == null) {
+            return;
+        }
+        for (UUID participantId : removed.participants.keySet()) {
+            if (sessionId.equals(PENDING_DUEL_SESSION_FFA_BY_PLAYER.get(participantId))) {
+                PENDING_DUEL_SESSION_FFA_BY_PLAYER.remove(participantId);
+            }
+        }
+    }
+
+    private static void notifyPendingFfaDuelSessionCancelled(MinecraftServer server, PendingFfaDuelSession pending, UUID decliningPlayerId) {
+        if (server == null || pending == null) {
+            return;
+        }
+        String decliningName = resolveKnownOwnerName(server, decliningPlayerId, "A player");
+        Component line = Component.literal("Duel session FFA cancelled because " + decliningName + " declined the invitation.").withStyle(ChatFormatting.YELLOW);
+        for (UUID participantId : pending.participants.keySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(participantId);
+            if (player != null) {
+                player.sendSystemMessage(line);
+            }
+        }
+    }
+
     private static boolean playerHasAnyPendingDuelSession(UUID playerUuid) {
-        return playerUuid != null && PENDING_DUEL_SESSION_BY_PLAYER.containsKey(playerUuid);
+        return playerUuid != null && (PENDING_DUEL_SESSION_BY_PLAYER.containsKey(playerUuid) || PENDING_DUEL_SESSION_FFA_BY_PLAYER.containsKey(playerUuid));
     }
 
     private static void removePendingDuelSession(UUID sessionId) {
@@ -18117,15 +18571,15 @@ public class TameCommands {
         if (server == null || session == null) {
             return false;
         }
-        if (ACTIVE_DUEL_SESSION_BY_PLAYER.containsKey(session.ownerA) || ACTIVE_DUEL_SESSION_BY_PLAYER.containsKey(session.ownerB)) {
-            return false;
-        }
-        if (TameDuelManager.isEntityInDuel(session.ownerA) || TameDuelManager.isEntityInDuel(session.ownerB)) {
-            return false;
+        for (UUID playerId : session.sessionPlayers) {
+            if (ACTIVE_DUEL_SESSION_BY_PLAYER.containsKey(playerId) || TameDuelManager.isEntityInDuel(playerId)) {
+                return false;
+            }
         }
         ACTIVE_DUEL_SESSIONS.put(session.sessionId, session);
-        ACTIVE_DUEL_SESSION_BY_PLAYER.put(session.ownerA, session.sessionId);
-        ACTIVE_DUEL_SESSION_BY_PLAYER.put(session.ownerB, session.sessionId);
+        for (UUID playerId : session.sessionPlayers) {
+            ACTIVE_DUEL_SESSION_BY_PLAYER.put(playerId, session.sessionId);
+        }
         return true;
     }
 
@@ -18133,11 +18587,10 @@ public class TameCommands {
         if (session == null) {
             return;
         }
-        if (Objects.equals(ACTIVE_DUEL_SESSION_BY_PLAYER.get(session.ownerA), session.sessionId)) {
-            ACTIVE_DUEL_SESSION_BY_PLAYER.remove(session.ownerA);
-        }
-        if (Objects.equals(ACTIVE_DUEL_SESSION_BY_PLAYER.get(session.ownerB), session.sessionId)) {
-            ACTIVE_DUEL_SESSION_BY_PLAYER.remove(session.ownerB);
+        for (UUID playerId : session.sessionPlayers) {
+            if (Objects.equals(ACTIVE_DUEL_SESSION_BY_PLAYER.get(playerId), session.sessionId)) {
+                ACTIVE_DUEL_SESSION_BY_PLAYER.remove(playerId);
+            }
         }
     }
 
@@ -18364,7 +18817,10 @@ public class TameCommands {
             if (session == null) {
                 continue;
             }
-            syncIdleDuelSessionTames(server, session);
+            if (now >= session.nextIdleSitSyncTick) {
+                syncIdleDuelSessionTames(server, session);
+                session.nextIdleSitSyncTick = now + 20L;
+            }
             if (session.currentRoundA.isEmpty() || session.currentRoundB.isEmpty()) {
                 if (session.nextRoundAtTick >= 0L && now >= session.nextRoundAtTick) {
                     if (!startNextDuelSessionRound(server, session)) {
@@ -18397,12 +18853,21 @@ public class TameCommands {
         if (server == null || session == null) {
             return false;
         }
-        List<UUID> availableA = availableSessionParticipants(server, session.poolA);
-        List<UUID> availableB = availableSessionParticipants(server, session.poolB);
-        if (availableA.isEmpty() || availableB.isEmpty()) {
-            return false;
+        DuelSessionRound round;
+        if (session.freeForAll) {
+            List<UUID> available = availableSessionParticipants(server, session.poolA);
+            if (available.size() < 2) {
+                return false;
+            }
+            round = createFfaDuelSessionRound(server, available);
+        } else {
+            List<UUID> availableA = availableSessionParticipants(server, session.poolA);
+            List<UUID> availableB = availableSessionParticipants(server, session.poolB);
+            if (availableA.isEmpty() || availableB.isEmpty()) {
+                return false;
+            }
+            round = createDuelSessionRound(server, availableA, availableB);
         }
-        DuelSessionRound round = createDuelSessionRound(server, availableA, availableB);
         if (round == null || round.teamA.isEmpty() || round.teamB.isEmpty()) {
             return false;
         }
@@ -18413,12 +18878,15 @@ public class TameCommands {
         prepareTeamForDuel(resolveLoadedRoundTames(server, round.teamB));
         assignInitialDuelTargets(resolveLoadedRoundTames(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB));
         assignInitialDuelTargets(resolveLoadedRoundTames(server, round.teamB), resolveLoadedRoundMembers(server, round.teamA));
-        TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, Set.of(), false);
+        LinkedHashSet<UUID> spectators = new LinkedHashSet<>(session.sessionPlayers);
+        spectators.remove(session.ownerA);
+        spectators.remove(session.ownerB);
+        TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, spectators, false);
         session.currentRoundA = Set.copyOf(round.teamA);
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        notifyDuelSessionOwners(server, session, Component.literal("Duel session round started" + arenaLabel(session.arenaName) + ": " + round.teamA.size() + " vs " + round.teamB.size() + ".").withStyle(ChatFormatting.RED));
+        notifyDuelSessionOwners(server, session, Component.literal(duelStartedLabel(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB))).withStyle(ChatFormatting.RED));
         return true;
     }
 
@@ -18463,6 +18931,51 @@ public class TameCommands {
             return new DuelSessionRound(seedTeam, chaseTeam);
         }
         return new DuelSessionRound(chaseTeam, seedTeam);
+    }
+
+    private static DuelSessionRound createFfaDuelSessionRound(MinecraftServer server, List<UUID> available) {
+        if (available == null || available.size() < 2) {
+            return null;
+        }
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        List<UUID> shuffled = new ArrayList<>(available);
+        java.util.Collections.shuffle(shuffled, random);
+        boolean oneVOne = random.nextDouble() < 0.70D || shuffled.size() < 4;
+        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+        if (oneVOne) {
+            teamA.add(shuffled.get(0));
+            UUID closest = closestPowerParticipant(server, shuffled.subList(1, shuffled.size()), sessionParticipantPower(server, shuffled.get(0)));
+            if (closest == null) {
+                closest = shuffled.get(1);
+            }
+            teamB.add(closest);
+            return new DuelSessionRound(teamA, teamB);
+        }
+        int desiredA = Math.max(1, Math.min(shuffled.size() - 1, 2 + random.nextInt(Math.max(1, shuffled.size() - 2))));
+        for (int i = 0; i < desiredA; i++) {
+            teamA.add(shuffled.get(i));
+        }
+        double teamAPower = sessionPowerTotal(server, teamA);
+        for (int i = desiredA; i < shuffled.size(); i++) {
+            UUID candidate = shuffled.get(i);
+            if (teamA.contains(candidate)) {
+                continue;
+            }
+            teamB.add(candidate);
+            if (sessionPowerTotal(server, teamB) >= teamAPower) {
+                break;
+            }
+        }
+        if (teamB.isEmpty()) {
+            for (UUID candidate : shuffled) {
+                if (!teamA.contains(candidate)) {
+                    teamB.add(candidate);
+                    break;
+                }
+            }
+        }
+        return teamA.isEmpty() || teamB.isEmpty() ? null : new DuelSessionRound(teamA, teamB);
     }
 
     private static UUID closestPowerParticipant(MinecraftServer server, List<UUID> candidates, double targetPower) {
@@ -18707,18 +19220,38 @@ public class TameCommands {
         return changed;
     }
 
+    private static boolean ownsAnyRoundParticipant(MinecraftServer server, UUID playerId, Set<UUID> participants) {
+        if (playerId == null || participants == null) {
+            return false;
+        }
+        for (UUID participantId : participants) {
+            if (playerId.equals(participantOwnerForSession(server, participantId))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static UUID participantOwnerForSession(MinecraftServer server, UUID participantId) {
+        if (participantId == null) {
+            return null;
+        }
+        ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(participantId);
+        if (player != null) {
+            return player.getUUID();
+        }
+        TameData data = TameRegistry.get(participantId);
+        return data == null ? null : data.ownerUUID;
+    }
+
     private static void notifyDuelSessionOwners(MinecraftServer server, ActiveDuelSession session, Component line) {
         if (server == null || session == null || line == null) {
             return;
         }
-        ServerPlayer ownerA = server.getPlayerList().getPlayer(session.ownerA);
-        if (ownerA != null) {
-            ownerA.sendSystemMessage(line);
-        }
-        if (!Objects.equals(session.ownerA, session.ownerB)) {
-            ServerPlayer ownerB = server.getPlayerList().getPlayer(session.ownerB);
-            if (ownerB != null) {
-                ownerB.sendSystemMessage(line);
+        for (UUID playerId : session.sessionPlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                player.sendSystemMessage(line);
             }
         }
     }
@@ -19410,6 +19943,32 @@ public class TameCommands {
         String challengerName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
         if (!challengerName.isBlank()) {
             suggestCommandString(b, challengerName);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestIncomingDuelSessionFfaChallengers(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return b.buildFuture();
+        UUID sessionId = PENDING_DUEL_SESSION_FFA_BY_PLAYER.get(player.getUUID());
+        if (sessionId == null) return b.buildFuture();
+        PendingFfaDuelSession pending = PENDING_DUEL_SESSION_FFA.get(sessionId);
+        if (pending == null || player.getUUID().equals(pending.initiatorUuid) || !pending.participants.containsKey(player.getUUID())) return b.buildFuture();
+        String challengerName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+        if (!challengerName.isBlank()) {
+            suggestCommandString(b, challengerName);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestCompactDuelSessionFfaSelection(CommandSourceStack source, SuggestionsBuilder b) {
+        List<String> values = new ArrayList<>();
+        values.add("myself");
+        values.add("myself, group guards");
+        values.add("myself, type wolf");
+        values.add("myself, " + source.getPlayer().getGameProfile().getName());
+        for (String value : values) {
+            suggestCommandString(b, value);
         }
         return b.buildFuture();
     }

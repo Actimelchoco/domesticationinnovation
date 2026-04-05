@@ -15,6 +15,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.block.model.ItemTransforms;
 import net.minecraft.client.renderer.entity.EntityRenderers;
@@ -27,17 +28,20 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.*;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -57,6 +61,7 @@ public class ClientProxy extends CommonProxy {
 
     public static final Map<Integer, DiscJockeySound> DISC_JOCKEY_SOUND_MAP = new HashMap<>();
     public static Map<Entity, int[]> shadowPunchRenderData = new HashMap<>();
+    private static int lockedSpyglassTameId = -1;
 
     @SubscribeEvent
     @OnlyIn(Dist.CLIENT)
@@ -158,6 +163,83 @@ public class ClientProxy extends CommonProxy {
                 Minecraft.getInstance().gameMode.attack(player, entityhitresult.getEntity());
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null || minecraft.level == null) {
+            lockedSpyglassTameId = -1;
+            return;
+        }
+        if (!hasSpyglassInHand(player)) {
+            lockedSpyglassTameId = -1;
+            return;
+        }
+        if (!isUsingSpyglass(player)) {
+            Entity locked = lockedSpyglassTameId < 0 ? null : minecraft.level.getEntity(lockedSpyglassTameId);
+            if (!(locked instanceof TamableAnimal tame) || !tame.isAlive()) {
+                lockedSpyglassTameId = -1;
+            }
+            return;
+        }
+        TamableAnimal aimedTame = aimedSpyglassTame(minecraft, player);
+        if (aimedTame != null) {
+            lockedSpyglassTameId = aimedTame.getId();
+            return;
+        }
+        Entity locked = lockedSpyglassTameId < 0 ? null : minecraft.level.getEntity(lockedSpyglassTameId);
+        if (!(locked instanceof TamableAnimal tame) || !tame.isAlive()) {
+            lockedSpyglassTameId = -1;
+        }
+    }
+
+    @SubscribeEvent
+    public void onRenderGuiOverlay(RenderGuiOverlayEvent.Post event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null || minecraft.level == null || lockedSpyglassTameId < 0 || !hasSpyglassInHand(player)) {
+            return;
+        }
+        Entity entity = minecraft.level.getEntity(lockedSpyglassTameId);
+        if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
+            lockedSpyglassTameId = -1;
+            return;
+        }
+        GuiGraphics graphics = event.getGuiGraphics();
+        Font font = minecraft.font;
+        String label = tame.getName().getString() + " " + Math.round(tame.getHealth()) + "/" + Math.round(tame.getMaxHealth());
+        int x = (minecraft.getWindow().getGuiScaledWidth() - font.width(label)) / 2;
+        int y = 18;
+        graphics.drawString(font, label, x, y, 0xFFFFFF, true);
+    }
+
+    private static boolean hasSpyglassInHand(Player player) {
+        return player != null && (player.getMainHandItem().is(Items.SPYGLASS) || player.getOffhandItem().is(Items.SPYGLASS));
+    }
+
+    private static boolean isUsingSpyglass(Player player) {
+        return player != null && player.isUsingItem() && player.getUseItem().is(Items.SPYGLASS);
+    }
+
+    private static TamableAnimal aimedSpyglassTame(Minecraft minecraft, Player player) {
+        if (minecraft == null || player == null) {
+            return null;
+        }
+        if (minecraft.hitResult instanceof EntityHitResult entityHitResult && entityHitResult.getEntity() instanceof TamableAnimal tame && tame.isAlive()) {
+            return tame;
+        }
+        Vec3 from = player.getEyePosition(1.0F);
+        Vec3 look = player.getViewVector(1.0F);
+        double range = 64.0D;
+        Vec3 to = from.add(look.scale(range));
+        AABB box = player.getBoundingBox().expandTowards(look.scale(range)).inflate(1.0D);
+        EntityHitResult result = ProjectileUtil.getEntityHitResult(player, from, to, box, entity -> entity instanceof TamableAnimal tamable && tamable.isAlive(), range * range);
+        return result != null && result.getEntity() instanceof TamableAnimal tame ? tame : null;
     }
 
     private void renderNametagEnchantments(Entity entity, Component nameTag, PoseStack pose, MultiBufferSource buffer, int lightIn) {

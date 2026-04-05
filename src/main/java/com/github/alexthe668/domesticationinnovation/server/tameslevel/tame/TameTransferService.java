@@ -6,12 +6,14 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGo
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +38,10 @@ public final class TameTransferService {
         }
 
         boolean crossDimension = !tame.level().dimension().equals(player.level().dimension());
+        List<double[]> attempts = transferAttempts(player.serverLevel(), tame, player.getX(), player.getY(), player.getZ());
         if (!crossDimension) {
-            tame.teleportTo(player.getX(), player.getY(), player.getZ());
+            double[] dest = attempts.isEmpty() ? new double[]{player.getX(), player.getY(), player.getZ()} : attempts.get(0);
+            tame.teleportTo(dest[0], dest[1], dest[2]);
             normalizeTransferredTame(tame, data);
             refreshLastKnown(data, tame, player.serverLevel());
             return new TransferResult(tame, false, "");
@@ -52,7 +56,6 @@ public final class TameTransferService {
         DyeColor collar = tame instanceof Wolf wolf ? wolf.getCollarColor() : null;
 
         ServerLevel targetLevel = player.serverLevel();
-        List<double[]> attempts = transferAttempts(player);
         for (double[] pos : attempts) {
             Entity created = tame.getType().create(targetLevel);
             if (!(created instanceof TamableAnimal moved)) {
@@ -100,8 +103,10 @@ public final class TameTransferService {
         }
 
         boolean crossDimension = !tame.level().dimension().equals(targetLevel.dimension());
+        List<double[]> attempts = transferAttempts(targetLevel, tame, x, y, z);
         if (!crossDimension) {
-            tame.teleportTo(x, y, z);
+            double[] dest = attempts.isEmpty() ? new double[]{x, y, z} : attempts.get(0);
+            tame.teleportTo(dest[0], dest[1], dest[2]);
             tame.setYRot(yRot);
             tame.setXRot(xRot);
             normalizeTransferredTame(tame, data);
@@ -116,13 +121,6 @@ public final class TameTransferService {
             ownerId = data.ownerUUID;
         }
         DyeColor collar = tame instanceof Wolf wolf ? wolf.getCollarColor() : null;
-
-        List<double[]> attempts = new ArrayList<>();
-        attempts.add(new double[]{x, y, z});
-        attempts.add(new double[]{x + 1.5D, y, z});
-        attempts.add(new double[]{x - 1.5D, y, z});
-        attempts.add(new double[]{x, y, z + 1.5D});
-        attempts.add(new double[]{x, y, z - 1.5D});
 
         for (double[] pos : attempts) {
             Entity created = tame.getType().create(targetLevel);
@@ -157,17 +155,65 @@ public final class TameTransferService {
         return new TransferResult(null, true, "spawn failed in target dimension");
     }
 
-    private static List<double[]> transferAttempts(ServerPlayer player) {
+    private static List<double[]> transferAttempts(ServerLevel level, TamableAnimal tame, double x, double y, double z) {
         List<double[]> positions = new ArrayList<>();
-        double x = player.getX();
-        double y = player.getY();
-        double z = player.getZ();
-        positions.add(new double[]{x, y, z});
-        positions.add(new double[]{x + 1.5D, y, z});
-        positions.add(new double[]{x - 1.5D, y, z});
-        positions.add(new double[]{x, y, z + 1.5D});
-        positions.add(new double[]{x, y, z - 1.5D});
+        if (level == null || tame == null) {
+            positions.add(new double[]{x, y, z});
+            return positions;
+        }
+        int baseX = (int) Math.floor(x);
+        int baseY = (int) Math.floor(y);
+        int baseZ = (int) Math.floor(z);
+        int rotation = Math.floorMod(tame.getUUID().hashCode(), 25);
+        List<BlockPos> candidates = new ArrayList<>();
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                        continue;
+                    }
+                    candidates.add(new BlockPos(baseX + dx, baseY, baseZ + dz));
+                }
+            }
+        }
+        if (!candidates.isEmpty()) {
+            java.util.Collections.rotate(candidates, rotation);
+        }
+        for (BlockPos candidate : candidates) {
+            double[] safe = safeTransferAttempt(level, tame, candidate);
+            if (safe != null) {
+                positions.add(safe);
+            }
+        }
+        if (positions.isEmpty()) {
+            positions.add(new double[]{x, y, z});
+        }
         return positions;
+    }
+
+    private static double[] safeTransferAttempt(ServerLevel level, TamableAnimal tame, BlockPos candidateBase) {
+        if (level == null || tame == null || candidateBase == null) {
+            return null;
+        }
+        for (int dy = -1; dy <= 1; dy++) {
+            BlockPos feet = candidateBase.offset(0, dy, 0);
+            BlockPos head = feet.above();
+            if (!level.getBlockState(feet).canBeReplaced() || !level.getBlockState(head).canBeReplaced()) {
+                continue;
+            }
+            double x = feet.getX() + 0.5D;
+            double y = feet.getY();
+            double z = feet.getZ() + 0.5D;
+            AABB box = tame.getDimensions(tame.getPose()).makeBoundingBox(x, y, z);
+            if (!level.noCollision(tame, box)) {
+                continue;
+            }
+            if (!level.getEntities(tame, box.inflate(0.05D), Entity::isAlive).isEmpty()) {
+                continue;
+            }
+            return new double[]{x, y, z};
+        }
+        return null;
     }
 
     private static void normalizeTransferredTame(TamableAnimal tame, TameData data) {
