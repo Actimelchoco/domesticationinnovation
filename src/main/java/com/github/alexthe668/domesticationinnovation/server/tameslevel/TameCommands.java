@@ -151,7 +151,6 @@ public class TameCommands {
     private static final int MORNING_LANTERN_RADIUS = 64;
     private static final int IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS = 5;
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
-    private static final long DUEL_SESSION_ROUND_TIMEOUT_TICKS = 20L * 60L * 5L;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final String TAG_GUARDIAN_TOOL_ORDER = "DIGuardianToolOrder";
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
@@ -1461,7 +1460,7 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
-                                .then(Commands.literal("duelSession")
+                        .then(Commands.literal("duelSession")
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestCompactDuelSessionAcceptSpec(ctx.getSource(), b))
@@ -1495,6 +1494,22 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
+                        .then(Commands.literal("duelToggle")
+                                .executes(ctx -> duelToggleStatus(ctx.getSource()))
+                                .then(Commands.literal("assistsMessages")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelAssistMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                )))))
+                        .then(Commands.literal("duelTogge")
+                                .executes(ctx -> duelToggleStatus(ctx.getSource()))
+                                .then(Commands.literal("assistsMessages")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelAssistMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                )))))
                                 .then(Commands.literal("duelTeamOld")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
@@ -2746,6 +2761,13 @@ public class TameCommands {
                                                 .executes(ctx -> adminSetPostTpStabilization(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelSessionLength")
+                                        .executes(ctx -> adminDuelSessionLengthStatus(ctx.getSource()))
+                                        .then(Commands.argument("minutes", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> adminSetDuelSessionLength(
+                                                        ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "minutes")
                                                 ))))
                                 .then(Commands.literal("debug")
                                         .executes(ctx -> adminDebugStatus(ctx.getSource()))
@@ -12116,6 +12138,20 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDuelAssistMessages(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelAssistMessages(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel assist messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int duelToggleStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
+        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static void debugTeleport(ServerPlayer player, String message) {
         if (player == null || !PlayerDebugSettings.teleport(player.getUUID())) {
             return;
@@ -13048,6 +13084,23 @@ public class TameCommands {
         source.sendSuccess(() -> Component.literal(
                 "Temporary admin setting: post-teleport stabilization is now " + (enabled ? "ENABLED" : "DISABLED") + "."
         ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminDuelSessionLengthStatus(CommandSourceStack source) {
+        int minutes = TLAdminRuntimeSettings.duelSessionLengthMinutes();
+        source.sendSuccess(() -> Component.literal(
+                "Duel session round timeout is currently " + minutes + " minute" + (minutes == 1 ? "" : "s") + "."
+        ).withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminSetDuelSessionLength(CommandSourceStack source, int minutes) {
+        TLAdminRuntimeSettings.setDuelSessionLengthMinutes(minutes);
+        int applied = TLAdminRuntimeSettings.duelSessionLengthMinutes();
+        source.sendSuccess(() -> Component.literal(
+                "Temporary admin setting: duel session round timeout is now " + applied + " minute" + (applied == 1 ? "" : "s") + "."
+        ).withStyle(ChatFormatting.YELLOW), true);
         return 1;
     }
 
@@ -17954,6 +18007,7 @@ public class TameCommands {
             if (session == null) {
                 continue;
             }
+            syncIdleDuelSessionTames(server, session);
             if (session.currentRoundA.isEmpty() || session.currentRoundB.isEmpty()) {
                 if (session.nextRoundAtTick >= 0L && now >= session.nextRoundAtTick) {
                     if (!startNextDuelSessionRound(server, session)) {
@@ -17963,7 +18017,7 @@ public class TameCommands {
                 continue;
             }
             if (hasAnyActiveDuelParticipants(session.currentRoundA) && hasAnyActiveDuelParticipants(session.currentRoundB)) {
-                if (session.roundStartedAtTick >= 0L && now - session.roundStartedAtTick >= DUEL_SESSION_ROUND_TIMEOUT_TICKS) {
+                if (session.roundStartedAtTick >= 0L && now - session.roundStartedAtTick >= duelSessionRoundTimeoutTicks()) {
                     resolveTimedOutDuelSessionRound(server, session);
                 }
                 continue;
@@ -18168,6 +18222,41 @@ public class TameCommands {
         }
     }
 
+    private static void syncIdleDuelSessionTames(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null) {
+            return;
+        }
+        Set<UUID> active = new HashSet<>(session.currentRoundA);
+        active.addAll(session.currentRoundB);
+        syncIdleSessionPool(server, session.ownerA, session.poolA, active);
+        if (!Objects.equals(session.ownerA, session.ownerB)) {
+            syncIdleSessionPool(server, session.ownerB, session.poolB, active);
+        } else {
+            syncIdleSessionPool(server, session.ownerB, session.poolB, active);
+        }
+    }
+
+    private static void syncIdleSessionPool(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound) {
+        if (server == null || ownerId == null || pool == null || activeRound == null) {
+            return;
+        }
+        CommandSourceStack source = server.createCommandSourceStack();
+        for (UUID id : pool) {
+            if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
+                continue;
+            }
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            if (currentLiveMovementOrder(tame, TameRegistry.get(id)) != MovementOrder.SIT) {
+                applyMovementOverride(tame, MovementOrder.SIT);
+            }
+            tame.setTarget(null);
+            tame.getNavigation().stop();
+        }
+    }
+
     private static void teleportSessionPoolHome(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound) {
         if (server == null || ownerId == null || pool == null || activeRound == null) {
             return;
@@ -18218,6 +18307,10 @@ public class TameCommands {
         }
         notifyDuelSessionOwners(server, session, Component.literal("Duel session round timed out after 5 minutes.").withStyle(ChatFormatting.YELLOW));
         forceEndDuelSessionSide(server, losing);
+    }
+
+    private static long duelSessionRoundTimeoutTicks() {
+        return 20L * 60L * Math.max(1, TLAdminRuntimeSettings.duelSessionLengthMinutes());
     }
 
     private static int aliveCount(Set<UUID> ids) {

@@ -11,6 +11,7 @@ public final class TLAdminRuntimeSettings {
     private static volatile float singleTargetAbilityDamageMultiplier = 1.0F;
     private static volatile float aoeAbilityDamageMultiplier = 1.0F;
     private static volatile float abilityCountCooldownNerfPercent = 25.0F;
+    private static volatile int duelSessionLengthMinutes = 5;
 
     public static boolean friendlyFireEnabled() {
         return friendlyFireEnabled;
@@ -66,6 +67,14 @@ public final class TLAdminRuntimeSettings {
 
     public static void setAbilityCountCooldownNerfPercent(float percent) {
         abilityCountCooldownNerfPercent = clampMultiplier(percent);
+    }
+
+    public static int duelSessionLengthMinutes() {
+        return duelSessionLengthMinutes;
+    }
+
+    public static void setDuelSessionLengthMinutes(int minutes) {
+        duelSessionLengthMinutes = Math.max(1, minutes);
     }
 
     private static float clampMultiplier(float multiplier) {

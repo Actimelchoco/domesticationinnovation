@@ -73,8 +73,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
         TameData data = TameRegistry.get(axolotl.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if (axolotl instanceof net.minecraft.world.entity.TamableAnimal tame
-                    && TameDuelManager.isEntityInDuel(tame.getUUID())) {
+            if (TameDuelManager.isEntityInDuel(axolotl.getUUID())) {
                 return false;
             }
             if (mode == TameMode.BOSS) {

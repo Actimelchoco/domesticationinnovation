@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.bossevents.CustomBossEvents;
@@ -95,7 +96,8 @@ public final class TameDuelManager {
     private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
     private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
     private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
-    private static final Map<UUID, Set<String>> RED_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
+    private static final Map<UUID, Set<String>> BLUE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
+    private static final Map<UUID, Set<String>> ORANGE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
 
     private TameDuelManager() {
     }
@@ -427,49 +429,40 @@ public final class TameDuelManager {
         for (UUID viewerId : viewers) {
             boolean viewerOnTeamA = battle.teamA.contains(viewerId);
             Set<UUID> enemyTeam = viewerOnTeamA ? battle.teamB : battle.teamA;
-            syncViewerEnemyGlow(server, viewerId, enemyTeam);
+            Set<UUID> allyTeam = viewerOnTeamA ? battle.teamA : battle.teamB;
+            syncViewerTeamGlow(server, viewerId, allyTeam, enemyTeam);
         }
     }
 
-    private static void syncViewerEnemyGlow(MinecraftServer server, UUID viewerId, Set<UUID> enemyIds) {
+    private static void syncViewerTeamGlow(MinecraftServer server, UUID viewerId, Set<UUID> blueIds, Set<UUID> orangeIds) {
         if (server == null || viewerId == null) {
             return;
         }
         ServerPlayer viewer = server.getPlayerList().getPlayer(viewerId);
         if (viewer == null) {
-            RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+            BLUE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+            ORANGE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
             return;
         }
-        PlayerTeam team = duelEnemyGlowTeam(viewerId);
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
+        PlayerTeam blueTeam = duelGlowTeam(viewerId, true);
+        PlayerTeam orangeTeam = duelGlowTeam(viewerId, false);
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(blueTeam, true));
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(orangeTeam, true));
 
-        Set<String> desired = new HashSet<>();
-        if (enemyIds != null) {
-            for (UUID enemyId : enemyIds) {
-                LivingEntity living = findLoadedLivingParticipant(server, enemyId);
-                if (living == null || !living.isAlive()) {
-                    continue;
-                }
-                living.addEffect(new MobEffectInstance(MobEffects.GLOWING, 10, 0, false, false, false));
-                desired.add(enemyId.toString());
-            }
-        }
+        Set<String> desiredBlue = collectGlowEntries(server, blueIds);
+        Set<String> desiredOrange = collectGlowEntries(server, orangeIds);
+        syncViewerGlowEntries(viewer, blueTeam, BLUE_GLOW_ENTRIES_BY_VIEWER.getOrDefault(viewerId, Set.of()), desiredBlue);
+        syncViewerGlowEntries(viewer, orangeTeam, ORANGE_GLOW_ENTRIES_BY_VIEWER.getOrDefault(viewerId, Set.of()), desiredOrange);
 
-        Set<String> previous = new HashSet<>(RED_GLOW_ENTRIES_BY_VIEWER.getOrDefault(viewerId, Set.of()));
-        for (String entry : previous) {
-            if (!desired.contains(entry)) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
-            }
-        }
-        for (String entry : desired) {
-            if (!previous.contains(entry)) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.ADD));
-            }
-        }
-        if (desired.isEmpty()) {
-            RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        if (desiredBlue.isEmpty()) {
+            BLUE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
         } else {
-            RED_GLOW_ENTRIES_BY_VIEWER.put(viewerId, desired);
+            BLUE_GLOW_ENTRIES_BY_VIEWER.put(viewerId, desiredBlue);
+        }
+        if (desiredOrange.isEmpty()) {
+            ORANGE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        } else {
+            ORANGE_GLOW_ENTRIES_BY_VIEWER.put(viewerId, desiredOrange);
         }
     }
 
@@ -478,28 +471,68 @@ public final class TameDuelManager {
             return;
         }
         ServerPlayer viewer = server.getPlayerList().getPlayer(viewerId);
-        Set<String> previous = RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
-        if (viewer == null || previous == null) {
+        Set<String> previousBlue = BLUE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        Set<String> previousOrange = ORANGE_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        if (viewer == null) {
             return;
         }
-        PlayerTeam team = duelEnemyGlowTeam(viewerId);
-        for (String entry : previous) {
-            viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+        PlayerTeam blueTeam = duelGlowTeam(viewerId, true);
+        PlayerTeam orangeTeam = duelGlowTeam(viewerId, false);
+        if (previousBlue != null) {
+            for (String entry : previousBlue) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(blueTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+            }
         }
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(team));
+        if (previousOrange != null) {
+            for (String entry : previousOrange) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(orangeTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+            }
+        }
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(blueTeam));
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(orangeTeam));
     }
 
-    private static PlayerTeam duelEnemyGlowTeam(UUID viewerId) {
+    private static Set<String> collectGlowEntries(MinecraftServer server, Set<UUID> ids) {
+        Set<String> desired = new HashSet<>();
+        if (ids == null) {
+            return desired;
+        }
+        for (UUID id : ids) {
+            LivingEntity living = findLoadedLivingParticipant(server, id);
+            if (living == null || !living.isAlive()) {
+                continue;
+            }
+            living.addEffect(new MobEffectInstance(MobEffects.GLOWING, 10, 0, false, false, false));
+            desired.add(id.toString());
+        }
+        return desired;
+    }
+
+    private static void syncViewerGlowEntries(ServerPlayer viewer, PlayerTeam team, Set<String> previous, Set<String> desired) {
+        Set<String> prev = new HashSet<>(previous == null ? Set.of() : previous);
+        for (String entry : prev) {
+            if (!desired.contains(entry)) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+            }
+        }
+        for (String entry : desired) {
+            if (!prev.contains(entry)) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.ADD));
+            }
+        }
+    }
+
+    private static PlayerTeam duelGlowTeam(UUID viewerId, boolean teamA) {
         Scoreboard scoreboard = new Scoreboard();
-        PlayerTeam team = new PlayerTeam(scoreboard, duelEnemyGlowTeamName(viewerId));
-        team.setColor(ChatFormatting.RED);
+        PlayerTeam team = new PlayerTeam(scoreboard, duelGlowTeamName(viewerId, teamA));
+        team.setColor(teamA ? ChatFormatting.BLUE : ChatFormatting.GOLD);
         team.setAllowFriendlyFire(true);
         return team;
     }
 
-    private static String duelEnemyGlowTeamName(UUID viewerId) {
+    private static String duelGlowTeamName(UUID viewerId, boolean teamA) {
         String compact = viewerId == null ? "viewer" : viewerId.toString().replace("-", "");
-        return "tldg" + compact.substring(0, Math.min(12, compact.length()));
+        return (teamA ? "tldga" : "tldgb") + compact.substring(0, Math.min(11, compact.length()));
     }
 
     private static void refreshStoredDuelSnapshotsFromRegistry(DuelBattle battle) {
@@ -747,23 +780,13 @@ public final class TameDuelManager {
         if (server == null || battle == null || elimination == null || elimination.victimId == null) {
             return;
         }
-        Component positiveLine = eliminationLine(server, elimination, true);
-        if (positiveLine == null) {
-            return;
-        }
         UUID killerOwner = participantOwner(battle, elimination.killerId);
         UUID victimOwner = participantOwner(battle, elimination.victimId);
-
-        if (killerOwner != null && killerOwner.equals(victimOwner)) {
-            sendBattleMessage(server, battle, positiveLine);
-            return;
-        }
-
-        sendBattleMessage(server, battle, positiveLine);
+        sendBattleMessage(server, battle, elimination, killerOwner != null && killerOwner.equals(victimOwner));
     }
 
-    private static void sendBattleMessage(MinecraftServer server, DuelBattle battle, Component line) {
-        if (server == null || battle == null || line == null) {
+    private static void sendBattleMessage(MinecraftServer server, DuelBattle battle, DuelElimination elimination, boolean positive) {
+        if (server == null || battle == null || elimination == null) {
             return;
         }
         Set<UUID> recipients = new HashSet<>();
@@ -782,12 +805,16 @@ public final class TameDuelManager {
         for (UUID recipientId : recipients) {
             ServerPlayer player = server.getPlayerList().getPlayer(recipientId);
             if (player != null) {
+                Component line = eliminationLine(server, elimination, positive, PlayerDebugSettings.duelAssistMessages(recipientId));
+                if (line == null) {
+                    continue;
+                }
                 player.sendSystemMessage(line);
             }
         }
     }
 
-    private static Component eliminationLine(MinecraftServer server, DuelElimination elimination, boolean positive) {
+    private static Component eliminationLine(MinecraftServer server, DuelElimination elimination, boolean positive, boolean includeAssists) {
         if (elimination == null || elimination.victimId == null) {
             return null;
         }
@@ -799,7 +826,7 @@ public final class TameDuelManager {
             line.append(Component.literal("A tame killed ").withStyle(ChatFormatting.WHITE));
         }
         line.append(Component.literal(entityLabel(server, elimination.victimId)).withStyle(ChatFormatting.RED));
-        if (elimination.assisterIds != null && !elimination.assisterIds.isEmpty()) {
+        if (includeAssists && elimination.assisterIds != null && !elimination.assisterIds.isEmpty()) {
             line.append(Component.literal(" assists: ").withStyle(ChatFormatting.WHITE));
             for (int i = 0; i < elimination.assisterIds.size(); i++) {
                 if (i > 0) {

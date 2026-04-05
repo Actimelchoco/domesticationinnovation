@@ -14,6 +14,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> LEVEL_UP = new HashMap<>();
     private static final Map<UUID, Boolean> DAMAGE = new HashMap<>();
     private static final Map<UUID, Boolean> TELEPORT = new HashMap<>();
+    private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
 
     public static boolean enemyKilled(UUID player) {
         return ENEMY_KILLED.getOrDefault(player, false);
@@ -43,6 +44,10 @@ public final class PlayerDebugSettings {
         return TELEPORT.getOrDefault(player, false);
     }
 
+    public static boolean duelAssistMessages(UUID player) {
+        return DUEL_ASSIST_MESSAGES.getOrDefault(player, true);
+    }
+
     public static void setAbilityUsed(UUID player, boolean enabled) {
         ABILITY_USED.put(player, enabled);
     }
@@ -61,5 +66,9 @@ public final class PlayerDebugSettings {
 
     public static void setTeleport(UUID player, boolean enabled) {
         TELEPORT.put(player, enabled);
+    }
+
+    public static void setDuelAssistMessages(UUID player, boolean enabled) {
+        DUEL_ASSIST_MESSAGES.put(player, enabled);
     }
 }

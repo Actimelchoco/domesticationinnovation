@@ -113,8 +113,7 @@ public class FollowOwner2Goal extends Goal {
         TameData data = TameRegistry.get(this.tamable.getUUID());
         if (data != null) {
             TameMode mode = TameMode.byId(data.mode);
-            if (this.tamable instanceof net.minecraft.world.entity.TamableAnimal tame
-                    && TameDuelManager.isEntityInDuel(tame.getUUID())) {
+            if (TameDuelManager.isEntityInDuel(this.tamable.getUUID())) {
                 return false;
             }
             if (mode == TameMode.BOSS) {
