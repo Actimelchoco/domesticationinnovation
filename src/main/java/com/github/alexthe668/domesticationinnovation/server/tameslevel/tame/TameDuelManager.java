@@ -839,6 +839,7 @@ public final class TameDuelManager {
         if (server == null || battle == null || battle.roster.isEmpty()) {
             return lines;
         }
+        Map<UUID, Integer> mmrDeltas = calculateBattleMmrDeltas(server, battle, null);
         List<UUID> ordered = new ArrayList<>();
         for (UUID participantId : battle.roster) {
             if (participantForSummary(server, battle, participantId) != null) {
@@ -878,7 +879,9 @@ public final class TameDuelManager {
                     .append(Component.literal("k:" + stats.kills).withStyle(ChatFormatting.RED))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal("a:" + stats.assists).withStyle(ChatFormatting.GREEN))
-                    .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY));
+                    .append(Component.literal(")").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal(" mmr:").withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal(formatSignedMmrDelta(mmrDeltas.getOrDefault(participantId, 0))).withStyle(mmrDeltas.getOrDefault(participantId, 0) >= 0 ? ChatFormatting.GREEN : ChatFormatting.RED));
             lines.add(row);
             rank++;
         }
@@ -1173,23 +1176,11 @@ public final class TameDuelManager {
         if (server == null || battle == null || battle.roster.isEmpty()) {
             return;
         }
-        List<UUID> placements = new ArrayList<>(battle.roster);
-        placements.removeIf(id -> participantForSummary(server, battle, id) == null);
-        placements.sort((a, b) -> compareBattlePlacement(server, battle, a, b));
-        if (placements.isEmpty()) {
+        Map<UUID, Integer> deltas = calculateBattleMmrDeltas(server, battle, forfeitingOwner);
+        if (deltas.isEmpty()) {
             return;
         }
-
-        Map<UUID, Integer> placementIndex = new HashMap<>();
-        for (int i = 0; i < placements.size(); i++) {
-            placementIndex.put(placements.get(i), i + 1);
-        }
-
         boolean teamAWon = didTeamWin(server, battle, true, forfeitingOwner);
-        int poolMagnitude = computeTeamMmrPool(server, battle, teamAWon);
-        Map<UUID, Integer> deltas = new HashMap<>();
-        distributeTeamMmr(server, battle, battle.originalTeamA, placementIndex, placements.size(), teamAWon, poolMagnitude, deltas);
-        distributeTeamMmr(server, battle, battle.originalTeamB, placementIndex, placements.size(), !teamAWon, poolMagnitude, deltas);
 
         for (UUID participantId : battle.roster) {
             DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
@@ -1198,6 +1189,32 @@ public final class TameDuelManager {
             applyPersistentParticipantStats(server, battle, participantId, stats, mmrDelta, won);
         }
         TameRegistry.markDirty();
+    }
+
+    private static Map<UUID, Integer> calculateBattleMmrDeltas(MinecraftServer server, DuelBattle battle, UUID forfeitingOwner) {
+        Map<UUID, Integer> deltas = new HashMap<>();
+        if (server == null || battle == null || battle.roster.isEmpty()) {
+            return deltas;
+        }
+        List<UUID> placements = new ArrayList<>(battle.roster);
+        placements.removeIf(id -> participantForSummary(server, battle, id) == null);
+        placements.sort((a, b) -> compareBattlePlacement(server, battle, a, b));
+        if (placements.isEmpty()) {
+            return deltas;
+        }
+        Map<UUID, Integer> placementIndex = new HashMap<>();
+        for (int i = 0; i < placements.size(); i++) {
+            placementIndex.put(placements.get(i), i + 1);
+        }
+        boolean teamAWon = didTeamWin(server, battle, true, forfeitingOwner);
+        int poolMagnitude = computeTeamMmrPool(server, battle, teamAWon);
+        distributeTeamMmr(server, battle, battle.originalTeamA, placementIndex, placements.size(), teamAWon, poolMagnitude, deltas);
+        distributeTeamMmr(server, battle, battle.originalTeamB, placementIndex, placements.size(), !teamAWon, poolMagnitude, deltas);
+        return deltas;
+    }
+
+    private static String formatSignedMmrDelta(int delta) {
+        return (delta >= 0 ? "+" : "") + delta;
     }
 
     private static boolean didTeamWin(MinecraftServer server, DuelBattle battle, boolean teamA, UUID forfeitingOwner) {

@@ -16,6 +16,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.Container;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -219,6 +221,7 @@ public class TameCombatEvents {
         player.setDeltaMovement(0.0D, 0.0D, 0.0D);
         player.invulnerableTime = Math.max(player.invulnerableTime, 20);
         player.hurtMarked = true;
+        player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 60, 0, false, true, true));
         MinecraftServer server = player.getServer();
         if (server != null) {
             TameDuelManager.recordElimination(
