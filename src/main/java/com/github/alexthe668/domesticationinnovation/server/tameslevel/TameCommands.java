@@ -145,6 +145,7 @@ public class TameCommands {
     private static final Map<UUID, UUID> PENDING_DUEL_SESSION_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, ActiveDuelSession> ACTIVE_DUEL_SESSIONS = new HashMap<>();
     private static final Map<UUID, UUID> ACTIVE_DUEL_SESSION_BY_PLAYER = new HashMap<>();
+    private static final Set<UUID> SUPPRESSED_UNLOADED_TELEPORT_MESSAGES = new HashSet<>();
     private static final Map<UUID, PendingClassReroll> PENDING_CLASS_REROLLS = new HashMap<>();
     private static final int UNLOADED_TP_TIMEOUT_TICKS = 1200;
     private static final int MORNING_LANTERN_TIMEOUT_TICKS = 200;
@@ -3227,6 +3228,9 @@ public class TameCommands {
         if (server == null || ownerUuid == null || message == null || message.isBlank()) {
             return;
         }
+        if (isSuppressedUnloadedTeleportMessageOwner(ownerUuid)) {
+            return;
+        }
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
         if (owner != null) {
             owner.sendSystemMessage(Component.literal(message).withStyle(color));
@@ -3587,6 +3591,22 @@ public class TameCommands {
                 loadChunksAround(sourceLevel, data.uuid, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ), true);
             }
         }
+    }
+
+    private static void beginSuppressedUnloadedTeleportMessages(UUID ownerUuid) {
+        if (ownerUuid != null) {
+            SUPPRESSED_UNLOADED_TELEPORT_MESSAGES.add(ownerUuid);
+        }
+    }
+
+    private static void endSuppressedUnloadedTeleportMessages(UUID ownerUuid) {
+        if (ownerUuid != null) {
+            SUPPRESSED_UNLOADED_TELEPORT_MESSAGES.remove(ownerUuid);
+        }
+    }
+
+    private static boolean isSuppressedUnloadedTeleportMessageOwner(UUID ownerUuid) {
+        return ownerUuid != null && SUPPRESSED_UNLOADED_TELEPORT_MESSAGES.contains(ownerUuid);
     }
 
     private static void processPendingMorningLanternRecalls(MinecraftServer server) {
@@ -9934,7 +9954,13 @@ public class TameCommands {
         snapshot.dead = false;
         snapshot.stored = false;
         TameRegistry.register(snapshot);
-        RespawnResult result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+        RespawnResult result;
+        beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+        try {
+            result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+        } finally {
+            endSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+        }
         if (!result.success) {
             return false;
         }
@@ -10829,7 +10855,9 @@ public class TameCommands {
         }
         RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
         if (recoverResult.entity != null) {
-            owner.sendSystemMessage(Component.literal("Rebuilt unloaded " + (data.name == null ? "unknown" : data.name) + " from snapshot (" + reason + ").").withStyle(ChatFormatting.YELLOW));
+            if (!isSuppressedUnloadedTeleportMessageOwner(owner.getUUID())) {
+                owner.sendSystemMessage(Component.literal("Rebuilt unloaded " + (data.name == null ? "unknown" : data.name) + " from snapshot (" + reason + ").").withStyle(ChatFormatting.YELLOW));
+            }
             return UnloadedTpResult.queued();
         }
         return UnloadedTpResult.fail(reason + "; snapshot rebuild failed: " + recoverResult.error);
@@ -18173,15 +18201,15 @@ public class TameCommands {
         ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(participantId);
         if (player != null) {
             PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-            return Math.max(1, player.experienceLevel) + (Math.max(0, stats.duelMmr) / 4.0D);
+            return Math.max(1, stats.duelMmr);
         }
         PlayerDuelStats storedPlayerStats = TameRegistry.getPlayerDuelStats().get(participantId);
         if (storedPlayerStats != null) {
-            return 1.0D + (Math.max(0, storedPlayerStats.duelMmr) / 4.0D);
+            return Math.max(1, storedPlayerStats.duelMmr);
         }
         TameData data = TameRegistry.get(participantId);
         if (data != null) {
-            return Math.max(1, data.level) + (Math.max(0, data.duelMmr) / 4.0D);
+            return Math.max(1, data.duelMmr);
         }
         return 0.0D;
     }
@@ -18266,22 +18294,27 @@ public class TameCommands {
             return;
         }
         CommandSourceStack source = owner.createCommandSourceStack();
-        for (UUID id : pool) {
-            if (activeRound.contains(id)) {
-                continue;
+        beginSuppressedUnloadedTeleportMessages(ownerId);
+        try {
+            for (UUID id : pool) {
+                if (activeRound.contains(id)) {
+                    continue;
+                }
+                TameData data = TameRegistry.get(id);
+                if (data == null || data.dead) {
+                    continue;
+                }
+                TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
+                if (tame == null || !tame.isAlive()) {
+                    continue;
+                }
+                SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
+                if (home != null) {
+                    teleportTameToLocation(tame, home);
+                }
             }
-            TameData data = TameRegistry.get(id);
-            if (data == null || data.dead) {
-                continue;
-            }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
-            if (tame == null || !tame.isAlive()) {
-                continue;
-            }
-            SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
-            if (home != null) {
-                teleportTameToLocation(tame, home);
-            }
+        } finally {
+            endSuppressedUnloadedTeleportMessages(ownerId);
         }
     }
 

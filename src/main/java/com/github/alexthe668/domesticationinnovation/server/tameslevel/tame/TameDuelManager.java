@@ -957,7 +957,7 @@ public final class TameDuelManager {
                 .append(Component.literal(team.displayName).withStyle(winner ? ChatFormatting.AQUA : ChatFormatting.GRAY))
                 .append(Component.literal(" tames:").withStyle(ChatFormatting.WHITE))
                 .append(Component.literal(String.valueOf(team.tameCount)).withStyle(winner ? ChatFormatting.YELLOW : ChatFormatting.RED))
-                .append(Component.literal(" total level:").withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" total mmr:").withStyle(ChatFormatting.WHITE))
                 .append(Component.literal(String.valueOf(team.totalLevel)).withStyle(ChatFormatting.YELLOW));
         if (winner) {
             line.append(Component.literal(" Survived:").withStyle(ChatFormatting.WHITE))
@@ -1319,11 +1319,7 @@ public final class TameDuelManager {
     }
 
     private static int duelEvaluationForParticipant(MinecraftServer server, DuelBattle battle, UUID participantId) {
-        SummaryParticipant participant = participantForSummary(server, battle, participantId);
-        if (participant == null) {
-            return 0;
-        }
-        return Math.max(1, participant.level()) + Math.max(0, participantStoredDuelMmr(participantId));
+        return Math.max(1, participantStoredDuelMmr(participantId));
     }
 
     private static int participantStoredDuelMmr(UUID participantId) {
