@@ -10344,6 +10344,7 @@ public class TameCommands {
         snapshot.dead = false;
         snapshot.stored = false;
         TameRegistry.register(snapshot);
+        cancelPendingImmediateChunkTeleport(server, snapshot);
         RespawnResult result;
         beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
         try {
@@ -11506,12 +11507,24 @@ public class TameCommands {
     }
 
     private static void clearPendingImmediateChunkTeleport(TameData data) {
+        cancelPendingImmediateChunkTeleport(null, data);
+    }
+
+    public static void cancelPendingImmediateChunkTeleport(MinecraftServer server, TameData data) {
         if (data == null) {
             return;
         }
         UUID key = data.tlId != null ? data.tlId : data.uuid;
-        if (key != null) {
-            PENDING_IMMEDIATE_CHUNK_TELEPORTS.remove(key);
+        if (key == null) {
+            return;
+        }
+        PendingImmediateChunkTeleport pending = PENDING_IMMEDIATE_CHUNK_TELEPORTS.remove(key);
+        if (pending == null || server == null || pending.sourceDimension == null) {
+            return;
+        }
+        ServerLevel sourceLevel = server.getLevel(pending.sourceDimension);
+        if (sourceLevel != null) {
+            releaseImmediateChunkTeleport(sourceLevel, pending);
         }
     }
 

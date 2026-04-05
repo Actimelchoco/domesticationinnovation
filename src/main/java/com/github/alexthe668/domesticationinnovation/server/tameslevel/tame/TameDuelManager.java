@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.bossevents.CustomBossEvents;
 import net.minecraft.server.level.ServerBossEvent;
@@ -449,8 +450,8 @@ public final class TameDuelManager {
         }
         PlayerTeam blueTeam = duelGlowTeam(viewerId, true);
         PlayerTeam orangeTeam = duelGlowTeam(viewerId, false);
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(blueTeam, true));
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(orangeTeam, true));
+        sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(blueTeam, true));
+        sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(orangeTeam, true));
 
         Set<String> desiredBlue = collectGlowEntries(server, blueIds);
         Set<String> desiredOrange = collectGlowEntries(server, orangeIds);
@@ -483,16 +484,16 @@ public final class TameDuelManager {
         PlayerTeam orangeTeam = duelGlowTeam(viewerId, false);
         if (previousBlue != null) {
             for (String entry : previousBlue) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(blueTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+                sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createPlayerPacket(blueTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
             }
         }
         if (previousOrange != null) {
             for (String entry : previousOrange) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(orangeTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+                sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createPlayerPacket(orangeTeam, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
             }
         }
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(blueTeam));
-        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(orangeTeam));
+        sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createRemovePacket(blueTeam));
+        sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createRemovePacket(orangeTeam));
     }
 
     private static Set<String> collectGlowEntries(MinecraftServer server, Set<UUID> ids) {
@@ -515,14 +516,21 @@ public final class TameDuelManager {
         Set<String> prev = new HashSet<>(previous == null ? Set.of() : previous);
         for (String entry : prev) {
             if (!desired.contains(entry)) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+                sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
             }
         }
         for (String entry : desired) {
             if (!prev.contains(entry)) {
-                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.ADD));
+                sendClientPacket(viewer, ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.ADD));
             }
         }
+    }
+
+    private static void sendClientPacket(ServerPlayer player, Packet<?> packet) {
+        if (player == null || packet == null || player.connection == null) {
+            return;
+        }
+        player.connection.f_9742_.send(packet);
     }
 
     private static PlayerTeam duelGlowTeam(UUID viewerId, boolean teamA) {
@@ -1088,6 +1096,7 @@ public final class TameDuelManager {
         if (data == null) {
             return;
         }
+        TameCommands.cancelPendingImmediateChunkTeleport(server, data);
         TameData snapshot = TameData.fromTag(data.toTag().copy());
         TamableAnimal loaded = findLoadedTame(server, participantId);
         if (loaded != null) {

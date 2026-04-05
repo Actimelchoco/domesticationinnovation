@@ -16,6 +16,7 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -195,15 +196,15 @@ public final class WaystonesTeleportCompat {
         if (owner == null || tame == null || owner.connection == null) {
             return;
         }
-        owner.connection.send(tame.getAddEntityPacket());
-        owner.connection.send(new ClientboundTeleportEntityPacket(tame));
+        sendClientPacket(owner, tame.getAddEntityPacket());
+        sendClientPacket(owner, new ClientboundTeleportEntityPacket(tame));
         List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
         if (values != null && !values.isEmpty()) {
-            owner.connection.send(new ClientboundSetEntityDataPacket(tame.getId(), values));
+            sendClientPacket(owner, new ClientboundSetEntityDataPacket(tame.getId(), values));
         }
         Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
         if (!attributes.isEmpty()) {
-            owner.connection.send(new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
+            sendClientPacket(owner, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
         }
         List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
         for (EquipmentSlot slot : EquipmentSlot.values()) {
@@ -213,8 +214,15 @@ public final class WaystonesTeleportCompat {
             }
         }
         if (!equipment.isEmpty()) {
-            owner.connection.send(new ClientboundSetEquipmentPacket(tame.getId(), equipment));
+            sendClientPacket(owner, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
         }
+    }
+
+    private static void sendClientPacket(ServerPlayer player, Packet<?> packet) {
+        if (player == null || packet == null || player.connection == null) {
+            return;
+        }
+        player.connection.f_9742_.send(packet);
     }
 
     private static boolean isWaystoneTeleportEligibleFromData(TameData data, UUID ownerId) {
