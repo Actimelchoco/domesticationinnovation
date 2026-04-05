@@ -587,6 +587,26 @@ public class TameCommands {
         }
     }
 
+    private static final class TeleportPaymentResult {
+        private final boolean success;
+        private final int xpSpent;
+        private final String error;
+
+        private TeleportPaymentResult(boolean success, int xpSpent, String error) {
+            this.success = success;
+            this.xpSpent = Math.max(0, xpSpent);
+            this.error = error == null ? "" : error;
+        }
+
+        private static TeleportPaymentResult ok(int xpSpent) {
+            return new TeleportPaymentResult(true, xpSpent, "");
+        }
+
+        private static TeleportPaymentResult fail(String error) {
+            return new TeleportPaymentResult(false, 0, error);
+        }
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildLegacyDuelCommand() {
         return Commands.literal("duelOld")
                 .then(Commands.literal("vs")
@@ -871,6 +891,8 @@ public class TameCommands {
                                 .then(Commands.argument("mobtype", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                        .then(Commands.literal("approvedItems")
+                                .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                         .then(Commands.literal("bed")
                                 .executes(ctx -> listOwnedBeds(ctx.getSource()))
                                 .then(Commands.literal("long")
@@ -2764,12 +2786,25 @@ public class TameCommands {
                                 .then(Commands.literal("approve")
                                         .then(Commands.literal("item")
                                                 .executes(ctx -> adminApproveHeldItem(ctx.getSource())))
+                                        .then(Commands.literal("cheapItem")
+                                                .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource())))
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
                                                 .then(Commands.argument("item", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestApprovedReincarnationItems(b))
+                                                        .suggests((ctx, b) -> suggestAllApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveApprovedItem(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "item")
+                                                        )))))
+                                .then(Commands.literal("cheapapprovedItem")
+                                        .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
+                                        .then(Commands.literal("list")
+                                                .executes(ctx -> adminListApprovedItems(ctx.getSource())))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
+                                                        .executes(ctx -> adminRemoveCheapApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
                                                         )))))
@@ -4708,9 +4743,7 @@ public class TameCommands {
         if (!withBeds.isEmpty()) {
             withBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
             player.sendSystemMessage(Component.literal("---- Your Tames With Beds ----").withStyle(ChatFormatting.GOLD));
-            for (TameData data : withBeds) {
-                player.sendSystemMessage(Component.literal(tameDisplayName(data)).withStyle(bedEntryColor(source.getServer(), data)));
-            }
+            player.sendSystemMessage(formatCompactBedNameList(source.getServer(), withBeds));
         }
         if (!withoutBeds.isEmpty()) {
             withoutBeds.sort(Comparator.comparing(TameCommands::tameDisplayName, String.CASE_INSENSITIVE_ORDER));
@@ -4795,12 +4828,11 @@ public class TameCommands {
         }
         boolean crossDimension = isCrossDimension(data, player);
         int cost = teleportCostFor(data, crossDimension);
-        if (!payTeleportXp(player, cost)) {
-            return 0;
-        }
+        TeleportPaymentResult payment = payTeleportXp(player, cost, 1);
+        if (!payment.success) return error(player, payment.error);
         assignTameBed(player.getServer(), data, dimensionId, bedPos);
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Set bed for " + tameDisplayName(data) + " at [" + bedPos.getX() + ", " + bedPos.getY() + ", " + bedPos.getZ() + "] (-" + cost + " XP points" + (crossDimension ? ", cross-dimension" : "") + ").")
+        player.sendSystemMessage(Component.literal("Set bed for " + tameDisplayName(data) + " at [" + bedPos.getX() + ", " + bedPos.getY() + ", " + bedPos.getZ() + "]" + (payment.xpSpent > 0 ? " (-" + payment.xpSpent + " XP points" : "") + (crossDimension ? ", cross-dimension" : "") + (payment.xpSpent > 0 ? ")." : "."))
                 .withStyle(ChatFormatting.GREEN));
         return 1;
     }
@@ -4943,6 +4975,29 @@ public class TameCommands {
                 .filter(name -> name != null && !name.isBlank())
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .collect(Collectors.joining(", "));
+    }
+
+    private static MutableComponent formatCompactBedNameList(MinecraftServer server, List<TameData> tames) {
+        if (tames == null || tames.isEmpty()) {
+            return Component.literal("-").withStyle(ChatFormatting.GRAY);
+        }
+        MutableComponent line = Component.empty();
+        boolean first = true;
+        for (TameData data : tames) {
+            if (data == null) {
+                continue;
+            }
+            String name = tameDisplayName(data);
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            if (!first) {
+                line.append(Component.literal(", ").withStyle(ChatFormatting.GRAY));
+            }
+            line.append(Component.literal(name).withStyle(bedEntryColor(server, data)));
+            first = false;
+        }
+        return first ? Component.literal("-").withStyle(ChatFormatting.GRAY) : line;
     }
 
     private static ChatFormatting bedEntryColor(MinecraftServer server, TameData data) {
@@ -5131,7 +5186,7 @@ public class TameCommands {
             parts.add(normalizedXp + " XP");
         }
         if (approvedItemCost > 0) {
-            parts.add(normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s"));
+            parts.add(formatApprovedItemRequirement(normalizedItems));
         }
         parts.add("1 totem");
         return String.join(" or ", parts);
@@ -5165,11 +5220,13 @@ public class TameCommands {
             }
             return PaymentResult.ok("1 totem");
         }
-        if (isApprovedReincarnationItem(held) && held.getCount() >= normalizedItems) {
+        int heldApprovedValue = approvedItemValue(held);
+        int requiredApprovedValue = normalizedItems * 5;
+        if (heldApprovedValue >= requiredApprovedValue) {
             if (consume) {
-                held.shrink(normalizedItems);
+                consumeApprovedItemValue(held, requiredApprovedValue);
             }
-            return PaymentResult.ok(normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s"));
+            return PaymentResult.ok(formatApprovedItemRequirement(normalizedItems));
         }
         int currentXp = currentXpPoints(player);
         if (allowXp && currentXp >= normalizedXp) {
@@ -5193,7 +5250,7 @@ public class TameCommands {
             if (appended) {
                 builder.append(" or ");
             }
-            builder.append(approvedItemCost).append(" approved item").append(approvedItemCost == 1 ? "" : "s");
+            builder.append(formatApprovedItemRequirement(approvedItemCost));
             appended = true;
         }
         if (appended) {
@@ -5207,25 +5264,59 @@ public class TameCommands {
     private static String approvedItemNamesDisplay() {
         List<String> names = new ArrayList<>();
         for (String id : TameRegistry.APPROVED_REINCARNATE_ITEMS) {
-            ResourceLocation key = ResourceLocation.tryParse(id);
-            if (key == null) {
-                continue;
-            }
-            var item = ForgeRegistries.ITEMS.getValue(key);
-            if (item != null) {
-                names.add(item.getDefaultInstance().getHoverName().getString());
-            }
+            names.add(approvedItemDisplayLabel(id) + " [normal]");
+        }
+        for (String id : TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS) {
+            names.add(approvedItemDisplayLabel(id) + " [cheap]");
         }
         names.sort(String::compareToIgnoreCase);
         return String.join(", ", names);
     }
 
     private static boolean isApprovedReincarnationItem(ItemStack stack) {
+        return approvedItemValue(stack) > 0;
+    }
+
+    private static int approvedItemValue(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
-            return false;
+            return 0;
         }
         ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
-        return key != null && TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(key.toString().toLowerCase(Locale.ROOT));
+        if (key == null) {
+            return 0;
+        }
+        String id = key.toString().toLowerCase(Locale.ROOT);
+        if (TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id)) {
+            return stack.getCount() * 5;
+        }
+        if (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id)) {
+            return stack.getCount();
+        }
+        return 0;
+    }
+
+    private static void consumeApprovedItemValue(ItemStack stack, int requiredValue) {
+        if (stack == null || stack.isEmpty() || requiredValue <= 0) {
+            return;
+        }
+        ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        if (key == null) {
+            return;
+        }
+        String id = key.toString().toLowerCase(Locale.ROOT);
+        int valuePerItem = TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id) ? 5
+                : (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id) ? 1 : 0);
+        if (valuePerItem <= 0) {
+            return;
+        }
+        int itemsToConsume = (int) Math.ceil(requiredValue / (double) valuePerItem);
+        stack.shrink(itemsToConsume);
+    }
+
+    private static String formatApprovedItemRequirement(int approvedItemCost) {
+        int normalizedItems = Math.max(1, approvedItemCost);
+        int cheapItems = normalizedItems * 5;
+        return normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s") + " or " + cheapItems + " cheap approved item" + (cheapItems == 1 ? "" : "s");
     }
 
     private static boolean isReincarnationTotem(ItemStack stack) {
@@ -7257,9 +7348,8 @@ public class TameCommands {
         if (loadedTargets.isEmpty() && unloadedTargets.isEmpty()) {
             return error(player, "No current guardian locations available for " + label + ".");
         }
-        if (!payTeleportXp(player, cost)) {
-            return 0;
-        }
+        TeleportPaymentResult payment = payTeleportXp(player, cost, loadedTargets.size() + unloadedTargets.size());
+        if (!payment.success) return error(player, payment.error);
         for (int i = 0; i < loadedTargets.size(); i++) {
             deployLoadedTameToGuardianCurrent(loadedTargets.get(i), loadedDestinations.get(i));
         }
@@ -7273,7 +7363,7 @@ public class TameCommands {
             }
         }
 
-        sendTeleportSummary(player, "Guardian deploy " + label, loadedTargets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
+        sendTeleportSummary(player, "Guardian deploy " + label, loadedTargets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Guardian deploy failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -7733,7 +7823,8 @@ public class TameCommands {
             if (cross) crossDimension++;
         }
 
-        if (!payTeleportXp(player, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(player, cost, loadedTargets.size() + unloadedTargets.size());
+        if (!payment.success) return error(player, payment.error);
         for (int i = 0; i < loadedTargets.size(); i++) {
             teleportTameToLocation(loadedTargets.get(i), loadedDestinations.get(i));
         }
@@ -7746,7 +7837,7 @@ public class TameCommands {
                 failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, 0, queueFailed, cost, crossDimension);
+        sendTeleportSummary(player, label, loadedTargets.size(), queued, 0, queueFailed, payment.xpSpent, crossDimension);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Drum tp failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -8275,11 +8366,9 @@ public class TameCommands {
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
-        List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
         int skippedDuel = 0;
-        int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
                 continue;
@@ -8290,21 +8379,19 @@ public class TameCommands {
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (ta == null) {
+                boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
+                cost += teleportCostFor(d, cross);
+                if (cross) crossDimension++;
                 continue;
             }
             boolean cross = isCrossDimension(ta, p);
-            int tameCost = teleportCostFor(d, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                continue;
-            }
             targets.add(ta);
-            xpBudget -= tameCost;
-            cost += tameCost;
+            cost += teleportCostFor(d, cross);
             if (cross) crossDimension++;
         }
-        if (!payTeleportXp(p, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
+        if (!payment.success) return error(p, payment.error);
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
         for (TameData d : queuedTargets) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
@@ -8315,8 +8402,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP group " + group, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
-        sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendTeleportSummary(p, "TP group " + group, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -8335,11 +8421,9 @@ public class TameCommands {
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
-        List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
         int skippedDuel = 0;
-        int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
                 continue;
@@ -8350,21 +8434,19 @@ public class TameCommands {
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (ta == null) {
+                boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
+                cost += teleportCostFor(d, cross);
+                if (cross) crossDimension++;
                 continue;
             }
             boolean cross = isCrossDimension(ta, p);
-            int tameCost = teleportCostFor(d, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                continue;
-            }
             targets.add(ta);
-            xpBudget -= tameCost;
-            cost += tameCost;
+            cost += teleportCostFor(d, cross);
             if (cross) crossDimension++;
         }
-        if (!payTeleportXp(p, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
+        if (!payment.success) return error(p, payment.error);
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
         for (TameData d : queuedTargets) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
@@ -8375,8 +8457,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP type " + typeFilter, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
-        sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendTeleportSummary(p, "TP type " + typeFilter, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -8516,6 +8597,10 @@ public class TameCommands {
         if (isDuelLocked(d)) return error(p, tameDisplayName(d) + " is in a duel. Use /tames dueltp.");
         if (d.stored) return error(p, tameDisplayName(d) + " is stored and can only be recovered with admin respawn.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
+        boolean crossDimension = isCrossDimension(d, p);
+        int cost = teleportCostFor(d, crossDimension);
+        TeleportPaymentResult payment = payTeleportXp(p, cost, 1);
+        if (!payment.success) return error(p, payment.error);
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
@@ -8524,12 +8609,9 @@ public class TameCommands {
             if (orderOverride != null && loadedAfterTeleport != null) {
                 applyMovementOverride(loadedAfterTeleport, orderOverride);
             }
-            p.sendSystemMessage(Component.literal("Teleported unloaded " + d.name + " to your position.").withStyle(ChatFormatting.GREEN));
+            p.sendSystemMessage(Component.literal("Teleported unloaded " + d.name + (payment.xpSpent > 0 ? " (-" + payment.xpSpent + " XP points)." : ".")).withStyle(ChatFormatting.GREEN));
             return 1;
         }
-        boolean crossDimension = isCrossDimension(ta, p);
-        int cost = teleportCostFor(d, crossDimension);
-        if (!payTeleportXp(p, cost)) return 0;
         if (crossDimension) {
             if (orderOverride != null) {
                 applyMovementOverride(ta, orderOverride);
@@ -8543,7 +8625,7 @@ public class TameCommands {
         if (orderOverride != null && loadedAfterTeleport != null) {
             applyMovementOverride(loadedAfterTeleport, orderOverride);
         }
-        p.sendSystemMessage(Component.literal("Teleported " + d.name + " (-" + cost + " XP points" + (crossDimension ? ", cross-dimension" : "") + ")."));
+        p.sendSystemMessage(Component.literal("Teleported " + d.name + (payment.xpSpent > 0 ? " (-" + payment.xpSpent + " XP points" : "") + (crossDimension ? ", cross-dimension" : "") + (payment.xpSpent > 0 ? ")." : ".")));
         return 1;
     }
 
@@ -9961,11 +10043,9 @@ public class TameCommands {
         int queued = 0;
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
-        List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
         int skippedDuel = 0;
-        int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
                 continue;
@@ -9976,21 +10056,19 @@ public class TameCommands {
             }
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (ta == null) {
+                boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
+                cost += teleportCostFor(d, cross);
+                if (cross) crossDimension++;
                 continue;
             }
             boolean cross = isCrossDimension(ta, p);
-            int tameCost = teleportCostFor(d, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                continue;
-            }
             targets.add(ta);
-            xpBudget -= tameCost;
-            cost += tameCost;
+            cost += teleportCostFor(d, cross);
             if (cross) crossDimension++;
         }
-        if (!payTeleportXp(p, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
+        if (!payment.success) return error(p, payment.error);
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
         for (TameData d : queuedTargets) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
@@ -10001,8 +10079,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTames(p.getUUID()).size(), queueFailed, cost, crossDimension);
-        sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTames(p.getUUID()).size(), queueFailed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -10048,12 +10125,10 @@ public class TameCommands {
         int queued = 0;
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
-        List<String> unaffordable = new ArrayList<>();
         int cost = 0;
         int crossDimension = 0;
         ResourceLocation dimensionId = fromDimension.dimension().location();
         int skippedDuel = 0;
-        int xpBudget = currentXpPoints(p);
 
         for (TameData d : requested) {
             if (d == null || d.dead) {
@@ -10068,25 +10143,23 @@ public class TameCommands {
                 if (!matchesDimensionFilter(d, null, dimensionId)) {
                     continue;
                 }
+                boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
+                cost += teleportCostFor(d, cross);
+                if (cross) crossDimension++;
                 continue;
             }
             if (!matchesDimensionFilter(d, ta, dimensionId)) {
                 continue;
             }
             boolean cross = isCrossDimension(ta, p);
-            int tameCost = teleportCostFor(d, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                continue;
-            }
             targets.add(ta);
-            xpBudget -= tameCost;
-            cost += tameCost;
+            cost += teleportCostFor(d, cross);
             if (cross) crossDimension++;
         }
 
-        if (!payTeleportXp(p, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
+        if (!payment.success) return error(p, payment.error);
         for (TamableAnimal ta : targets) teleportTameToPlayer(ta, p);
         for (TameData d : queuedTargets) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
@@ -10103,8 +10176,7 @@ public class TameCommands {
                 deadSkipped++;
             }
         }
-        sendTeleportSummary(p, "TP dim " + dimensionId, targets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
-        sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendTeleportSummary(p, "TP dim " + dimensionId, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -10240,7 +10312,8 @@ public class TameCommands {
         if (loadedTargets.isEmpty() && unloadedTargets.isEmpty()) {
             return error(player, "No guardian tames could be teleported.");
         }
-        if (!payTeleportXp(player, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(player, cost, loadedTargets.size() + unloadedTargets.size());
+        if (!payment.success) return error(player, payment.error);
         for (TamableAnimal tame : loadedTargets) {
             teleportTameToPlayer(tame, player);
         }
@@ -10253,7 +10326,7 @@ public class TameCommands {
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, cost, crossDimension);
+        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
         sendAffordabilityFailures(player, "Could not afford tpguardian for", unaffordable);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("TPGuardian failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -10850,9 +10923,7 @@ public class TameCommands {
         int queued = 0;
         int crossDimension = 0;
         int skippedDuel = 0;
-        List<String> unaffordable = new ArrayList<>();
         List<String> failedNames = new ArrayList<>();
-        int xpBudget = currentXpPoints(p);
         for (TameData d : requested) {
             if (d == null || d.dead) {
                 continue;
@@ -10873,30 +10944,19 @@ public class TameCommands {
                     continue;
                 }
                 boolean cross = isCrossDimension(d, p);
-                int tameCost = teleportCostFor(d, cross);
-                if (tameCost > xpBudget) {
-                    unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                    continue;
-                }
                 unloadedTargets.add(d);
-                xpBudget -= tameCost;
-                cost += tameCost;
+                cost += teleportCostFor(d, cross);
                 if (cross) crossDimension++;
                 continue;
             }
             if (!matchesMovementOrder(ta, order)) continue;
             boolean cross = isCrossDimension(ta, p);
-            int tameCost = teleportCostFor(d, cross);
-            if (tameCost > xpBudget) {
-                unaffordable.add(pricedTameLabel(d, teleportPriceLabel(tameCost)));
-                continue;
-            }
             loadedTargets.add(ta);
-            xpBudget -= tameCost;
-            cost += tameCost;
+            cost += teleportCostFor(d, cross);
             if (cross) crossDimension++;
         }
-        if (!payTeleportXp(p, cost)) return 0;
+        TeleportPaymentResult payment = payTeleportXp(p, cost, loadedTargets.size() + unloadedTargets.size());
+        if (!payment.success) return error(p, payment.error);
         for (TamableAnimal ta : loadedTargets) teleportTameToPlayer(ta, p);
         for (TameData data : unloadedTargets) {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, data);
@@ -10907,8 +10967,7 @@ public class TameCommands {
                 failedNames.add(tameDisplayName(data) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP " + movementLabel(order), loadedTargets.size(), queued, 0, failed, cost, crossDimension);
-        sendAffordabilityFailures(p, "Could not afford tp for", unaffordable);
+        sendTeleportSummary(p, "TP " + movementLabel(order), loadedTargets.size(), queued, 0, failed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("TP " + movementLabel(order) + " failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -11065,16 +11124,43 @@ public class TameCommands {
         }
     }
 
-    private static boolean payTeleportXp(ServerPlayer player, int cost) {
-        cost = Math.max(0, cost);
-        if (cost <= 0) return true;
-        int currentXp = currentXpPoints(player);
-        if (currentXp < cost) {
-            player.sendSystemMessage(Component.literal("Not enough XP points. Required: " + cost + ", you have: " + currentXp + ".").withStyle(ChatFormatting.RED));
-            return false;
+    private static TeleportPaymentResult payTeleportXp(ServerPlayer player, int cost, int teleportedTames) {
+        if (player == null) {
+            return TeleportPaymentResult.fail("player unavailable");
         }
-        player.giveExperiencePoints(-cost);
-        return true;
+        int normalizedCost = Math.max(0, cost);
+        int normalizedTeleports = Math.max(0, teleportedTames);
+        int availableCredits = TameRegistry.getTeleportApprovedCredits(player.getUUID());
+        int missingTeleports = Math.max(0, normalizedTeleports - availableCredits);
+        int approvedItemsNeeded = missingTeleports <= 0 ? 0 : (int) Math.ceil(missingTeleports / 10.0D);
+        ItemStack held = player.getMainHandItem();
+        if (normalizedTeleports > 0 && (availableCredits > 0 || approvedItemsNeeded > 0)) {
+            int requiredApprovedValue = approvedItemsNeeded * 5;
+            if (approvedItemsNeeded == 0 || approvedItemValue(held) >= requiredApprovedValue) {
+                if (approvedItemsNeeded > 0) {
+                    consumeApprovedItemValue(held, requiredApprovedValue);
+                }
+                int remainingCredits = Math.max(0, availableCredits + approvedItemsNeeded * 10 - normalizedTeleports);
+                TameRegistry.setTeleportApprovedCredits(player.getUUID(), remainingCredits);
+                String itemLabel = approvedItemsNeeded <= 0
+                        ? "used stored approved TP credits"
+                        : "spent " + formatApprovedItemRequirement(approvedItemsNeeded);
+                player.sendSystemMessage(Component.literal("Teleport payment: " + itemLabel + " (" + remainingCredits + " TP credit" + (remainingCredits == 1 ? "" : "s") + " left).").withStyle(ChatFormatting.GREEN));
+                return TeleportPaymentResult.ok(0);
+            }
+        }
+        if (normalizedCost <= 0) {
+            return TeleportPaymentResult.ok(0);
+        }
+        int currentXp = currentXpPoints(player);
+        if (currentXp < normalizedCost) {
+            String requirement = approvedItemsNeeded > 0
+                    ? normalizedCost + " XP or " + formatApprovedItemRequirement(approvedItemsNeeded)
+                    : normalizedCost + " XP";
+            return TeleportPaymentResult.fail("Not enough payment. Need " + requirement + " (you have " + currentXp + " XP and " + availableCredits + " TP credits).");
+        }
+        player.giveExperiencePoints(-normalizedCost);
+        return TeleportPaymentResult.ok(normalizedCost);
     }
 
     private static int teleportCostFor(TameData data, boolean crossDimension) {
@@ -13172,6 +13258,14 @@ public class TameCommands {
     }
 
     private static int adminApproveHeldItem(CommandSourceStack source) {
+        return adminApproveHeldItem(source, false);
+    }
+
+    private static int adminApproveHeldCheapItem(CommandSourceStack source) {
+        return adminApproveHeldItem(source, true);
+    }
+
+    private static int adminApproveHeldItem(CommandSourceStack source, boolean cheap) {
         ServerPlayer p = source.getPlayer();
         ItemStack held = p.getMainHandItem();
         if (held.isEmpty()) {
@@ -13182,10 +13276,11 @@ public class TameCommands {
             return error(p, "Could not resolve held item id.");
         }
 
-        boolean added = TameRegistry.APPROVED_REINCARNATE_ITEMS.add(itemId);
+        Set<String> targetSet = cheap ? TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS : TameRegistry.APPROVED_REINCARNATE_ITEMS;
+        boolean added = targetSet.add(itemId);
         TameRegistry.markDirty();
         if (added) {
-            p.sendSystemMessage(Component.literal("Approved reincarnation item: " + itemId).withStyle(ChatFormatting.GREEN));
+            p.sendSystemMessage(Component.literal((cheap ? "Cheap approved reincarnation item: " : "Approved reincarnation item: ") + itemId).withStyle(ChatFormatting.GREEN));
         } else {
             p.sendSystemMessage(Component.literal("Item already approved: " + itemId).withStyle(ChatFormatting.YELLOW));
         }
@@ -13198,16 +13293,22 @@ public class TameCommands {
             return 0;
         }
         List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
+        List<String> cheapApproved = new ArrayList<>(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
         approved.sort(String::compareToIgnoreCase);
-        if (approved.isEmpty()) {
+        cheapApproved.sort(String::compareToIgnoreCase);
+        if (approved.isEmpty() && cheapApproved.isEmpty()) {
             return error(player, "No approved reincarnation items are configured.");
         }
-        player.sendSystemMessage(Component.literal("Approved reincarnation items (" + approved.size() + "):").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Approved reincarnation items (" + (approved.size() + cheapApproved.size()) + "):").withStyle(ChatFormatting.GOLD));
         for (String id : approved) {
             String label = approvedItemDisplayLabel(id);
             player.sendSystemMessage(Component.literal("- " + label + " [" + id + "]").withStyle(ChatFormatting.GRAY));
         }
-        return approved.size();
+        for (String id : cheapApproved) {
+            String label = approvedItemDisplayLabel(id);
+            player.sendSystemMessage(Component.literal("- " + label + " [" + id + "] (cheap x1/5)").withStyle(ChatFormatting.DARK_GRAY));
+        }
+        return approved.size() + cheapApproved.size();
     }
 
     private static int adminListApprovedItems(CommandSourceStack source) {
@@ -13215,6 +13316,14 @@ public class TameCommands {
     }
 
     private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId) {
+        return adminRemoveApprovedItem(source, rawItemId, false);
+    }
+
+    private static int adminRemoveCheapApprovedItem(CommandSourceStack source, String rawItemId) {
+        return adminRemoveApprovedItem(source, rawItemId, true);
+    }
+
+    private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId, boolean cheap) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -13223,17 +13332,30 @@ public class TameCommands {
         if (itemId.isBlank()) {
             return error(player, "Provide an item id to remove.");
         }
-        boolean removed = TameRegistry.APPROVED_REINCARNATE_ITEMS.remove(itemId);
+        boolean removed = (cheap ? TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS : TameRegistry.APPROVED_REINCARNATE_ITEMS).remove(itemId);
         if (!removed) {
             return error(player, "Item is not approved: " + itemId);
         }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Removed approved reincarnation item: " + itemId).withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal((cheap ? "Removed cheap approved reincarnation item: " : "Removed approved reincarnation item: ") + itemId).withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
     private static CompletableFuture<Suggestions> suggestApprovedReincarnationItems(SuggestionsBuilder builder) {
         List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
+        approved.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(approved, builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestCheapApprovedReincarnationItems(SuggestionsBuilder builder) {
+        List<String> approved = new ArrayList<>(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
+        approved.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(approved, builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestAllApprovedReincarnationItems(SuggestionsBuilder builder) {
+        List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
+        approved.addAll(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
         approved.sort(String::compareToIgnoreCase);
         return SharedSuggestionProvider.suggest(approved, builder);
     }
@@ -14203,6 +14325,7 @@ public class TameCommands {
             return false;
         }
         LevelSystem.updateTameName(tame, data);
+        syncMutantCreeperMinionSettings(tame, data);
         float nextHealth = fullHeal
                 ? (float) tame.getMaxHealth()
                 : (float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth());
@@ -14218,6 +14341,29 @@ public class TameCommands {
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
         return true;
+    }
+
+    public static void syncMutantCreeperMinionSettings(TamableAnimal tame, TameData data) {
+        if (!isMutantCreeperMinion(tame) || data == null) {
+            return;
+        }
+        invokeExactBooleanSetter(tame, "setCanExplodeContinuously", true);
+        invokeExactFloatSetter(tame, "setExplosionRadius", computeMutantCreeperMinionExplosionRadius(data));
+    }
+
+    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        String typeId = key == null ? tame.getType().toString() : key.toString();
+        return "mutantmonsters:creeper_minion".equalsIgnoreCase(typeId)
+                || "entity.mutantmonsters.creeper_minion".equalsIgnoreCase(typeId);
+    }
+
+    private static float computeMutantCreeperMinionExplosionRadius(TameData data) {
+        double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
+        return (float) Mth.clamp(2.0D + bonusDamage * 0.05D, 2.0D, 6.0D);
     }
 
     private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
@@ -14328,6 +14474,24 @@ public class TameCommands {
             Method m = tame.getClass().getMethod(methodName, Boolean.class);
             m.setAccessible(true);
             m.invoke(tame, Boolean.valueOf(value));
+            return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private static boolean invokeExactFloatSetter(TamableAnimal tame, String methodName, float value) {
+        try {
+            Method m = tame.getClass().getMethod(methodName, float.class);
+            m.setAccessible(true);
+            m.invoke(tame, value);
+            return true;
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method m = tame.getClass().getMethod(methodName, Float.class);
+            m.setAccessible(true);
+            m.invoke(tame, Float.valueOf(value));
             return true;
         } catch (Throwable ignored) {
         }
@@ -16373,7 +16537,7 @@ public class TameCommands {
         if (consumeFromInventories(inventories, 1, TameCommands::isReincarnationTotem)) {
             return true;
         }
-        return consumeFromInventories(inventories, Math.max(1, approvedItemCost), TameCommands::isApprovedReincarnationItem);
+        return consumeApprovedItemValueFromInventories(inventories, Math.max(1, approvedItemCost) * 5);
     }
 
     private static InventoryAccess inventoryAccessFromBlockEntity(BlockEntity blockEntity) {
@@ -16420,6 +16584,52 @@ public class TameCommands {
             }
         }
         return false;
+    }
+
+    private static boolean consumeApprovedItemValueFromInventories(List<InventoryAccess> inventories, int requiredValue) {
+        if (inventories == null || inventories.isEmpty() || requiredValue <= 0) {
+            return false;
+        }
+        int totalValue = 0;
+        for (InventoryAccess inventory : inventories) {
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                totalValue += approvedItemValue(inventory.getItem(slot));
+                if (totalValue >= requiredValue) {
+                    break;
+                }
+            }
+            if (totalValue >= requiredValue) {
+                break;
+            }
+        }
+        if (totalValue < requiredValue) {
+            return false;
+        }
+        int remaining = requiredValue;
+        for (InventoryAccess inventory : inventories) {
+            for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
+                ItemStack stack = inventory.getItem(slot);
+                int stackValue = approvedItemValue(stack);
+                if (stackValue <= 0) {
+                    continue;
+                }
+                ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
+                if (key == null) {
+                    continue;
+                }
+                String id = key.toString().toLowerCase(Locale.ROOT);
+                int valuePerItem = TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id) ? 5
+                        : (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id) ? 1 : 0);
+                if (valuePerItem <= 0) {
+                    continue;
+                }
+                int itemsNeeded = (int) Math.ceil(remaining / (double) valuePerItem);
+                int toConsume = Math.min(itemsNeeded, stack.getCount());
+                ItemStack removed = inventory.remove(slot, toConsume);
+                remaining -= removed.getCount() * valuePerItem;
+            }
+        }
+        return remaining <= 0;
     }
 
     private static Set<BlockPos> reincarnationBedScanPositions(ServerLevel level, BlockPos bedPos) {

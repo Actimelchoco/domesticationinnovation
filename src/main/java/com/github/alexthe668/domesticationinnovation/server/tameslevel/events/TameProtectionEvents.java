@@ -24,6 +24,10 @@ public class TameProtectionEvents {
 
         if (attackerParticipantId != null && TameDuelManager.isEntityInDuel(attackerParticipantId)) {
             if (victimParticipantId != null && TameDuelManager.areDuelOpponents(attackerParticipantId, victimParticipantId)) {
+                if (attacker instanceof Player && victim instanceof Player) {
+                    event.setCanceled(true);
+                    return;
+                }
                 return;
             }
             event.setCanceled(true);

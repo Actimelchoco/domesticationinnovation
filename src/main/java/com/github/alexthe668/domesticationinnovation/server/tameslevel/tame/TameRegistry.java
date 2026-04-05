@@ -29,6 +29,7 @@ public class TameRegistry {
     public static final Map<UUID, TameDeathRecord> LAST_DEATHS = new HashMap<>();
     public static final List<TameDeathRecord> DEATH_HISTORY = new ArrayList<>();
     public static final Set<String> APPROVED_REINCARNATE_ITEMS = new HashSet<>();
+    public static final Set<String> CHEAP_APPROVED_REINCARNATE_ITEMS = new HashSet<>();
     private static final Map<UUID, String> OWNER_RESPAWN_ORDERS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_AUTO_REINCARNATION = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_DO_NOT_ATTACK_TYPES = new HashMap<>();
@@ -38,6 +39,7 @@ public class TameRegistry {
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
+    private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -84,6 +86,8 @@ public class TameRegistry {
         DEATH_HISTORY.addAll(savedData.getDeathHistory());
         APPROVED_REINCARNATE_ITEMS.clear();
         APPROVED_REINCARNATE_ITEMS.addAll(savedData.getApprovedReincarnateItems());
+        CHEAP_APPROVED_REINCARNATE_ITEMS.clear();
+        CHEAP_APPROVED_REINCARNATE_ITEMS.addAll(savedData.getCheapApprovedReincarnateItems());
         OWNER_RESPAWN_ORDERS.clear();
         OWNER_RESPAWN_ORDERS.putAll(savedData.getRespawnOrders());
         OWNER_AUTO_REINCARNATION.clear();
@@ -102,6 +106,8 @@ public class TameRegistry {
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
         PLAYER_DUEL_STATS.clear();
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
+        OWNER_TELEPORT_APPROVED_CREDITS.clear();
+        OWNER_TELEPORT_APPROVED_CREDITS.putAll(savedData.getOwnerTeleportApprovedCredits());
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
             LAST_DEATHS.entrySet().removeIf(entry -> {
                 TameDeathRecord record = entry.getValue();
@@ -253,6 +259,8 @@ public class TameRegistry {
         savedData.getDeathHistory().addAll(DEATH_HISTORY);
         savedData.getApprovedReincarnateItems().clear();
         savedData.getApprovedReincarnateItems().addAll(APPROVED_REINCARNATE_ITEMS);
+        savedData.getCheapApprovedReincarnateItems().clear();
+        savedData.getCheapApprovedReincarnateItems().addAll(CHEAP_APPROVED_REINCARNATE_ITEMS);
         savedData.setRespawnOrders(OWNER_RESPAWN_ORDERS);
         savedData.setAutoReincarnation(OWNER_AUTO_REINCARNATION);
         savedData.setDoNotAttackTypes(OWNER_DO_NOT_ATTACK_TYPES);
@@ -262,7 +270,28 @@ public class TameRegistry {
         savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
+        savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setDirty();
+    }
+
+    public static int getTeleportApprovedCredits(UUID ownerUuid) {
+        if (ownerUuid == null) {
+            return 0;
+        }
+        return Math.max(0, OWNER_TELEPORT_APPROVED_CREDITS.getOrDefault(ownerUuid, 0));
+    }
+
+    public static void setTeleportApprovedCredits(UUID ownerUuid, int credits) {
+        if (ownerUuid == null) {
+            return;
+        }
+        int normalized = Math.max(0, credits);
+        if (normalized <= 0) {
+            OWNER_TELEPORT_APPROVED_CREDITS.remove(ownerUuid);
+        } else {
+            OWNER_TELEPORT_APPROVED_CREDITS.put(ownerUuid, normalized);
+        }
+        markDirty();
     }
 
     public static PlayerDuelStats getOrCreatePlayerDuelStats(UUID playerUuid, String lastKnownName) {

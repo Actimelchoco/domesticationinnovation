@@ -1244,6 +1244,9 @@ public class TameableUtils {
     }
 
     public static boolean isValidTeleporter(LivingEntity owner, Mob animal) {
+        if (animal == null || TameDuelManager.isEntityInDuel(animal.getUUID())) {
+            return false;
+        }
         boolean hasTeleportFlag = hasEnchant(animal, DIEnchantmentRegistry.TETHERED_TELEPORT);
         if (!hasTeleportFlag) {
             TameData data = TameRegistry.get(animal.getUUID());

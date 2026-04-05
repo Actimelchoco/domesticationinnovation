@@ -21,6 +21,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, TameDeathRecord> lastDeaths = new HashMap<>();
     private final List<TameDeathRecord> deathHistory = new ArrayList<>();
     private final Set<String> approvedReincarnateItems = new LinkedHashSet<>();
+    private final Set<String> cheapApprovedReincarnateItems = new LinkedHashSet<>();
     private final Map<UUID, String> respawnOrders = new HashMap<>();
     private final Map<UUID, Boolean> autoReincarnation = new HashMap<>();
     private final Map<UUID, Set<String>> doNotAttackTypes = new HashMap<>();
@@ -30,6 +31,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
+    private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -45,6 +47,10 @@ public class TameRegistrySavedData extends SavedData {
 
     public Set<String> getApprovedReincarnateItems() {
         return approvedReincarnateItems;
+    }
+
+    public Set<String> getCheapApprovedReincarnateItems() {
+        return cheapApprovedReincarnateItems;
     }
 
     public Map<UUID, String> getRespawnOrders() {
@@ -191,6 +197,26 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public Map<UUID, Integer> getOwnerTeleportApprovedCredits() {
+        return ownerTeleportApprovedCredits;
+    }
+
+    public void setOwnerTeleportApprovedCredits(Map<UUID, Integer> ownerTeleportApprovedCredits) {
+        this.ownerTeleportApprovedCredits.clear();
+        if (ownerTeleportApprovedCredits == null) {
+            return;
+        }
+        for (Map.Entry<UUID, Integer> entry : ownerTeleportApprovedCredits.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            int credits = Math.max(0, entry.getValue() == null ? 0 : entry.getValue());
+            if (credits > 0) {
+                this.ownerTeleportApprovedCredits.put(entry.getKey(), credits);
+            }
+        }
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         ListTag tamesTag = new ListTag();
@@ -216,6 +242,11 @@ public class TameRegistrySavedData extends SavedData {
             approvedItemsTag.add(net.minecraft.nbt.StringTag.valueOf(itemId));
         }
         tag.put("approvedReincarnateItems", approvedItemsTag);
+        ListTag cheapApprovedItemsTag = new ListTag();
+        for (String itemId : cheapApprovedReincarnateItems) {
+            cheapApprovedItemsTag.add(net.minecraft.nbt.StringTag.valueOf(itemId));
+        }
+        tag.put("cheapApprovedReincarnateItems", cheapApprovedItemsTag);
         ListTag respawnOrdersTag = new ListTag();
         for (Map.Entry<UUID, String> entry : respawnOrders.entrySet()) {
             if (entry.getKey() == null) {
@@ -323,6 +354,21 @@ public class TameRegistrySavedData extends SavedData {
             playerDuelStatsTag.add(stats.toTag());
         }
         tag.put("playerDuelStats", playerDuelStatsTag);
+        ListTag teleportCreditsTag = new ListTag();
+        for (Map.Entry<UUID, Integer> entry : ownerTeleportApprovedCredits.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            int credits = Math.max(0, entry.getValue() == null ? 0 : entry.getValue());
+            if (credits <= 0) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putInt("credits", credits);
+            teleportCreditsTag.add(row);
+        }
+        tag.put("ownerTeleportApprovedCredits", teleportCreditsTag);
         return tag;
     }
 
@@ -361,6 +407,12 @@ public class TameRegistrySavedData extends SavedData {
             ListTag approved = tag.getList("approvedReincarnateItems", Tag.TAG_STRING);
             for (Tag entry : approved) {
                 data.approvedReincarnateItems.add(entry.getAsString().trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        if (tag.contains("cheapApprovedReincarnateItems", Tag.TAG_LIST)) {
+            ListTag approved = tag.getList("cheapApprovedReincarnateItems", Tag.TAG_STRING);
+            for (Tag entry : approved) {
+                data.cheapApprovedReincarnateItems.add(entry.getAsString().trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
         if (tag.contains("respawnOrders", Tag.TAG_LIST)) {
@@ -471,6 +523,18 @@ public class TameRegistrySavedData extends SavedData {
                 PlayerDuelStats stats = PlayerDuelStats.fromTag(row);
                 if (stats.playerUuid != null) {
                     data.playerDuelStats.put(stats.playerUuid, stats);
+                }
+            }
+        }
+        if (tag.contains("ownerTeleportApprovedCredits", Tag.TAG_LIST)) {
+            ListTag teleportCreditsList = tag.getList("ownerTeleportApprovedCredits", Tag.TAG_COMPOUND);
+            for (Tag entry : teleportCreditsList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                int credits = Math.max(0, row.getInt("credits"));
+                if (credits > 0) {
+                    data.ownerTeleportApprovedCredits.put(row.getUUID("ownerUUID"), credits);
                 }
             }
         }

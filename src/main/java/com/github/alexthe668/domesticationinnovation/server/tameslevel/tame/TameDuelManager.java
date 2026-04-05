@@ -3,8 +3,11 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.bossevents.CustomBossEvents;
 import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.ChatFormatting;
 import net.minecraft.world.BossEvent;
 import net.minecraft.network.chat.Component;
@@ -14,6 +17,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -90,6 +95,7 @@ public final class TameDuelManager {
     private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
     private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
     private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
+    private static final Map<UUID, Set<String>> RED_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
 
     private TameDuelManager() {
     }
@@ -290,6 +296,7 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
+            syncPlayerEnemyGlow(server, battle);
         }
     }
 
@@ -390,6 +397,7 @@ public final class TameDuelManager {
             BATTLE_ID_BY_ENTITY.remove(participantId);
             TEAM_A_BY_ENTITY.remove(participantId);
             RECENT_DUEL_ELIMINATIONS.remove(participantId);
+            clearViewerEnemyGlow(server, participantId);
             clearTargetForParticipant(server, participantId);
             CompoundTag playerSnapshot = battle.playerSnapshots.get(participantId);
             if (playerSnapshot != null && TameCommands.restoreDuelPlayerSnapshot(server, participantId, playerSnapshot.copy())) {
@@ -404,6 +412,94 @@ public final class TameDuelManager {
             }
         }
         notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
+    }
+
+    private static void syncPlayerEnemyGlow(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) {
+            return;
+        }
+        Set<UUID> viewers = new HashSet<>();
+        for (UUID participantId : battle.roster) {
+            if (server.getPlayerList().getPlayer(participantId) != null) {
+                viewers.add(participantId);
+            }
+        }
+        for (UUID viewerId : viewers) {
+            boolean viewerOnTeamA = battle.teamA.contains(viewerId);
+            Set<UUID> enemyTeam = viewerOnTeamA ? battle.teamB : battle.teamA;
+            syncViewerEnemyGlow(server, viewerId, enemyTeam);
+        }
+    }
+
+    private static void syncViewerEnemyGlow(MinecraftServer server, UUID viewerId, Set<UUID> enemyIds) {
+        if (server == null || viewerId == null) {
+            return;
+        }
+        ServerPlayer viewer = server.getPlayerList().getPlayer(viewerId);
+        if (viewer == null) {
+            RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+            return;
+        }
+        PlayerTeam team = duelEnemyGlowTeam(viewerId);
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true));
+
+        Set<String> desired = new HashSet<>();
+        if (enemyIds != null) {
+            for (UUID enemyId : enemyIds) {
+                LivingEntity living = findLoadedLivingParticipant(server, enemyId);
+                if (living == null || !living.isAlive()) {
+                    continue;
+                }
+                living.addEffect(new MobEffectInstance(MobEffects.GLOWING, 10, 0, false, false, false));
+                desired.add(enemyId.toString());
+            }
+        }
+
+        Set<String> previous = new HashSet<>(RED_GLOW_ENTRIES_BY_VIEWER.getOrDefault(viewerId, Set.of()));
+        for (String entry : previous) {
+            if (!desired.contains(entry)) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+            }
+        }
+        for (String entry : desired) {
+            if (!previous.contains(entry)) {
+                viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.ADD));
+            }
+        }
+        if (desired.isEmpty()) {
+            RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        } else {
+            RED_GLOW_ENTRIES_BY_VIEWER.put(viewerId, desired);
+        }
+    }
+
+    private static void clearViewerEnemyGlow(MinecraftServer server, UUID viewerId) {
+        if (server == null || viewerId == null) {
+            return;
+        }
+        ServerPlayer viewer = server.getPlayerList().getPlayer(viewerId);
+        Set<String> previous = RED_GLOW_ENTRIES_BY_VIEWER.remove(viewerId);
+        if (viewer == null || previous == null) {
+            return;
+        }
+        PlayerTeam team = duelEnemyGlowTeam(viewerId);
+        for (String entry : previous) {
+            viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team, entry, ClientboundSetPlayerTeamPacket.Action.REMOVE));
+        }
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(team));
+    }
+
+    private static PlayerTeam duelEnemyGlowTeam(UUID viewerId) {
+        Scoreboard scoreboard = new Scoreboard();
+        PlayerTeam team = new PlayerTeam(scoreboard, duelEnemyGlowTeamName(viewerId));
+        team.setColor(ChatFormatting.RED);
+        team.setAllowFriendlyFire(true);
+        return team;
+    }
+
+    private static String duelEnemyGlowTeamName(UUID viewerId) {
+        String compact = viewerId == null ? "viewer" : viewerId.toString().replace("-", "");
+        return "tldg" + compact.substring(0, Math.min(12, compact.length()));
     }
 
     private static void refreshStoredDuelSnapshotsFromRegistry(DuelBattle battle) {
@@ -759,6 +855,7 @@ public final class TameDuelManager {
                 continue;
             }
             DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
+            double resultPoints = duelResultPoints(stats);
             boolean died = stats.deaths > 0;
             LivingEntity currentEntity = died ? null : findLoadedLivingParticipant(server, participantId);
             MutableComponent row = Component.literal(rank + ". ").withStyle(ChatFormatting.GOLD)
@@ -776,7 +873,7 @@ public final class TameDuelManager {
             }
             row = row
                     .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal("p:" + formatPoints(stats.points)).withStyle(ChatFormatting.LIGHT_PURPLE))
+                    .append(Component.literal("p:" + formatPoints(resultPoints)).withStyle(ChatFormatting.LIGHT_PURPLE))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                     .append(Component.literal("k:" + stats.kills).withStyle(ChatFormatting.RED))
                     .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
@@ -1046,11 +1143,7 @@ public final class TameDuelManager {
     private static int compareBattlePlacement(MinecraftServer server, DuelBattle battle, UUID leftId, UUID rightId) {
         DuelStats left = battle.duelStats.getOrDefault(leftId, new DuelStats());
         DuelStats right = battle.duelStats.getOrDefault(rightId, new DuelStats());
-        int survivalCompare = Integer.compare(left.deaths, right.deaths);
-        if (survivalCompare != 0) {
-            return survivalCompare;
-        }
-        int scoreCompare = Double.compare(right.points, left.points);
+        int scoreCompare = Double.compare(duelResultPoints(right), duelResultPoints(left));
         if (scoreCompare != 0) {
             return scoreCompare;
         }
@@ -1063,6 +1156,17 @@ public final class TameDuelManager {
             return assistsCompare;
         }
         return entityLabel(server, leftId).compareToIgnoreCase(entityLabel(server, rightId));
+    }
+
+    private static double duelResultPoints(DuelStats stats) {
+        if (stats == null) {
+            return 0.0D;
+        }
+        double adjusted = Math.max(0.0D, stats.points);
+        if (stats.deaths > 0) {
+            adjusted *= 0.7D;
+        }
+        return adjusted;
     }
 
     private static void persistBattleStatsAndMmr(MinecraftServer server, DuelBattle battle, UUID forfeitingOwner) {
@@ -1082,7 +1186,7 @@ public final class TameDuelManager {
         }
 
         boolean teamAWon = didTeamWin(server, battle, true, forfeitingOwner);
-        int poolMagnitude = computeTeamMmrPool(battle, teamAWon);
+        int poolMagnitude = computeTeamMmrPool(server, battle, teamAWon);
         Map<UUID, Integer> deltas = new HashMap<>();
         distributeTeamMmr(server, battle, battle.originalTeamA, placementIndex, placements.size(), teamAWon, poolMagnitude, deltas);
         distributeTeamMmr(server, battle, battle.originalTeamB, placementIndex, placements.size(), !teamAWon, poolMagnitude, deltas);
@@ -1119,12 +1223,12 @@ public final class TameDuelManager {
         return teamA ? winner == teamAResult : winner == teamBResult;
     }
 
-    private static int computeTeamMmrPool(DuelBattle battle, boolean teamAWon) {
+    private static int computeTeamMmrPool(MinecraftServer server, DuelBattle battle, boolean teamAWon) {
         if (battle == null) {
             return 0;
         }
-        double teamATotal = teamMmrTotal(battle.originalTeamA);
-        double teamBTotal = teamMmrTotal(battle.originalTeamB);
+        double teamATotal = teamMmrTotal(server, battle, battle.originalTeamA);
+        double teamBTotal = teamMmrTotal(server, battle, battle.originalTeamB);
         double expectedA = expectedTeamScore(teamATotal, teamBTotal);
         double actualA = teamAWon ? 1.0D : 0.0D;
         double swing = Math.abs(actualA - expectedA);
@@ -1132,13 +1236,13 @@ public final class TameDuelManager {
         return Math.max(1, (int) Math.round(DUEL_MMR_K * swing * (participants / 2.0D)));
     }
 
-    private static double teamMmrTotal(Set<UUID> participantIds) {
+    private static double teamMmrTotal(MinecraftServer server, DuelBattle battle, Set<UUID> participantIds) {
         if (participantIds == null || participantIds.isEmpty()) {
             return 0.0D;
         }
         double total = 0.0D;
         for (UUID participantId : participantIds) {
-            total += participantCurrentMmr(participantId);
+            total += participantCurrentMmr(server, battle, participantId);
         }
         return total;
     }
@@ -1147,7 +1251,7 @@ public final class TameDuelManager {
         return 1.0D / (1.0D + Math.pow(10.0D, (otherMmr - ownMmr) / 400.0D));
     }
 
-    private static int participantCurrentMmr(UUID participantId) {
+    private static int participantCurrentMmr(MinecraftServer server, DuelBattle battle, UUID participantId) {
         if (participantId == null) {
             return PlayerDuelStats.DEFAULT_MMR;
         }
@@ -1155,11 +1259,55 @@ public final class TameDuelManager {
         if (tame != null) {
             return Math.max(0, tame.duelMmr);
         }
+        ServerPlayer livePlayer = server == null ? null : server.getPlayerList().getPlayer(participantId);
+        if (livePlayer != null) {
+            return playerMmrWeightFromStats(livePlayer.getMaxHealth(), livePlayer.getArmorValue(), livePlayer.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS));
+        }
+        CompoundTag snapshot = battle == null ? null : battle.playerSnapshots.get(participantId);
+        if (snapshot != null && !snapshot.isEmpty()) {
+            return playerMmrWeightFromSnapshot(snapshot);
+        }
         PlayerDuelStats player = TameRegistry.getPlayerDuelStats().get(participantId);
         if (player != null) {
-            return Math.max(0, player.duelMmr);
+            return playerMmrWeightFromStats(20.0F, 0.0D, 0.0D);
         }
         return PlayerDuelStats.DEFAULT_MMR;
+    }
+
+    private static int playerMmrWeightFromSnapshot(CompoundTag snapshot) {
+        return playerMmrWeightFromStats(
+                readPlayerAttribute(snapshot, "minecraft:generic.max_health", 20.0D),
+                readPlayerAttribute(snapshot, "minecraft:generic.armor", 0.0D),
+                readPlayerAttribute(snapshot, "minecraft:generic.armor_toughness", 0.0D)
+        );
+    }
+
+    private static int playerMmrWeightFromStats(double maxHealth, double armor, double armorToughness) {
+        double clampedHealth = Math.max(1.0D, maxHealth);
+        double clampedArmor = Math.max(0.0D, armor);
+        double clampedToughness = Math.max(0.0D, armorToughness);
+        return Math.max(1, (int) Math.round((clampedHealth * 2.0D) + ((clampedArmor + clampedToughness) * 2.0D)));
+    }
+
+    private static double readPlayerAttribute(CompoundTag snapshot, String attributeName, double fallback) {
+        if (snapshot != null && snapshot.contains("Attributes", 9)) {
+            var attributes = snapshot.getList("Attributes", 10);
+            for (int i = 0; i < attributes.size(); i++) {
+                CompoundTag row = attributes.getCompound(i);
+                if (!row.contains("Name", 8)) {
+                    continue;
+                }
+                String name = row.getString("Name");
+                String shortName = attributeName.startsWith("minecraft:") ? attributeName.substring("minecraft:".length()) : attributeName;
+                if (!attributeName.equals(name) && !shortName.equals(name)) {
+                    continue;
+                }
+                if (row.contains("Base", 99)) {
+                    return row.getDouble("Base");
+                }
+            }
+        }
+        return fallback;
     }
 
     private static void distributeTeamMmr(MinecraftServer server, DuelBattle battle, Set<UUID> teamIds, Map<UUID, Integer> placementIndex, int participantCount, boolean won, int poolMagnitude, Map<UUID, Integer> deltas) {
