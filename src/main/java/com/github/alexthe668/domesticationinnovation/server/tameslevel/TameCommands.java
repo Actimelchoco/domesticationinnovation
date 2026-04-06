@@ -10550,6 +10550,7 @@ public class TameCommands {
         if (tame == null || data == null) {
             return;
         }
+        removeCompetingLoadedTameCopies(tame, data);
         TameRegistry.bindEntityToData(tame, data);
         applyLatestDeathSnapshotIfAvailable(tame, data);
         tame.stopRiding();
@@ -10593,6 +10594,30 @@ public class TameCommands {
         TameRegistry.bindEntityToData(tame, data);
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
+    }
+
+    private static void removeCompetingLoadedTameCopies(TamableAnimal keeper, TameData data) {
+        if (keeper == null || data == null || keeper.level() == null || keeper.level().getServer() == null) {
+            return;
+        }
+        UUID keeperUuid = keeper.getUUID();
+        UUID keeperTlId = data.tlId;
+        List<TamableAnimal> duplicates = new ArrayList<>();
+        for (ServerLevel level : keeper.level().getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal other) || other == keeper) {
+                    continue;
+                }
+                UUID otherTlId = TameData.getTlId(other);
+                if (keeperUuid.equals(other.getUUID()) || (keeperTlId != null && keeperTlId.equals(otherTlId))) {
+                    duplicates.add(other);
+                }
+            }
+        }
+        for (TamableAnimal duplicate : duplicates) {
+            TameDuelManager.endDuelForTame(keeper.level().getServer(), duplicate.getUUID());
+            forceRemoveLoadedTame(duplicate);
+        }
     }
 
     private static void clearMatchingDiBedRespawnRequests(CommandSourceStack source, TameData data) {
@@ -13545,16 +13570,12 @@ public class TameCommands {
 
         if (!aliveMatches.isEmpty()) {
             TameData data = aliveMatches.get(0);
-            targetUuid = data.uuid;
-            targetTlId = data.tlId;
-            TamableAnimal loaded = findLoadedTameByUuid(source, data.uuid);
-            if (loaded != null) {
-                TameDuelManager.endDuelForTame(source.getServer(), loaded.getUUID());
-                forceRemoveLoadedTame(loaded);
-            }
-            if (TameRegistry.TAMES.remove(data.uuid) != null) {
-                removedRegistry++;
-            }
+            TerminateFamilyResult family = terminateMatchingOwnerIdentity(source, data);
+            removedRegistry += family.removedRegistry();
+            removedLastDeaths += family.removedLastDeaths();
+            removedHistory += family.removedHistory();
+            targetUuid = family.primaryUuid();
+            targetTlId = family.primaryTlId();
         }
 
         if (targetUuid != null) {
@@ -13780,20 +13801,26 @@ public class TameCommands {
         int removedLastDeaths = 0;
         int removedHistory = 0;
 
-        TamableAnimal loaded = findLoadedTameByUuid(source, tameUuid);
-        if (loaded != null) {
-            TameDuelManager.endDuelForTame(source.getServer(), loaded.getUUID());
-            forceRemoveLoadedTame(loaded);
+        TameData selected = TameRegistry.get(tameUuid);
+        UUID tlId;
+        if (selected != null) {
+            TerminateFamilyResult family = terminateMatchingOwnerIdentity(source, selected);
+            removedRegistry += family.removedRegistry();
+            removedLastDeaths += family.removedLastDeaths();
+            removedHistory += family.removedHistory();
+            tlId = family.primaryTlId();
+        } else {
+            TamableAnimal loaded = findLoadedTameByUuid(source, tameUuid);
+            if (loaded != null) {
+                TameDuelManager.endDuelForTame(source.getServer(), loaded.getUUID());
+                forceRemoveLoadedTame(loaded);
+            }
+            tlId = null;
+            removedLastDeaths += TameRegistry.removeDeathsForIdentity(tameUuid, tlId);
+            int beforeHistory = TameRegistry.DEATH_HISTORY.size();
+            TameRegistry.DEATH_HISTORY.removeIf(r -> r != null && tameUuid.equals(r.uuid));
+            removedHistory += Math.max(0, beforeHistory - TameRegistry.DEATH_HISTORY.size());
         }
-        if (TameRegistry.TAMES.remove(tameUuid) != null) {
-            removedRegistry++;
-        }
-        TameData registryData = TameRegistry.get(tameUuid);
-        UUID tlId = registryData == null ? null : registryData.tlId;
-        removedLastDeaths += TameRegistry.removeDeathsForIdentity(tameUuid, tlId);
-        int beforeHistory = TameRegistry.DEATH_HISTORY.size();
-        TameRegistry.DEATH_HISTORY.removeIf(r -> r != null && (tameUuid.equals(r.uuid) || (tlId != null && tlId.equals(r.tlId))));
-        removedHistory += Math.max(0, beforeHistory - TameRegistry.DEATH_HISTORY.size());
 
         if (removedRegistry <= 0 && removedLastDeaths <= 0 && removedHistory <= 0) {
             return error(source.getPlayer(), "No registry/death entries removed for selected tame.");
@@ -13807,6 +13834,105 @@ public class TameCommands {
                         + rd + " last-death row, " + rh + " death-history rows."
         ), true);
         return 1;
+    }
+
+    private record TerminateFamilyResult(UUID primaryUuid, UUID primaryTlId, int removedRegistry, int removedLastDeaths, int removedHistory) {
+    }
+
+    private static TerminateFamilyResult terminateMatchingOwnerIdentity(CommandSourceStack source, TameData selected) {
+        if (source == null || selected == null) {
+            return new TerminateFamilyResult(null, null, 0, 0, 0);
+        }
+        UUID ownerId = selected.ownerUUID;
+        String groupKey = duplicateGroupKey(selected);
+        UUID primaryUuid = selected.uuid;
+        UUID primaryTlId = selected.tlId;
+        int removedRegistry = 0;
+        int removedLastDeaths = 0;
+        int removedHistory = 0;
+
+        List<TamableAnimal> loadedCopies = new ArrayList<>();
+        MinecraftServer server = source.getServer();
+        if (server != null && ownerId != null && !groupKey.isBlank()) {
+            for (ServerLevel level : server.getAllLevels()) {
+                for (Entity entity : level.getAllEntities()) {
+                    if (!(entity instanceof TamableAnimal tame)) {
+                        continue;
+                    }
+                    UUID loadedOwner = tame.getOwnerUUID();
+                    if (!ownerId.equals(loadedOwner)) {
+                        continue;
+                    }
+                    if (matchesTerminateIdentity(tame, selected, groupKey)) {
+                        loadedCopies.add(tame);
+                    }
+                }
+            }
+        }
+
+        for (TamableAnimal loaded : loadedCopies) {
+            TameDuelManager.endDuelForTame(source.getServer(), loaded.getUUID());
+            forceRemoveLoadedTame(loaded);
+        }
+
+        List<TameData> registryCopies = new ArrayList<>();
+        if (ownerId != null && !groupKey.isBlank()) {
+            for (TameData candidate : TameRegistry.TAMES.values()) {
+                if (candidate == null || candidate.uuid == null || candidate.ownerUUID == null) {
+                    continue;
+                }
+                if (!ownerId.equals(candidate.ownerUUID)) {
+                    continue;
+                }
+                if (!groupKey.equals(duplicateGroupKey(candidate))) {
+                    continue;
+                }
+                registryCopies.add(candidate);
+            }
+        } else if (selected.uuid != null) {
+            registryCopies.add(selected);
+        }
+
+        for (TameData candidate : registryCopies) {
+            UUID candidateUuid = candidate.uuid;
+            UUID candidateTlId = candidate.tlId;
+            if (candidateUuid == null) {
+                continue;
+            }
+            if (TameRegistry.TAMES.remove(candidateUuid) != null) {
+                removedRegistry++;
+            }
+            removedLastDeaths += TameRegistry.removeDeathsForIdentity(candidateUuid, candidateTlId);
+            int beforeHistory = TameRegistry.DEATH_HISTORY.size();
+            TameRegistry.DEATH_HISTORY.removeIf(r -> r != null && (candidateUuid.equals(r.uuid) || (candidateTlId != null && candidateTlId.equals(r.tlId))));
+            removedHistory += Math.max(0, beforeHistory - TameRegistry.DEATH_HISTORY.size());
+        }
+
+        return new TerminateFamilyResult(primaryUuid, primaryTlId, removedRegistry, removedLastDeaths, removedHistory);
+    }
+
+    private static boolean matchesTerminateIdentity(TamableAnimal tame, TameData selected, String selectedGroupKey) {
+        if (tame == null || selected == null || selectedGroupKey == null || selectedGroupKey.isBlank()) {
+            return false;
+        }
+        TameData liveData = TameRegistry.get(tame.getUUID());
+        if (liveData == null) {
+            String liveKey = duplicateGroupKeyForLoadedTame(tame);
+            return selectedGroupKey.equals(liveKey);
+        }
+        return selectedGroupKey.equals(duplicateGroupKey(liveData));
+    }
+
+    private static String duplicateGroupKeyForLoadedTame(TamableAnimal tame) {
+        if (tame == null || tame.getOwnerUUID() == null) {
+            return "";
+        }
+        String name = stripLevelPrefixes(tame.getName().getString()).toLowerCase(Locale.ROOT);
+        String type = entityTypeId(tame);
+        if (type == null) {
+            type = "";
+        }
+        return tame.getOwnerUUID() + "|" + name + "|" + type.toLowerCase(Locale.ROOT);
     }
 
     private static int adminRespawnPet(CommandSourceStack source, String petName, int index) {
