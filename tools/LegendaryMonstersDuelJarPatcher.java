@@ -17,11 +17,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Enumeration;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
+import java.nio.charset.StandardCharsets;
 
 public class LegendaryMonstersDuelJarPatcher {
     private static final String HELPER_OWNER = "com/github/alexthe668/domesticationinnovation/server/tameslevel/compat/LegendaryMonstersDuelCompat";
@@ -30,7 +30,8 @@ public class LegendaryMonstersDuelJarPatcher {
 
     private static final Map<String, String> TARGET_CLASSES = Map.of(
             "net/miauczel/legendary_monsters/entity/AnimatedMonster/Mobs/Pets/FHauntedGuardEntity.class", "m_269323_",
-            "net/miauczel/legendary_monsters/entity/AnimatedMonster/Mobs/Pets/FLivingArmorEntity.class", "m_269323_"
+            "net/miauczel/legendary_monsters/entity/AnimatedMonster/Mobs/Pets/FLivingArmorEntity.class", "m_269323_",
+            "net/miauczel/legendary_monsters/entity/AnimatedMonster/Mobs/Pets/MossyGolemEntity.class", "m_269323_"
     );
 
     public static void main(String[] args) throws Exception {
@@ -65,6 +66,9 @@ public class LegendaryMonstersDuelJarPatcher {
     }
 
     private static byte[] patchClass(byte[] classBytes, String ownerMethodName) {
+        if (containsHelperReference(classBytes)) {
+            return classBytes;
+        }
         ClassNode node = new ClassNode();
         new ClassReader(classBytes).accept(node, 0);
         boolean changed = false;
@@ -82,6 +86,10 @@ public class LegendaryMonstersDuelJarPatcher {
         return writer.toByteArray();
     }
 
+    private static boolean containsHelperReference(byte[] classBytes) {
+        return new String(classBytes, StandardCharsets.ISO_8859_1).contains(HELPER_OWNER);
+    }
+
     private static boolean patchAreaAttack(MethodNode method, String ownerMethodName) {
         boolean changed = false;
         for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
@@ -91,7 +99,11 @@ public class LegendaryMonstersDuelJarPatcher {
             AbstractInsnNode firstPrev = previousMeaningful(insn.getPrevious());
             AbstractInsnNode secondPrev = previousMeaningful(firstPrev == null ? null : firstPrev.getPrevious());
             AbstractInsnNode thirdPrev = previousMeaningful(secondPrev == null ? null : secondPrev.getPrevious());
-            if (!(firstPrev instanceof MethodInsnNode firstMethod) || !(secondPrev instanceof VarInsnNode secondVar) || !(thirdPrev instanceof MethodInsnNode thirdMethod)) {
+            AbstractInsnNode fourthPrev = previousMeaningful(thirdPrev == null ? null : thirdPrev.getPrevious());
+            if (!(firstPrev instanceof MethodInsnNode firstMethod)
+                    || !(secondPrev instanceof VarInsnNode secondVar)
+                    || !(thirdPrev instanceof MethodInsnNode thirdMethod)
+                    || !(fourthPrev instanceof VarInsnNode fourthVar)) {
                 continue;
             }
             if (!ownerMethodName.equals(firstMethod.name) || !ownerMethodName.equals(thirdMethod.name)) {
@@ -100,11 +112,14 @@ public class LegendaryMonstersDuelJarPatcher {
             if (secondVar.getOpcode() != Opcodes.ALOAD || secondVar.var != 0) {
                 continue;
             }
+            if (fourthVar.getOpcode() != Opcodes.ALOAD || fourthVar.var <= 0) {
+                continue;
+            }
             LabelNode allowDamage = new LabelNode();
             InsnList injected = new InsnList();
             injected.add(new JumpInsnNode(Opcodes.IF_ACMPNE, allowDamage));
             injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            injected.add(new VarInsnNode(Opcodes.ALOAD, 9));
+            injected.add(new VarInsnNode(Opcodes.ALOAD, fourthVar.var));
             injected.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER_OWNER, HELPER_NAME, HELPER_DESC, false));
             injected.add(new JumpInsnNode(Opcodes.IFNE, allowDamage));
             injected.add(new JumpInsnNode(Opcodes.GOTO, jump.label));
