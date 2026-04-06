@@ -371,14 +371,6 @@ public class TameRegistry {
         return usesInvertedCallOrderByDefault(normalized) || INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized);
     }
 
-    public static boolean isFollowSitOnlyType(String typeId) {
-        String normalized = normalizeTypeId(typeId);
-        if (normalized == null || normalized.isBlank()) {
-            return false;
-        }
-        return normalized.startsWith("crittersandcompanions:");
-    }
-
     public static Set<String> getCallOrderInvertedTypes() {
         return Set.copyOf(INVERTED_CALL_ORDER_TYPE_IDS);
     }

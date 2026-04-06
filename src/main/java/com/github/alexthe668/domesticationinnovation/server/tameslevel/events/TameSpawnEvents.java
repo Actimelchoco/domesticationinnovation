@@ -136,7 +136,6 @@ public class TameSpawnEvents {
             changed = true;
         }
         LevelSystem.updateTameName(tame, data);
-        TameCommands.syncMutantCreeperMinionSettings(tame, data);
         if (changed) {
             TameRegistry.markDirty();
         }
@@ -182,7 +181,6 @@ public class TameSpawnEvents {
             // Keep entity attributes in sync with registry bonuses whenever a tracked tame loads.
             TameRegistry.bindEntityToData(tame, existing);
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existing);
-            TameCommands.syncMutantCreeperMinionSettings(tame, existing);
             queueDeferredStatRefresh(tame, existing, DEFERRED_STAT_REFRESH_DELAY_TICKS);
             return existing;
         }
@@ -217,7 +215,6 @@ public class TameSpawnEvents {
                 notifyFlutterReleased(tame, existingByTlId);
             }
             LevelSystem.reapplyTypeBasePlusBonuses(tame, existingByTlId);
-            TameCommands.syncMutantCreeperMinionSettings(tame, existingByTlId);
             queueDeferredStatRefresh(tame, existingByTlId, DEFERRED_STAT_REFRESH_DELAY_TICKS);
             return existingByTlId;
         }
@@ -244,7 +241,6 @@ public class TameSpawnEvents {
         notifyNewTameFound(tame, data);
         LevelSystem.ensureClassAssigned(tame, data, true);
         LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
-        TameCommands.syncMutantCreeperMinionSettings(tame, data);
         queueDeferredStatRefresh(tame, data, DEFERRED_STAT_REFRESH_DELAY_TICKS);
         System.out.println("[TamesLevel] Registered tame: " + data.name);
         return data;
@@ -292,7 +288,6 @@ public class TameSpawnEvents {
             return;
         }
         LevelSystem.updateTameName(tame, data);
-        TameCommands.syncMutantCreeperMinionSettings(tame, data);
         tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
         refreshRegistrySnapshot(tame, data);
         queueDeferredStatRefresh(tame, data, DEFERRED_STAT_REFRESH_DELAY_TICKS);

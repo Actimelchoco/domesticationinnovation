@@ -3071,14 +3071,6 @@ public class TameCommands {
                                                 .executes(ctx -> adminCleanupProjectiles(ctx.getSource(), "all")))
                                         .then(Commands.literal("dragonFireball")
                                                 .executes(ctx -> adminCleanupProjectiles(ctx.getSource(), "dragon_fireball"))))
-                                .then(Commands.literal("dragonfly")
-                                        .then(Commands.literal("fixArmor")
-                                                .executes(ctx -> fixDragonflyArmor(ctx.getSource())))
-                                        .then(Commands.literal("fixStats")
-                                                .executes(ctx -> fixDragonflyStats(ctx.getSource())))
-                                        .then(Commands.literal("rebuildFromData")
-                                                .executes(ctx -> rebuildDragonfliesFromData(ctx.getSource()))))
-
                                 .then(Commands.literal("xp")
                                         .then(Commands.literal("add")
                                                 .then(Commands.argument("pet", StringArgumentType.string())
@@ -5776,7 +5768,7 @@ public class TameCommands {
 
         TameDuelManager.startGroupDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, spectators.playerIds, spectators.broadcastToServer);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), spectators,
-                Component.literal(duelStartedLabel(new ArrayList<>(leftGroup), new ArrayList<>(rightGroup))).withStyle(ChatFormatting.RED));
+                duelStartedComponent(new ArrayList<>(leftGroup), new ArrayList<>(rightGroup)));
         return 1;
     }
 
@@ -5826,7 +5818,7 @@ public class TameCommands {
 
         TameDuelManager.startTeamDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, spectators.playerIds, spectators.broadcastToServer);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), spectators,
-                Component.literal(duelStartedLabel(leftResult.members, rightResult.members)).withStyle(ChatFormatting.RED));
+                duelStartedComponent(leftResult.members, rightResult.members));
         return 1;
     }
 
@@ -5896,7 +5888,7 @@ public class TameCommands {
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal(duelStartedLabel(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup))).withStyle(ChatFormatting.RED));
+                duelStartedComponent(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup)));
         return 1;
     }
 
@@ -5946,7 +5938,7 @@ public class TameCommands {
         TameDuelManager.startTeamDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal(duelStartedLabel(challengerResult.members, targetResult.members)).withStyle(ChatFormatting.RED));
+                duelStartedComponent(challengerResult.members, targetResult.members));
         return 1;
     }
 
@@ -6024,7 +6016,7 @@ public class TameCommands {
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal(duelStartedLabel(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup))).withStyle(ChatFormatting.RED));
+                duelStartedComponent(new ArrayList<>(challengerGroup), new ArrayList<>(targetGroup)));
         return 1;
     }
 
@@ -6082,7 +6074,7 @@ public class TameCommands {
         TameDuelManager.startTeamDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
         notifyDuelSpectators(source.getServer(), challenger.getUUID(), targetPlayer.getUUID(), spectators,
-                Component.literal(duelStartedLabel(challengerResult.members, targetResult.members)).withStyle(ChatFormatting.RED));
+                duelStartedComponent(challengerResult.members, targetResult.members));
         return 1;
     }
 
@@ -15038,185 +15030,6 @@ public class TameCommands {
         return 1;
     }
 
-    private static int fixDragonflyArmor(CommandSourceStack source) {
-        int touched = 0;
-        int clearedStacks = 0;
-        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
-        for (ServerLevel level : source.getServer().getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
-                if (!dragonflyId.equals(typeId) || !(entity instanceof LivingEntity living)) {
-                    continue;
-                }
-                int removedHere = 0;
-                for (EquipmentSlot slot : List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)) {
-                    ItemStack stack = living.getItemBySlot(slot);
-                    if (stack.isEmpty()) {
-                        continue;
-                    }
-                    living.setItemSlot(slot, ItemStack.EMPTY);
-                    removedHere++;
-                }
-                if (removedHere > 0) {
-                    touched++;
-                    clearedStacks += removedHere;
-                }
-            }
-        }
-        final int fixedEntities = touched;
-        final int fixedStacks = clearedStacks;
-        source.sendSuccess(() -> Component.literal("Fixed dragonfly armor on " + fixedEntities + " loaded dragonflies and removed " + fixedStacks + " equipped armor stacks."), true);
-        return fixedEntities > 0 ? fixedEntities : 1;
-    }
-
-    private static int rebuildDragonfliesFromData(CommandSourceStack source) {
-        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
-        EntityType<?> dragonflyType = ForgeRegistries.ENTITY_TYPES.getValue(dragonflyId);
-        if (dragonflyType == null) {
-            source.sendFailure(Component.literal("Dragonfly entity type not found: " + dragonflyId));
-            return 0;
-        }
-
-        int rebuilt = 0;
-        int skippedUnloaded = 0;
-        int failed = 0;
-
-        for (TameData data : TameRegistry.TAMES.values()) {
-            if (data == null || data.uuid == null || data.dead) {
-                continue;
-            }
-            if (!dragonflyId.toString().equalsIgnoreCase(data.type)) {
-                continue;
-            }
-
-            TamableAnimal current = findLoadedTameByUuid(source.getServer(), data.uuid);
-            if (current == null) {
-                skippedUnloaded++;
-                continue;
-            }
-            if (!(current.level() instanceof ServerLevel level)) {
-                failed++;
-                continue;
-            }
-
-            Vec3 pos = current.position();
-            float yRot = current.getYRot();
-            float xRot = current.getXRot();
-            boolean sitting = current.isOrderedToSit();
-            UUID ownerId = current.getOwnerUUID() != null ? current.getOwnerUUID() : data.ownerUUID;
-
-            current.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
-            current.discard();
-
-            Entity spawned = dragonflyType.create(level);
-            if (!(spawned instanceof TamableAnimal rebuiltDragonfly)) {
-                failed++;
-                continue;
-            }
-
-            rebuiltDragonfly.setUUID(data.uuid);
-            rebuiltDragonfly.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
-            rebuiltDragonfly.setDeltaMovement(0.0D, 0.0D, 0.0D);
-            rebuiltDragonfly.setTame(true);
-            if (ownerId != null) {
-                rebuiltDragonfly.setOwnerUUID(ownerId);
-            }
-            rebuiltDragonfly.setTarget(null);
-            rebuiltDragonfly.getNavigation().stop();
-            rebuiltDragonfly.setOrderedToSit(sitting);
-
-            if (!level.addFreshEntity(rebuiltDragonfly)) {
-                failed++;
-                continue;
-            }
-
-            TameGoalInstaller.installIfMissing(rebuiltDragonfly);
-            TameRegistry.bindEntityToData(rebuiltDragonfly, data);
-            LevelSystem.ensureClassAssigned(rebuiltDragonfly, data, false);
-            LevelSystem.reapplyTypeBasePlusBonuses(rebuiltDragonfly, data);
-            LevelSystem.updateTameName(rebuiltDragonfly, data);
-            rebuiltDragonfly.setHealth(rebuiltDragonfly.getMaxHealth());
-
-            data.ownerUUID = ownerId;
-            data.lastKnownDimension = level.dimension().location().toString();
-            data.lastKnownX = rebuiltDragonfly.blockPosition().getX();
-            data.lastKnownY = rebuiltDragonfly.blockPosition().getY();
-            data.lastKnownZ = rebuiltDragonfly.blockPosition().getZ();
-            data.lastKnownGameTime = level.getGameTime();
-            CompoundTag refreshedSnapshot = new CompoundTag();
-            rebuiltDragonfly.save(refreshedSnapshot);
-            data.entitySnapshot = refreshedSnapshot;
-            rebuilt++;
-        }
-
-        TameRegistry.markDirty();
-        final int rebuiltCount = rebuilt;
-        final int skippedCount = skippedUnloaded;
-        final int failedCount = failed;
-        source.sendSuccess(() -> Component.literal(
-                "Rebuilt " + rebuiltCount + " loaded dragonflies from registry data; skipped unloaded " + skippedCount + "; failed " + failedCount + "."
-        ), true);
-        return rebuiltCount > 0 ? rebuiltCount : 1;
-    }
-
-    private static int fixDragonflyStats(CommandSourceStack source) {
-        ResourceLocation dragonflyId = new ResourceLocation("crittersandcompanions", "dragonfly");
-        int fixed = 0;
-        int skippedUntracked = 0;
-        int failed = 0;
-
-        for (ServerLevel level : source.getServer().getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
-                if (!dragonflyId.equals(typeId) || !(entity instanceof TamableAnimal tame)) {
-                    continue;
-                }
-                TameData data = TameRegistry.get(tame.getUUID());
-                if (data == null) {
-                    data = TameRegistry.getByTlId(TameData.getTlId(tame));
-                }
-                if (data == null) {
-                    skippedUntracked++;
-                    continue;
-                }
-
-                float oldHealth = tame.getHealth();
-                float oldMaxHealth = Math.max(1.0F, (float) tame.getMaxHealth());
-                double healthRatio = Mth.clamp(oldHealth / oldMaxHealth, 0.0F, 1.0F);
-
-                TameGoalInstaller.installIfMissing(tame);
-                TameRegistry.bindEntityToData(tame, data);
-                LevelSystem.ensureClassAssigned(tame, data, false);
-                if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
-                    failed++;
-                    continue;
-                }
-                LevelSystem.updateTameName(tame, data);
-                tame.setHealth((float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth()));
-                TameSpawnEvents.queueDeferredStatRefresh(tame, data, 1200L);
-
-                data.lastKnownDimension = level.dimension().location().toString();
-                data.lastKnownX = tame.blockPosition().getX();
-                data.lastKnownY = tame.blockPosition().getY();
-                data.lastKnownZ = tame.blockPosition().getZ();
-                data.lastKnownGameTime = level.getGameTime();
-                CompoundTag refreshedSnapshot = new CompoundTag();
-                tame.save(refreshedSnapshot);
-                data.entitySnapshot = refreshedSnapshot;
-                fixed++;
-            }
-        }
-
-        TameRegistry.markDirty();
-        final int fixedCount = fixed;
-        final int skippedCount = skippedUntracked;
-        final int failedCount = failed;
-        source.sendSuccess(() -> Component.literal(
-                "Fixed dragonfly stats on " + fixedCount + " loaded tracked dragonflies; skipped untracked " + skippedCount + "; failed " + failedCount + "."
-        ), true);
-        return fixedCount > 0 ? fixedCount : 1;
-    }
-
     public static boolean refreshLoadedTameStatsAfterRebuild(TamableAnimal tame, TameData data, boolean fullHeal) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
             return false;
@@ -15232,7 +15045,6 @@ public class TameCommands {
             return false;
         }
         LevelSystem.updateTameName(tame, data);
-        syncMutantCreeperMinionSettings(tame, data);
         float nextHealth = fullHeal
                 ? (float) tame.getMaxHealth()
                 : (float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth());
@@ -15248,29 +15060,6 @@ public class TameCommands {
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
         return true;
-    }
-
-    public static void syncMutantCreeperMinionSettings(TamableAnimal tame, TameData data) {
-        if (!isMutantCreeperMinion(tame) || data == null) {
-            return;
-        }
-        invokeExactBooleanSetter(tame, "setCanExplodeContinuously", true);
-        invokeExactFloatSetter(tame, "setExplosionRadius", computeMutantCreeperMinionExplosionRadius(data));
-    }
-
-    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
-        if (tame == null) {
-            return false;
-        }
-        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        String typeId = key == null ? tame.getType().toString() : key.toString();
-        return "mutantmonsters:creeper_minion".equalsIgnoreCase(typeId)
-                || "entity.mutantmonsters.creeper_minion".equalsIgnoreCase(typeId);
-    }
-
-    private static float computeMutantCreeperMinionExplosionRadius(TameData data) {
-        double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
-        return (float) Mth.clamp(2.0D + bonusDamage * 0.05D, 2.0D, 6.0D);
     }
 
     private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
@@ -16527,14 +16316,6 @@ public class TameCommands {
     }
 
     private static boolean matchesSnapshotCommand(int command, MovementOrder order, String typeId) {
-        if (TameRegistry.isFollowSitOnlyType(typeId)) {
-            int sitCommand = twoStateSitCommand(typeId);
-            return switch (order) {
-                case FOLLOW -> command != sitCommand;
-                case SIT -> command == sitCommand;
-                case WANDER, GUARDIAN -> false;
-            };
-        }
         int expected = switch (order) {
             case WANDER, GUARDIAN -> 0;
             case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 1 : 2;
@@ -16555,13 +16336,6 @@ public class TameCommands {
 
     private static MovementOrder resolveMovementOrderFromLiveCommand(TamableAnimal tame, int command, boolean hasHome) {
         String typeId = entityTypeId(tame);
-        if (TameRegistry.isFollowSitOnlyType(typeId)) {
-            int sitCommand = twoStateSitCommand(typeId);
-            if (tame != null && tame.isOrderedToSit()) {
-                return MovementOrder.SIT;
-            }
-            return command == sitCommand ? MovementOrder.SIT : MovementOrder.FOLLOW;
-        }
         if (tame != null && tame.isOrderedToSit()) {
             return MovementOrder.SIT;
         }
@@ -16644,10 +16418,6 @@ public class TameCommands {
         return null;
     }
 
-    private static int twoStateSitCommand(String typeId) {
-        return usesInvertedGenericCallOrder(typeId) ? 2 : 1;
-    }
-
     private static String entityTypeId(TamableAnimal tame) {
         if (tame == null) {
             return null;
@@ -16691,25 +16461,6 @@ public class TameCommands {
         });
     }
 
-    public static boolean cycleCompatInteractionMovementOrder(ServerPlayer player, TamableAnimal tame) {
-        if (player == null || tame == null || !tame.isTame()) {
-            return false;
-        }
-        TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
-            return false;
-        }
-        MovementOrder current = currentLiveMovementOrder(tame, data);
-        MovementOrder next = switch (current) {
-            case FOLLOW, GUARDIAN -> MovementOrder.SIT;
-            case SIT -> MovementOrder.WANDER;
-            case WANDER -> MovementOrder.FOLLOW;
-        };
-        applyMovementOverride(tame, next);
-        player.sendSystemMessage(Component.literal(tameDisplayName(data) + ": " + movementLabel(next) + ".").withStyle(ChatFormatting.YELLOW), true);
-        return true;
-    }
-
     private static void applyMovementOverride(TamableAnimal tame, MovementOrder order) {
         if (tame == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
@@ -16742,10 +16493,7 @@ public class TameCommands {
             if (sit || order == MovementOrder.WANDER) {
                 tame.setTarget(null);
             }
-            if (!usesMinimalMovementOverride(tame)) {
-                // Best-effort compatibility with non-DI wandering/order state.
-                clearExternalWanderingState(tame, order);
-            }
+            clearExternalWanderingState(tame, order);
         }
         if (order == MovementOrder.SIT) {
             tame.setTarget(null);
@@ -16775,23 +16523,6 @@ public class TameCommands {
         data.movementOrder = liveCode;
         refreshRegistrySnapshotFor(tame);
         return true;
-    }
-
-    private static boolean usesMinimalMovementOverride(TamableAnimal tame) {
-        ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        return isLegendaryMonstersType(typeKey == null ? null : typeKey.toString());
-    }
-
-    private static boolean isLegendaryMonstersType(String typeId) {
-        if (typeId == null || typeId.isBlank()) {
-            return false;
-        }
-        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("entity.")) {
-            normalized = normalized.substring("entity.".length());
-        }
-        return normalized.startsWith("legendary_monsters:")
-                || normalized.startsWith("legendary_monsters.");
     }
 
     private static void syncCommandableMovementState(TamableAnimal tame, IComandableMob commandableMob, MovementOrder order) {
@@ -16874,12 +16605,6 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {
-        if (TameRegistry.isFollowSitOnlyType(entityTypeId(tame))) {
-            return switch (order) {
-                case SIT -> twoStateSitCommand(entityTypeId(tame));
-                case FOLLOW, WANDER, GUARDIAN -> 0;
-            };
-        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> 0;
@@ -16968,13 +16693,6 @@ public class TameCommands {
     }
 
     private static int[] commandCandidates(TamableAnimal tame, MovementOrder order) {
-        if (TameRegistry.isFollowSitOnlyType(entityTypeId(tame))) {
-            int sitCommand = twoStateSitCommand(entityTypeId(tame));
-            return switch (order) {
-                case SIT -> sitCommand == 2 ? new int[]{2, 1, 0, 3} : new int[]{1, 2, 0, 3};
-                case FOLLOW, WANDER, GUARDIAN -> new int[]{0, 2, 1, 3};
-            };
-        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> new int[]{0, 1, 2, 3};
@@ -18194,7 +17912,7 @@ public class TameCommands {
 
         TameDuelManager.startTeamDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, Set.of(), false);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), DuelSpectators.empty(),
-                Component.literal(duelStartedLabel(leftResult.members, rightResult.members)).withStyle(ChatFormatting.RED));
+                duelStartedComponent(leftResult.members, rightResult.members));
         return 1;
     }
 
@@ -18480,7 +18198,7 @@ public class TameCommands {
         if (server == null || match == null) {
             return;
         }
-        Component line = Component.literal(duelStartedLabel(sideMembersForPendingDuel(server, match, true), sideMembersForPendingDuel(server, match, false))).withStyle(ChatFormatting.RED);
+        Component line = duelStartedComponent(sideMembersForPendingDuel(server, match, true), sideMembersForPendingDuel(server, match, false));
         for (UUID participantId : match.participants.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(participantId);
             if (player != null) {
@@ -18735,8 +18453,13 @@ public class TameCommands {
         return point.dimensionId() + " @ " + fmt(point.x()) + ", " + fmt(point.y()) + ", " + fmt(point.z());
     }
 
-    private static String duelStartedLabel(List<? extends LivingEntity> teamA, List<? extends LivingEntity> teamB) {
-        return "Duel Started: " + duelMemberNames(teamA) + " vs " + duelMemberNames(teamB) + ".";
+    private static Component duelStartedComponent(List<? extends LivingEntity> teamA, List<? extends LivingEntity> teamB) {
+        return Component.empty()
+                .append(Component.literal("Duel Started: ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(duelMemberNames(teamA)).withStyle(ChatFormatting.DARK_BLUE))
+                .append(Component.literal(" vs ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(duelMemberNames(teamB)).withStyle(ChatFormatting.RED))
+                .append(Component.literal(".").withStyle(ChatFormatting.GOLD));
     }
 
     private static String duelMemberNames(List<? extends LivingEntity> members) {
@@ -18918,7 +18641,7 @@ public class TameCommands {
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        notifyDuelSessionOwners(server, session, Component.literal(duelStartedLabel(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB))).withStyle(ChatFormatting.RED));
+        notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
         return true;
     }
 
@@ -18984,7 +18707,8 @@ public class TameCommands {
             teamB.add(closest);
             return new DuelSessionRound(teamA, teamB);
         }
-        int desiredA = Math.max(1, Math.min(shuffled.size() - 1, 2 + random.nextInt(Math.max(1, shuffled.size() - 2))));
+        int maxFirstTeamSize = Math.max(1, shuffled.size() / 2);
+        int desiredA = Math.max(1, Math.min(maxFirstTeamSize, 2 + random.nextInt(Math.max(1, shuffled.size() - 2))));
         for (int i = 0; i < desiredA; i++) {
             teamA.add(shuffled.get(i));
         }

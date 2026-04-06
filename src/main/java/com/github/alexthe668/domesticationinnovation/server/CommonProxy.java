@@ -16,7 +16,6 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCompatInteractEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameDrumEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
@@ -151,7 +150,6 @@ public class CommonProxy {
         tlIntegrationRegistered = true;
         DomesticationMod.LOGGER.info("Registering TL integration handlers in DomesticationMod.");
         MinecraftForge.EVENT_BUS.register(TameCombatEvents.class);
-        MinecraftForge.EVENT_BUS.register(TameCompatInteractEvents.class);
         MinecraftForge.EVENT_BUS.register(TameDrumEvents.class);
         MinecraftForge.EVENT_BUS.register(GuardianToolEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
@@ -223,7 +221,6 @@ public class CommonProxy {
                 }
             }
         }
-        sanitizeInvalidDragonflyArmor(event.getEntity());
     }
 
     @SubscribeEvent
@@ -231,7 +228,6 @@ public class CommonProxy {
         if (event == null || event.getSlot() != EquipmentSlot.CHEST) {
             return;
         }
-        sanitizeInvalidDragonflyArmor(event.getEntity());
     }
 
     @SubscribeEvent
@@ -277,42 +273,6 @@ public class CommonProxy {
                 tracker.addBlockedEntityTick(entity.getUUID(), 5);
             }
         }
-    }
-
-    private static void sanitizeInvalidDragonflyArmor(Entity entity) {
-        if (!(entity instanceof LivingEntity living) || living.level().isClientSide) {
-            return;
-        }
-        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(living.getType());
-        if (typeId == null || !"crittersandcompanions:dragonfly".equals(typeId.toString())) {
-            return;
-        }
-        ItemStack chest = living.getItemBySlot(EquipmentSlot.CHEST);
-        if (chest.isEmpty()) {
-            return;
-        }
-        if (isValidDragonflyArmor(chest)) {
-            return;
-        }
-        living.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
-    }
-
-    private static boolean isValidDragonflyArmor(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) {
-            return true;
-        }
-        Item item = stack.getItem();
-        if (item == null) {
-            return false;
-        }
-        ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(item);
-        if (itemId != null
-                && "crittersandcompanions".equals(itemId.getNamespace())
-                && itemId.getPath().endsWith("_dragonfly_armor")) {
-            return true;
-        }
-        String className = item.getClass().getName();
-        return className != null && className.endsWith(".DragonflyArmorItem");
     }
 
     @SubscribeEvent
@@ -374,7 +334,6 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onLivingUpdate(LivingEvent.LivingTickEvent event) {
-        sanitizeInvalidDragonflyArmor(event.getEntity());
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
             if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {

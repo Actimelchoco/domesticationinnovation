@@ -348,13 +348,7 @@ public class TameCombatEvents {
     }
 
     private static boolean shouldInstantRebuildNearOwner(TamableAnimal tame, TameData data, boolean diedInDuel) {
-        if (tame == null || data == null || diedInDuel || data.ownerUUID == null) {
-            return false;
-        }
-        ResourceLocation key = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        String typeId = key == null ? tame.getType().toString() : key.toString();
-        return "mutantmonsters:creeper_minion".equalsIgnoreCase(typeId)
-                || "entity.mutantmonsters.creeper_minion".equalsIgnoreCase(typeId);
+        return false;
     }
 
     private static void scheduleInstantRespawn(UUID tameUuid, int delayTicks, int retries) {

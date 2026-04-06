@@ -35,8 +35,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 public class LevelSystem {
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
-    private static final UUID LEGENDARY_MONSTERS_HEALTH_BONUS_UUID = UUID.fromString("5d39f5cd-0d9d-4308-96d5-76aef6c72601");
-    private static final UUID LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID = UUID.fromString("f8d8b4d9-7d04-4e0c-90d9-76b8f5485cc7");
 
     public enum AbilityType {
         ATTACK,
@@ -791,11 +789,7 @@ public class LevelSystem {
         }
         trackBonus(data, reward, amount);
         boolean reapplied = false;
-        if (tame != null && data != null && isLegendaryMonstersType(data.type)) {
-            reapplied = reapplyTypeBasePlusBonuses(tame, data);
-        } else {
-            addToAttribute(tame, reward.attribute, amount);
-        }
+        addToAttribute(tame, reward.attribute, amount);
         if (reward == BaseStatReward.HP) {
             if (amount >= 0.0D) {
                 tame.setHealth(tame.getMaxHealth());
@@ -1353,21 +1347,12 @@ public class LevelSystem {
         }
 
         scrubLegacyManagedModifiers(tame);
-        boolean legendaryMonsters = isLegendaryMonstersType(data.type);
         Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
-        boolean addBonusHealthOnForcedBase = forcedMaxHealth != null && isDragonflyType(data.type);
-        double maxHealthBase = forcedMaxHealth != null
-                ? forcedMaxHealth + (addBonusHealthOnForcedBase ? data.bonusHealth : 0.0D)
-                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
-        if (legendaryMonsters) {
-            setAttributeBaseValue(tame, Attributes.MAX_HEALTH, forcedMaxHealth != null ? forcedMaxHealth : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth));
-            setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage));
-            applyManagedAdditionModifier(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID, data.bonusHealth, "tl_legendary_bonus_health");
-            applyManagedAdditionModifier(tame, Attributes.ATTACK_DAMAGE, LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID, data.bonusDamage, "tl_legendary_bonus_damage");
-        } else {
-            setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
-            setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
-        }
+        double maxHealthBase = (forcedMaxHealth != null
+                ? forcedMaxHealth
+                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth)) + data.bonusHealth;
+        setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
+        setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
         setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
         setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, resolveBaseValue(data, template, Attributes.ARMOR_TOUGHNESS, data.bonusArmorToughness) + data.bonusArmorToughness);
@@ -1380,14 +1365,7 @@ public class LevelSystem {
     }
 
     public static boolean needsDeferredStatRefresh(TamableAnimal tame, TameData data) {
-        ResourceLocation liveType = tame == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        if (liveType != null) {
-            if ("crittersandcompanions".equals(liveType.getNamespace()) && "dragonfly".equals(liveType.getPath())) {
-                return true;
-            }
-        }
-        String typeId = data == null ? null : data.type;
-        return isDragonflyType(typeId);
+        return false;
     }
 
     private static double readBaseOrDefault(TamableAnimal tame, Attribute attribute) {
@@ -1413,27 +1391,7 @@ public class LevelSystem {
         if (data == null || attribute != Attributes.MAX_HEALTH || data.type == null) {
             return resolveForcedClassBaseValue(data, attribute);
         }
-        if (isDragonflyType(data.type)) {
-            return 4.0D;
-        }
         return resolveForcedClassBaseValue(data, attribute);
-    }
-
-    private static boolean isDragonflyType(String typeId) {
-        return "crittersandcompanions:dragonfly".equals(typeId)
-                || "entity.crittersandcompanions.dragonfly".equals(typeId);
-    }
-
-    private static boolean isLegendaryMonstersType(String typeId) {
-        if (typeId == null || typeId.isBlank()) {
-            return false;
-        }
-        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
-        if (normalized.startsWith("entity.")) {
-            normalized = normalized.substring("entity.".length());
-        }
-        return normalized.startsWith("legendary_monsters:")
-                || normalized.startsWith("legendary_monsters.");
     }
 
     private static void normalizeLiveTypeId(TamableAnimal tame, TameData data) {
@@ -1552,8 +1510,8 @@ public class LevelSystem {
     }
 
     private static void scrubLegacyManagedModifiers(TamableAnimal tame) {
-        scrubUnknownModifiers(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID);
-        scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE, LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID);
+        scrubUnknownModifiers(tame, Attributes.MAX_HEALTH);
+        scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE);
         scrubUnknownModifiers(tame, Attributes.MOVEMENT_SPEED);
         scrubUnknownModifiers(tame, Attributes.ARMOR, COLLAR_ARMOR_UUID);
         scrubUnknownModifiers(tame, Attributes.ARMOR_TOUGHNESS, COLLAR_ARMOR_TOUGHNESS_UUID);
