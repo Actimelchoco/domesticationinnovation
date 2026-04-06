@@ -111,19 +111,11 @@ dependencies {
     implementation fg.deobf("curse.maven:citadel-331936:4848887")
     def localWaystonesJar = file('C:/Users/bruns/Documents/linggango server/mods/waystones-forge-1.20.1-14.1.18.jar')
     def localBalmJar = file('C:/Users/bruns/Documents/linggango server/mods/balm-forge-1.20.1-7.3.38-all.jar')
-    def localLegendaryMonstersJar = file('C:/Users/bruns/Documents/linggango server/mods/legendarymonsters-1.9.8 MC 1.20.1.jar')
-    def localCrittersJar = file('C:/Users/bruns/Documents/linggango server/mods/crittersandcompanions-forge-1.20.1-2.3.5.jar')
     if (localWaystonesJar.exists()) {
         compileOnly files(localWaystonesJar)
     }
     if (localBalmJar.exists()) {
         compileOnly files(localBalmJar)
-    }
-    if (localLegendaryMonstersJar.exists()) {
-        compileOnly files(localLegendaryMonstersJar)
-    }
-    if (localCrittersJar.exists()) {
-        compileOnly files(localCrittersJar)
     }
 
 }

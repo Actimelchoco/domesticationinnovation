@@ -18592,7 +18592,7 @@ public class TameCommands {
     private static Component duelStartedComponent(List<? extends LivingEntity> teamA, List<? extends LivingEntity> teamB) {
         return Component.empty()
                 .append(Component.literal("Duel Started: ").withStyle(ChatFormatting.GOLD))
-                .append(Component.literal(duelMemberNames(teamA)).withStyle(ChatFormatting.DARK_BLUE))
+                .append(Component.literal(duelMemberNames(teamA)).withStyle(ChatFormatting.AQUA))
                 .append(Component.literal(" vs ").withStyle(ChatFormatting.GOLD))
                 .append(Component.literal(duelMemberNames(teamB)).withStyle(ChatFormatting.RED))
                 .append(Component.literal(".").withStyle(ChatFormatting.GOLD));
@@ -18879,8 +18879,8 @@ public class TameCommands {
             teamB.add(closest);
             return new DuelSessionRound(teamA, teamB);
         }
-        int maxFirstTeamSize = Math.max(1, shuffled.size() / 2);
-        int desiredA = Math.max(1, Math.min(maxFirstTeamSize, 2 + random.nextInt(Math.max(1, shuffled.size() - 2))));
+        int maxFirstTeamSize = Math.max(2, shuffled.size() / 2);
+        int desiredA = 2 + random.nextInt(maxFirstTeamSize - 1);
         for (int i = 0; i < desiredA; i++) {
             teamA.add(shuffled.get(i));
         }
