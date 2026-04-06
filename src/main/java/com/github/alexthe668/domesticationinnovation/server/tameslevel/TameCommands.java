@@ -129,6 +129,7 @@ import java.nio.file.Path;
 import java.io.IOException;
 
 public class TameCommands {
+    private static final String EXTERNAL_PET_COMMAND_TAG = "di_server_pet_command";
     private static final String JOIN_FIX_STALE_SKIP_TAG = "DITLJoinFixStaleSkip";
     public static final String ADMIN_CLONE_TRANSIENT_TAG = "DITLAdminCloneTransient";
     public static final String ADMIN_CLONE_SILENT_TAG = "DITLAdminCloneSilent";
@@ -16349,6 +16350,14 @@ public class TameCommands {
     }
 
     private static MovementOrder resolveExternalMovementOrder(TamableAnimal tame, TameData data) {
+        Integer tagCommand = readExternalPetCommandTag(tame);
+        if (tagCommand != null) {
+            return switch (tagCommand) {
+                case 1 -> MovementOrder.SIT;
+                case 2 -> data != null && data.hasHome ? MovementOrder.GUARDIAN : MovementOrder.WANDER;
+                default -> MovementOrder.FOLLOW;
+            };
+        }
         Integer command = tryReadExternalInt(tame, "getCommand");
         if (command == null) command = tryReadExternalInt(tame, "getPetCommand");
         if (command == null) command = tryReadExternalInt(tame, "getOrder");
@@ -16552,6 +16561,7 @@ public class TameCommands {
         boolean sit = order == MovementOrder.SIT;
         boolean follow = order == MovementOrder.FOLLOW;
         boolean wander = order == MovementOrder.WANDER || order == MovementOrder.GUARDIAN;
+        writeExternalPetCommandTag(tame, order);
         tryInvokeBooleanSetter(tame, "setWandering", wander);
         tryInvokeBooleanSetter(tame, "setWander", wander);
         tryInvokeBooleanSetter(tame, "setDrumWandering", wander);
@@ -18460,6 +18470,42 @@ public class TameCommands {
                 .append(Component.literal(" vs ").withStyle(ChatFormatting.GOLD))
                 .append(Component.literal(duelMemberNames(teamB)).withStyle(ChatFormatting.RED))
                 .append(Component.literal(".").withStyle(ChatFormatting.GOLD));
+    }
+
+    private static Integer readExternalPetCommandTag(TamableAnimal tame) {
+        if (!usesExternalPetCommandTag(tame)) {
+            return null;
+        }
+        CompoundTag persistentData = tame.getPersistentData();
+        if (persistentData.contains(EXTERNAL_PET_COMMAND_TAG, Tag.TAG_INT)) {
+            return persistentData.getInt(EXTERNAL_PET_COMMAND_TAG);
+        }
+        if (persistentData.contains(EXTERNAL_PET_COMMAND_TAG, Tag.TAG_BYTE)) {
+            return (int) persistentData.getByte(EXTERNAL_PET_COMMAND_TAG);
+        }
+        return null;
+    }
+
+    private static void writeExternalPetCommandTag(TamableAnimal tame, MovementOrder order) {
+        if (!usesExternalPetCommandTag(tame)) {
+            return;
+        }
+        int encoded = switch (order) {
+            case SIT -> 1;
+            case WANDER, GUARDIAN -> 2;
+            default -> 0;
+        };
+        tame.getPersistentData().putInt(EXTERNAL_PET_COMMAND_TAG, encoded);
+    }
+
+    private static boolean usesExternalPetCommandTag(TamableAnimal tame) {
+        String typeId = entityTypeId(tame);
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("legendary_monsters:")
+                || normalized.startsWith("crittersandcompanions:");
     }
 
     private static String duelMemberNames(List<? extends LivingEntity> members) {
