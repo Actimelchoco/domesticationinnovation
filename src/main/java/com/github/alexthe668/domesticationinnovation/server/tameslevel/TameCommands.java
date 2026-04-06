@@ -104,6 +104,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1612,34 +1613,6 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "selection")
                                         ))))
-                        .then(Commands.literal("duelToggle")
-                                .executes(ctx -> duelToggleStatus(ctx.getSource()))
-                                .then(Commands.literal("assistsMessages")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelAssistMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("killNotification")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelKillNotifications(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                )))))
-                        .then(Commands.literal("duelTogge")
-                                .executes(ctx -> duelToggleStatus(ctx.getSource()))
-                                .then(Commands.literal("assistsMessages")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelAssistMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("killNotification")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelKillNotifications(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                )))))
                                 .then(Commands.literal("duelTeamOld")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
@@ -2498,7 +2471,20 @@ public class TameCommands {
                                                 .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
+                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                .then(Commands.literal("duelKill")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelKillNotifications(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelAssists")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelAssistMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                                ))))
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -6421,6 +6407,15 @@ public class TameCommands {
         if (arenaName != null && !arenaName.isBlank() && arena == null) {
             return error(owner, "Arena duel session FFA requires setA, setB, setWaitingA, and setWaitingB.");
         }
+        ActiveDuelSession existingArenaFfa = findActiveArenaFfaSession(arenaName);
+        if (existingArenaFfa != null) {
+            int added = appendParticipantsToActiveArenaFfaSession(source.getServer(), existingArenaFfa, Set.of(owner.getUUID()), pool);
+            if (added < 0) {
+                return error(owner, "A duel or duel session is already active for one of those players.");
+            }
+            owner.sendSystemMessage(Component.literal("Added " + added + " participants to the active duel session FFA" + arenaLabel(arenaName) + ".").withStyle(ChatFormatting.GREEN));
+            return 1;
+        }
         ActiveDuelSession session = new ActiveDuelSession(
                 UUID.randomUUID(),
                 owner.getUUID(),
@@ -6554,6 +6549,16 @@ public class TameCommands {
         if (!pending.arenaName.isBlank() && arena == null) {
             removePendingFfaDuelSession(pending.sessionId);
             return error(source.getPlayer(), "Arena duel session FFA is missing spawn or waiting points.");
+        }
+        ActiveDuelSession existingArenaFfa = findActiveArenaFfaSession(pending.arenaName);
+        if (existingArenaFfa != null) {
+            int added = appendParticipantsToActiveArenaFfaSession(source.getServer(), existingArenaFfa, sessionPlayers, pool);
+            removePendingFfaDuelSession(pending.sessionId);
+            if (added < 0) {
+                return error(source.getPlayer(), "A duel or duel session is already active for one of those players.");
+            }
+            notifyDuelSessionOwners(source.getServer(), existingArenaFfa, Component.literal("Added " + added + " participants to the active duel session FFA" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.GREEN));
+            return 1;
         }
         ActiveDuelSession session = new ActiveDuelSession(
                 pending.sessionId,
@@ -11532,17 +11537,39 @@ public class TameCommands {
         if (data == null) {
             return;
         }
-        UUID key = data.tlId != null ? data.tlId : data.uuid;
-        if (key == null) {
+        UUID dataUuid = data.uuid;
+        UUID dataTlId = data.tlId;
+        if (dataUuid == null && dataTlId == null) {
             return;
         }
-        PendingImmediateChunkTeleport pending = PENDING_IMMEDIATE_CHUNK_TELEPORTS.remove(key);
-        if (pending == null || server == null || pending.sourceDimension == null) {
+        List<PendingImmediateChunkTeleport> removed = new ArrayList<>();
+        Iterator<Map.Entry<UUID, PendingImmediateChunkTeleport>> iterator = PENDING_IMMEDIATE_CHUNK_TELEPORTS.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, PendingImmediateChunkTeleport> entry = iterator.next();
+            PendingImmediateChunkTeleport pending = entry.getValue();
+            if (pending == null) {
+                iterator.remove();
+                continue;
+            }
+            boolean matchesUuid = dataUuid != null && (dataUuid.equals(entry.getKey()) || dataUuid.equals(pending.tameUuid));
+            boolean matchesTlId = dataTlId != null && (dataTlId.equals(entry.getKey()) || dataTlId.equals(pending.tlId));
+            if (!matchesUuid && !matchesTlId) {
+                continue;
+            }
+            removed.add(pending);
+            iterator.remove();
+        }
+        if (server == null) {
             return;
         }
-        ServerLevel sourceLevel = server.getLevel(pending.sourceDimension);
-        if (sourceLevel != null) {
-            releaseImmediateChunkTeleport(sourceLevel, pending);
+        for (PendingImmediateChunkTeleport pending : removed) {
+            if (pending.sourceDimension == null) {
+                continue;
+            }
+            ServerLevel sourceLevel = server.getLevel(pending.sourceDimension);
+            if (sourceLevel != null) {
+                releaseImmediateChunkTeleport(sourceLevel, pending);
+            }
         }
     }
 
@@ -18451,6 +18478,49 @@ public class TameCommands {
             ACTIVE_DUEL_SESSION_BY_PLAYER.remove(playerUuid);
         }
         return session;
+    }
+
+    private static ActiveDuelSession findActiveArenaFfaSession(String arenaName) {
+        String normalized = normalizeArenaName(arenaName);
+        if (normalized.isBlank()) {
+            return null;
+        }
+        for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
+            if (session != null && session.freeForAll && normalized.equals(session.arenaName)) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    private static int appendParticipantsToActiveArenaFfaSession(MinecraftServer server, ActiveDuelSession session, Set<UUID> sessionPlayersToAdd, Set<UUID> participantIdsToAdd) {
+        if (server == null || session == null || !session.freeForAll || sessionPlayersToAdd == null || participantIdsToAdd == null) {
+            return -1;
+        }
+        for (UUID playerId : sessionPlayersToAdd) {
+            UUID activeSessionId = ACTIVE_DUEL_SESSION_BY_PLAYER.get(playerId);
+            if (activeSessionId != null && !activeSessionId.equals(session.sessionId)) {
+                return -1;
+            }
+            if (activeSessionId == null && TameDuelManager.isEntityInDuel(playerId)) {
+                return -1;
+            }
+        }
+        int added = 0;
+        for (UUID playerId : sessionPlayersToAdd) {
+            session.sessionPlayers.add(playerId);
+            ACTIVE_DUEL_SESSION_BY_PLAYER.put(playerId, session.sessionId);
+        }
+        for (UUID participantId : participantIdsToAdd) {
+            if (session.poolA.add(participantId)) {
+                added++;
+            }
+        }
+        if (added > 0) {
+            teleportDuelSessionIdleTamesHome(server, session, session.currentRoundA, session.currentRoundB);
+            syncIdleDuelSessionTames(server, session);
+        }
+        return added;
     }
 
     private static boolean registerActiveDuelSession(MinecraftServer server, ActiveDuelSession session) {
