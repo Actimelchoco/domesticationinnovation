@@ -2483,8 +2483,7 @@ public class TameCommands {
                                                 .executes(ctx -> setDuelAssistMessages(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                                ))))
+                                                )))))
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -19142,18 +19141,19 @@ public class TameCommands {
                 if (data == null || data.dead) {
                     continue;
                 }
+                SpawnTarget target = waitingTarget;
+                if (target == null) {
+                    target = resolveRespawnTarget(source, owner, data, false);
+                }
+                if (target == null || target.level == null || target.pos == null) {
+                    continue;
+                }
                 TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
                 if (tame == null || !tame.isAlive()) {
+                    tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
                     continue;
                 }
-                if (waitingTarget != null) {
-                    teleportTameToLocation(tame, waitingTarget);
-                    continue;
-                }
-                SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
-                if (home != null) {
-                    teleportTameToLocation(tame, home);
-                }
+                teleportTameToLocation(tame, target);
             }
         } finally {
             endSuppressedUnloadedTeleportMessages(ownerId);

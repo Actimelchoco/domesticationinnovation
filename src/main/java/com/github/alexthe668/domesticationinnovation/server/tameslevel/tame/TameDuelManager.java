@@ -1479,10 +1479,7 @@ public final class TameDuelManager {
     }
 
     private static int duelXpReward(int mmrDelta, boolean won) {
-        if (!won) {
-            return 1;
-        }
-        return Math.max(1, Math.max(0, mmrDelta) / 10);
+        return Math.max(3, Math.max(0, mmrDelta));
     }
 
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
