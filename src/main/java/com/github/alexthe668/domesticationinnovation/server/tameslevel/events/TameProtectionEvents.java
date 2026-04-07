@@ -7,9 +7,11 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.UUID;
 
@@ -87,6 +89,7 @@ public class TameProtectionEvents {
 
         net.minecraft.world.entity.LivingEntity target = tame.getTarget();
         if (target == null) {
+            refreshLegendaryMonstersDuelTarget(tame);
             return;
         }
         if (TameDuelManager.isTameInDuel(tame.getUUID())) {
@@ -94,6 +97,7 @@ public class TameProtectionEvents {
                 return;
             }
             tame.setTarget(null);
+            refreshLegendaryMonstersDuelTarget(tame);
             return;
         }
         if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
@@ -116,6 +120,28 @@ public class TameProtectionEvents {
         if (TameRegistry.isProtectedAttackTarget(tame, target)) {
             tame.setTarget(null);
         }
+    }
+
+    private static void refreshLegendaryMonstersDuelTarget(TamableAnimal tame) {
+        if (tame == null || !isLegendaryMonstersPet(tame) || !TameDuelManager.isTameInDuel(tame.getUUID()) || tame.level().getServer() == null) {
+            return;
+        }
+        LivingEntity nearest = TameDuelManager.findNearestLoadedOpponent(tame.level().getServer(), tame);
+        if (nearest == null || !nearest.isAlive() || nearest.level() != tame.level()) {
+            return;
+        }
+        if (tame.getTarget() != nearest) {
+            tame.setTarget(nearest);
+        }
+        tame.getNavigation().moveTo(nearest, 1.15D);
+    }
+
+    private static boolean isLegendaryMonstersPet(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key != null && "legendary_monsters".equals(key.getNamespace());
     }
 
     private static TamableAnimal resolveTameAttacker(net.minecraft.world.entity.Entity attacker, net.minecraft.world.entity.Entity direct) {

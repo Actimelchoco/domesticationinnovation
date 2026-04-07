@@ -3263,10 +3263,10 @@ public class TameCommands {
             if (pending.chunksReadyTick < 0L) {
                 pending.chunksReadyTick = now;
             }
-            TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, pending.tameUuid, pending.tlId);
+            TamableAnimal tame = findLoadedTameByIdentity(server, pending.tameUuid, pending.tlId);
             if (tame != null && tame.isAlive()) {
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
-                debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + sourceLevel.dimension().location());
+                debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + tame.level().dimension().location());
                 teleportTameToLocation(tame, pending.target);
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleported unloaded " + pending.tameName + ".", ChatFormatting.GREEN);
@@ -19148,7 +19148,16 @@ public class TameCommands {
                 if (target == null || target.level == null || target.pos == null) {
                     continue;
                 }
+                if (hasPendingImmediateChunkTeleport(data)) {
+                    continue;
+                }
                 TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
+                if ((tame == null || !tame.isAlive()) && data.uuid != null) {
+                    TamableAnimal loadedByIdentity = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+                    if (loadedByIdentity != null && loadedByIdentity.isAlive() && ownerId.equals(loadedByIdentity.getOwnerUUID())) {
+                        tame = loadedByIdentity;
+                    }
+                }
                 if (tame == null || !tame.isAlive()) {
                     tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
                     continue;
