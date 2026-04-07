@@ -11251,6 +11251,15 @@ public class TameCommands {
         if (data == null || data.dead || (data.uuid != null && isDeadEntry(data.uuid))) {
             return UnloadedTpResult.fail("tame is dead");
         }
+        MinecraftServer server = source == null ? null : source.getServer();
+        TamableAnimal loaded = server == null ? null : findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        if (loaded != null && loaded.isAlive()) {
+            if (target != null && target.level != null && target.pos != null) {
+                teleportTameToLocation(loaded, target);
+                return UnloadedTpResult.queued();
+            }
+            return UnloadedTpResult.fail("invalid target");
+        }
         boolean crossDimension = isCrossDimension(data, target.level);
         String validationError = validateUnloadedHomeTeleport(source, owner, data, target);
         if (validationError != null) {
@@ -19107,12 +19116,12 @@ public class TameCommands {
         if (server == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
-        CommandSourceStack source = server.createCommandSourceStack();
         for (UUID id : pool) {
             if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                 continue;
             }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
+            LivingEntity living = findLoadedLivingParticipant(server, id);
+            TamableAnimal tame = living instanceof TamableAnimal candidate ? candidate : null;
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
@@ -19126,12 +19135,17 @@ public class TameCommands {
         if (server == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
-        ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
-        if (owner == null) {
-            return;
+        Set<UUID> suppressedOwners = new LinkedHashSet<>();
+        for (UUID id : pool) {
+            TameData data = TameRegistry.get(id);
+            UUID suppressOwnerId = data != null && data.ownerUUID != null ? data.ownerUUID : ownerId;
+            if (suppressOwnerId != null) {
+                suppressedOwners.add(suppressOwnerId);
+            }
         }
-        CommandSourceStack source = owner.createCommandSourceStack();
-        beginSuppressedUnloadedTeleportMessages(ownerId);
+        for (UUID suppressOwnerId : suppressedOwners) {
+            beginSuppressedUnloadedTeleportMessages(suppressOwnerId);
+        }
         try {
             for (UUID id : pool) {
                 if (activeRound.contains(id)) {
@@ -19141,8 +19155,14 @@ public class TameCommands {
                 if (data == null || data.dead) {
                     continue;
                 }
+                UUID effectiveOwnerId = data.ownerUUID != null ? data.ownerUUID : ownerId;
+                ServerPlayer owner = effectiveOwnerId == null ? null : server.getPlayerList().getPlayer(effectiveOwnerId);
                 SpawnTarget target = waitingTarget;
                 if (target == null) {
+                    if (owner == null) {
+                        continue;
+                    }
+                    CommandSourceStack source = owner.createCommandSourceStack();
                     target = resolveRespawnTarget(source, owner, data, false);
                 }
                 if (target == null || target.level == null || target.pos == null) {
@@ -19151,21 +19171,21 @@ public class TameCommands {
                 if (hasPendingImmediateChunkTeleport(data)) {
                     continue;
                 }
-                TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, id);
-                if ((tame == null || !tame.isAlive()) && data.uuid != null) {
-                    TamableAnimal loadedByIdentity = findLoadedTameByIdentity(server, data.uuid, data.tlId);
-                    if (loadedByIdentity != null && loadedByIdentity.isAlive() && ownerId.equals(loadedByIdentity.getOwnerUUID())) {
-                        tame = loadedByIdentity;
-                    }
-                }
+                TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
                 if (tame == null || !tame.isAlive()) {
+                    if (owner == null) {
+                        continue;
+                    }
+                    CommandSourceStack source = owner.createCommandSourceStack();
                     tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
                     continue;
                 }
                 teleportTameToLocation(tame, target);
             }
         } finally {
-            endSuppressedUnloadedTeleportMessages(ownerId);
+            for (UUID suppressOwnerId : suppressedOwners) {
+                endSuppressedUnloadedTeleportMessages(suppressOwnerId);
+            }
         }
     }
 
