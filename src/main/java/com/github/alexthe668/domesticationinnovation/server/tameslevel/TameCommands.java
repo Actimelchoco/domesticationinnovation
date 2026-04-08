@@ -3245,6 +3245,8 @@ public class TameCommands {
                     ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                     if (owner != null && data != null) {
                         debugTeleport(owner, "unloaded chunk timeout rebuilding " + pending.tameName + " from snapshot");
+                        logRebuildTrace("pendingImmediateChunk.timeoutRebuild", data,
+                                "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                         RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
                         if (recoverResult.entity != null) {
                             if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot after chunk load timeout.", ChatFormatting.YELLOW);
@@ -3267,6 +3269,9 @@ public class TameCommands {
             if (tame != null && tame.isAlive()) {
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + tame.level().dimension().location());
+                TameData liveData = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
+                        "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportTameToLocation(tame, pending.target);
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleported unloaded " + pending.tameName + ".", ChatFormatting.GREEN);
@@ -3284,6 +3289,8 @@ public class TameCommands {
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 if (owner != null && data != null) {
                     debugTeleport(owner, "unloaded wait rebuilding " + pending.tameName + " from snapshot");
+                    logRebuildTrace("pendingImmediateChunk.waitRebuild", data,
+                            "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                     RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
                     if (recoverResult.entity != null) {
                         if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot.", ChatFormatting.YELLOW);
@@ -10331,6 +10338,7 @@ public class TameCommands {
         }
         TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
         if (loaded != null) {
+            logDeleteTrace("restoreDuelParticipantSnapshot.loadedDiscard", snapshot, loaded, "discard before restoring duel snapshot");
             loaded.discard();
         }
         SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
@@ -10554,6 +10562,8 @@ public class TameCommands {
         if (tame == null || data == null) {
             return;
         }
+        logRebuildTrace("finalizeRespawnState.begin", data,
+                "entityUuid=" + tame.getUUID() + " entityTlId=" + TameData.getTlId(tame) + " dim=" + tame.level().dimension().location());
         removeCompetingLoadedTameCopies(tame, data);
         TameRegistry.bindEntityToData(tame, data);
         applyLatestDeathSnapshotIfAvailable(tame, data);
@@ -10598,6 +10608,8 @@ public class TameCommands {
         TameRegistry.bindEntityToData(tame, data);
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
+        logRebuildTrace("finalizeRespawnState.end", data,
+                "entityUuid=" + tame.getUUID() + " entityTlId=" + TameData.getTlId(tame) + " dim=" + tame.level().dimension().location());
     }
 
     private static void removeCompetingLoadedTameCopies(TamableAnimal keeper, TameData data) {
@@ -10619,6 +10631,8 @@ public class TameCommands {
             }
         }
         for (TamableAnimal duplicate : duplicates) {
+            logDeleteTrace("removeCompetingLoadedTameCopies", data, duplicate,
+                    "keeperUuid=" + keeperUuid + " keeperTlId=" + keeperTlId + " keeperDim=" + keeper.level().dimension().location());
             TameDuelManager.endDuelForTame(keeper.level().getServer(), duplicate.getUUID());
             forceRemoveLoadedTame(duplicate);
         }
@@ -10754,29 +10768,39 @@ public class TameCommands {
         if (owner == null || target == null || target.level == null || target.pos == null || data == null) {
             return RecoverResult.fail("invalid context");
         }
+        logRebuildTrace("recoverPetEntityAtLocation.begin", data,
+                "owner=" + owner.getUUID() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
         clearGuardianAnchor(data);
-        if (isDeadEntry(data.uuid)) return RecoverResult.fail("tame is marked dead");
+        if (isDeadEntry(data.uuid)) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "tame is marked dead");
+            return RecoverResult.fail("tame is marked dead");
+        }
         String logicalKey = logicalTameKey(data);
         if (!logicalKey.isBlank() && hasLoadedLogicalDuplicate(owner.getServer(), data, logicalKey)) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "duplicate already loaded logicalKey=" + logicalKey);
             return RecoverResult.fail("duplicate already loaded");
         }
         String typeId = recoverEntityTypeId(data);
         if (typeId.isBlank()) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "missing saved entity type");
             return RecoverResult.fail("missing saved entity type");
         }
 
         ResourceLocation id = ResourceLocation.tryParse(typeId);
         if (id == null) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "invalid entity type " + typeId);
             return RecoverResult.fail("invalid entity type '" + typeId + "'");
         }
         EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
         if (entityType == null) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "unknown entity type " + typeId);
             return RecoverResult.fail("unknown entity type '" + typeId + "'");
         }
 
         Entity spawned = entityType.create(target.level);
         if (!(spawned instanceof TamableAnimal recovered)) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "stored type is not tamable");
             return RecoverResult.fail("stored type is not tamable");
         }
 
@@ -10791,6 +10815,7 @@ public class TameCommands {
         enforceTamedOwnerPreserveCollar(recovered, owner.getUUID());
 
         if (!target.level.addFreshEntity(recovered)) {
+            logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
 
@@ -10803,6 +10828,8 @@ public class TameCommands {
 
         data.ownerUUID = owner.getUUID();
         TameRegistry.markDirty();
+        logRebuildTrace("recoverPetEntityAtLocation.success", data,
+                "entityUuid=" + recovered.getUUID() + " entityTlId=" + TameData.getTlId(recovered) + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
         return RecoverResult.ok(recovered);
     }
 
@@ -11254,6 +11281,8 @@ public class TameCommands {
         MinecraftServer server = source == null ? null : source.getServer();
         TamableAnimal loaded = server == null ? null : findLoadedTameByIdentity(server, data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
+            logRebuildTrace("tpUnloadedHomeViaLanternOrRecover.loadedDirect", data,
+                    "entityUuid=" + loaded.getUUID() + " entityTlId=" + TameData.getTlId(loaded) + " targetDim=" + (target != null && target.level != null ? target.level.dimension().location() : "null") + " targetPos=" + (target == null ? "null" : target.pos));
             if (target != null && target.level != null && target.pos != null) {
                 teleportTameToLocation(loaded, target);
                 return UnloadedTpResult.queued();
@@ -11262,6 +11291,8 @@ public class TameCommands {
         }
         boolean crossDimension = isCrossDimension(data, target.level);
         String validationError = validateUnloadedHomeTeleport(source, owner, data, target);
+        logRebuildTrace("tpUnloadedHomeViaLanternOrRecover.route", data,
+                "owner=" + (owner == null ? null : owner.getUUID()) + " crossDimension=" + crossDimension + " validationError=" + (validationError == null ? "" : validationError) + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
         if (validationError != null) {
             if (crossDimension) {
                 return UnloadedTpResult.fail(validationError);
@@ -11275,6 +11306,8 @@ public class TameCommands {
         if (owner == null || target == null || data == null) {
             return UnloadedTpResult.fail(reason);
         }
+        logRebuildTrace("tryRebuildSnapshotTeleport", data,
+                "owner=" + owner.getUUID() + " reason=" + reason + " targetDim=" + (target.level == null ? "null" : target.level.dimension().location()) + " targetPos=" + target.pos);
         RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
         if (recoverResult.entity != null) {
             if (!isSuppressedUnloadedTeleportMessageOwner(owner.getUUID())) {
@@ -11400,6 +11433,8 @@ public class TameCommands {
         }
         TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, data.uuid, data.tlId);
         if (tame != null && tame.isAlive()) {
+            logRebuildTrace("tryImmediateChunkLoadTeleport.liveInSourceLevel", data,
+                    "sourceDim=" + sourceLevel.dimension().location() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
             try {
                 teleportTameToLocation(tame, target);
                 return UnloadedTpResult.queued();
@@ -11423,6 +11458,8 @@ public class TameCommands {
                 liveEntityOnly,
                 false
         );
+        logRebuildTrace("tryImmediateChunkLoadTeleport.queuePending", data,
+                "ticket=" + ticketId + " sourceDim=" + sourceLevel.dimension().location() + " sourcePos=" + sourcePos + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos + " liveEntityOnly=" + liveEntityOnly);
         PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
         return UnloadedTpResult.queued();
     }
@@ -11454,6 +11491,8 @@ public class TameCommands {
                 liveEntityOnly,
                 silent
         );
+        logRebuildTrace("queueImmediateChunkTeleport", data,
+                "ticket=" + ticketId + " sourceDim=" + sourceLevel.dimension().location() + " sourcePos=" + sourcePos + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos + " liveEntityOnly=" + liveEntityOnly + " silent=" + silent);
         PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
         return UnloadedTpResult.queued();
     }
@@ -12754,6 +12793,30 @@ public class TameCommands {
             return;
         }
         player.sendSystemMessage(Component.literal("TPDBG " + message).withStyle(ChatFormatting.YELLOW));
+    }
+
+    private static void logRebuildTrace(String stage, TameData data, String detail) {
+        String name = data == null || data.name == null || data.name.isBlank() ? "unknown" : data.name;
+        UUID ownerId = data == null ? null : data.ownerUUID;
+        UUID uuid = data == null ? null : data.uuid;
+        UUID tlId = data == null ? null : data.tlId;
+        DomesticationMod.LOGGER.warn("[TAME-REBUILD] stage={} tame={} owner={} uuid={} tlId={} detail={}",
+                stage, name, ownerId, uuid, tlId, detail == null ? "" : detail);
+    }
+
+    private static void logDeleteTrace(String stage, TameData registryData, TamableAnimal entity, String detail) {
+        String tameName = registryData != null && registryData.name != null && !registryData.name.isBlank()
+                ? registryData.name
+                : entity != null && entity.getName() != null ? entity.getName().getString() : "unknown";
+        UUID registryUuid = registryData == null ? null : registryData.uuid;
+        UUID registryTlId = registryData == null ? null : registryData.tlId;
+        UUID registryOwner = registryData == null ? null : registryData.ownerUUID;
+        UUID entityUuid = entity == null ? null : entity.getUUID();
+        UUID entityTlId = entity == null ? null : TameData.getTlId(entity);
+        UUID entityOwner = entity == null ? null : entity.getOwnerUUID();
+        String dimension = entity == null || entity.level() == null ? "null" : entity.level().dimension().location().toString();
+        DomesticationMod.LOGGER.warn("[TAME-DELETE] stage={} tame={} registryOwner={} registryUuid={} registryTlId={} entityOwner={} entityUuid={} entityTlId={} dim={} detail={}",
+                stage, tameName, registryOwner, registryUuid, registryTlId, entityOwner, entityUuid, entityTlId, dimension, detail == null ? "" : detail);
     }
 
     private static int debugStatus(CommandSourceStack source) {
