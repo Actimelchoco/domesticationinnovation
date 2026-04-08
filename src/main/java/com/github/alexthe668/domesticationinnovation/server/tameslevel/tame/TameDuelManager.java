@@ -1215,12 +1215,13 @@ public final class TameDuelManager {
             return;
         }
         boolean teamAWon = didTeamWin(server, battle, true, forfeitingOwner);
+        int poolMagnitude = computeTeamMmrPool(server, battle, teamAWon);
 
         for (UUID participantId : battle.roster) {
             DuelStats stats = battle.duelStats.getOrDefault(participantId, new DuelStats());
             int mmrDelta = deltas.getOrDefault(participantId, 0);
             boolean won = battle.originalTeamA.contains(participantId) ? teamAWon : !teamAWon;
-            applyPersistentParticipantStats(server, battle, participantId, stats, mmrDelta, won);
+            applyPersistentParticipantStats(server, battle, participantId, stats, mmrDelta, won, poolMagnitude);
         }
         TameRegistry.markDirty();
     }
@@ -1424,7 +1425,7 @@ public final class TameDuelManager {
         return won ? (participantCount - normalizedPlacement + 1) : normalizedPlacement;
     }
 
-    private static void applyPersistentParticipantStats(MinecraftServer server, DuelBattle battle, UUID participantId, DuelStats stats, int mmrDelta, boolean won) {
+    private static void applyPersistentParticipantStats(MinecraftServer server, DuelBattle battle, UUID participantId, DuelStats stats, int mmrDelta, boolean won, int poolMagnitude) {
         if (participantId == null || stats == null) {
             return;
         }
@@ -1442,7 +1443,7 @@ public final class TameDuelManager {
             tame.duelLosses += won ? 0 : 1;
             tame.duelCount += 1;
             tame.duelPoints += creditedPoints;
-            grantDuelXp(server, participantId, tame, mmrDelta, won);
+            grantDuelXp(server, participantId, tame, mmrDelta, poolMagnitude);
             return;
         }
         String resolvedName = entityLabel(server, participantId);
@@ -1460,11 +1461,11 @@ public final class TameDuelManager {
         playerStats.duelPoints += Math.max(0.0D, stats.points);
     }
 
-    private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, boolean won) {
+    private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, int poolMagnitude) {
         if (participantId == null || tame == null) {
             return;
         }
-        int xpReward = duelXpReward(mmrDelta, won);
+        int xpReward = duelXpReward(mmrDelta, poolMagnitude);
         if (xpReward <= 0) {
             return;
         }
@@ -1478,8 +1479,9 @@ public final class TameDuelManager {
         TameRegistry.markDirty();
     }
 
-    private static int duelXpReward(int mmrDelta, boolean won) {
-        return Math.max(3, Math.max(0, mmrDelta));
+    private static int duelXpReward(int mmrDelta, int poolMagnitude) {
+        int poolBonus = Math.max(0, poolMagnitude) / 10;
+        return Math.max(0, mmrDelta) + poolBonus + 3;
     }
 
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
