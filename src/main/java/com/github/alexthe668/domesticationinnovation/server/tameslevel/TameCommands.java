@@ -1592,7 +1592,7 @@ public class TameCommands {
                         .then(Commands.literal("duelSessionFFA")
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestCompactDuelSessionAcceptSpec(ctx.getSource(), b))
+                                                .suggests((ctx, b) -> suggestCompactDuelSessionFfaAcceptSpec(ctx.getSource(), b))
                                                 .executes(ctx -> duelSessionFfaAcceptCompact(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "spec")
@@ -18458,16 +18458,26 @@ public class TameCommands {
 
     private static PendingDuelSession findPendingDuelSessionForInvite(CommandSourceStack source, ServerPlayer player, String challengerName) {
         UUID sessionId = PENDING_DUEL_SESSION_BY_PLAYER.get(player.getUUID());
-        if (sessionId == null) {
-            return null;
+        if (sessionId != null) {
+            PendingDuelSession pending = PENDING_DUEL_SESSIONS.get(sessionId);
+            if (pending == null) {
+                PENDING_DUEL_SESSION_BY_PLAYER.remove(player.getUUID());
+            } else {
+                String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+                if (player.getUUID().equals(pending.targetPlayerUuid) && initiatorName.equalsIgnoreCase(challengerName)) {
+                    return pending;
+                }
+            }
         }
-        PendingDuelSession pending = PENDING_DUEL_SESSIONS.get(sessionId);
-        if (pending == null) {
-            PENDING_DUEL_SESSION_BY_PLAYER.remove(player.getUUID());
-            return null;
-        }
-        String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
-        if (initiatorName.equalsIgnoreCase(challengerName)) {
+        for (PendingDuelSession pending : PENDING_DUEL_SESSIONS.values()) {
+            if (pending == null || !player.getUUID().equals(pending.targetPlayerUuid)) {
+                continue;
+            }
+            String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+            if (!initiatorName.equalsIgnoreCase(challengerName)) {
+                continue;
+            }
+            PENDING_DUEL_SESSION_BY_PLAYER.put(player.getUUID(), pending.sessionId);
             return pending;
         }
         return null;
@@ -18475,16 +18485,33 @@ public class TameCommands {
 
     private static PendingFfaDuelSession findPendingFfaDuelSessionForInvite(CommandSourceStack source, ServerPlayer player, String challengerName) {
         UUID sessionId = PENDING_DUEL_SESSION_FFA_BY_PLAYER.get(player.getUUID());
-        if (sessionId == null) {
-            return null;
+        if (sessionId != null) {
+            PendingFfaDuelSession pending = PENDING_DUEL_SESSION_FFA.get(sessionId);
+            if (pending == null) {
+                PENDING_DUEL_SESSION_FFA_BY_PLAYER.remove(player.getUUID());
+            } else {
+                String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+                if (!player.getUUID().equals(pending.initiatorUuid)
+                        && pending.participants.containsKey(player.getUUID())
+                        && initiatorName.equalsIgnoreCase(challengerName)) {
+                    return pending;
+                }
+            }
         }
-        PendingFfaDuelSession pending = PENDING_DUEL_SESSION_FFA.get(sessionId);
-        if (pending == null) {
-            PENDING_DUEL_SESSION_FFA_BY_PLAYER.remove(player.getUUID());
-            return null;
+        for (PendingFfaDuelSession pending : PENDING_DUEL_SESSION_FFA.values()) {
+            if (pending == null
+                    || player.getUUID().equals(pending.initiatorUuid)
+                    || !pending.participants.containsKey(player.getUUID())) {
+                continue;
+            }
+            String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+            if (!initiatorName.equalsIgnoreCase(challengerName)) {
+                continue;
+            }
+            PENDING_DUEL_SESSION_FFA_BY_PLAYER.put(player.getUUID(), pending.sessionId);
+            return pending;
         }
-        String initiatorName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
-        return initiatorName.equalsIgnoreCase(challengerName) ? pending : null;
+        return null;
     }
 
     private static boolean playerHasAnyPendingFfaDuelSession(UUID playerUuid) {
@@ -20327,6 +20354,54 @@ public class TameCommands {
         SuggestionsBuilder rightBuilder = b.createOffset(b.getStart() + vsIndex + 4);
         suggestCompactDuelSide(source, player, rightBuilder, remaining.substring(vsIndex + 4), false);
         return rightBuilder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestCompactDuelSessionFfaAcceptSpec(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return b.buildFuture();
+        }
+        String remaining = b.getRemaining();
+        int vsIndex = compactVsIndex(remaining);
+        if (vsIndex < 0) {
+            suggestIncomingDuelSessionFfaChallengers(source, b);
+            String trimmed = remaining.trim();
+            PendingFfaDuelSession pending = findPendingFfaInviteForPlayer(source, player);
+            if (pending != null) {
+                String challengerName = resolveKnownOwnerName(source.getServer(), pending.initiatorUuid, "");
+                if (!challengerName.isBlank() && challengerName.equalsIgnoreCase(trimmed)) {
+                    SuggestionsBuilder tail = b.createOffset(b.getStart() + remaining.length());
+                    tail.suggest(" vs ");
+                    return tail.buildFuture();
+                }
+            }
+            return b.buildFuture();
+        }
+        SuggestionsBuilder rightBuilder = b.createOffset(b.getStart() + vsIndex + 4);
+        suggestCompactDuelSide(source, player, rightBuilder, remaining.substring(vsIndex + 4), false);
+        return rightBuilder.buildFuture();
+    }
+
+    private static PendingFfaDuelSession findPendingFfaInviteForPlayer(CommandSourceStack source, ServerPlayer player) {
+        UUID sessionId = PENDING_DUEL_SESSION_FFA_BY_PLAYER.get(player.getUUID());
+        if (sessionId != null) {
+            PendingFfaDuelSession pending = PENDING_DUEL_SESSION_FFA.get(sessionId);
+            if (pending == null) {
+                PENDING_DUEL_SESSION_FFA_BY_PLAYER.remove(player.getUUID());
+            } else if (!player.getUUID().equals(pending.initiatorUuid) && pending.participants.containsKey(player.getUUID())) {
+                return pending;
+            }
+        }
+        for (PendingFfaDuelSession pending : PENDING_DUEL_SESSION_FFA.values()) {
+            if (pending == null
+                    || player.getUUID().equals(pending.initiatorUuid)
+                    || !pending.participants.containsKey(player.getUUID())) {
+                continue;
+            }
+            PENDING_DUEL_SESSION_FFA_BY_PLAYER.put(player.getUUID(), pending.sessionId);
+            return pending;
+        }
+        return null;
     }
 
     private static void suggestCompactDuelSide(CommandSourceStack source, ServerPlayer owner, SuggestionsBuilder builder, String rawSide, boolean allowVs) {
