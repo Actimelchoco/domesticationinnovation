@@ -138,6 +138,7 @@ public class TameCommands {
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
     private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "old docus");
+    private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
     private static final int MAX_CLASS_REROLLS = 3;
@@ -18771,8 +18772,35 @@ public class TameCommands {
             return false;
         }
         String normalized = typeId.trim().toLowerCase(Locale.ROOT);
-        return normalized.startsWith("legendary_monsters:")
-                || normalized.startsWith("crittersandcompanions:");
+        if (normalized.startsWith("legendary_monsters:")) {
+            return hasExternalPetCommandCompat("legendary_monsters");
+        }
+        if (normalized.startsWith("crittersandcompanions:")) {
+            return hasExternalPetCommandCompat("crittersandcompanions");
+        }
+        return false;
+    }
+
+    private static boolean hasExternalPetCommandCompat(String namespace) {
+        if (namespace == null || namespace.isBlank()) {
+            return false;
+        }
+        return EXTERNAL_PET_COMMAND_COMPAT_CACHE.computeIfAbsent(namespace, key -> {
+            String helperClass = switch (key) {
+                case "legendary_monsters" -> "net.miauczel.legendary_monsters.compat.DIServerPetCommandCompat";
+                case "crittersandcompanions" -> "com.github.eterdelta.crittersandcompanions.compat.DIServerPetCommandCompat";
+                default -> "";
+            };
+            if (helperClass.isBlank()) {
+                return false;
+            }
+            try {
+                Class.forName(helperClass, false, TameCommands.class.getClassLoader());
+                return true;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        });
     }
 
     private static String duelMemberNames(List<? extends LivingEntity> members) {
