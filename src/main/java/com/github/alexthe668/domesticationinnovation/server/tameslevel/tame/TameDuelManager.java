@@ -561,6 +561,9 @@ public final class TameDuelManager {
                 continue;
             }
             TameData snapshot = TameData.fromTag(snapshotTag.copy());
+            snapshot.level = persisted.level;
+            snapshot.xp = persisted.xp;
+            snapshot.xpToNext = persisted.xpToNext;
             snapshot.duelMmr = persisted.duelMmr;
             snapshot.duelKills = persisted.duelKills;
             snapshot.duelAssists = persisted.duelAssists;
