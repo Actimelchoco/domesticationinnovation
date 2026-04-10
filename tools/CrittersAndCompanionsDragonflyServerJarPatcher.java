@@ -29,6 +29,8 @@ public class CrittersAndCompanionsDragonflyServerJarPatcher {
     private static final String TARGET_METHOD = "m_8061_";
     private static final String TARGET_DESC = "(Lnet/minecraft/world/entity/EquipmentSlot;Lnet/minecraft/world/item/ItemStack;)V";
     private static final String PATCH_MARKER = "domesticationinnovation/server_dragonfly_armor_guard";
+    private static final String TICK_METHOD = "m_8024_";
+    private static final String TICK_DESC = "()V";
 
     public static void main(String[] args) throws Exception {
         if (args.length != 2) {
@@ -65,15 +67,84 @@ public class CrittersAndCompanionsDragonflyServerJarPatcher {
         }
         ClassNode node = new ClassNode();
         new ClassReader(classBytes).accept(node, 0);
+        boolean tickPatched = false;
         for (MethodNode method : node.methods) {
             if (TARGET_METHOD.equals(method.name) && TARGET_DESC.equals(method.desc)) {
                 throw new IllegalStateException("DragonflyEntity already defines " + TARGET_METHOD + TARGET_DESC);
             }
+            if (TICK_METHOD.equals(method.name) && TICK_DESC.equals(method.desc)) {
+                patchTickMethod(method);
+                tickPatched = true;
+            }
+        }
+        if (!tickPatched) {
+            throw new IllegalStateException("DragonflyEntity missing expected tick method " + TICK_METHOD + TICK_DESC);
         }
         node.methods.add(createGuardedSetItemSlotOverride());
         ClassWriter writer = new SafeClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
+    }
+
+    private static void patchTickMethod(MethodNode method) {
+        InsnList injected = new InsnList();
+        LabelNode skipSanitize = new LabelNode();
+
+        injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        injected.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "com/github/eterdelta/crittersandcompanions/entity/DragonflyEntity",
+                "getArmor",
+                "()Lnet/minecraft/world/item/ItemStack;",
+                false
+        ));
+        injected.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "net/minecraft/world/item/ItemStack",
+                "m_41619_",
+                "()Z",
+                false
+        ));
+        injected.add(new JumpInsnNode(Opcodes.IFNE, skipSanitize));
+        injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        injected.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "com/github/eterdelta/crittersandcompanions/entity/DragonflyEntity",
+                "getArmor",
+                "()Lnet/minecraft/world/item/ItemStack;",
+                false
+        ));
+        injected.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "net/minecraft/world/item/ItemStack",
+                "m_41720_",
+                "()Lnet/minecraft/world/item/Item;",
+                false
+        ));
+        injected.add(new TypeInsnNode(
+                Opcodes.INSTANCEOF,
+                "com/github/eterdelta/crittersandcompanions/item/DragonflyArmorItem"
+        ));
+        injected.add(new JumpInsnNode(Opcodes.IFNE, skipSanitize));
+        injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        injected.add(new FieldInsnNode(
+                Opcodes.GETSTATIC,
+                "net/minecraft/world/item/ItemStack",
+                "f_41583_",
+                "Lnet/minecraft/world/item/ItemStack;"
+        ));
+        injected.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "com/github/eterdelta/crittersandcompanions/entity/DragonflyEntity",
+                "setArmor",
+                "(Lnet/minecraft/world/item/ItemStack;)V",
+                false
+        ));
+        injected.add(new LdcInsnNode(PATCH_MARKER));
+        injected.add(new InsnNode(Opcodes.POP));
+        injected.add(skipSanitize);
+
+        method.instructions.insert(injected);
     }
 
     private static MethodNode createGuardedSetItemSlotOverride() {
@@ -85,7 +156,6 @@ public class CrittersAndCompanionsDragonflyServerJarPatcher {
                 null
         );
         InsnList insns = method.instructions;
-        LabelNode callSuper = new LabelNode();
         LabelNode callSuperWithOriginal = new LabelNode();
 
         insns.add(new VarInsnNode(Opcodes.ALOAD, 1));
@@ -152,8 +222,6 @@ public class CrittersAndCompanionsDragonflyServerJarPatcher {
                 false
         ));
         insns.add(new InsnNode(Opcodes.RETURN));
-
-        insns.add(callSuper);
         method.maxLocals = 3;
         method.maxStack = 3;
         return method;
