@@ -3015,36 +3015,36 @@ public class TameCommands {
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
                                                 .executes(ctx -> adminRemoveHeldApprovedItem(ctx.getSource()))
-                                                .then(Commands.argument("item", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestAllApprovedReincarnationItems(b))
+                                                .then(Commands.argument("item", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
-                                                        ))))
+                                                        )))))
                                 .then(Commands.literal("cheapapprove")
                                         .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
                                                 .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
-                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                .then(Commands.argument("item", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveCheapApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
-                                                        ))))
+                                                        )))))
                                 .then(Commands.literal("cheapapprovedItem")
                                         .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
                                                 .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
-                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                .then(Commands.argument("item", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveCheapApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
-                                                        ))))
+                                                        )))))
                                 .then(Commands.literal("collar")
                                         .then(Commands.literal("stripDiEnchants")
                                                 .executes(ctx -> adminStripDiEnchantsFromHeldCollar(ctx.getSource())))
@@ -3095,98 +3095,8 @@ public class TameCommands {
                                                                         IntegerArgumentType.getInteger(ctx, "amount")
                                                                 ))))))
 
-                                .then(Commands.literal("ability")
-                                        .then(Commands.literal("add")
-                                                .then(Commands.argument("id", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                                .executes(ctx -> abilityAdd(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "pet"),
-                                                                        StringArgumentType.getString(ctx, "id"),
-                                                                        1
-                                                                ))
-                                                                .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                                        .executes(ctx -> abilityAdd(
-                                                                                ctx.getSource(),
-                                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                                StringArgumentType.getString(ctx, "id"),
-                                                                                IntegerArgumentType.getInteger(ctx, "levels")
-                                                                        ))))))
-                                        .then(Commands.literal("remove")
-                                                .then(Commands.argument("id", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                                .executes(ctx -> abilityRemove(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "pet"),
-                                                                        StringArgumentType.getString(ctx, "id"),
-                                                                        1
-                                                                ))
-                                                                .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                                        .executes(ctx -> abilityRemove(
-                                                                                ctx.getSource(),
-                                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                                StringArgumentType.getString(ctx, "id"),
-                                                                                IntegerArgumentType.getInteger(ctx, "levels")
-                                                                        ))))))
-                                        .then(Commands.literal("clear")
-                                                .then(Commands.argument("pet", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                        .executes(ctx -> abilityClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
-                                        .then(Commands.literal("list")
-                                                .then(Commands.argument("pet", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                        .executes(ctx -> abilityList(ctx.getSource(), StringArgumentType.getString(ctx, "pet"))))))
-
-                                .then(Commands.literal("attribute")
-                                        .then(Commands.literal("add")
-                                                .then(Commands.argument("id", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestAttributes(b))
-                                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                                .executes(ctx -> attributeAdd(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "pet"),
-                                                                        StringArgumentType.getString(ctx, "id"),
-                                                                        1
-                                                                ))
-                                                                .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                                        .executes(ctx -> attributeAdd(
-                                                                                ctx.getSource(),
-                                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                                StringArgumentType.getString(ctx, "id"),
-                                                                                IntegerArgumentType.getInteger(ctx, "levels")
-                                                                        ))))))
-                                        .then(Commands.literal("remove")
-                                                .then(Commands.argument("id", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestAttributes(b))
-                                                        .then(Commands.argument("pet", StringArgumentType.string())
-                                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                                .executes(ctx -> attributeRemove(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "pet"),
-                                                                        StringArgumentType.getString(ctx, "id"),
-                                                                        1
-                                                                ))
-                                                                .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                                        .executes(ctx -> attributeRemove(
-                                                                                ctx.getSource(),
-                                                                                StringArgumentType.getString(ctx, "pet"),
-                                                                                StringArgumentType.getString(ctx, "id"),
-                                                                                IntegerArgumentType.getInteger(ctx, "levels")
-                                                                        ))))))
-                                        .then(Commands.literal("clear")
-                                                .then(Commands.argument("pet", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                        .executes(ctx -> attributeClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
-                                        .then(Commands.literal("list")
-                                                .then(Commands.argument("pet", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                                        .executes(ctx -> attributeList(ctx.getSource(), StringArgumentType.getString(ctx, "pet"))))))
-
+                                .then(adminAbilityCommand())
+                                .then(adminAttributeCommand()))
                                 .then(Commands.literal("removeTarget")
                                         .executes(ctx -> removeTargetAll(ctx.getSource()))
                                         .then(Commands.argument("name", StringArgumentType.string())
@@ -3206,10 +3116,174 @@ public class TameCommands {
                                                         .executes(ctx -> removeTargetState(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
 
                                 .then(Commands.argument("name", StringArgumentType.string())
-                                        .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-        ))));
+                                        .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+        );
 
         dispatcher.register(Commands.literal("tame").redirect(root));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> adminAbilityCommand() {
+        return Commands.literal("ability")
+                .then(Commands.literal("add")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .then(Commands.argument("id", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
+                                        .executes(ctx -> abilityAdd(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> abilityAdd(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                )))))
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestAdminAbilities(b))
+                                .then(Commands.argument("pet", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                        .executes(ctx -> abilityAdd(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> abilityAdd(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                ))))))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .then(Commands.argument("id", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
+                                        .executes(ctx -> abilityRemove(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> abilityRemove(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                )))))
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestAdminAbilities(b))
+                                .then(Commands.argument("pet", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                        .executes(ctx -> abilityRemove(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> abilityRemove(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                ))))))
+                .then(Commands.literal("clear")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .executes(ctx -> abilityClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
+                .then(Commands.literal("list")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .executes(ctx -> abilityList(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> adminAttributeCommand() {
+        return Commands.literal("attribute")
+                .then(Commands.literal("add")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .then(Commands.argument("id", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestAttributes(b))
+                                        .executes(ctx -> attributeAdd(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> attributeAdd(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                )))))
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestAttributes(b))
+                                .then(Commands.argument("pet", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                        .executes(ctx -> attributeAdd(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> attributeAdd(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                ))))))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .then(Commands.argument("id", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestAttributes(b))
+                                        .executes(ctx -> attributeRemove(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> attributeRemove(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                )))))
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestAttributes(b))
+                                .then(Commands.argument("pet", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                        .executes(ctx -> attributeRemove(
+                                                ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "pet"),
+                                                StringArgumentType.getString(ctx, "id"),
+                                                1
+                                        ))
+                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> attributeRemove(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet"),
+                                                        StringArgumentType.getString(ctx, "id"),
+                                                        IntegerArgumentType.getInteger(ctx, "levels")
+                                                ))))))
+                .then(Commands.literal("clear")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .executes(ctx -> attributeClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
+                .then(Commands.literal("list")
+                        .then(Commands.argument("pet", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                .executes(ctx -> attributeList(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))));
     }
 
     @SubscribeEvent
@@ -10597,6 +10671,7 @@ public class TameCommands {
         tame.invulnerableTime = 0;
         tame.setSecondsOnFire(0);
         tame.setRemainingFireTicks(0);
+        clearFrozenState(tame);
         tame.fallDistance = 0.0F;
         tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
         tame.setTarget(null);
@@ -10629,6 +10704,12 @@ public class TameCommands {
         data.entitySnapshot = refreshedSnapshot;
         logRebuildTrace("finalizeRespawnState.end", data,
                 "entityUuid=" + tame.getUUID() + " entityTlId=" + TameData.getTlId(tame) + " dim=" + tame.level().dimension().location());
+    }
+
+    private static void clearFrozenState(TamableAnimal tame) {
+        tame.setTicksFrozen(0);
+        TameableUtils.setFrozenTimeTag(tame, 0);
+        TameableUtils.setFrozenLevel(tame, 0);
     }
 
     private static void removeCompetingLoadedTameCopies(TamableAnimal keeper, TameData data) {
@@ -14531,7 +14612,11 @@ public class TameCommands {
         if (rawItemId == null) {
             return "";
         }
-        return rawItemId.trim().toLowerCase(Locale.ROOT);
+        String normalized = rawItemId.trim();
+        if (normalized.length() >= 2 && normalized.startsWith("\"") && normalized.endsWith("\"")) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     private static String approvedItemDisplayLabel(String itemId) {

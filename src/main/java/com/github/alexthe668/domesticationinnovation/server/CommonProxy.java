@@ -92,6 +92,9 @@ import net.minecraft.world.item.enchantment.EnchantmentInstance;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.storage.loot.BuiltInLootTables;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
@@ -131,6 +134,9 @@ public class CommonProxy {
     private static final TargetingConditions ZOMBIE_TARGET = TargetingConditions.forCombat().range(32.0D);
     private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_BASE = 5.0D;
     private static final double PSYCHIC_WALL_OWNER_PROTECT_RANGE_PER_LEVEL = 1.5D;
+    private static final int SPAWNER_TRIGGER_RANGE = 16;
+    private static final Set<String> SPAWNER_TRIGGERED_THIS_TICK = new HashSet<>();
+    private static long spawnerTriggerProcessedTick = Long.MIN_VALUE;
     public static boolean queueLegacyPetTeleport(Entity entity, ServerLevel endpointWorld, UUID ownerUUID, long queuedGameTime) {
         return false;
     }
@@ -508,6 +514,10 @@ public class CommonProxy {
                 if (!mob.canPickUpLoot()) {
                     mob.setCanPickUpLoot(true);
                 }
+            }
+            int spawnerTriggerLevel = getDiEffectLevel(event.getEntity(), "spawner_trigger");
+            if (spawnerTriggerLevel > 0 && event.getEntity() instanceof TamableAnimal tame && tame.isAlive()) {
+                tickSpawnerTrigger(tame);
             }
             int shepherdLvl = getDiEffectLevel(event.getEntity(), "herding");
             if (shepherdLvl > 0) {
@@ -2020,6 +2030,48 @@ public class CommonProxy {
         }
         TameData data = TameRegistry.get(tame.getUUID());
         return data != null && LevelSystem.getAttributeLevel(data, attributeId) > 0;
+    }
+
+    private static void tickSpawnerTrigger(TamableAnimal tame) {
+        if (tame.level().isClientSide || !(tame.level() instanceof ServerLevel level) || level.getServer() == null) {
+            return;
+        }
+        long serverTick = level.getServer().getTickCount();
+        if (spawnerTriggerProcessedTick != serverTick) {
+            SPAWNER_TRIGGERED_THIS_TICK.clear();
+            spawnerTriggerProcessedTick = serverTick;
+        }
+        BlockPos center = tame.blockPosition();
+        int minChunkX = (center.getX() - SPAWNER_TRIGGER_RANGE) >> 4;
+        int maxChunkX = (center.getX() + SPAWNER_TRIGGER_RANGE) >> 4;
+        int minChunkZ = (center.getZ() - SPAWNER_TRIGGER_RANGE) >> 4;
+        int maxChunkZ = (center.getZ() + SPAWNER_TRIGGER_RANGE) >> 4;
+        double maxDistanceSq = SPAWNER_TRIGGER_RANGE * SPAWNER_TRIGGER_RANGE;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (!level.hasChunk(chunkX, chunkZ)) {
+                    continue;
+                }
+                LevelChunk chunk = level.getChunk(chunkX, chunkZ);
+                for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                    if (!(blockEntity instanceof SpawnerBlockEntity spawner)) {
+                        continue;
+                    }
+                    BlockPos spawnerPos = spawner.getBlockPos();
+                    if (center.distSqr(spawnerPos) > maxDistanceSq) {
+                        continue;
+                    }
+                    if (level.hasNearbyAlivePlayer(spawnerPos.getX() + 0.5D, spawnerPos.getY() + 0.5D, spawnerPos.getZ() + 0.5D, SPAWNER_TRIGGER_RANGE)) {
+                        continue;
+                    }
+                    String tickKey = level.dimension().location() + "|" + spawnerPos.asLong();
+                    if (!SPAWNER_TRIGGERED_THIS_TICK.add(tickKey)) {
+                        continue;
+                    }
+                    spawner.getSpawner().serverTick(level, spawnerPos);
+                }
+            }
+        }
     }
 
     private static boolean shouldApplyLegacyFrostFang(LivingEntity attacker, int level) {

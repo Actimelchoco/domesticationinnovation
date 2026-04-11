@@ -127,6 +127,7 @@ public class LevelSystem {
         GLUTTONOUS("gluttonous", 1),
         TETHERED_TELEPORT("tethered_teleport", 1),
         MUFFLED("muffled", 1),
+        SPAWNER_TRIGGER("spawner_trigger", 1),
         BLAZING_PROTECTION("blazing_protection", Integer.MAX_VALUE);
 
         private final String id;
