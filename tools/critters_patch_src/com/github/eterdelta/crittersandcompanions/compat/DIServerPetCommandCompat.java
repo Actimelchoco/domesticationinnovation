@@ -1,6 +1,8 @@
 package com.github.eterdelta.crittersandcompanions.compat;
 
 import com.github.eterdelta.crittersandcompanions.entity.DragonflyEntity;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 
 import java.lang.reflect.Method;
@@ -66,6 +68,16 @@ public class DIServerPetCommandCompat {
         if (dragonfly.m_21827_()) {
             stopNavigation(dragonfly);
         }
+    }
+
+    public static void syncManualCommand(Object player, Object tame) {
+        syncManualCommand(tame);
+        if (!(player instanceof Player owner) || !(tame instanceof DragonflyEntity dragonfly)) {
+            return;
+        }
+        int command = readCommand(dragonfly);
+        int messageId = command == COMMAND_SIT ? 1 : command == COMMAND_WANDER ? 0 : 2;
+        owner.displayClientMessage(Component.translatable("message.domesticationinnovation.command_" + messageId, dragonfly.getName()), true);
     }
 
     public static void tickSync(Object tame) {

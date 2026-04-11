@@ -20,11 +20,20 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,6 +41,21 @@ import java.util.regex.Pattern;
 public class TameSpawnEvents {
     private static final Pattern LEVEL_PREFIX =
             Pattern.compile("^\\[lvl\\s*(\\d+)\\]\\s*(.*)$", Pattern.CASE_INSENSITIVE);
+    private static final Path RANDOM_TAME_NAME_FILE = FMLPaths.CONFIGDIR.get()
+            .resolve("domesticationinnovation")
+            .resolve("tame_name_pool.txt");
+    private static final List<String> DEFAULT_RANDOM_TAME_NAMES = List.of(
+            "Bramble",
+            "Miso",
+            "Thistle",
+            "Koda",
+            "Juniper",
+            "Pico",
+            "Sable",
+            "Mochi",
+            "Rook",
+            "Tansy"
+    );
     private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
     private static final Map<UUID, PendingNewTameNotification> PENDING_NEW_TAME_NOTIFICATIONS = new HashMap<>();
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
@@ -676,10 +700,6 @@ public class TameSpawnEvents {
 
     public static String uniqueLoadedNameFor(TamableAnimal self, String requestedName) {
         String base = stripLevelPrefixes(requestedName);
-        if (base.isBlank()) {
-            base = "Tame";
-        }
-
         java.util.Set<String> used = new java.util.HashSet<>();
         UUID ownerId = self.getOwnerUUID();
         UUID selfTlId = TameData.getTlId(self);
@@ -717,9 +737,21 @@ public class TameSpawnEvents {
             }
         }
 
+        if (base.isBlank()) {
+            String randomBlank = pickRandomUnusedTameName(used);
+            if (!randomBlank.isBlank()) {
+                return randomBlank;
+            }
+            base = "Tame";
+        }
+
         String lower = base.toLowerCase(java.util.Locale.ROOT);
         if (!used.contains(lower)) {
             return base;
+        }
+        String randomReplacement = pickRandomUnusedTameName(used);
+        if (!randomReplacement.isBlank()) {
+            return randomReplacement;
         }
         int i = 2;
         while (i < 10000) {
@@ -730,6 +762,59 @@ public class TameSpawnEvents {
             i++;
         }
         return base + " " + self.getUUID().toString().substring(0, 8);
+    }
+
+    private static String pickRandomUnusedTameName(java.util.Set<String> used) {
+        List<String> pool = loadRandomTameNames();
+        if (pool.isEmpty()) {
+            return "";
+        }
+        List<String> shuffled = new ArrayList<>(pool);
+        java.util.Collections.shuffle(shuffled, ThreadLocalRandom.current());
+        for (String candidate : shuffled) {
+            String cleaned = stripLevelPrefixes(candidate).trim();
+            if (cleaned.isBlank()) {
+                continue;
+            }
+            if (!used.contains(cleaned.toLowerCase(Locale.ROOT))) {
+                return cleaned;
+            }
+        }
+        return "";
+    }
+
+    private static List<String> loadRandomTameNames() {
+        try {
+            ensureRandomTameNameFileExists();
+            LinkedHashSet<String> names = new LinkedHashSet<>();
+            for (String line : Files.readAllLines(RANDOM_TAME_NAME_FILE, StandardCharsets.UTF_8)) {
+                if (line == null) {
+                    continue;
+                }
+                String cleaned = line.trim();
+                if (cleaned.isBlank() || cleaned.startsWith("#")) {
+                    continue;
+                }
+                names.add(cleaned);
+            }
+            if (!names.isEmpty()) {
+                return new ArrayList<>(names);
+            }
+        } catch (IOException ignored) {
+        }
+        return new ArrayList<>(DEFAULT_RANDOM_TAME_NAMES);
+    }
+
+    private static void ensureRandomTameNameFileExists() throws IOException {
+        if (Files.exists(RANDOM_TAME_NAME_FILE)) {
+            return;
+        }
+        Files.createDirectories(RANDOM_TAME_NAME_FILE.getParent());
+        List<String> lines = new ArrayList<>();
+        lines.add("# One tame name per line.");
+        lines.add("# When a duplicate name would need a suffix, TL picks a random unused name from this file instead.");
+        lines.addAll(DEFAULT_RANDOM_TAME_NAMES);
+        Files.write(RANDOM_TAME_NAME_FILE, lines, StandardCharsets.UTF_8);
     }
 
     private static String stripLevelPrefixes(String name) {

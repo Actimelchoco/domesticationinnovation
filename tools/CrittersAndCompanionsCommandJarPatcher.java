@@ -143,12 +143,13 @@ public class CrittersAndCompanionsCommandJarPatcher {
                 continue;
             }
             InsnList injected = new InsnList();
+            injected.add(new VarInsnNode(Opcodes.ALOAD, 1));
             injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
             injected.add(new MethodInsnNode(
                     Opcodes.INVOKESTATIC,
                     HELPER_OWNER,
                     "syncManualCommand",
-                    "(Ljava/lang/Object;)V",
+                    "(Ljava/lang/Object;Ljava/lang/Object;)V",
                     false
             ));
             method.instructions.insert(insn, injected);

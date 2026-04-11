@@ -70,7 +70,7 @@ public class LegendaryMonstersDuelJarPatcher {
             return classBytes;
         }
         ClassNode node = new ClassNode();
-        new ClassReader(classBytes).accept(node, 0);
+        new ClassReader(classBytes).accept(node, ClassReader.EXPAND_FRAMES);
         boolean changed = false;
         for (MethodNode method : node.methods) {
             if (!"AreaAttack".equals(method.name)) {
@@ -81,7 +81,7 @@ public class LegendaryMonstersDuelJarPatcher {
         if (!changed) {
             throw new IllegalStateException("Did not patch expected AreaAttack method in " + node.name);
         }
-        ClassWriter writer = new ClassWriter(0);
+        ClassWriter writer = new SafeClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
     }
@@ -179,5 +179,16 @@ public class LegendaryMonstersDuelJarPatcher {
             current = current.getPrevious();
         }
         return null;
+    }
+
+    private static final class SafeClassWriter extends ClassWriter {
+        private SafeClassWriter(int flags) {
+            super(flags);
+        }
+
+        @Override
+        protected String getCommonSuperClass(String type1, String type2) {
+            return "java/lang/Object";
+        }
     }
 }

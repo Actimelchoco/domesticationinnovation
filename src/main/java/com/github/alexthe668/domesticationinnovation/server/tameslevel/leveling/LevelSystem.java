@@ -539,6 +539,26 @@ public class LevelSystem {
             return new LevelRewardRepairResult(0, 0, 0, 0);
         }
 
+        List<CompoundTag> recordedRows = new ArrayList<>();
+        for (CompoundTag row : data.levelRewardHistory) {
+            if (LevelRewardResult.fromHistoryRow(row) == null) {
+                continue;
+            }
+            boolean active = !row.contains("active") || row.getBoolean("active");
+            if (!active) {
+                continue;
+            }
+            recordedRows.add(row);
+        }
+        if (recordedRows.isEmpty()) {
+            return new LevelRewardRepairResult(0, 0, 0, 0);
+        }
+
+        int expectedRewardCount = Math.min(recordedRows.size(), Math.max(0, data.level - 1));
+        if (expectedRewardCount <= 0) {
+            return new LevelRewardRepairResult(0, 0, 0, 0);
+        }
+
         Map<String, Double> availableBase = new HashMap<>();
         availableBase.put(BaseStatReward.HP.id, data.bonusHealth);
         availableBase.put(BaseStatReward.DAMAGE.id, data.bonusDamage);
@@ -550,99 +570,27 @@ public class LevelSystem {
 
         Map<String, Integer> availableAttributes = new HashMap<>(data.attributeLevels);
         Map<String, Integer> availableAbilities = new HashMap<>(data.abilityLevels);
-        Map<String, Double> missingBase = new HashMap<>();
-        Map<String, Integer> missingAttributes = new HashMap<>();
-        Map<String, Integer> missingAbilities = new HashMap<>();
-        int repairedRows = 0;
+        int appliedRewardCount = countAppliedRewardRows(
+                recordedRows.subList(0, expectedRewardCount),
+                availableBase,
+                availableAttributes,
+                availableAbilities
+        );
 
-        for (CompoundTag row : data.levelRewardHistory) {
-            if (row == null) {
-                continue;
-            }
-            boolean active = !row.contains("active") || row.getBoolean("active");
-            if (!active) {
-                continue;
-            }
-            String category = row.getString("rewardCategory");
-            String rewardId = row.getString("rewardId");
-            if (category == null || category.isBlank() || rewardId == null || rewardId.isBlank()) {
-                continue;
-            }
-            if ("BASE_STAT".equalsIgnoreCase(category)) {
-                double amount = row.contains("rewardAmount", Tag.TAG_DOUBLE) ? row.getDouble("rewardAmount") : 1.0D;
-                double available = availableBase.getOrDefault(rewardId, 0.0D);
-                if (available + 1.0E-6D >= amount) {
-                    availableBase.put(rewardId, Math.max(0.0D, available - amount));
-                } else {
-                    double delta = Math.max(0.0D, amount - Math.max(0.0D, available));
-                    if (delta > 1.0E-6D) {
-                        missingBase.merge(rewardId, delta, Double::sum);
-                        repairedRows++;
-                    }
-                    availableBase.put(rewardId, 0.0D);
-                }
-                continue;
-            }
-
-            int amount = Math.max(1, (int) Math.round(row.contains("rewardAmount", Tag.TAG_DOUBLE) ? row.getDouble("rewardAmount") : 1.0D));
-            if ("ATTRIBUTE".equalsIgnoreCase(category)) {
-                int available = availableAttributes.getOrDefault(rewardId, 0);
-                if (available >= amount) {
-                    availableAttributes.put(rewardId, available - amount);
-                } else {
-                    int delta = Math.max(0, amount - Math.max(0, available));
-                    if (delta > 0) {
-                        missingAttributes.merge(rewardId, delta, Integer::sum);
-                        repairedRows++;
-                    }
-                    availableAttributes.put(rewardId, 0);
-                }
-                continue;
-            }
-
-            if ("ABILITY".equalsIgnoreCase(category)) {
-                int available = availableAbilities.getOrDefault(rewardId, 0);
-                if (available >= amount) {
-                    availableAbilities.put(rewardId, available - amount);
-                } else {
-                    int delta = Math.max(0, amount - Math.max(0, available));
-                    if (delta > 0) {
-                        missingAbilities.merge(rewardId, delta, Integer::sum);
-                        repairedRows++;
-                    }
-                    availableAbilities.put(rewardId, 0);
-                }
-            }
-        }
-
+        int repairedRows = Math.max(0, expectedRewardCount - appliedRewardCount);
         int baseRepairs = 0;
-        for (Map.Entry<String, Double> entry : missingBase.entrySet()) {
-            BaseStatReward reward = byBaseStatId(entry.getKey());
-            double amount = entry.getValue();
-            if (reward == null || amount <= 1.0E-6D) {
-                continue;
-            }
-            trackBonus(data, reward, amount);
-            baseRepairs++;
-        }
-
         int attributeRepairs = 0;
-        for (Map.Entry<String, Integer> entry : missingAttributes.entrySet()) {
-            if (entry.getValue() <= 0) {
-                continue;
-            }
-            if (addAttribute(data, entry.getKey(), entry.getValue())) {
-                attributeRepairs++;
-            }
-        }
-
         int abilityRepairs = 0;
-        for (Map.Entry<String, Integer> entry : missingAbilities.entrySet()) {
-            if (entry.getValue() <= 0) {
+        for (int i = appliedRewardCount; i < expectedRewardCount; i++) {
+            LevelRewardResult reward = LevelRewardResult.fromHistoryRow(recordedRows.get(i));
+            if (reward == null) {
                 continue;
             }
-            if (addAbility(data, entry.getKey(), entry.getValue())) {
-                abilityRepairs++;
+            applyStoredLevelReward(tame, data, reward);
+            switch (reward.category()) {
+                case BASE_STAT -> baseRepairs++;
+                case ATTRIBUTE -> attributeRepairs++;
+                case ABILITY -> abilityRepairs++;
             }
         }
 
@@ -661,6 +609,68 @@ public class LevelSystem {
             TameRegistry.markDirty();
         }
         return new LevelRewardRepairResult(repairedRows, baseRepairs, attributeRepairs, abilityRepairs);
+    }
+
+    private static int countAppliedRewardRows(
+            List<CompoundTag> rows,
+            Map<String, Double> availableBase,
+            Map<String, Integer> availableAttributes,
+            Map<String, Integer> availableAbilities
+    ) {
+        Map<String, List<Double>> baseById = new HashMap<>();
+        Map<String, List<Integer>> attributeById = new HashMap<>();
+        Map<String, List<Integer>> abilityById = new HashMap<>();
+
+        for (CompoundTag row : rows) {
+            LevelRewardResult reward = LevelRewardResult.fromHistoryRow(row);
+            if (reward == null) {
+                continue;
+            }
+            switch (reward.category()) {
+                case BASE_STAT -> baseById.computeIfAbsent(reward.rewardId(), key -> new ArrayList<>()).add(reward.amount());
+                case ATTRIBUTE -> attributeById.computeIfAbsent(reward.rewardId(), key -> new ArrayList<>()).add(Math.max(1, (int) Math.round(reward.amount())));
+                case ABILITY -> abilityById.computeIfAbsent(reward.rewardId(), key -> new ArrayList<>()).add(Math.max(1, (int) Math.round(reward.amount())));
+            }
+        }
+
+        int matched = 0;
+        for (Map.Entry<String, List<Double>> entry : baseById.entrySet()) {
+            List<Double> amounts = entry.getValue();
+            amounts.sort(Double::compare);
+            double available = availableBase.getOrDefault(entry.getKey(), 0.0D);
+            for (double amount : amounts) {
+                if (available + 1.0E-6D < amount) {
+                    break;
+                }
+                available -= amount;
+                matched++;
+            }
+        }
+        for (Map.Entry<String, List<Integer>> entry : attributeById.entrySet()) {
+            List<Integer> amounts = entry.getValue();
+            amounts.sort(Integer::compareTo);
+            int available = availableAttributes.getOrDefault(entry.getKey(), 0);
+            for (int amount : amounts) {
+                if (available < amount) {
+                    break;
+                }
+                available -= amount;
+                matched++;
+            }
+        }
+        for (Map.Entry<String, List<Integer>> entry : abilityById.entrySet()) {
+            List<Integer> amounts = entry.getValue();
+            amounts.sort(Integer::compareTo);
+            int available = availableAbilities.getOrDefault(entry.getKey(), 0);
+            for (int amount : amounts) {
+                if (available < amount) {
+                    break;
+                }
+                available -= amount;
+                matched++;
+            }
+        }
+        return matched;
     }
 
     // ===============================
