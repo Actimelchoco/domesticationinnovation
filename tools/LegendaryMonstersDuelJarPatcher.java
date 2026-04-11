@@ -93,6 +93,10 @@ public class LegendaryMonstersDuelJarPatcher {
     private static boolean patchAreaAttack(MethodNode method, String ownerMethodName) {
         boolean changed = false;
         for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+            if (insn instanceof JumpInsnNode jump && jump.getOpcode() == Opcodes.IFNE) {
+                changed |= patchAlliedGate(method, jump);
+                continue;
+            }
             if (!(insn instanceof JumpInsnNode jump) || jump.getOpcode() != Opcodes.IF_ACMPEQ) {
                 continue;
             }
@@ -124,11 +128,45 @@ public class LegendaryMonstersDuelJarPatcher {
             injected.add(new JumpInsnNode(Opcodes.IFNE, allowDamage));
             injected.add(new JumpInsnNode(Opcodes.GOTO, jump.label));
             injected.add(allowDamage);
-            method.instructions.insert(insn, injected);
+            method.instructions.insertBefore(insn, injected);
             method.instructions.remove(insn);
             changed = true;
         }
         return changed;
+    }
+
+    private static boolean patchAlliedGate(MethodNode method, JumpInsnNode jump) {
+        AbstractInsnNode methodInsnNode = previousMeaningful(jump.getPrevious());
+        AbstractInsnNode targetLoadNode = previousMeaningful(methodInsnNode == null ? null : methodInsnNode.getPrevious());
+        AbstractInsnNode selfLoadNode = previousMeaningful(targetLoadNode == null ? null : targetLoadNode.getPrevious());
+        if (!(methodInsnNode instanceof MethodInsnNode methodInsn)
+                || !(targetLoadNode instanceof VarInsnNode targetLoad)
+                || !(selfLoadNode instanceof VarInsnNode selfLoad)) {
+            return false;
+        }
+        if (methodInsn.getOpcode() != Opcodes.INVOKEVIRTUAL
+                || !"m_7307_".equals(methodInsn.name)
+                || !"(Lnet/minecraft/world/entity/Entity;)Z".equals(methodInsn.desc)) {
+            return false;
+        }
+        if (selfLoad.getOpcode() != Opcodes.ALOAD || selfLoad.var != 0) {
+            return false;
+        }
+        if (targetLoad.getOpcode() != Opcodes.ALOAD || targetLoad.var <= 0) {
+            return false;
+        }
+        LabelNode allowDamage = new LabelNode();
+        InsnList injected = new InsnList();
+        injected.add(new JumpInsnNode(Opcodes.IFEQ, allowDamage));
+        injected.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        injected.add(new VarInsnNode(Opcodes.ALOAD, targetLoad.var));
+        injected.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER_OWNER, HELPER_NAME, HELPER_DESC, false));
+        injected.add(new JumpInsnNode(Opcodes.IFNE, allowDamage));
+        injected.add(new JumpInsnNode(Opcodes.GOTO, jump.label));
+        injected.add(allowDamage);
+        method.instructions.insertBefore(jump, injected);
+        method.instructions.remove(jump);
+        return true;
     }
 
     private static AbstractInsnNode previousMeaningful(AbstractInsnNode insn) {

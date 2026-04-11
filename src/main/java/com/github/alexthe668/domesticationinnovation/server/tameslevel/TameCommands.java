@@ -2503,6 +2503,14 @@ public class TameCommands {
                                                 .executes(ctx -> adminRepairLoadedTames(ctx.getSource()))))
                                 .then(Commands.literal("grantMissingMilestoneAttributes")
                                         .executes(ctx -> adminGrantMissingMilestoneAttributes(ctx.getSource())))
+                                .then(Commands.literal("repairMissingDuelRewards")
+                                        .executes(ctx -> adminRepairMissingDuelRewards(ctx.getSource()))
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                .executes(ctx -> adminRepairMissingDuelRewards(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet")
+                                                ))))
                                 .then(Commands.literal("reloadClassWeights")
                                         .executes(ctx -> adminReloadClassWeights(ctx.getSource())))
                                 .then(Commands.literal("normalizeBonuses")
@@ -2810,6 +2818,16 @@ public class TameCommands {
                                                         )))))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
+                                .then(Commands.literal("repairMissingDuelRewards")
+                                        .executes(ctx -> adminRepairMissingDuelRewards(ctx.getSource()))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> adminRepairMissingDuelRewards(ctx.getSource())))
+                                        .then(Commands.argument("pet", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                .executes(ctx -> adminRepairMissingDuelRewards(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "pet")
+                                                ))))
                                 .then(Commands.literal("stat")
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestAllAliveTameNames(b))
@@ -10028,6 +10046,11 @@ public class TameCommands {
                 failReasons.add("unknown (invalid registry entry)");
                 continue;
             }
+            if (isDuelLocked(data)) {
+                failed++;
+                failReasons.add(tameDisplayName(data) + " (active duel or duel session)");
+                continue;
+            }
             if (!isDeadEntry(data.uuid)) {
                 continue;
             }
@@ -10094,6 +10117,11 @@ public class TameCommands {
             if (data == null || data.uuid == null) {
                 failed++;
                 failReasons.add("unknown (invalid registry entry)");
+                continue;
+            }
+            if (isDuelLocked(data)) {
+                failed++;
+                failReasons.add(tameDisplayName(data) + " (active duel or duel session)");
                 continue;
             }
             if (!isDeadEntry(data.uuid)) {
@@ -10488,10 +10516,57 @@ public class TameCommands {
         return true;
     }
 
-    private static void copyPersistentDuelStats(TameData from, TameData into) {
+    public static void copyPersistentDuelStats(TameData from, TameData into) {
         if (from == null || into == null) {
             return;
         }
+        into.level = from.level;
+        into.xp = from.xp;
+        into.xpToNext = from.xpToNext;
+        into.kills = from.kills;
+        into.assists = from.assists;
+        into.deaths = from.deaths;
+        into.bonusHealth = from.bonusHealth;
+        into.bonusDamage = from.bonusDamage;
+        into.bonusSpeed = from.bonusSpeed;
+        into.bonusArmor = from.bonusArmor;
+        into.bonusArmorToughness = from.bonusArmorToughness;
+        into.bonusKnockback = from.bonusKnockback;
+        into.bonusKnockbackResist = from.bonusKnockbackResist;
+        into.tameClass = from.tameClass;
+        into.classRerollsUsed = from.classRerollsUsed;
+        into.levelRewardHistory.clear();
+        for (CompoundTag rewardEntry : from.levelRewardHistory) {
+            if (rewardEntry != null && !rewardEntry.isEmpty()) {
+                into.levelRewardHistory.add(rewardEntry.copy());
+            }
+        }
+        into.abilities.clear();
+        into.abilities.addAll(from.abilities);
+        into.abilityLevels.clear();
+        into.abilityLevels.putAll(from.abilityLevels);
+        into.attributeLevels.clear();
+        into.attributeLevels.putAll(from.attributeLevels);
+        into.hasSavedProgress = from.hasSavedProgress;
+        into.savedProgressCost = from.savedProgressCost;
+        into.savedLevel = from.savedLevel;
+        into.savedXp = from.savedXp;
+        into.savedXpToNext = from.savedXpToNext;
+        into.savedKills = from.savedKills;
+        into.savedAssists = from.savedAssists;
+        into.savedBonusHealth = from.savedBonusHealth;
+        into.savedBonusDamage = from.savedBonusDamage;
+        into.savedBonusSpeed = from.savedBonusSpeed;
+        into.savedBonusArmor = from.savedBonusArmor;
+        into.savedBonusArmorToughness = from.savedBonusArmorToughness;
+        into.savedBonusKnockback = from.savedBonusKnockback;
+        into.savedBonusKnockbackResist = from.savedBonusKnockbackResist;
+        into.savedAbilities.clear();
+        into.savedAbilities.addAll(from.savedAbilities);
+        into.savedAbilityLevels.clear();
+        into.savedAbilityLevels.putAll(from.savedAbilityLevels);
+        into.savedAttributeLevels.clear();
+        into.savedAttributeLevels.putAll(from.savedAttributeLevels);
         into.duelMmr = from.duelMmr;
         into.duelKills = from.duelKills;
         into.duelAssists = from.duelAssists;
@@ -10608,6 +10683,9 @@ public class TameCommands {
 
     public static boolean respawnDeadTameAtBed(ServerLevel level, BlockPos bedPos, Direction facing, TameData data) {
         if (level == null || bedPos == null || data == null || data.uuid == null || !data.dead) {
+            return false;
+        }
+        if (isDuelLocked(data)) {
             return false;
         }
         Vec3 spawnPos = Vec3.upFromBottomCenterOf(bedPos, 0.8F);
@@ -14391,6 +14469,13 @@ public class TameCommands {
             }
             return error(source.getPlayer(), "Cannot respawn this tame: invalid registry entry.");
         }
+        if (isDuelLocked(data)) {
+            if (failures != null) {
+                failures.add(tameDisplayName(data) + " (active duel or duel session)");
+                return 0;
+            }
+            return error(source.getPlayer(), tameDisplayName(data) + " is in an active duel or duel session and cannot be respawned right now.");
+        }
         TamableAnimal loaded = findLoadedTameByUuid(source, data.uuid);
         if (loaded != null) {
             loaded.discard();
@@ -15613,6 +15698,68 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminRepairMissingDuelRewards(CommandSourceStack source) {
+        int touchedTames = 0;
+        int repairedRows = 0;
+        int repairedBaseStats = 0;
+        int repairedAttributes = 0;
+        int repairedAbilities = 0;
+
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.dead) {
+                continue;
+            }
+            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+            LevelSystem.LevelRewardRepairResult result = LevelSystem.repairMissingRecordedLevelRewards(tame, data);
+            if (!result.changed()) {
+                continue;
+            }
+            touchedTames++;
+            repairedRows += result.repairedRows();
+            repairedBaseStats += result.baseStats();
+            repairedAttributes += result.attributes();
+            repairedAbilities += result.abilities();
+        }
+
+        if (touchedTames <= 0) {
+            return error(source.getPlayer(), "No missing recorded duel rewards were found.");
+        }
+        final int finalTouchedTames = touchedTames;
+        final int finalRepairedRows = repairedRows;
+        final int finalRepairedBaseStats = repairedBaseStats;
+        final int finalRepairedAttributes = repairedAttributes;
+        final int finalRepairedAbilities = repairedAbilities;
+        source.sendSuccess(() -> Component.literal(
+                "Re-rewarded " + finalTouchedTames + " tame(s): "
+                        + finalRepairedRows + " missing reward row(s), "
+                        + finalRepairedBaseStats + " base stat repair(s), "
+                        + finalRepairedAttributes + " attribute repair(s), "
+                        + finalRepairedAbilities + " ability repair(s)."
+        ), true);
+        return 1;
+    }
+
+    private static int adminRepairMissingDuelRewards(CommandSourceStack source, String petName) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = resolveAdminAliveTame(player, petName);
+        if (data == null) {
+            return 0;
+        }
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        LevelSystem.LevelRewardRepairResult result = LevelSystem.repairMissingRecordedLevelRewards(tame, data);
+        if (!result.changed()) {
+            return error(player, "No missing recorded duel rewards were found for " + data.name + ".");
+        }
+        source.sendSuccess(() -> Component.literal(
+                "Re-rewarded " + data.name + ": "
+                        + result.repairedRows() + " missing reward row(s), "
+                        + result.baseStats() + " base stat repair(s), "
+                        + result.attributes() + " attribute repair(s), "
+                        + result.abilities() + " ability repair(s)."
+        ), true);
+        return 1;
+    }
+
     private static int adminRegistryRemove(CommandSourceStack source, String name) {
         ServerPlayer p = source.getPlayer();
         String wanted = name == null ? "" : name.trim();
@@ -16602,11 +16749,33 @@ public class TameCommands {
     }
 
     private static boolean isDuelLocked(TameData data) {
-        return data != null && data.uuid != null && TameDuelManager.isEntityInDuel(data.uuid);
+        return data != null && data.uuid != null && isDuelLocked(data.uuid);
     }
 
     private static boolean isDuelLocked(TamableAnimal tame) {
-        return tame != null && TameDuelManager.isEntityInDuel(tame.getUUID());
+        return tame != null && isDuelLocked(tame.getUUID());
+    }
+
+    private static boolean isDuelLocked(UUID entityId) {
+        return entityId != null && (TameDuelManager.isEntityInDuel(entityId) || isActiveDuelSessionParticipant(entityId));
+    }
+
+    private static boolean isActiveDuelSessionParticipant(UUID entityId) {
+        if (entityId == null || ACTIVE_DUEL_SESSIONS.isEmpty()) {
+            return false;
+        }
+        for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
+            if (session == null) {
+                continue;
+            }
+            if (session.poolA.contains(entityId)
+                    || session.poolB.contains(entityId)
+                    || session.currentRoundA.contains(entityId)
+                    || session.currentRoundB.contains(entityId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void sendDuelCommandSkipNotice(ServerPlayer player, int skippedDuel, String commandKind) {

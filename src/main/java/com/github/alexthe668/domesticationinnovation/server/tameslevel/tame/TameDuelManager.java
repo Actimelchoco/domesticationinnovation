@@ -561,17 +561,7 @@ public final class TameDuelManager {
                 continue;
             }
             TameData snapshot = TameData.fromTag(snapshotTag.copy());
-            snapshot.level = persisted.level;
-            snapshot.xp = persisted.xp;
-            snapshot.xpToNext = persisted.xpToNext;
-            snapshot.duelMmr = persisted.duelMmr;
-            snapshot.duelKills = persisted.duelKills;
-            snapshot.duelAssists = persisted.duelAssists;
-            snapshot.duelDeaths = persisted.duelDeaths;
-            snapshot.duelWins = persisted.duelWins;
-            snapshot.duelLosses = persisted.duelLosses;
-            snapshot.duelCount = persisted.duelCount;
-            snapshot.duelPoints = persisted.duelPoints;
+            TameCommands.copyPersistentDuelStats(persisted, snapshot);
             entry.setValue(snapshot.toTag());
         }
     }

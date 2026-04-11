@@ -52,6 +52,12 @@ public class LevelSystem {
 
     private static final Random RANDOM = new Random();
 
+    public record LevelRewardRepairResult(int repairedRows, int baseStats, int attributes, int abilities) {
+        public boolean changed() {
+            return repairedRows > 0 || baseStats > 0 || attributes > 0 || abilities > 0;
+        }
+    }
+
     // mobUUID -> set of tameUUID
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
     // mobUUID -> set of playerUUID
@@ -526,6 +532,135 @@ public class LevelSystem {
         data.xp = Math.max(0, data.xp + adjusted);
         checkLevelUp(tame, data);
         TameRegistry.markDirty();
+    }
+
+    public static LevelRewardRepairResult repairMissingRecordedLevelRewards(TamableAnimal tame, TameData data) {
+        if (data == null || data.levelRewardHistory == null || data.levelRewardHistory.isEmpty()) {
+            return new LevelRewardRepairResult(0, 0, 0, 0);
+        }
+
+        Map<String, Double> availableBase = new HashMap<>();
+        availableBase.put(BaseStatReward.HP.id, data.bonusHealth);
+        availableBase.put(BaseStatReward.DAMAGE.id, data.bonusDamage);
+        availableBase.put(BaseStatReward.SPEED.id, data.bonusSpeed);
+        availableBase.put(BaseStatReward.ARMOR.id, data.bonusArmor);
+        availableBase.put(BaseStatReward.ARMOR_TOUGHNESS.id, data.bonusArmorToughness);
+        availableBase.put(BaseStatReward.KNOCKBACK.id, data.bonusKnockback);
+        availableBase.put(BaseStatReward.KNOCKBACK_RESIST.id, data.bonusKnockbackResist);
+
+        Map<String, Integer> availableAttributes = new HashMap<>(data.attributeLevels);
+        Map<String, Integer> availableAbilities = new HashMap<>(data.abilityLevels);
+        Map<String, Double> missingBase = new HashMap<>();
+        Map<String, Integer> missingAttributes = new HashMap<>();
+        Map<String, Integer> missingAbilities = new HashMap<>();
+        int repairedRows = 0;
+
+        for (CompoundTag row : data.levelRewardHistory) {
+            if (row == null) {
+                continue;
+            }
+            boolean active = !row.contains("active") || row.getBoolean("active");
+            if (!active) {
+                continue;
+            }
+            String category = row.getString("rewardCategory");
+            String rewardId = row.getString("rewardId");
+            if (category == null || category.isBlank() || rewardId == null || rewardId.isBlank()) {
+                continue;
+            }
+            if ("BASE_STAT".equalsIgnoreCase(category)) {
+                double amount = row.contains("rewardAmount", Tag.TAG_DOUBLE) ? row.getDouble("rewardAmount") : 1.0D;
+                double available = availableBase.getOrDefault(rewardId, 0.0D);
+                if (available + 1.0E-6D >= amount) {
+                    availableBase.put(rewardId, Math.max(0.0D, available - amount));
+                } else {
+                    double delta = Math.max(0.0D, amount - Math.max(0.0D, available));
+                    if (delta > 1.0E-6D) {
+                        missingBase.merge(rewardId, delta, Double::sum);
+                        repairedRows++;
+                    }
+                    availableBase.put(rewardId, 0.0D);
+                }
+                continue;
+            }
+
+            int amount = Math.max(1, (int) Math.round(row.contains("rewardAmount", Tag.TAG_DOUBLE) ? row.getDouble("rewardAmount") : 1.0D));
+            if ("ATTRIBUTE".equalsIgnoreCase(category)) {
+                int available = availableAttributes.getOrDefault(rewardId, 0);
+                if (available >= amount) {
+                    availableAttributes.put(rewardId, available - amount);
+                } else {
+                    int delta = Math.max(0, amount - Math.max(0, available));
+                    if (delta > 0) {
+                        missingAttributes.merge(rewardId, delta, Integer::sum);
+                        repairedRows++;
+                    }
+                    availableAttributes.put(rewardId, 0);
+                }
+                continue;
+            }
+
+            if ("ABILITY".equalsIgnoreCase(category)) {
+                int available = availableAbilities.getOrDefault(rewardId, 0);
+                if (available >= amount) {
+                    availableAbilities.put(rewardId, available - amount);
+                } else {
+                    int delta = Math.max(0, amount - Math.max(0, available));
+                    if (delta > 0) {
+                        missingAbilities.merge(rewardId, delta, Integer::sum);
+                        repairedRows++;
+                    }
+                    availableAbilities.put(rewardId, 0);
+                }
+            }
+        }
+
+        int baseRepairs = 0;
+        for (Map.Entry<String, Double> entry : missingBase.entrySet()) {
+            BaseStatReward reward = byBaseStatId(entry.getKey());
+            double amount = entry.getValue();
+            if (reward == null || amount <= 1.0E-6D) {
+                continue;
+            }
+            trackBonus(data, reward, amount);
+            baseRepairs++;
+        }
+
+        int attributeRepairs = 0;
+        for (Map.Entry<String, Integer> entry : missingAttributes.entrySet()) {
+            if (entry.getValue() <= 0) {
+                continue;
+            }
+            if (addAttribute(data, entry.getKey(), entry.getValue())) {
+                attributeRepairs++;
+            }
+        }
+
+        int abilityRepairs = 0;
+        for (Map.Entry<String, Integer> entry : missingAbilities.entrySet()) {
+            if (entry.getValue() <= 0) {
+                continue;
+            }
+            if (addAbility(data, entry.getKey(), entry.getValue())) {
+                abilityRepairs++;
+            }
+        }
+
+        String milestoneSummary = grantMissingMilestoneAttributes(data);
+        if (!milestoneSummary.isEmpty()) {
+            attributeRepairs++;
+        }
+
+        if ((baseRepairs > 0 || attributeRepairs > 0 || abilityRepairs > 0) && tame != null) {
+            if (!reapplyTypeBasePlusBonuses(tame, data)) {
+                updateTameName(tame, data);
+                tame.setHealth(tame.getMaxHealth());
+            }
+        }
+        if (baseRepairs > 0 || attributeRepairs > 0 || abilityRepairs > 0) {
+            TameRegistry.markDirty();
+        }
+        return new LevelRewardRepairResult(repairedRows, baseRepairs, attributeRepairs, abilityRepairs);
     }
 
     // ===============================
