@@ -28,6 +28,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
@@ -78,9 +79,11 @@ import net.minecraft.world.entity.monster.Ravager;
 import net.minecraft.world.entity.npc.VillagerTrades;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -99,6 +102,7 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.*;
 import net.minecraftforge.event.entity.item.ItemExpireEvent;
+import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.living.*;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
@@ -932,8 +936,51 @@ public class CommonProxy {
     }
 
     @SubscribeEvent
+    public void onDuelRightClickItem(PlayerInteractEvent.RightClickItem event) {
+        if (!isDuelRestrictedPlayer(event.getEntity())) {
+            return;
+        }
+        if (isAllowedDuelItemUse(event.getItemStack())) {
+            return;
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.FAIL);
+    }
+
+    @SubscribeEvent
+    public void onDuelRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (!isDuelRestrictedPlayer(event.getEntity())) {
+            return;
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.FAIL);
+    }
+
+    @SubscribeEvent
+    public void onDuelLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
+        if (!isDuelRestrictedPlayer(event.getEntity())) {
+            return;
+        }
+        event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public void onDuelEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (!isDuelRestrictedPlayer(event.getEntity())) {
+            return;
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.FAIL);
+    }
+
+    @SubscribeEvent
     public void onInteractWithEntity(PlayerInteractEvent.EntityInteract event) {
         Player player = event.getEntity();
+        if (isDuelRestrictedPlayer(player)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
         if (TameableUtils.isTamed(event.getTarget())) {
@@ -1095,12 +1142,53 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (isDuelRestrictedPlayer(event.getPlayer())) {
+            event.setCanceled(true);
+            return;
+        }
         if (event.getState().getBlock() instanceof PetBedBlock) {
             if (event.getLevel().getBlockEntity(event.getPos()) instanceof PetBedBlockEntity entity1) {
                 entity1.removeAllRequestsFor(event.getPlayer());
                 entity1.resetBedsForNearbyPets();
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onDuelBlockPlace(BlockEvent.EntityPlaceEvent event) {
+        if (event.getEntity() instanceof Player player && isDuelRestrictedPlayer(player)) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onDuelItemToss(ItemTossEvent event) {
+        if (event.getPlayer() != null && isDuelRestrictedPlayer(event.getPlayer())) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public void onDuelItemUseStart(LivingEntityUseItemEvent.Start event) {
+        if (!(event.getEntity() instanceof Player player) || !isDuelRestrictedPlayer(player)) {
+            return;
+        }
+        if (isAllowedDuelItemUse(event.getItem())) {
+            return;
+        }
+        event.setCanceled(true);
+    }
+
+    private static boolean isDuelRestrictedPlayer(Player player) {
+        return player != null && !player.level().isClientSide && TameDuelManager.isEntityInDuel(player.getUUID());
+    }
+
+    private static boolean isAllowedDuelItemUse(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        Item item = stack.getItem();
+        return item instanceof BowItem || item instanceof ProjectileWeaponItem;
     }
 
     @SubscribeEvent
