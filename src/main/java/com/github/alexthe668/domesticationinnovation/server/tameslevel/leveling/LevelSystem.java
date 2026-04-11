@@ -1445,26 +1445,11 @@ public class LevelSystem {
     }
 
     private static Double resolveForcedClassBaseValue(TameData data, Attribute attribute) {
-        if (data == null || attribute != Attributes.MAX_HEALTH || data.tameClass == null) {
-            return null;
-        }
-        if (data.tameClass == TameClass.UNSTABLE_GOD || data.tameClass == TameClass.GANDALF) {
-            return 1.0D;
-        }
-        if (data.tameClass == TameClass.VORGOTTENLUNCHBOX) {
-            return 3.0D;
-        }
-        if (data.tameClass == TameClass.STRIKER) {
-            return 5.0D;
-        }
         return null;
     }
 
     private static boolean usesFixedHealthClass(TameClass tameClass) {
-        return tameClass == TameClass.UNSTABLE_GOD
-                || tameClass == TameClass.GANDALF
-                || tameClass == TameClass.VORGOTTENLUNCHBOX
-                || tameClass == TameClass.STRIKER;
+        return false;
     }
 
     private static void normalizeFixedHealthBonuses(TameData data) {
