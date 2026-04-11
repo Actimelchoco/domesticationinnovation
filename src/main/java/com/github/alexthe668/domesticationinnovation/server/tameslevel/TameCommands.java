@@ -2487,6 +2487,12 @@ public class TameCommands {
                                                 .executes(ctx -> setDuelAssistMessages(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelSessionMessage")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelSessionMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
                                                 )))))
 
                         .then(Commands.literal("admin")
@@ -12958,11 +12964,19 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDuelSessionMessages(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelSessionMessages(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel session messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int duelToggleStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
         boolean killNotifications = PlayerDebugSettings.duelKillNotifications(p.getUUID());
-        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications).withStyle(ChatFormatting.YELLOW));
+        boolean sessionMessages = PlayerDebugSettings.duelSessionMessages(p.getUUID());
+        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -13002,7 +13016,8 @@ public class TameCommands {
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
         boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp).withStyle(ChatFormatting.YELLOW));
+        boolean duelSessionMessage = PlayerDebugSettings.duelSessionMessages(p.getUUID());
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -19922,7 +19937,7 @@ public class TameCommands {
         }
         for (UUID playerId : session.sessionPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-            if (player != null) {
+            if (player != null && PlayerDebugSettings.duelSessionMessages(playerId)) {
                 player.sendSystemMessage(line);
             }
         }
