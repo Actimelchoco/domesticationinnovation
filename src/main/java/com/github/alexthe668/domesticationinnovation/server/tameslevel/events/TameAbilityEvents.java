@@ -13,6 +13,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -56,6 +57,8 @@ import net.minecraft.world.entity.projectile.ThrownPotion;
 import net.minecraft.world.entity.projectile.ThrownTrident;
 import net.minecraft.world.entity.projectile.WitherSkull;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -574,7 +577,8 @@ public class TameAbilityEvents {
         if (distance < 2.0D) return;
         Vec3 dir = toTarget.normalize();
         double dashDistance = Math.min(4.0D + levelValue * 0.8D, Math.max(2.0D, distance));
-        Vec3 end = start.add(dir.scale(dashDistance));
+        Vec3 end = resolveDashEndpoint(level, tame, start, dir, dashDistance);
+        if (end.distanceToSqr(start) < 0.25D) return;
 
         AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
         float damage = offensiveAbilityCastDamage(data, "dash", levelValue);
@@ -596,6 +600,24 @@ public class TameAbilityEvents {
 
         setAbilityCooldown(tame, data, "dash", "dash_tick", now, 90L);
         debugAbilityUse(tame, "dash");
+    }
+
+    private static Vec3 resolveDashEndpoint(ServerLevel level, TamableAnimal tame, Vec3 start, Vec3 dir, double dashDistance) {
+        Vec3 desired = start.add(dir.scale(dashDistance));
+        Vec3 rayStart = start.add(0.0D, Math.max(0.25D, tame.getBbHeight() * 0.5D), 0.0D);
+        Vec3 rayEnd = desired.add(0.0D, Math.max(0.25D, tame.getBbHeight() * 0.5D), 0.0D);
+        BlockHitResult hit = level.clip(new ClipContext(rayStart, rayEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, tame));
+        if (hit.getType() != BlockHitResult.Type.BLOCK) {
+            return desired;
+        }
+        double standOff = Math.max(0.6D, tame.getBbWidth() * 0.5D + 0.1D);
+        Vec3 blocked = hit.getLocation().subtract(dir.scale(standOff));
+        Vec3 candidate = new Vec3(blocked.x, start.y, blocked.z);
+        BlockPos candidatePos = BlockPos.containing(candidate.x, Math.max(level.getMinBuildHeight() + 1, candidate.y), candidate.z);
+        if (!level.getBlockState(candidatePos).canBeReplaced()) {
+            candidate = candidate.add(0.0D, 1.0D, 0.0D);
+        }
+        return candidate;
     }
 
     private static void handleEvokerFangs(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
