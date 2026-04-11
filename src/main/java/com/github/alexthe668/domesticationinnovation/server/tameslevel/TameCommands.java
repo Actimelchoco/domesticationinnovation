@@ -3014,23 +3014,37 @@ public class TameCommands {
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
+                                                .executes(ctx -> adminRemoveHeldApprovedItem(ctx.getSource()))
                                                 .then(Commands.argument("item", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestAllApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
-                                                        )))))
-                                .then(Commands.literal("cheapapprovedItem")
+                                                        ))))
+                                .then(Commands.literal("cheapapprove")
                                         .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
+                                                .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
                                                 .then(Commands.argument("item", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveCheapApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
-                                                        )))))
+                                                        ))))
+                                .then(Commands.literal("cheapapprovedItem")
+                                        .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
+                                        .then(Commands.literal("list")
+                                                .executes(ctx -> adminListApprovedItems(ctx.getSource())))
+                                        .then(Commands.literal("remove")
+                                                .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
+                                                .then(Commands.argument("item", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
+                                                        .executes(ctx -> adminRemoveCheapApprovedItem(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "item")
+                                                        ))))
                                 .then(Commands.literal("collar")
                                         .then(Commands.literal("stripDiEnchants")
                                                 .executes(ctx -> adminStripDiEnchantsFromHeldCollar(ctx.getSource())))
@@ -3189,11 +3203,11 @@ public class TameCommands {
                                         .then(Commands.literal("state")
                                                 .then(Commands.argument("name", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestMovementStates(b))
-                                                        .executes(ctx -> removeTargetState(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))))
+                                                        .executes(ctx -> removeTargetState(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
 
                                 .then(Commands.argument("name", StringArgumentType.string())
-                                        .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
-        );
+                                        .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+        ))));
 
         dispatcher.register(Commands.literal("tame").redirect(root));
     }
@@ -14450,6 +14464,30 @@ public class TameCommands {
 
     private static int adminRemoveCheapApprovedItem(CommandSourceStack source, String rawItemId) {
         return adminRemoveApprovedItem(source, rawItemId, true);
+    }
+
+    private static int adminRemoveHeldApprovedItem(CommandSourceStack source) {
+        return adminRemoveHeldApprovedItem(source, false);
+    }
+
+    private static int adminRemoveHeldCheapApprovedItem(CommandSourceStack source) {
+        return adminRemoveHeldApprovedItem(source, true);
+    }
+
+    private static int adminRemoveHeldApprovedItem(CommandSourceStack source, boolean cheap) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        ItemStack held = player.getMainHandItem();
+        if (held.isEmpty()) {
+            return error(player, "Hold an item in your main hand or specify an item id to remove.");
+        }
+        String itemId = heldItemId(held);
+        if (itemId == null || itemId.isBlank()) {
+            return error(player, "Could not resolve held item id.");
+        }
+        return adminRemoveApprovedItem(source, itemId, cheap);
     }
 
     private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId, boolean cheap) {

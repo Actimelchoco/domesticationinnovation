@@ -61,6 +61,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -115,6 +116,7 @@ import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
+import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -338,6 +340,7 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onLivingUpdate(LivingEvent.LivingTickEvent event) {
+        enforceNoGriefMutantCreeperMinion(event.getEntity());
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
             if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {
@@ -1255,6 +1258,9 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onExplosion(ExplosionEvent.Start event) {
+        if (explosionOwnedByTamedEntity(event)) {
+            return;
+        }
         float dist = 30;
         Vec3 center = event.getExplosion().getPosition();
         Vec3 bottom = center.add(-dist, -dist, -dist);
@@ -1307,6 +1313,34 @@ public class CommonProxy {
             defuserData.cooldowns.put("defusal_tick", now + cooldownSeconds * 20L);
             TameRegistry.markDirty();
             debugDiAbilityUse(defuserHit, "defusal");
+        }
+    }
+
+    private static boolean explosionOwnedByTamedEntity(ExplosionEvent.Start event) {
+        if (event == null || event.getExplosion() == null) {
+            return false;
+        }
+        DamageSource damageSource = event.getExplosion().getDamageSource();
+        if (damageSource == null) {
+            return false;
+        }
+        Entity source = damageSource.getEntity();
+        return source instanceof TamableAnimal tame && tame.isTame();
+    }
+
+    private static void enforceNoGriefMutantCreeperMinion(Entity entity) {
+        if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || tame.level().isClientSide) {
+            return;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (key == null || !"mutantmonsters".equals(key.getNamespace()) || !"creeper_minion".equals(key.getPath())) {
+            return;
+        }
+        try {
+            Method method = tame.getClass().getMethod("setDestroyBlocks", boolean.class);
+            method.setAccessible(true);
+            method.invoke(tame, false);
+        } catch (Throwable ignored) {
         }
     }
 
