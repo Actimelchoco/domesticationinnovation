@@ -1166,6 +1166,15 @@ public class TameAbilityEvents {
         if (damage <= 0.0F) return;
         LivingEntity target = event.getEntity();
 
+        if (isMutantCreeperMinionExplosion(tame, event)) {
+            float bonusDamage = data == null ? 0.0F : (float) Math.max(0.0D, data.bonusDamage);
+            if (bonusDamage > 0.0F) {
+                event.setAmount(event.getAmount() + bonusDamage);
+                damage = event.getAmount();
+                noteDamageContributor("bonus_damage");
+            }
+        }
+
         int killerLevel = attributeLevel(data, "killer");
         if (killerLevel > 0) {
             float hpPct = target.getHealth() / Math.max(1.0F, target.getMaxHealth());
@@ -1816,7 +1825,27 @@ public class TameAbilityEvents {
         if (INTERNAL_BONUS_DAMAGE.get()) {
             return false;
         }
-        return event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame;
+        return (event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame)
+                || isMutantCreeperMinionExplosion(tame, event);
+    }
+
+    private static boolean isMutantCreeperMinionExplosion(TamableAnimal tame, LivingHurtEvent event) {
+        return tame != null
+                && event != null
+                && event.getSource() != null
+                && event.getSource().getEntity() == tame
+                && event.getSource().is(DamageTypeTags.IS_EXPLOSION)
+                && isMutantCreeperMinion(tame);
+    }
+
+    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = EntityType.getKey(tame.getType());
+        return key != null
+                && "mutantmonsters".equals(key.getNamespace())
+                && "creeper_minion".equals(key.getPath());
     }
 
     private static float lightningfangChance(int level) {

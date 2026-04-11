@@ -663,6 +663,9 @@ public class TameCommands {
         private final SpawnTarget spawnB;
         private final SpawnTarget waitingA;
         private final SpawnTarget waitingB;
+        private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
+        private final Map<UUID, Long> idleSitHoldUntilTick = new HashMap<>();
+        private final Map<ResourceKey<Level>, Set<ChunkPos>> forcedArenaChunks = new HashMap<>();
         private Set<UUID> currentRoundA = Set.of();
         private Set<UUID> currentRoundB = Set.of();
         private long roundStartedAtTick = -1L;
@@ -6628,7 +6631,7 @@ public class TameCommands {
             return error(player, "No active duel session to end.");
         }
         ActiveDuelSession session = ACTIVE_DUEL_SESSIONS.remove(sessionId);
-        unregisterActiveDuelSession(session);
+        unregisterActiveDuelSession(source.getServer(), session);
         if (session != null) {
             for (UUID playerId : session.sessionPlayers) {
                 TameDuelManager.endDuelsForOwner(source.getServer(), playerId);
@@ -10075,6 +10078,7 @@ public class TameCommands {
 
     private record SpawnTarget(ServerLevel level, Vec3 pos, float yRot, float xRot) {}
     private record ArenaSpawnSet(String arenaName, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB) {}
+    private record IdleSessionRestorePlan(SpawnTarget target, int movementOrderCode, boolean holdSit) {}
 
     private static SpawnTarget resolveRespawnTarget(CommandSourceStack source, ServerPlayer player, TameData data, boolean toMe) {
         if (toMe || data == null) {
@@ -12366,7 +12370,7 @@ public class TameCommands {
                     data.group,
                     data.level,
                     false,
-                    Math.max(0, data.duelMmr),
+                    data.duelMmr,
                     Math.max(0, data.duelWins),
                     Math.max(0, data.duelLosses),
                     Math.max(0, data.duelCount),
@@ -12390,7 +12394,7 @@ public class TameCommands {
                     "",
                     0,
                     true,
-                    Math.max(0, stats.duelMmr),
+                    stats.duelMmr,
                     Math.max(0, stats.duelWins),
                     Math.max(0, stats.duelLosses),
                     Math.max(0, stats.duelCount),
@@ -18612,6 +18616,7 @@ public class TameCommands {
         }
         for (UUID participantId : participantIdsToAdd) {
             if (session.poolA.add(participantId)) {
+                captureDuelSessionSnapshot(server, session, participantId);
                 added++;
             }
         }
@@ -18635,12 +18640,17 @@ public class TameCommands {
         for (UUID playerId : session.sessionPlayers) {
             ACTIVE_DUEL_SESSION_BY_PLAYER.put(playerId, session.sessionId);
         }
+        captureDuelSessionSnapshots(server, session);
+        setDuelSessionArenaChunksLoaded(server, session, true);
         return true;
     }
 
-    private static void unregisterActiveDuelSession(ActiveDuelSession session) {
+    private static void unregisterActiveDuelSession(MinecraftServer server, ActiveDuelSession session) {
         if (session == null) {
             return;
+        }
+        if (server != null) {
+            setDuelSessionArenaChunksLoaded(server, session, false);
         }
         for (UUID playerId : session.sessionPlayers) {
             if (Objects.equals(ACTIVE_DUEL_SESSION_BY_PLAYER.get(playerId), session.sessionId)) {
@@ -18952,12 +18962,16 @@ public class TameCommands {
                 }
                 continue;
             }
+            recoverUnloadedDuelSessionParticipants(server, session, session.currentRoundA, session.spawnA, session.ownerA);
+            recoverUnloadedDuelSessionParticipants(server, session, session.currentRoundB, session.spawnB, session.ownerB);
             if (hasAnyActiveDuelParticipants(session.currentRoundA) && hasAnyActiveDuelParticipants(session.currentRoundB)) {
                 if (session.roundStartedAtTick >= 0L && now - session.roundStartedAtTick >= duelSessionRoundTimeoutTicks()) {
                     resolveTimedOutDuelSessionRound(server, session);
                 }
                 continue;
             }
+            teleportDuelSessionIdleTamesHome(server, session, Set.of(), Set.of());
+            syncIdleDuelSessionTames(server, session);
             session.currentRoundA = Set.of();
             session.currentRoundB = Set.of();
             session.roundStartedAtTick = -1L;
@@ -18965,7 +18979,7 @@ public class TameCommands {
         }
         for (UUID sessionId : endedSessions) {
             ActiveDuelSession removed = ACTIVE_DUEL_SESSIONS.remove(sessionId);
-            unregisterActiveDuelSession(removed);
+            unregisterActiveDuelSession(server, removed);
             if (removed != null) {
                 notifyDuelSessionOwners(server, removed, Component.literal("Duel session ended because one side no longer has available participants.").withStyle(ChatFormatting.YELLOW));
             }
@@ -19208,11 +19222,11 @@ public class TameCommands {
         }
         Set<UUID> active = new HashSet<>(roundA);
         active.addAll(roundB);
-        teleportSessionPoolHome(server, session.ownerA, session.poolA, active, session.waitingA);
+        teleportSessionPoolHome(server, session, session.ownerA, session.poolA, active, session.waitingA);
         if (!Objects.equals(session.ownerA, session.ownerB)) {
-            teleportSessionPoolHome(server, session.ownerB, session.poolB, active, session.waitingB);
+            teleportSessionPoolHome(server, session, session.ownerB, session.poolB, active, session.waitingB);
         } else {
-            teleportSessionPoolHome(server, session.ownerB, session.poolB, active, session.waitingB);
+            teleportSessionPoolHome(server, session, session.ownerB, session.poolB, active, session.waitingB);
         }
     }
 
@@ -19222,18 +19236,19 @@ public class TameCommands {
         }
         Set<UUID> active = new HashSet<>(session.currentRoundA);
         active.addAll(session.currentRoundB);
-        syncIdleSessionPool(server, session.ownerA, session.poolA, active);
+        syncIdleSessionPool(server, session, session.ownerA, session.poolA, active);
         if (!Objects.equals(session.ownerA, session.ownerB)) {
-            syncIdleSessionPool(server, session.ownerB, session.poolB, active);
+            syncIdleSessionPool(server, session, session.ownerB, session.poolB, active);
         } else {
-            syncIdleSessionPool(server, session.ownerB, session.poolB, active);
+            syncIdleSessionPool(server, session, session.ownerB, session.poolB, active);
         }
     }
 
-    private static void syncIdleSessionPool(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound) {
-        if (server == null || ownerId == null || pool == null || activeRound == null) {
+    private static void syncIdleSessionPool(MinecraftServer server, ActiveDuelSession session, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound) {
+        if (server == null || session == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         for (UUID id : pool) {
             if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                 continue;
@@ -19243,16 +19258,22 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            applyMovementOverride(tame, MovementOrder.SIT);
-            tame.setTarget(null);
-            tame.getNavigation().stop();
+            Long holdUntil = session.idleSitHoldUntilTick.get(id);
+            if (holdUntil != null && holdUntil > now) {
+                applyMovementOrderCode(tame, 1);
+                tame.setTarget(null);
+                tame.getNavigation().stop();
+            } else if (holdUntil != null) {
+                session.idleSitHoldUntilTick.remove(id);
+            }
         }
     }
 
-    private static void teleportSessionPoolHome(MinecraftServer server, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound, SpawnTarget waitingTarget) {
-        if (server == null || ownerId == null || pool == null || activeRound == null) {
+    private static void teleportSessionPoolHome(MinecraftServer server, ActiveDuelSession session, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound, SpawnTarget waitingTarget) {
+        if (server == null || session == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         Set<UUID> suppressedOwners = new LinkedHashSet<>();
         for (UUID id : pool) {
             TameData data = TameRegistry.get(id);
@@ -19275,14 +19296,12 @@ public class TameCommands {
                 }
                 UUID effectiveOwnerId = data.ownerUUID != null ? data.ownerUUID : ownerId;
                 ServerPlayer owner = effectiveOwnerId == null ? null : server.getPlayerList().getPlayer(effectiveOwnerId);
-                SpawnTarget target = waitingTarget;
-                if (target == null) {
-                    if (owner == null) {
-                        continue;
-                    }
-                    CommandSourceStack source = owner.createCommandSourceStack();
-                    target = resolveRespawnTarget(source, owner, data, false);
+                TameData snapshot = duelSessionSnapshot(session, id);
+                IdleSessionRestorePlan restorePlan = planIdleSessionRestore(server, snapshot, data, owner, waitingTarget);
+                if (restorePlan == null) {
+                    continue;
                 }
+                SpawnTarget target = restorePlan.target();
                 if (target == null || target.level == null || target.pos == null) {
                     continue;
                 }
@@ -19294,15 +19313,233 @@ public class TameCommands {
                     if (owner == null) {
                         continue;
                     }
+                    applySessionSnapshotState(data, snapshot);
                     CommandSourceStack source = owner.createCommandSourceStack();
                     tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
+                    if (restorePlan.holdSit()) {
+                        session.idleSitHoldUntilTick.put(id, now + 20L);
+                    } else {
+                        session.idleSitHoldUntilTick.remove(id);
+                    }
                     continue;
                 }
                 teleportTameToLocation(tame, target);
+                applyMovementOrderCode(tame, restorePlan.movementOrderCode());
+                if (restorePlan.holdSit()) {
+                    session.idleSitHoldUntilTick.put(id, now + 20L);
+                } else {
+                    session.idleSitHoldUntilTick.remove(id);
+                }
             }
         } finally {
             for (UUID suppressOwnerId : suppressedOwners) {
                 endSuppressedUnloadedTeleportMessages(suppressOwnerId);
+            }
+        }
+    }
+
+    private static void captureDuelSessionSnapshots(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null) {
+            return;
+        }
+        session.tameSnapshots.clear();
+        for (UUID participantId : session.poolA) {
+            captureDuelSessionSnapshot(server, session, participantId);
+        }
+        for (UUID participantId : session.poolB) {
+            captureDuelSessionSnapshot(server, session, participantId);
+        }
+    }
+
+    private static void captureDuelSessionSnapshot(MinecraftServer server, ActiveDuelSession session, UUID participantId) {
+        if (server == null || session == null || participantId == null || session.tameSnapshots.containsKey(participantId)) {
+            return;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            return;
+        }
+        TameData snapshot = TameData.fromTag(data.toTag().copy());
+        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        if (loaded != null && loaded.isAlive()) {
+            CompoundTag entitySnapshot = new CompoundTag();
+            loaded.save(entitySnapshot);
+            snapshot.entitySnapshot = entitySnapshot;
+            snapshot.lastKnownDimension = loaded.level().dimension().location().toString();
+            snapshot.lastKnownX = loaded.blockPosition().getX();
+            snapshot.lastKnownY = loaded.blockPosition().getY();
+            snapshot.lastKnownZ = loaded.blockPosition().getZ();
+        }
+        session.tameSnapshots.put(participantId, snapshot.toTag());
+    }
+
+    private static TameData duelSessionSnapshot(ActiveDuelSession session, UUID participantId) {
+        if (session == null || participantId == null) {
+            return null;
+        }
+        CompoundTag snapshot = session.tameSnapshots.get(participantId);
+        return snapshot == null || snapshot.isEmpty() ? null : TameData.fromTag(snapshot.copy());
+    }
+
+    private static IdleSessionRestorePlan planIdleSessionRestore(MinecraftServer server, TameData snapshot, TameData liveData, ServerPlayer owner, SpawnTarget waitingTarget) {
+        TameData basis = snapshot != null ? snapshot : liveData;
+        if (basis == null) {
+            return null;
+        }
+        int movementOrderCode = Math.max(0, Math.min(3, basis.movementOrder));
+        SpawnTarget fallback = spawnTargetFromTameData(server, basis);
+        SpawnTarget target = switch (movementOrderCode) {
+            case 0 -> owner != null
+                    ? new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot())
+                    : fallback;
+            case 1 -> waitingTarget != null ? waitingTarget : fallback;
+            case 2, 3 -> fallback;
+            default -> fallback;
+        };
+        if (target == null || target.level == null || target.pos == null) {
+            return null;
+        }
+        return new IdleSessionRestorePlan(target, movementOrderCode, movementOrderCode == 1);
+    }
+
+    private static SpawnTarget spawnTargetFromTameData(MinecraftServer server, TameData data) {
+        if (server == null || data == null || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            return null;
+        }
+        ResourceLocation dimId = ResourceLocation.tryParse(data.lastKnownDimension);
+        if (dimId == null) {
+            return null;
+        }
+        ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimId));
+        if (level == null) {
+            return null;
+        }
+        float yRot = 0.0F;
+        float xRot = 0.0F;
+        if (data.entitySnapshot != null && data.entitySnapshot.contains("Rotation", Tag.TAG_LIST)) {
+            ListTag rotation = data.entitySnapshot.getList("Rotation", Tag.TAG_FLOAT);
+            if (rotation.size() >= 2) {
+                yRot = rotation.getFloat(0);
+                xRot = rotation.getFloat(1);
+            }
+        }
+        return new SpawnTarget(level, new Vec3(data.lastKnownX + 0.5D, data.lastKnownY, data.lastKnownZ + 0.5D), yRot, xRot);
+    }
+
+    private static void applySessionSnapshotState(TameData liveData, TameData snapshot) {
+        if (liveData == null || snapshot == null) {
+            return;
+        }
+        liveData.lastKnownDimension = snapshot.lastKnownDimension;
+        liveData.lastKnownX = snapshot.lastKnownX;
+        liveData.lastKnownY = snapshot.lastKnownY;
+        liveData.lastKnownZ = snapshot.lastKnownZ;
+        liveData.lastKnownGameTime = snapshot.lastKnownGameTime;
+        liveData.movementOrder = snapshot.movementOrder;
+        liveData.hasHome = snapshot.hasHome;
+        liveData.homeDimension = snapshot.homeDimension;
+        liveData.homeX = snapshot.homeX;
+        liveData.homeY = snapshot.homeY;
+        liveData.homeZ = snapshot.homeZ;
+        liveData.hasPreviousHome = snapshot.hasPreviousHome;
+        liveData.previousHomeDimension = snapshot.previousHomeDimension;
+        liveData.previousHomeX = snapshot.previousHomeX;
+        liveData.previousHomeY = snapshot.previousHomeY;
+        liveData.previousHomeZ = snapshot.previousHomeZ;
+        liveData.guardianReturnTicks = snapshot.guardianReturnTicks;
+        liveData.guardianRelaxing = snapshot.guardianRelaxing;
+        liveData.guardianNextPhaseTick = snapshot.guardianNextPhaseTick;
+        liveData.guardianTargetUuid = snapshot.guardianTargetUuid;
+        liveData.guardianTargetStuckTicks = snapshot.guardianTargetStuckTicks;
+        liveData.guardianTargetBestDistanceSq = snapshot.guardianTargetBestDistanceSq;
+        liveData.bodyguardRange = snapshot.bodyguardRange;
+        liveData.guardianSetAnchors.clear();
+        liveData.guardianSetAnchors.putAll(snapshot.guardianSetAnchors);
+        liveData.entitySnapshot = snapshot.entitySnapshot == null ? new CompoundTag() : snapshot.entitySnapshot.copy();
+        TameRegistry.markDirty();
+    }
+
+    private static void recoverUnloadedDuelSessionParticipants(MinecraftServer server, ActiveDuelSession session, Set<UUID> activeRound, SpawnTarget target, UUID ownerId) {
+        if (server == null || session == null || activeRound == null || activeRound.isEmpty() || target == null || target.level == null || target.pos == null) {
+            return;
+        }
+        ServerPlayer owner = ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return;
+        }
+        CommandSourceStack source = owner.createCommandSourceStack();
+        for (UUID participantId : activeRound) {
+            if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
+                continue;
+            }
+            TameData data = TameRegistry.get(participantId);
+            if (data == null || data.dead || data.stored || hasPendingImmediateChunkTeleport(data)) {
+                continue;
+            }
+            TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            if (loaded != null && loaded.isAlive()) {
+                continue;
+            }
+            tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
+        }
+    }
+
+    private static void setDuelSessionArenaChunksLoaded(MinecraftServer server, ActiveDuelSession session, boolean load) {
+        if (server == null || session == null) {
+            return;
+        }
+        if (load) {
+            session.forcedArenaChunks.clear();
+            buildDuelSessionArenaChunks(session);
+        }
+        for (Map.Entry<ResourceKey<Level>, Set<ChunkPos>> entry : session.forcedArenaChunks.entrySet()) {
+            ServerLevel level = server.getLevel(entry.getKey());
+            if (level == null) {
+                continue;
+            }
+            for (ChunkPos chunkPos : entry.getValue()) {
+                ForgeChunkManager.forceChunk(level, DomesticationMod.MODID, session.sessionId, chunkPos.x, chunkPos.z, load, true);
+            }
+        }
+        if (!load) {
+            session.forcedArenaChunks.clear();
+        }
+    }
+
+    private static void buildDuelSessionArenaChunks(ActiveDuelSession session) {
+        if (session == null || session.spawnA == null || session.spawnB == null || session.spawnA.level == null || session.spawnB.level == null) {
+            return;
+        }
+        if (session.spawnA.level.dimension().equals(session.spawnB.level.dimension())) {
+            ChunkPos chunkA = new ChunkPos(BlockPos.containing(session.spawnA.pos));
+            ChunkPos chunkB = new ChunkPos(BlockPos.containing(session.spawnB.pos));
+            addArenaChunkRectangle(session.forcedArenaChunks, session.spawnA.level.dimension(),
+                    Math.min(chunkA.x, chunkB.x) - 1,
+                    Math.max(chunkA.x, chunkB.x) + 1,
+                    Math.min(chunkA.z, chunkB.z) - 1,
+                    Math.max(chunkA.z, chunkB.z) + 1);
+            return;
+        }
+        addArenaChunkRectangle(session.forcedArenaChunks, session.spawnA.level.dimension(),
+                new ChunkPos(BlockPos.containing(session.spawnA.pos)).x - 1,
+                new ChunkPos(BlockPos.containing(session.spawnA.pos)).x + 1,
+                new ChunkPos(BlockPos.containing(session.spawnA.pos)).z - 1,
+                new ChunkPos(BlockPos.containing(session.spawnA.pos)).z + 1);
+        addArenaChunkRectangle(session.forcedArenaChunks, session.spawnB.level.dimension(),
+                new ChunkPos(BlockPos.containing(session.spawnB.pos)).x - 1,
+                new ChunkPos(BlockPos.containing(session.spawnB.pos)).x + 1,
+                new ChunkPos(BlockPos.containing(session.spawnB.pos)).z - 1,
+                new ChunkPos(BlockPos.containing(session.spawnB.pos)).z + 1);
+    }
+
+    private static void addArenaChunkRectangle(Map<ResourceKey<Level>, Set<ChunkPos>> forcedChunks, ResourceKey<Level> dimension, int minChunkX, int maxChunkX, int minChunkZ, int maxChunkZ) {
+        if (forcedChunks == null || dimension == null) {
+            return;
+        }
+        Set<ChunkPos> chunks = forcedChunks.computeIfAbsent(dimension, ignored -> new LinkedHashSet<>());
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                chunks.add(new ChunkPos(chunkX, chunkZ));
             }
         }
     }

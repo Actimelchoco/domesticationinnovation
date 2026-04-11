@@ -8,6 +8,7 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -21,6 +22,10 @@ public class TameProtectionEvents {
         var victim = event.getEntity();
         var attacker = event.getSource().getEntity();
         var direct = event.getSource().getDirectEntity();
+        if (victim instanceof TamableAnimal targetTame && targetTame.isTame() && isMutantCreeperMinionSelfExplosion(targetTame, event)) {
+            event.setCanceled(true);
+            return;
+        }
         UUID attackerParticipantId = resolveParticipantId(attacker, direct);
         UUID victimParticipantId = victim == null ? null : victim.getUUID();
 
@@ -160,5 +165,15 @@ public class TameProtectionEvents {
         }
         TamableAnimal tame = resolveTameAttacker(attacker, direct);
         return tame == null ? null : tame.getUUID();
+    }
+
+    private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, LivingAttackEvent event) {
+        if (tame == null || event == null || event.getSource() == null || event.getSource().getEntity() != tame || !event.getSource().is(DamageTypeTags.IS_EXPLOSION)) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key != null
+                && "mutantmonsters".equals(key.getNamespace())
+                && "creeper_minion".equals(key.getPath());
     }
 }

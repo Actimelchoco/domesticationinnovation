@@ -1,0 +1,766 @@
+﻿Compiled from "MutatedExplosion.java"
+public class fuzs.mutantmonsters.world.level.MutatedExplosion extends net.minecraft.world.level.Explosion {
+  private final net.minecraft.world.level.Level world;
+
+  private final float size;
+
+  private fuzs.mutantmonsters.world.level.MutatedExplosion(net.minecraft.world.level.Level, net.minecraft.world.entity.Entity, double, double, double, float, boolean, net.minecraft.world.level.Explosion$BlockInteraction);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aconst_null
+       4: aconst_null
+       5: dload_3
+       6: dload         5
+       8: dload         7
+      10: fload         9
+      12: iload         10
+      14: aload         11
+      16: invokespecial #38                 // Method net/minecraft/world/level/Explosion."<init>":(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/damagesource/DamageSource;Lnet/minecraft/world/level/ExplosionDamageCalculator;DDDFZLnet/minecraft/world/level/Explosion$BlockInteraction;)V
+      19: aload_0
+      20: aload_1
+      21: putfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+      24: aload_0
+      25: fload         9
+      27: putfield      #42                 // Field size:F
+      30: return
+
+  public void m_46061_();
+    Code:
+       0: aload_0
+       1: getfield      #42                 // Field size:F
+       4: fconst_0
+       5: fcmpg
+       6: ifle          1062
+       9: new           #60                 // class java/util/HashSet
+      12: dup
+      13: invokespecial #62                 // Method java/util/HashSet."<init>":()V
+      16: astore_1
+      17: getstatic     #68                 // Field fuzs/mutantmonsters/core/CommonAbstractions.INSTANCE:Lfuzs/mutantmonsters/core/CommonAbstractions;
+      20: aload_0
+      21: invokeinterface #72,  2           // InterfaceMethod fuzs/mutantmonsters/core/CommonAbstractions.getExplosionExploder:(Lnet/minecraft/world/level/Explosion;)Lnet/minecraft/world/entity/Entity;
+      26: astore_2
+      27: getstatic     #68                 // Field fuzs/mutantmonsters/core/CommonAbstractions.INSTANCE:Lfuzs/mutantmonsters/core/CommonAbstractions;
+      30: aload_0
+      31: invokeinterface #76,  2           // InterfaceMethod fuzs/mutantmonsters/core/CommonAbstractions.getExplosionPosition:(Lnet/minecraft/world/level/Explosion;)Lnet/minecraft/world/phys/Vec3;
+      36: astore_3
+      37: aload_2
+      38: ifnonnull     51
+      41: new           #78                 // class net/minecraft/world/level/ExplosionDamageCalculator
+      44: dup
+      45: invokespecial #79                 // Method net/minecraft/world/level/ExplosionDamageCalculator."<init>":()V
+      48: goto          59
+      51: new           #87                 // class net/minecraft/world/level/EntityBasedExplosionDamageCalculator
+      54: dup
+      55: aload_2
+      56: invokespecial #90                 // Method net/minecraft/world/level/EntityBasedExplosionDamageCalculator."<init>":(Lnet/minecraft/world/entity/Entity;)V
+      59: astore        4
+      61: iconst_0
+      62: istore        13
+      64: iload         13
+      66: bipush        16
+      68: if_icmpge     433
+      71: iconst_0
+      72: istore        5
+      74: iload         5
+      76: bipush        16
+      78: if_icmpge     427
+      81: iconst_0
+      82: istore        6
+      84: iload         6
+      86: bipush        16
+      88: if_icmpge     421
+      91: iload         13
+      93: ifeq          127
+      96: iload         13
+      98: bipush        15
+     100: if_icmpeq     127
+     103: iload         5
+     105: ifeq          127
+     108: iload         5
+     110: bipush        15
+     112: if_icmpeq     127
+     115: iload         6
+     117: ifeq          127
+     120: iload         6
+     122: bipush        15
+     124: if_icmpne     415
+     127: iload         13
+     129: i2f
+     130: ldc           #91                 // float 15.0f
+     132: fdiv
+     133: fconst_2
+     134: fmul
+     135: fconst_1
+     136: fsub
+     137: f2d
+     138: dstore        14
+     140: iload         5
+     142: i2f
+     143: ldc           #91                 // float 15.0f
+     145: fdiv
+     146: fconst_2
+     147: fmul
+     148: fconst_1
+     149: fsub
+     150: f2d
+     151: dstore        16
+     153: iload         6
+     155: i2f
+     156: ldc           #91                 // float 15.0f
+     158: fdiv
+     159: fconst_2
+     160: fmul
+     161: fconst_1
+     162: fsub
+     163: f2d
+     164: dstore        18
+     166: dload         14
+     168: dload         14
+     170: dmul
+     171: dload         16
+     173: dload         16
+     175: dmul
+     176: dadd
+     177: dload         18
+     179: dload         18
+     181: dmul
+     182: dadd
+     183: invokestatic  #97                 // Method java/lang/Math.sqrt:(D)D
+     186: dstore        20
+     188: dload         14
+     190: dload         20
+     192: ddiv
+     193: dstore        14
+     195: dload         16
+     197: dload         20
+     199: ddiv
+     200: dstore        16
+     202: dload         18
+     204: dload         20
+     206: ddiv
+     207: dstore        18
+     209: aload_0
+     210: getfield      #42                 // Field size:F
+     213: ldc           #98                 // float 0.7f
+     215: aload_0
+     216: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     219: getfield      #102                // Field net/minecraft/world/level/Level.f_46441_:Lnet/minecraft/util/RandomSource;
+     222: invokeinterface #108,  1          // InterfaceMethod net/minecraft/util/RandomSource.m_188501_:()F
+     227: ldc           #109                // float 0.6f
+     229: fmul
+     230: fadd
+     231: fmul
+     232: fstore        22
+     234: aload_3
+     235: getfield      #112                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     238: dstore        7
+     240: aload_3
+     241: getfield      #115                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     244: dstore        9
+     246: aload_3
+     247: getfield      #118                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     250: dstore        11
+     252: ldc           #119                // float 0.3f
+     254: fstore        23
+     256: fload         22
+     258: fconst_0
+     259: fcmpl
+     260: ifle          415
+     263: dload         7
+     265: dload         9
+     267: dload         11
+     269: invokestatic  #125                // Method net/minecraft/core/BlockPos.m_274561_:(DDD)Lnet/minecraft/core/BlockPos;
+     272: astore        24
+     274: aload_0
+     275: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     278: aload         24
+     280: invokevirtual #129                // Method net/minecraft/world/level/Level.m_8055_:(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;
+     283: astore        25
+     285: aload         4
+     287: aload_0
+     288: aload_0
+     289: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     292: aload         24
+     294: aload         25
+     296: getstatic     #135                // Field net/minecraft/world/level/material/Fluids.f_76191_:Lnet/minecraft/world/level/material/Fluid;
+     299: invokevirtual #141                // Method net/minecraft/world/level/material/Fluid.m_76145_:()Lnet/minecraft/world/level/material/FluidState;
+     302: invokevirtual #145                // Method net/minecraft/world/level/ExplosionDamageCalculator.m_6617_:(Lnet/minecraft/world/level/Explosion;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/material/FluidState;)Ljava/util/Optional;
+     305: astore        26
+     307: aload         26
+     309: invokevirtual #151                // Method java/util/Optional.isPresent:()Z
+     312: ifeq          337
+     315: fload         22
+     317: aload         26
+     319: invokevirtual #155                // Method java/util/Optional.get:()Ljava/lang/Object;
+     322: checkcast     #157                // class java/lang/Float
+     325: invokevirtual #160                // Method java/lang/Float.floatValue:()F
+     328: fload         23
+     330: fadd
+     331: fload         23
+     333: fmul
+     334: fsub
+     335: fstore        22
+     337: fload         22
+     339: fconst_0
+     340: fcmpl
+     341: ifle          372
+     344: aload         4
+     346: aload_0
+     347: aload_0
+     348: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     351: aload         24
+     353: aload         25
+     355: fload         22
+     357: invokevirtual #166                // Method net/minecraft/world/level/ExplosionDamageCalculator.m_6714_:(Lnet/minecraft/world/level/Explosion;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;F)Z
+     360: ifeq          372
+     363: aload_1
+     364: aload         24
+     366: invokeinterface #170,  2          // InterfaceMethod java/util/Set.add:(Ljava/lang/Object;)Z
+     371: pop
+     372: dload         7
+     374: dload         14
+     376: fload         23
+     378: f2d
+     379: dmul
+     380: dadd
+     381: dstore        7
+     383: dload         9
+     385: dload         16
+     387: fload         23
+     389: f2d
+     390: dmul
+     391: dadd
+     392: dstore        9
+     394: dload         11
+     396: dload         18
+     398: fload         23
+     400: f2d
+     401: dmul
+     402: dadd
+     403: dstore        11
+     405: fload         22
+     407: ldc           #171                // float 0.22500001f
+     409: fsub
+     410: fstore        22
+     412: goto          256
+     415: iinc          6, 1
+     418: goto          84
+     421: iinc          5, 1
+     424: goto          74
+     427: iinc          13, 1
+     430: goto          64
+     433: aload_0
+     434: invokevirtual #175                // Method m_46081_:()Ljava/util/List;
+     437: aload_1
+     438: invokeinterface #181,  2          // InterfaceMethod java/util/List.addAll:(Ljava/util/Collection;)Z
+     443: pop
+     444: aload_0
+     445: getfield      #42                 // Field size:F
+     448: fconst_2
+     449: fmul
+     450: fstore        13
+     452: aload_3
+     453: getfield      #112                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     456: fload         13
+     458: f2d
+     459: dsub
+     460: dconst_1
+     461: dsub
+     462: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     465: istore        5
+     467: aload_3
+     468: getfield      #112                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     471: fload         13
+     473: f2d
+     474: dadd
+     475: dconst_1
+     476: dadd
+     477: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     480: istore        6
+     482: aload_3
+     483: getfield      #115                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     486: fload         13
+     488: f2d
+     489: dsub
+     490: dconst_1
+     491: dsub
+     492: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     495: istore        14
+     497: aload_3
+     498: getfield      #115                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     501: fload         13
+     503: f2d
+     504: dadd
+     505: dconst_1
+     506: dadd
+     507: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     510: istore        15
+     512: aload_3
+     513: getfield      #118                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     516: fload         13
+     518: f2d
+     519: dsub
+     520: dconst_1
+     521: dsub
+     522: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     525: istore        16
+     527: aload_3
+     528: getfield      #118                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     531: fload         13
+     533: f2d
+     534: dadd
+     535: dconst_1
+     536: dadd
+     537: invokestatic  #187                // Method net/minecraft/util/Mth.m_14107_:(D)I
+     540: istore        17
+     542: aload_0
+     543: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     546: aload_2
+     547: new           #189                // class net/minecraft/world/phys/AABB
+     550: dup
+     551: iload         5
+     553: i2d
+     554: iload         14
+     556: i2d
+     557: iload         16
+     559: i2d
+     560: iload         6
+     562: i2d
+     563: iload         15
+     565: i2d
+     566: iload         17
+     568: i2d
+     569: invokespecial #192                // Method net/minecraft/world/phys/AABB."<init>":(DDDDDD)V
+     572: aload_2
+     573: invokedynamic #211,  0            // InvokeDynamic #0:test:(Lnet/minecraft/world/entity/Entity;)Ljava/util/function/Predicate;
+     578: invokevirtual #215                // Method net/minecraft/world/level/Level.m_6249_:(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;
+     581: astore        18
+     583: getstatic     #68                 // Field fuzs/mutantmonsters/core/CommonAbstractions.INSTANCE:Lfuzs/mutantmonsters/core/CommonAbstractions;
+     586: aload_0
+     587: getfield      #40                 // Field world:Lnet/minecraft/world/level/Level;
+     590: aload_0
+     591: aload         18
+     593: fload         13
+     595: f2d
+     596: invokeinterface #219,  6          // InterfaceMethod fuzs/mutantmonsters/core/CommonAbstractions.onExplosionDetonate:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/Explosion;Ljava/util/List;D)V
+     601: aload         18
+     603: invokeinterface #223,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+     608: astore        19
+     610: aload         19
+     612: invokeinterface #228,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+     617: ifne          621
+     620: return
+     621: aload         19
+     623: invokeinterface #231,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     628: checkcast     #83                 // class net/minecraft/world/entity/Entity
+     631: astore        23
+     633: aload         23
+     635: aload_3
+     636: invokevirtual #235                // Method net/minecraft/world/entity/Entity.m_20238_:(Lnet/minecraft/world/phys/Vec3;)D
+     639: d2f
+     640: invokestatic  #239                // Method net/minecraft/util/Mth.m_14116_:(F)F
+     643: fload         13
+     645: fdiv
+     646: f2d
+     647: dstore        24
+     649: dload         24
+     651: dconst_1
+     652: dcmpg
+     653: ifgt          610
+     656: aload         23
+     658: invokevirtual #243                // Method net/minecraft/world/entity/Entity.m_20185_:()D
+     661: aload_3
+     662: getfield      #112                // Field net/minecraft/world/phys/Vec3.f_82479_:D
+     665: dsub
+     666: dstore        7
+     668: aload         23
+     670: invokevirtual #246                // Method net/minecraft/world/entity/Entity.m_20188_:()D
+     673: aload_3
+     674: getfield      #115                // Field net/minecraft/world/phys/Vec3.f_82480_:D
+     677: dsub
+     678: dstore        9
+     680: aload         23
+     682: invokevirtual #249                // Method net/minecraft/world/entity/Entity.m_20189_:()D
+     685: aload_3
+     686: getfield      #118                // Field net/minecraft/world/phys/Vec3.f_82481_:D
+     689: dsub
+     690: dstore        11
+     692: dload         7
+     694: dload         7
+     696: dmul
+     697: dload         9
+     699: dload         9
+     701: dmul
+     702: dadd
+     703: dload         11
+     705: dload         11
+     707: dmul
+     708: dadd
+     709: d2f
+     710: invokestatic  #239                // Method net/minecraft/util/Mth.m_14116_:(F)F
+     713: f2d
+     714: dstore        26
+     716: dload         26
+     718: dconst_0
+     719: dcmpl
+     720: ifeq          610
+     723: dload         7
+     725: dload         26
+     727: ddiv
+     728: dstore        7
+     730: dload         9
+     732: dload         26
+     734: ddiv
+     735: dstore        9
+     737: dload         11
+     739: dload         26
+     741: ddiv
+     742: dstore        11
+     744: dconst_1
+     745: dload         24
+     747: dsub
+     748: aload_3
+     749: aload         23
+     751: invokestatic  #253                // Method m_46064_:(Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/entity/Entity;)F
+     754: f2d
+     755: dmul
+     756: dstore        21
+     758: dload         21
+     760: dload         21
+     762: dmul
+     763: dload         21
+     765: dadd
+     766: ldc2_w        #254                // double 2.0d
+     769: ddiv
+     770: ldc2_w        #256                // double 6.0d
+     773: dmul
+     774: fload         13
+     776: f2d
+     777: dmul
+     778: dconst_1
+     779: dadd
+     780: d2i
+     781: i2f
+     782: fstore        28
+     784: aload         23
+     786: aload_0
+     787: invokevirtual #261                // Method m_46077_:()Lnet/minecraft/world/damagesource/DamageSource;
+     790: fload         28
+     792: invokevirtual #265                // Method net/minecraft/world/entity/Entity.m_6469_:(Lnet/minecraft/world/damagesource/DamageSource;F)Z
+     795: ifne          923
+     798: aload_2
+     799: instanceof    #267                // class fuzs/mutantmonsters/world/entity/mutant/MutantCreeper
+     802: ifeq          923
+     805: aload_2
+     806: checkcast     #267                // class fuzs/mutantmonsters/world/entity/mutant/MutantCreeper
+     809: astore        29
+     811: aload         23
+     813: instanceof    #269                // class net/minecraft/world/entity/player/Player
+     816: ifeq          923
+     819: aload         23
+     821: checkcast     #269                // class net/minecraft/world/entity/player/Player
+     824: astore        30
+     826: aload         23
+     828: checkcast     #269                // class net/minecraft/world/entity/player/Player
+     831: invokevirtual #272                // Method net/minecraft/world/entity/player/Player.m_21254_:()Z
+     834: ifeq          923
+     837: aload         29
+     839: invokevirtual #275                // Method fuzs/mutantmonsters/world/entity/mutant/MutantCreeper.isJumpAttacking:()Z
+     842: ifeq          885
+     845: aload         30
+     847: aload         29
+     849: invokevirtual #278                // Method fuzs/mutantmonsters/world/entity/mutant/MutantCreeper.isCharged:()Z
+     852: ifeq          861
+     855: sipush        200
+     858: goto          863
+     861: bipush        100
+     863: invokestatic  #284                // Method fuzs/mutantmonsters/util/EntityUtil.disableShield:(Lnet/minecraft/world/entity/LivingEntity;I)V
+     866: aload         23
+     868: aload_0
+     869: invokevirtual #261                // Method m_46077_:()Lnet/minecraft/world/damagesource/DamageSource;
+     872: fload         28
+     874: ldc_w         #285                // float 0.5f
+     877: fmul
+     878: invokevirtual #265                // Method net/minecraft/world/entity/Entity.m_6469_:(Lnet/minecraft/world/damagesource/DamageSource;F)Z
+     881: pop
+     882: goto          923
+     885: aload         30
+     887: invokevirtual #289                // Method net/minecraft/world/entity/player/Player.m_21211_:()Lnet/minecraft/world/item/ItemStack;
+     890: fload         28
+     892: f2i
+     893: iconst_2
+     894: imul
+     895: aload         30
+     897: aload         30
+     899: invokedynamic #302,  0            // InvokeDynamic #1:accept:(Lnet/minecraft/world/entity/player/Player;)Ljava/util/function/Consumer;
+     904: invokevirtual #308                // Method net/minecraft/world/item/ItemStack.m_41622_:(ILnet/minecraft/world/entity/LivingEntity;Ljava/util/function/Consumer;)V
+     907: aload         23
+     909: aload_0
+     910: invokevirtual #261                // Method m_46077_:()Lnet/minecraft/world/damagesource/DamageSource;
+     913: fload         28
+     915: ldc_w         #285                // float 0.5f
+     918: fmul
+     919: invokevirtual #265                // Method net/minecraft/world/entity/Entity.m_6469_:(Lnet/minecraft/world/damagesource/DamageSource;F)Z
+     922: pop
+     923: dload         21
+     925: dstore        29
+     927: aload         23
+     929: instanceof    #310                // class net/minecraft/world/entity/LivingEntity
+     932: ifeq          947
+     935: aload         23
+     937: checkcast     #310                // class net/minecraft/world/entity/LivingEntity
+     940: dload         21
+     942: invokestatic  #316                // Method net/minecraft/world/item/enchantment/ProtectionEnchantment.m_45135_:(Lnet/minecraft/world/entity/LivingEntity;D)D
+     945: dstore        29
+     947: aload         23
+     949: instanceof    #267                // class fuzs/mutantmonsters/world/entity/mutant/MutantCreeper
+     952: ifne          983
+     955: aload         23
+     957: aload         23
+     959: invokevirtual #320                // Method net/minecraft/world/entity/Entity.m_20184_:()Lnet/minecraft/world/phys/Vec3;
+     962: dload         7
+     964: dload         29
+     966: dmul
+     967: dload         9
+     969: dload         29
+     971: dmul
+     972: dload         11
+     974: dload         29
+     976: dmul
+     977: invokevirtual #324                // Method net/minecraft/world/phys/Vec3.m_82520_:(DDD)Lnet/minecraft/world/phys/Vec3;
+     980: invokevirtual #328                // Method net/minecraft/world/entity/Entity.m_20256_:(Lnet/minecraft/world/phys/Vec3;)V
+     983: aload         23
+     985: instanceof    #269                // class net/minecraft/world/entity/player/Player
+     988: ifeq          610
+     991: aload         23
+     993: checkcast     #269                // class net/minecraft/world/entity/player/Player
+     996: astore        20
+     998: aload         20
+    1000: invokevirtual #331                // Method net/minecraft/world/entity/player/Player.m_5833_:()Z
+    1003: ifne          610
+    1006: aload         20
+    1008: invokevirtual #334                // Method net/minecraft/world/entity/player/Player.m_7500_:()Z
+    1011: ifeq          1025
+    1014: aload         20
+    1016: invokevirtual #338                // Method net/minecraft/world/entity/player/Player.m_150110_:()Lnet/minecraft/world/entity/player/Abilities;
+    1019: getfield      #343                // Field net/minecraft/world/entity/player/Abilities.f_35935_:Z
+    1022: ifne          610
+    1025: aload_0
+    1026: invokevirtual #347                // Method m_46078_:()Ljava/util/Map;
+    1029: aload         20
+    1031: new           #85                 // class net/minecraft/world/phys/Vec3
+    1034: dup
+    1035: dload         7
+    1037: dload         21
+    1039: dmul
+    1040: dload         9
+    1042: dload         21
+    1044: dmul
+    1045: dload         11
+    1047: dload         21
+    1049: dmul
+    1050: invokespecial #350                // Method net/minecraft/world/phys/Vec3."<init>":(DDD)V
+    1053: invokeinterface #356,  3          // InterfaceMethod java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+    1058: pop
+    1059: goto          610
+    1062: return
+
+  public static fuzs.mutantmonsters.world.level.MutatedExplosion create(net.minecraft.world.entity.Entity, float, boolean, net.minecraft.world.level.Level$ExplosionInteraction);
+    Code:
+       0: aload_0
+       1: invokevirtual #412                // Method net/minecraft/world/entity/Entity.m_9236_:()Lnet/minecraft/world/level/Level;
+       4: aload_0
+       5: aload_0
+       6: invokevirtual #243                // Method net/minecraft/world/entity/Entity.m_20185_:()D
+       9: aload_0
+      10: invokevirtual #415                // Method net/minecraft/world/entity/Entity.m_20186_:()D
+      13: aload_0
+      14: invokevirtual #249                // Method net/minecraft/world/entity/Entity.m_20189_:()D
+      17: fload_1
+      18: iload_2
+      19: aload_3
+      20: invokestatic  #418                // Method create:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;DDDFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lfuzs/mutantmonsters/world/level/MutatedExplosion;
+      23: areturn
+
+  public static fuzs.mutantmonsters.world.level.MutatedExplosion create(net.minecraft.world.level.Level, net.minecraft.world.entity.Entity, double, double, double, float, boolean, net.minecraft.world.level.Level$ExplosionInteraction);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload         10
+       4: invokestatic  #424                // Method getExplosionInteraction:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion$BlockInteraction;
+       7: astore        11
+       9: new           #2                  // class fuzs/mutantmonsters/world/level/MutatedExplosion
+      12: dup
+      13: aload_0
+      14: aload_1
+      15: dload_2
+      16: dload         4
+      18: dload         6
+      20: fload         8
+      22: iload         9
+      24: aload         11
+      26: invokespecial #426                // Method "<init>":(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;DDDFZLnet/minecraft/world/level/Explosion$BlockInteraction;)V
+      29: astore        12
+      31: getstatic     #68                 // Field fuzs/mutantmonsters/core/CommonAbstractions.INSTANCE:Lfuzs/mutantmonsters/core/CommonAbstractions;
+      34: aload_0
+      35: aload         12
+      37: invokeinterface #430,  3          // InterfaceMethod fuzs/mutantmonsters/core/CommonAbstractions.onExplosionStart:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/Explosion;)Z
+      42: ifne          174
+      45: aload_0
+      46: instanceof    #432                // class net/minecraft/server/level/ServerLevel
+      49: ifeq          174
+      52: aload         12
+      54: invokevirtual #434                // Method m_46061_:()V
+      57: aload         12
+      59: iconst_0
+      60: invokevirtual #438                // Method m_46075_:(Z)V
+      63: aload         11
+      65: getstatic     #441                // Field net/minecraft/world/level/Explosion$BlockInteraction.KEEP:Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      68: if_acmpne     76
+      71: aload         12
+      73: invokevirtual #444                // Method m_46080_:()V
+      76: aload_0
+      77: checkcast     #432                // class net/minecraft/server/level/ServerLevel
+      80: invokevirtual #447                // Method net/minecraft/server/level/ServerLevel.m_6907_:()Ljava/util/List;
+      83: invokeinterface #223,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      88: astore        13
+      90: aload         13
+      92: invokeinterface #228,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      97: ifeq          174
+     100: aload         13
+     102: invokeinterface #231,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     107: checkcast     #449                // class net/minecraft/server/level/ServerPlayer
+     110: astore        14
+     112: aload         14
+     114: dload_2
+     115: dload         4
+     117: dload         6
+     119: invokevirtual #453                // Method net/minecraft/server/level/ServerPlayer.m_20275_:(DDD)D
+     122: ldc2_w        #454                // double 4096.0d
+     125: dcmpg
+     126: ifge          171
+     129: aload         14
+     131: getfield      #459                // Field net/minecraft/server/level/ServerPlayer.f_8906_:Lnet/minecraft/server/network/ServerGamePacketListenerImpl;
+     134: new           #461                // class net/minecraft/network/protocol/game/ClientboundExplodePacket
+     137: dup
+     138: dload_2
+     139: dload         4
+     141: dload         6
+     143: fload         8
+     145: aload         12
+     147: invokevirtual #175                // Method m_46081_:()Ljava/util/List;
+     150: aload         12
+     152: invokevirtual #347                // Method m_46078_:()Ljava/util/Map;
+     155: aload         14
+     157: invokeinterface #464,  2          // InterfaceMethod java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;
+     162: checkcast     #85                 // class net/minecraft/world/phys/Vec3
+     165: invokespecial #467                // Method net/minecraft/network/protocol/game/ClientboundExplodePacket."<init>":(DDDFLjava/util/List;Lnet/minecraft/world/phys/Vec3;)V
+     168: invokevirtual #473                // Method net/minecraft/server/network/ServerGamePacketListenerImpl.m_9829_:(Lnet/minecraft/network/protocol/Packet;)V
+     171: goto          90
+     174: aload         12
+     176: areturn
+
+  public static net.minecraft.world.level.Explosion$BlockInteraction getExplosionInteraction(net.minecraft.world.level.Level, net.minecraft.world.entity.Entity, net.minecraft.world.level.Level$ExplosionInteraction);
+    Code:
+       0: getstatic     #481                // Field fuzs/mutantmonsters/world/level/MutatedExplosion$1.$SwitchMap$net$minecraft$world$level$Level$ExplosionInteraction:[I
+       3: aload_2
+       4: invokevirtual #485                // Method net/minecraft/world/level/Level$ExplosionInteraction.ordinal:()I
+       7: iaload
+       8: tableswitch   { // 1 to 4
+
+                     1: 48
+
+                     2: 54
+
+                     3: 64
+
+                     4: 93
+               default: 40
+          }
+      40: new           #487                // class java/lang/IncompatibleClassChangeError
+      43: dup
+      44: invokespecial #488                // Method java/lang/IncompatibleClassChangeError."<init>":()V
+      47: athrow
+      48: getstatic     #441                // Field net/minecraft/world/level/Explosion$BlockInteraction.KEEP:Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      51: goto          100
+      54: aload_0
+      55: getstatic     #492                // Field net/minecraft/world/level/GameRules.f_254629_:Lnet/minecraft/world/level/GameRules$Key;
+      58: invokestatic  #496                // Method getDestroyType:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/GameRules$Key;)Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      61: goto          100
+      64: getstatic     #68                 // Field fuzs/mutantmonsters/core/CommonAbstractions.INSTANCE:Lfuzs/mutantmonsters/core/CommonAbstractions;
+      67: aload_0
+      68: aload_1
+      69: invokeinterface #500,  3          // InterfaceMethod fuzs/mutantmonsters/core/CommonAbstractions.getMobGriefingEvent:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/Entity;)Z
+      74: ifeq          87
+      77: aload_0
+      78: getstatic     #503                // Field net/minecraft/world/level/GameRules.f_254692_:Lnet/minecraft/world/level/GameRules$Key;
+      81: invokestatic  #496                // Method getDestroyType:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/GameRules$Key;)Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      84: goto          100
+      87: getstatic     #441                // Field net/minecraft/world/level/Explosion$BlockInteraction.KEEP:Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      90: goto          100
+      93: aload_0
+      94: getstatic     #506                // Field net/minecraft/world/level/GameRules.f_254705_:Lnet/minecraft/world/level/GameRules$Key;
+      97: invokestatic  #496                // Method getDestroyType:(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/GameRules$Key;)Lnet/minecraft/world/level/Explosion$BlockInteraction;
+     100: areturn
+
+  private static net.minecraft.world.level.Explosion$BlockInteraction getDestroyType(net.minecraft.world.level.Level, net.minecraft.world.level.GameRules$Key<net.minecraft.world.level.GameRules$BooleanValue>);
+    Code:
+       0: aload_0
+       1: invokevirtual #512                // Method net/minecraft/world/level/Level.m_46469_:()Lnet/minecraft/world/level/GameRules;
+       4: aload_1
+       5: invokevirtual #516                // Method net/minecraft/world/level/GameRules.m_46207_:(Lnet/minecraft/world/level/GameRules$Key;)Z
+       8: ifeq          17
+      11: getstatic     #519                // Field net/minecraft/world/level/Explosion$BlockInteraction.DESTROY_WITH_DECAY:Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      14: goto          20
+      17: getstatic     #522                // Field net/minecraft/world/level/Explosion$BlockInteraction.DESTROY:Lnet/minecraft/world/level/Explosion$BlockInteraction;
+      20: areturn
+
+  private static void lambda$explode$1(net.minecraft.world.entity.player.Player, net.minecraft.world.entity.player.Player);
+    Code:
+       0: aload_1
+       1: aload_0
+       2: invokevirtual #528                // Method net/minecraft/world/entity/player/Player.m_7655_:()Lnet/minecraft/world/InteractionHand;
+       5: invokevirtual #532                // Method net/minecraft/world/entity/player/Player.m_21190_:(Lnet/minecraft/world/InteractionHand;)V
+       8: return
+
+  private static boolean lambda$explode$0(net.minecraft.world.entity.Entity, net.minecraft.world.entity.Entity);
+    Code:
+       0: aload_1
+       1: invokevirtual #536                // Method net/minecraft/world/entity/Entity.m_6128_:()Z
+       4: ifeq          9
+       7: iconst_0
+       8: ireturn
+       9: aload_0
+      10: instanceof    #538                // class fuzs/mutantmonsters/world/entity/SkullSpirit
+      13: ifeq          70
+      16: aload_0
+      17: checkcast     #538                // class fuzs/mutantmonsters/world/entity/SkullSpirit
+      20: astore_2
+      21: aload_1
+      22: aload_2
+      23: invokevirtual #542                // Method fuzs/mutantmonsters/world/entity/SkullSpirit.getTarget:()Lnet/minecraft/world/entity/Mob;
+      26: if_acmpne     42
+      29: aload_2
+      30: invokevirtual #545                // Method fuzs/mutantmonsters/world/entity/SkullSpirit.isAttached:()Z
+      33: ifne          40
+      36: iconst_1
+      37: goto          41
+      40: iconst_0
+      41: ireturn
+      42: aload_1
+      43: instanceof    #310                // class net/minecraft/world/entity/LivingEntity
+      46: ifeq          64
+      49: getstatic     #551                // Field fuzs/mutantmonsters/world/effect/ChemicalXMobEffect.IS_APPLICABLE:Ljava/util/function/Predicate;
+      52: aload_1
+      53: checkcast     #310                // class net/minecraft/world/entity/LivingEntity
+      56: invokeinterface #555,  2          // InterfaceMethod java/util/function/Predicate.test:(Ljava/lang/Object;)Z
+      61: ifeq          68
+      64: iconst_1
+      65: goto          69
+      68: iconst_0
+      69: ireturn
+      70: iconst_1
+      71: ireturn
+}

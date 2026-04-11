@@ -2120,7 +2120,20 @@ public class CommonProxy {
         if (attacker == null || event == null || event.getSource() == null) {
             return false;
         }
-        return event.getSource().getEntity() == attacker && event.getSource().getDirectEntity() == attacker;
+        return (event.getSource().getEntity() == attacker && event.getSource().getDirectEntity() == attacker)
+                || isMutantCreeperMinionExplosion(attacker, event);
+    }
+
+    private static boolean isMutantCreeperMinionExplosion(LivingEntity attacker, LivingAttackEvent event) {
+        if (!(attacker instanceof TamableAnimal tame) || event == null || event.getSource() == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key != null
+                && "mutantmonsters".equals(key.getNamespace())
+                && "creeper_minion".equals(key.getPath())
+                && event.getSource().getEntity() == attacker
+                && event.getSource().is(DamageTypeTags.IS_EXPLOSION);
     }
 
     private static int psychicAbilityToEnchantScale(int abilityLevel) {
