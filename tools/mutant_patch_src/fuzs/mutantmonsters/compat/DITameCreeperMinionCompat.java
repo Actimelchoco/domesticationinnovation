@@ -23,6 +23,23 @@ public final class DITameCreeperMinionCompat {
         return !isTamedCreeperMinion(creeperMinion);
     }
 
+    public static void handlePostExplosion(Object creeperMinion) {
+        if (creeperMinion == null) {
+            return;
+        }
+        if (isTamedCreeperMinion(creeperMinion)) {
+            return;
+        }
+        setBooleanField(creeperMinion, "f_20890_", true);
+        invokeZeroArg(creeperMinion, "m_146870_");
+        try {
+            Class<?> entityUtilClass = Class.forName("fuzs.mutantmonsters.util.EntityUtil");
+            Method method = entityUtilClass.getMethod("spawnLingeringCloud", Class.forName("net.minecraft.world.entity.LivingEntity"));
+            method.invoke(null, creeperMinion);
+        } catch (Throwable ignored) {
+        }
+    }
+
     public static float adjustExplosionDamage(Object exploder, Object target, float baseDamage) {
         if (!isTamedCreeperMinion(exploder)) {
             return baseDamage;
@@ -79,6 +96,18 @@ public final class DITameCreeperMinionCompat {
         }
     }
 
+    private static void setBooleanField(Object target, String fieldName, boolean value) {
+        try {
+            Field field = findField(target.getClass(), fieldName);
+            if (field == null) {
+                return;
+            }
+            field.setAccessible(true);
+            field.setBoolean(target, value);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private static Object invokeZeroArg(Object target, String... names) {
         for (String name : names) {
             try {
@@ -104,6 +133,18 @@ public final class DITameCreeperMinionCompat {
             try {
                 return current.getMethod(name, parameterTypes);
             } catch (NoSuchMethodException ignored) {
+            }
+            current = current.getSuperclass();
+        }
+        return null;
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
             }
             current = current.getSuperclass();
         }

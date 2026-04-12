@@ -9,15 +9,28 @@ import org.objectweb.asm.util.TraceMethodVisitor;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.jar.JarFile;
 
 public class ClassInspector {
     public static void main(String[] args) throws Exception {
-        if (args.length < 2 || args.length > 3) {
-            throw new IllegalArgumentException("Usage: ClassInspector <jar> <class-entry> [method-name]");
+        if (args.length < 1 || args.length > 3) {
+            throw new IllegalArgumentException("Usage: ClassInspector <jar-or-class-file> [class-entry] [method-name]");
         }
-        byte[] bytes = readJarEntry(Path.of(args[0]), args[1]);
+        byte[] bytes;
+        String methodName = null;
+        if (args[0].endsWith(".class")) {
+            bytes = Files.readAllBytes(Path.of(args[0]));
+            if (args.length == 2) {
+                methodName = args[1];
+            }
+        } else {
+            bytes = readJarEntry(Path.of(args[0]), args[1]);
+            if (args.length == 3) {
+                methodName = args[2];
+            }
+        }
         ClassNode node = new ClassNode();
         new ClassReader(bytes).accept(node, 0);
         System.out.println("Class: " + node.name);
@@ -25,11 +38,11 @@ public class ClassInspector {
             System.out.println("Field: " + field.name + " " + field.desc);
         }
         for (MethodNode method : node.methods) {
-            if (args.length == 3 && !method.name.equals(args[2])) {
+            if (methodName != null && !method.name.equals(methodName)) {
                 continue;
             }
             System.out.println("Method: " + method.name + method.desc);
-            if (args.length == 2) {
+            if (methodName == null) {
                 continue;
             }
             for (AbstractInsnNode insn : method.instructions) {

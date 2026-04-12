@@ -55,6 +55,9 @@ public class MutantMonstersCreeperMinionJarPatcher {
             Enumeration<JarEntry> entries = jarFile.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
+                if (shouldSkipEntry(entry.getName())) {
+                    continue;
+                }
                 JarEntry outEntry = new JarEntry(entry.getName());
                 jarOut.putNextEntry(outEntry);
                 try (InputStream in = jarFile.getInputStream(entry)) {
@@ -134,28 +137,10 @@ public class MutantMonstersCreeperMinionJarPatcher {
         method.instructions.insert(prologue);
 
         for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (!(insn instanceof MethodInsnNode methodInsn)) {
-                continue;
+            if (isDiscardCall(insn)) {
+                replacePostExplosionDiscardBlock(method, insn);
+                return true;
             }
-            if (!"canExplodeContinuously".equals(methodInsn.name) || !"()Z".equals(methodInsn.desc)) {
-                continue;
-            }
-            AbstractInsnNode next = nextMeaningful(methodInsn);
-            if (!(next instanceof JumpInsnNode jumpInsn) || jumpInsn.getOpcode() != Opcodes.IFNE) {
-                continue;
-            }
-            InsnList guard = new InsnList();
-            guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
-            guard.add(new MethodInsnNode(
-                    Opcodes.INVOKESTATIC,
-                    HELPER_OWNER,
-                    "shouldDiscardAfterExplosion",
-                    "(Ljava/lang/Object;)Z",
-                    false
-            ));
-            guard.add(new JumpInsnNode(Opcodes.IFEQ, jumpInsn.label));
-            method.instructions.insert(jumpInsn, guard);
-            return true;
         }
         return false;
     }
@@ -188,16 +173,63 @@ public class MutantMonstersCreeperMinionJarPatcher {
         return false;
     }
 
-    private static AbstractInsnNode nextMeaningful(AbstractInsnNode insn) {
-        AbstractInsnNode current = insn.getNext();
-        while (current != null) {
-            int type = current.getType();
-            if (type != AbstractInsnNode.LABEL && type != AbstractInsnNode.FRAME && type != AbstractInsnNode.LINE) {
-                return current;
+    private static boolean isDiscardCall(AbstractInsnNode insn) {
+        return insn instanceof MethodInsnNode methodInsn
+                && methodInsn.getOpcode() == Opcodes.INVOKEVIRTUAL
+                && "m_146870_".equals(methodInsn.name)
+                && "()V".equals(methodInsn.desc);
+    }
+
+    private static void replacePostExplosionDiscardBlock(MethodNode method, AbstractInsnNode discardCall) {
+        AbstractInsnNode blockStart = discardCall;
+        int backtrack = 0;
+        while (blockStart.getPrevious() != null && backtrack < 4) {
+            blockStart = blockStart.getPrevious();
+            if (blockStart instanceof LabelNode) {
+                blockStart = blockStart.getNext();
+                break;
             }
-            current = current.getNext();
+            backtrack++;
         }
-        return null;
+        AbstractInsnNode blockEnd = discardCall;
+        while (blockEnd != null) {
+            if (blockEnd instanceof MethodInsnNode methodInsn
+                    && methodInsn.getOpcode() == Opcodes.INVOKESTATIC
+                    && "spawnLingeringCloud".equals(methodInsn.name)) {
+                break;
+            }
+            blockEnd = blockEnd.getNext();
+        }
+        if (blockEnd == null) {
+            throw new IllegalStateException("Failed to locate lingering cloud call");
+        }
+        InsnList replacement = new InsnList();
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        replacement.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                HELPER_OWNER,
+                "handlePostExplosion",
+                "(Ljava/lang/Object;)V",
+                false
+        ));
+        method.instructions.insertBefore(blockStart, replacement);
+        AbstractInsnNode current = blockStart;
+        while (current != null) {
+            AbstractInsnNode next = current.getNext();
+            method.instructions.remove(current);
+            if (current == blockEnd) {
+                break;
+            }
+            current = next;
+        }
+    }
+
+    private static boolean shouldSkipEntry(String name) {
+        if (!name.startsWith("META-INF/")) {
+            return false;
+        }
+        String upper = name.toUpperCase(java.util.Locale.ROOT);
+        return upper.endsWith(".SF") || upper.endsWith(".RSA") || upper.endsWith(".DSA");
     }
 
     private static boolean containsMarker(byte[] classBytes) {
