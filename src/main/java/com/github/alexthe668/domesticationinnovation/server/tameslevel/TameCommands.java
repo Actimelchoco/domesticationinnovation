@@ -163,6 +163,9 @@ public class TameCommands {
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
     private static final Map<UUID, PendingImmediateChunkTeleport> PENDING_IMMEDIATE_CHUNK_TELEPORTS = new HashMap<>();
+    private static final Map<UUID, Long> AUTO_FOLLOW_RETRY_AFTER = new HashMap<>();
+    private static final Set<UUID> AUTO_FOLLOW_RECOVER_REQUIRED = new HashSet<>();
+    private static final long AUTO_FOLLOW_RETRY_DELAY_TICKS = 100L;
     private static final Map<UUID, PendingGuardianToolConfirm> PENDING_GUARDIAN_TOOL_CONFIRMS = new HashMap<>();
     private static long lastMorningRegistrySweepDay = Long.MIN_VALUE;
     private static long tlMigrationLastScanned = 0L;
@@ -299,8 +302,9 @@ public class TameCommands {
         private final String tameName;
         private final boolean liveEntityOnly;
         private final boolean silent;
+        private final boolean autoFollow;
 
-        private PendingImmediateChunkTeleport(UUID ticketId, UUID tameUuid, UUID tlId, UUID ownerUuid, ResourceKey<Level> sourceDimension, BlockPos sourcePos, SpawnTarget target, long createdTick, long nextAttemptTick, long chunksReadyTick, String tameName, boolean liveEntityOnly, boolean silent) {
+        private PendingImmediateChunkTeleport(UUID ticketId, UUID tameUuid, UUID tlId, UUID ownerUuid, ResourceKey<Level> sourceDimension, BlockPos sourcePos, SpawnTarget target, long createdTick, long nextAttemptTick, long chunksReadyTick, String tameName, boolean liveEntityOnly, boolean silent, boolean autoFollow) {
             this.ticketId = ticketId;
             this.tameUuid = tameUuid;
             this.tlId = tlId;
@@ -314,6 +318,7 @@ public class TameCommands {
             this.tameName = tameName == null ? "unknown" : tameName;
             this.liveEntityOnly = liveEntityOnly;
             this.silent = silent;
+            this.autoFollow = autoFollow;
         }
     }
 
@@ -3352,10 +3357,14 @@ public class TameCommands {
             if (!chunksReady) {
                 if ((now - pending.createdTick) >= IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS) {
                     releaseImmediateChunkTeleport(sourceLevel, pending);
+                    TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                    if (pending.autoFollow && data != null) {
+                        noteAutoFollowImmediateTeleportFailure(server, data);
+                    }
                     if (!pending.silent) {
                         String message = pending.liveEntityOnly
                                 ? "Failed to retrieve unloaded " + pending.tameName + ". Live entity cross-dimension teleport timed out."
-                                : "Failed to retrieve unloaded " + pending.tameName + ". Chunk load timed out. Use /tames recover.";
+                                : "Failed to retrieve unloaded " + pending.tameName + ". Chunk load timed out." + autoFollowRetryMessage(data);
                         notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                     }
                     finished.add(entry.getKey());
@@ -3382,10 +3391,14 @@ public class TameCommands {
             }
             if (pending.chunksReadyTick >= 0L && (now - pending.chunksReadyTick) >= 10L) {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
+                TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                if (pending.autoFollow && data != null) {
+                    noteAutoFollowImmediateTeleportFailure(server, data);
+                }
                 if (!pending.silent) {
                     String message = pending.liveEntityOnly
                             ? "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Live entity not found."
-                            : "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Use /tames recover.";
+                            : "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait." + autoFollowRetryMessage(data);
                     notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                 }
                 finished.add(entry.getKey());
@@ -9476,6 +9489,7 @@ public class TameCommands {
         }
         RecoverResult recovered = recoverPetEntity(source, p, data);
         if (recovered.entity == null) return error(p, "Failed to recover tame: " + recovered.error);
+        clearAutoFollowRetryState(data);
         p.sendSystemMessage(Component.literal("Recovered " + data.name + " (no XP cost).").withStyle(ChatFormatting.GREEN));
         return 1;
     }
@@ -11581,6 +11595,7 @@ public class TameCommands {
                 -1L,
                 data.name,
                 liveEntityOnly,
+                false,
                 false
         );
         logRebuildTrace("tryImmediateChunkLoadTeleport.queuePending", data,
@@ -11614,7 +11629,8 @@ public class TameCommands {
                 -1L,
                 data.name,
                 liveEntityOnly,
-                silent
+                silent,
+                false
         );
         logRebuildTrace("queueImmediateChunkTeleport", data,
                 "ticket=" + ticketId + " sourceDim=" + sourceLevel.dimension().location() + " sourcePos=" + sourcePos + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos + " liveEntityOnly=" + liveEntityOnly + " silent=" + silent);
@@ -11683,6 +11699,72 @@ public class TameCommands {
                 -1L,
                 data.name,
                 liveEntityOnly,
+                true,
+                false
+        );
+        PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
+        return UnloadedTpResult.queued();
+    }
+
+    private static UnloadedTpResult queueAutoFollowImmediateChunkTeleport(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target, boolean liveEntityOnly) {
+        if (source == null || source.getServer() == null || owner == null || data == null || data.uuid == null) {
+            return UnloadedTpResult.fail("invalid context");
+        }
+        if (data.dead || isDeadEntry(data.uuid)) {
+            return UnloadedTpResult.fail("tame is dead");
+        }
+        if (target == null || target.level == null || target.pos == null) {
+            return UnloadedTpResult.fail("invalid target");
+        }
+        if (isLoadedAnywhere(source.getServer(), data.uuid)) {
+            return UnloadedTpResult.fail("already loaded");
+        }
+        if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
+            return UnloadedTpResult.fail("missing last known dimension");
+        }
+        ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
+        if (lastKnown == null) {
+            return UnloadedTpResult.fail("invalid last known dimension");
+        }
+        ServerLevel sourceLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, lastKnown));
+        if (sourceLevel == null) {
+            return UnloadedTpResult.fail("source level unavailable");
+        }
+
+        BlockPos sourcePos = new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ);
+        ChunkPos sourceChunk = new ChunkPos(sourcePos);
+        UUID ticketId = data.tlId != null ? data.tlId : data.uuid;
+        loadChunksAround(sourceLevel, ticketId, sourcePos, true);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                sourceLevel.getChunk(sourceChunk.x + dx, sourceChunk.z + dz);
+            }
+        }
+        TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, data.uuid, data.tlId);
+        if (tame != null && tame.isAlive()) {
+            try {
+                teleportTameToLocation(tame, target);
+                clearAutoFollowRetryState(data);
+                return UnloadedTpResult.queued();
+            } finally {
+                loadChunksAround(sourceLevel, ticketId, sourcePos, false);
+            }
+        }
+        long now = source.getServer().overworld() == null ? 0L : source.getServer().overworld().getGameTime();
+        PendingImmediateChunkTeleport pending = new PendingImmediateChunkTeleport(
+                ticketId,
+                data.uuid,
+                data.tlId,
+                data.ownerUUID,
+                sourceLevel.dimension(),
+                sourcePos,
+                target,
+                now,
+                now + IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS,
+                -1L,
+                data.name,
+                liveEntityOnly,
+                true,
                 true
         );
         PENDING_IMMEDIATE_CHUNK_TELEPORTS.put(ticketId, pending);
@@ -11731,6 +11813,50 @@ public class TameCommands {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
             }
         }
+    }
+
+    private static UUID autoFollowKey(TameData data) {
+        if (data == null) {
+            return null;
+        }
+        return data.tlId != null ? data.tlId : data.uuid;
+    }
+
+    private static void clearAutoFollowRetryState(TameData data) {
+        UUID key = autoFollowKey(data);
+        if (key == null) {
+            return;
+        }
+        AUTO_FOLLOW_RETRY_AFTER.remove(key);
+        AUTO_FOLLOW_RECOVER_REQUIRED.remove(key);
+    }
+
+    private static void noteAutoFollowImmediateTeleportFailure(MinecraftServer server, TameData data) {
+        UUID key = autoFollowKey(data);
+        if (key == null) {
+            return;
+        }
+        if (AUTO_FOLLOW_RETRY_AFTER.containsKey(key)) {
+            AUTO_FOLLOW_RETRY_AFTER.remove(key);
+            AUTO_FOLLOW_RECOVER_REQUIRED.add(key);
+            return;
+        }
+        long now = server != null && server.overworld() != null ? server.overworld().getGameTime() : 0L;
+        AUTO_FOLLOW_RETRY_AFTER.put(key, now + AUTO_FOLLOW_RETRY_DELAY_TICKS);
+    }
+
+    private static String autoFollowRetryMessage(TameData data) {
+        UUID key = autoFollowKey(data);
+        if (key == null) {
+            return "";
+        }
+        if (AUTO_FOLLOW_RECOVER_REQUIRED.contains(key)) {
+            return " Auto-follow stopped until /tames recover is used.";
+        }
+        if (AUTO_FOLLOW_RETRY_AFTER.containsKey(key)) {
+            return " Auto-follow will retry in 5 seconds.";
+        }
+        return "";
     }
 
     private static boolean matchesDimensionFilter(TameData data, TamableAnimal loaded, ResourceLocation targetDimensionId) {
@@ -12380,6 +12506,9 @@ public class TameCommands {
         if (TameDuelManager.isTameInDuel(data.uuid)) {
             return false;
         }
+        if (!canAttemptAutoFollowUnloadedTeleport(owner.getServer(), data)) {
+            return false;
+        }
         SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
         TamableAnimal loaded = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
@@ -12388,9 +12517,15 @@ public class TameCommands {
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
             }
+            clearAutoFollowRetryState(data);
             return true;
         }
-        UnloadedTpResult result = tpUnloadedHomeViaLanternOrRecover(owner.createCommandSourceStack(), owner, data, target);
+        boolean crossDimension = isCrossDimension(data, target.level);
+        String validationError = validateUnloadedHomeTeleport(owner.createCommandSourceStack(), owner, data, target);
+        if (validationError != null) {
+            return false;
+        }
+        UnloadedTpResult result = queueAutoFollowImmediateChunkTeleport(owner.createCommandSourceStack(), owner, data, target, crossDimension);
         if (result.success) {
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
@@ -12406,6 +12541,24 @@ public class TameCommands {
         }
         UUID key = data.tlId != null ? data.tlId : data.uuid;
         return key != null && PENDING_IMMEDIATE_CHUNK_TELEPORTS.containsKey(key);
+    }
+
+    public static boolean canAttemptAutoFollowUnloadedTeleport(MinecraftServer server, TameData data) {
+        if (data == null) {
+            return false;
+        }
+        UUID key = autoFollowKey(data);
+        if (key == null) {
+            return false;
+        }
+        if (AUTO_FOLLOW_RECOVER_REQUIRED.contains(key)) {
+            return false;
+        }
+        if (server == null || server.overworld() == null) {
+            return !AUTO_FOLLOW_RETRY_AFTER.containsKey(key);
+        }
+        Long retryAt = AUTO_FOLLOW_RETRY_AFTER.get(key);
+        return retryAt == null || server.overworld().getGameTime() >= retryAt;
     }
 
     private record DuelLeaderboardEntry(UUID participantId, UUID ownerUuid, String name, String type, String group, int level, boolean player,
