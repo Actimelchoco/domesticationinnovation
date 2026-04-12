@@ -941,6 +941,10 @@ public class TameCommands {
 
                         .then(Commands.literal("strongest")
                                 .executes(ctx -> strongest(ctx.getSource())))
+                        .then(Commands.literal("recover")
+                                .then(Commands.argument("pet", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                        .executes(ctx -> recoverPet(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
 
                         .then(Commands.literal("stat")
                                 .then(Commands.argument("name", StringArgumentType.string())
