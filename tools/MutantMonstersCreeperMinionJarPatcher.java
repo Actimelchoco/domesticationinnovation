@@ -137,8 +137,8 @@ public class MutantMonstersCreeperMinionJarPatcher {
         method.instructions.insert(prologue);
 
         for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-            if (isDiscardCall(insn)) {
-                replacePostExplosionDiscardBlock(method, insn);
+            if (isExplosionPostBlockStart(insn)) {
+                replacePostExplosionBlock(method, insn);
                 return true;
             }
         }
@@ -173,35 +173,23 @@ public class MutantMonstersCreeperMinionJarPatcher {
         return false;
     }
 
-    private static boolean isDiscardCall(AbstractInsnNode insn) {
-        return insn instanceof MethodInsnNode methodInsn
-                && methodInsn.getOpcode() == Opcodes.INVOKEVIRTUAL
-                && "m_146870_".equals(methodInsn.name)
-                && "()V".equals(methodInsn.desc);
+    private static boolean isExplosionPostBlockStart(AbstractInsnNode insn) {
+        if (!(insn instanceof MethodInsnNode methodInsn)) {
+            return false;
+        }
+        if (!"canExplodeContinuously".equals(methodInsn.name) || !"()Z".equals(methodInsn.desc)) {
+            return false;
+        }
+        AbstractInsnNode next = nextMeaningful(insn);
+        return next instanceof JumpInsnNode jumpInsn && jumpInsn.getOpcode() == Opcodes.IFNE;
     }
 
-    private static void replacePostExplosionDiscardBlock(MethodNode method, AbstractInsnNode discardCall) {
-        AbstractInsnNode blockStart = discardCall;
-        int backtrack = 0;
-        while (blockStart.getPrevious() != null && backtrack < 4) {
-            blockStart = blockStart.getPrevious();
-            if (blockStart instanceof LabelNode) {
-                blockStart = blockStart.getNext();
-                break;
-            }
-            backtrack++;
-        }
-        AbstractInsnNode blockEnd = discardCall;
-        while (blockEnd != null) {
-            if (blockEnd instanceof MethodInsnNode methodInsn
-                    && methodInsn.getOpcode() == Opcodes.INVOKESTATIC
-                    && "spawnLingeringCloud".equals(methodInsn.name)) {
-                break;
-            }
-            blockEnd = blockEnd.getNext();
-        }
-        if (blockEnd == null) {
-            throw new IllegalStateException("Failed to locate lingering cloud call");
+    private static void replacePostExplosionBlock(MethodNode method, AbstractInsnNode canExplodeCall) {
+        AbstractInsnNode jumpInsn = nextMeaningful(canExplodeCall);
+        AbstractInsnNode blockStart = nextMeaningful(jumpInsn);
+        AbstractInsnNode blockEnd = findSpawnLingeringCloudCall(blockStart);
+        if (blockStart == null || blockEnd == null) {
+            throw new IllegalStateException("Failed to locate post explosion block");
         }
         InsnList replacement = new InsnList();
         replacement.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -222,6 +210,29 @@ public class MutantMonstersCreeperMinionJarPatcher {
             }
             current = next;
         }
+    }
+
+    private static AbstractInsnNode findSpawnLingeringCloudCall(AbstractInsnNode start) {
+        for (AbstractInsnNode insn = start; insn != null; insn = insn.getNext()) {
+            if (insn instanceof MethodInsnNode methodInsn
+                    && methodInsn.getOpcode() == Opcodes.INVOKESTATIC
+                    && "spawnLingeringCloud".equals(methodInsn.name)) {
+                return insn;
+            }
+        }
+        return null;
+    }
+
+    private static AbstractInsnNode nextMeaningful(AbstractInsnNode insn) {
+        AbstractInsnNode current = insn == null ? null : insn.getNext();
+        while (current != null) {
+            int type = current.getType();
+            if (type != AbstractInsnNode.LABEL && type != AbstractInsnNode.FRAME && type != AbstractInsnNode.LINE) {
+                return current;
+            }
+            current = current.getNext();
+        }
+        return null;
     }
 
     private static boolean shouldSkipEntry(String name) {

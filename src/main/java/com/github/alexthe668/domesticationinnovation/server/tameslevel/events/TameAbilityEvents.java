@@ -1813,11 +1813,13 @@ public class TameAbilityEvents {
         if (tame == null || event == null || event.getSource() == null) {
             return false;
         }
+        if (isMutantCreeperMinionExplosion(tame, event)) {
+            return true;
+        }
         if (INTERNAL_BONUS_DAMAGE.get()) {
             return false;
         }
-        return (event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame)
-                || isMutantCreeperMinionExplosion(tame, event);
+        return event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame;
     }
 
     private static boolean isMutantCreeperMinionExplosion(TamableAnimal tame, LivingHurtEvent event) {

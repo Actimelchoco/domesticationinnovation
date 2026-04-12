@@ -30,12 +30,51 @@ public final class DITameCreeperMinionCompat {
         if (isTamedCreeperMinion(creeperMinion)) {
             return;
         }
+        notifyExplosionOwner(creeperMinion);
         setBooleanField(creeperMinion, "f_20890_", true);
         invokeZeroArg(creeperMinion, "m_146870_");
         try {
             Class<?> entityUtilClass = Class.forName("fuzs.mutantmonsters.util.EntityUtil");
             Method method = entityUtilClass.getMethod("spawnLingeringCloud", Class.forName("net.minecraft.world.entity.LivingEntity"));
             method.invoke(null, creeperMinion);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void notifyExplosionOwner(Object creeperMinion) {
+        try {
+            Object level = invokeZeroArg(creeperMinion, "m_9236_", "level");
+            if (level == null) {
+                return;
+            }
+            Object gameRules = invokeZeroArg(level, "m_46469_", "getGameRules");
+            if (gameRules == null) {
+                return;
+            }
+            Class<?> gameRulesClass = Class.forName("net.minecraft.world.level.GameRules");
+            Field sendDeathMessagesField = gameRulesClass.getField("f_46142_");
+            Object sendDeathMessagesKey = sendDeathMessagesField.get(null);
+            Method getBoolean = gameRulesClass.getMethod("m_46207_", sendDeathMessagesKey.getClass());
+            Object enabled = getBoolean.invoke(gameRules, sendDeathMessagesKey);
+            if (!(enabled instanceof Boolean) || !((Boolean) enabled)) {
+                return;
+            }
+            Object owner = invokeZeroArg(creeperMinion, "m_269323_", "getOwner");
+            if (owner == null || !owner.getClass().getName().equals("net.minecraft.server.level.ServerPlayer")) {
+                return;
+            }
+            Class<?> componentClass = Class.forName("net.minecraft.network.chat.Component");
+            Method getName = findZeroArgMethod(creeperMinion.getClass(), "m_5446_", "getDisplayName");
+            if (getName == null) {
+                return;
+            }
+            Object displayName = getName.invoke(creeperMinion);
+            Method translatable = componentClass.getMethod("m_237110_", String.class, Object[].class);
+            Object message = translatable.invoke(null, "death.attack.explosion", new Object[]{new Object[]{displayName}});
+            Method sendSystemMessage = findMethod(owner.getClass(), "m_213846_", componentClass);
+            if (sendSystemMessage != null) {
+                sendSystemMessage.invoke(owner, message);
+            }
         } catch (Throwable ignored) {
         }
     }
@@ -133,6 +172,33 @@ public final class DITameCreeperMinionCompat {
             try {
                 return current.getMethod(name, parameterTypes);
             } catch (NoSuchMethodException ignored) {
+            }
+            current = current.getSuperclass();
+        }
+        return null;
+    }
+
+    private static Method findZeroArgMethod(Class<?> type, String... names) {
+        Class<?> current = type;
+        while (current != null) {
+            for (Method method : current.getDeclaredMethods()) {
+                for (String name : names) {
+                    if (method.getName().equals(name) && method.getParameterCount() == 0) {
+                        method.setAccessible(true);
+                        return method;
+                    }
+                }
+            }
+            try {
+                for (Method method : current.getMethods()) {
+                    for (String name : names) {
+                        if (method.getName().equals(name) && method.getParameterCount() == 0) {
+                            method.setAccessible(true);
+                            return method;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
             }
             current = current.getSuperclass();
         }
