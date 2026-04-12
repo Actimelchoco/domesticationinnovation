@@ -1,7 +1,6 @@
 package net.miauczel.legendary_monsters.compat;
 
 import net.minecraft.world.entity.TamableAnimal;
-import net.minecraft.world.entity.ai.navigation.PathNavigation;
 
 import java.lang.reflect.Method;
 
@@ -35,7 +34,7 @@ public final class DIServerPetCommandCompat {
         setSitting(animal, enabled);
         if (enabled) {
             stopNavigation(animal);
-            animal.setTarget(null);
+            clearTarget(animal);
         }
     }
 
@@ -46,7 +45,7 @@ public final class DIServerPetCommandCompat {
         if (enabled) {
             writeCommand(animal, COMMAND_WANDER);
             setSitting(animal, false);
-            animal.setTarget(null);
+            clearTarget(animal);
             stopNavigation(animal);
         } else if (readCommand(animal) == COMMAND_WANDER) {
             writeCommand(animal, COMMAND_FOLLOW);
@@ -56,7 +55,7 @@ public final class DIServerPetCommandCompat {
     public static boolean shouldFollow(Object tame) {
         return tame instanceof TamableAnimal animal
                 && readCommand(animal) == COMMAND_FOLLOW
-                && !animal.isOrderedToSit();
+                && !isOrderedToSit(animal);
     }
 
     public static boolean isWandering(Object tame) {
@@ -75,9 +74,9 @@ public final class DIServerPetCommandCompat {
         if (!(tame instanceof TamableAnimal animal)) {
             return;
         }
-        writeCommand(animal, animal.isOrderedToSit() ? COMMAND_SIT : COMMAND_FOLLOW);
-        if (animal.isOrderedToSit()) {
-            animal.setTarget(null);
+        writeCommand(animal, isOrderedToSit(animal) ? COMMAND_SIT : COMMAND_FOLLOW);
+        if (isOrderedToSit(animal)) {
+            clearTarget(animal);
             stopNavigation(animal);
         }
     }
@@ -88,9 +87,9 @@ public final class DIServerPetCommandCompat {
 
     private static void setSitting(TamableAnimal animal, boolean sitting) {
         tryInvokeSetOrderedToSit(animal, sitting);
-        animal.setInSittingPose(sitting);
+        tryInvokeSetInSittingPose(animal, sitting);
         if (sitting) {
-            animal.setTarget(null);
+            clearTarget(animal);
         }
     }
 
@@ -102,27 +101,177 @@ public final class DIServerPetCommandCompat {
             return;
         } catch (ReflectiveOperationException ignored) {
         }
-        animal.setOrderedToSit(sitting);
+        try {
+            Method method = animal.getClass().getMethod("setOrderedToSit", boolean.class);
+            method.setAccessible(true);
+            method.invoke(animal, sitting);
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    private static void tryInvokeSetInSittingPose(TamableAnimal animal, boolean sitting) {
+        try {
+            Method method = animal.getClass().getMethod("m_21837_", boolean.class);
+            method.setAccessible(true);
+            method.invoke(animal, sitting);
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method method = animal.getClass().getMethod("setInSittingPose", boolean.class);
+            method.setAccessible(true);
+            method.invoke(animal, sitting);
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    private static void clearTarget(TamableAnimal animal) {
+        try {
+            Method method = animal.getClass().getMethod("m_6710_", net.minecraft.world.entity.LivingEntity.class);
+            method.setAccessible(true);
+            method.invoke(animal, new Object[]{null});
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method method = animal.getClass().getMethod("setTarget", net.minecraft.world.entity.LivingEntity.class);
+            method.setAccessible(true);
+            method.invoke(animal, new Object[]{null});
+        } catch (ReflectiveOperationException ignored) {
+        }
     }
 
     private static void stopNavigation(TamableAnimal animal) {
-        PathNavigation navigation = animal.getNavigation();
-        if (navigation != null) {
-            navigation.stop();
+        try {
+            Method getNavigation = animal.getClass().getMethod("m_21573_");
+            getNavigation.setAccessible(true);
+            Object navigation = getNavigation.invoke(animal);
+            if (navigation != null) {
+                invokeStopNavigation(navigation);
+            }
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method getNavigation = animal.getClass().getMethod("getNavigation");
+            getNavigation.setAccessible(true);
+            Object navigation = getNavigation.invoke(animal);
+            if (navigation != null) {
+                invokeStopNavigation(navigation);
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    private static void invokeStopNavigation(Object navigation) {
+        try {
+            Method stop = navigation.getClass().getMethod("m_26573_");
+            stop.setAccessible(true);
+            stop.invoke(navigation);
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method stop = navigation.getClass().getMethod("stop");
+            stop.setAccessible(true);
+            stop.invoke(navigation);
+        } catch (ReflectiveOperationException ignored) {
         }
     }
 
     private static int readCommand(TamableAnimal animal) {
         try {
-            if (animal.getPersistentData().contains(COMMAND_TAG)) {
-                return animal.getPersistentData().getInt(COMMAND_TAG);
+            Object tag = getPersistentData(animal);
+            if (tag != null && hasIntTag(tag, COMMAND_TAG)) {
+                return getIntTag(tag, COMMAND_TAG);
             }
         } catch (Throwable ignored) {
         }
-        return animal.isOrderedToSit() ? COMMAND_SIT : COMMAND_FOLLOW;
+        return isOrderedToSit(animal) ? COMMAND_SIT : COMMAND_FOLLOW;
     }
 
     private static void writeCommand(TamableAnimal animal, int command) {
-        animal.getPersistentData().putInt(COMMAND_TAG, command);
+        try {
+            Object tag = getPersistentData(animal);
+            if (tag != null) {
+                putIntTag(tag, COMMAND_TAG, command);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static boolean isOrderedToSit(TamableAnimal animal) {
+        try {
+            Method method = animal.getClass().getMethod("isOrderedToSit");
+            method.setAccessible(true);
+            Object value = method.invoke(animal);
+            if (value instanceof Boolean bool) {
+                return bool;
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method method = animal.getClass().getMethod("m_21827_");
+            method.setAccessible(true);
+            Object value = method.invoke(animal);
+            if (value instanceof Boolean bool) {
+                return bool;
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return false;
+    }
+
+    private static Object getPersistentData(TamableAnimal animal) throws ReflectiveOperationException {
+        try {
+            Method method = animal.getClass().getMethod("getPersistentData");
+            method.setAccessible(true);
+            return method.invoke(animal);
+        } catch (NoSuchMethodException ignored) {
+            Method method = animal.getClass().getMethod("m_20241_");
+            method.setAccessible(true);
+            return method.invoke(animal);
+        }
+    }
+
+    private static boolean hasIntTag(Object tag, String key) throws ReflectiveOperationException {
+        try {
+            Method method = tag.getClass().getMethod("m_128441_", String.class);
+            method.setAccessible(true);
+            Object value = method.invoke(tag, key);
+            return value instanceof Boolean bool && bool;
+        } catch (NoSuchMethodException ignored) {
+            Method method = tag.getClass().getMethod("contains", String.class);
+            method.setAccessible(true);
+            Object value = method.invoke(tag, key);
+            return value instanceof Boolean bool && bool;
+        }
+    }
+
+    private static int getIntTag(Object tag, String key) throws ReflectiveOperationException {
+        try {
+            Method method = tag.getClass().getMethod("m_128451_", String.class);
+            method.setAccessible(true);
+            Object value = method.invoke(tag, key);
+            return value instanceof Integer integer ? integer : COMMAND_FOLLOW;
+        } catch (NoSuchMethodException ignored) {
+            Method method = tag.getClass().getMethod("getInt", String.class);
+            method.setAccessible(true);
+            Object value = method.invoke(tag, key);
+            return value instanceof Integer integer ? integer : COMMAND_FOLLOW;
+        }
+    }
+
+    private static void putIntTag(Object tag, String key, int value) throws ReflectiveOperationException {
+        try {
+            Method method = tag.getClass().getMethod("m_128405_", String.class, int.class);
+            method.setAccessible(true);
+            method.invoke(tag, key, value);
+            return;
+        } catch (NoSuchMethodException ignored) {
+        }
+        Method method = tag.getClass().getMethod("putInt", String.class, int.class);
+        method.setAccessible(true);
+        method.invoke(tag, key, value);
     }
 }

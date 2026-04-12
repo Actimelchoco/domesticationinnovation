@@ -10,6 +10,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -85,6 +86,22 @@ public class TameProtectionEvents {
             }
             event.setCanceled(true);
         }
+    }
+
+    @SubscribeEvent
+    public static void onDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+            return;
+        }
+        if (!isMutantCreeperMinionSelfExplosion(tame, event.getSource())) {
+            return;
+        }
+        event.setCanceled(true);
+        tame.setHealth(Math.max(1.0F, Math.min(tame.getMaxHealth(), 1.0F)));
+        tame.setTarget(null);
+        tame.setLastHurtByMob(null);
+        tame.setLastHurtMob(null);
+        tame.getNavigation().stop();
     }
 
     @SubscribeEvent
@@ -168,7 +185,14 @@ public class TameProtectionEvents {
     }
 
     private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, LivingAttackEvent event) {
-        if (tame == null || event == null || event.getSource() == null || event.getSource().getEntity() != tame || !event.getSource().is(DamageTypeTags.IS_EXPLOSION)) {
+        if (tame == null || event == null || !isMutantCreeperMinionSelfExplosion(tame, event.getSource())) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, net.minecraft.world.damagesource.DamageSource source) {
+        if (tame == null || source == null || source.getEntity() != tame || !source.is(DamageTypeTags.IS_EXPLOSION)) {
             return false;
         }
         ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());

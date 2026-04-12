@@ -1166,15 +1166,6 @@ public class TameAbilityEvents {
         if (damage <= 0.0F) return;
         LivingEntity target = event.getEntity();
 
-        if (isMutantCreeperMinionExplosion(tame, event)) {
-            float bonusDamage = data == null ? 0.0F : (float) Math.max(0.0D, data.bonusDamage);
-            if (bonusDamage > 0.0F) {
-                event.setAmount(event.getAmount() + bonusDamage);
-                damage = event.getAmount();
-                noteDamageContributor("bonus_damage");
-            }
-        }
-
         int killerLevel = attributeLevel(data, "killer");
         if (killerLevel > 0) {
             float hpPct = target.getHealth() / Math.max(1.0F, target.getMaxHealth());
