@@ -40,41 +40,52 @@ public class TamePersistenceEvents {
     public static void onLevelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
-        if (level.getGameTime() % 40 != 0) return;
+        boolean maintenanceTick = (level.getGameTime() % 40L) == 0L;
         boolean saveLocationTick = (level.getGameTime() % LOCATION_SAVE_INTERVAL_TICKS) == 0L;
         boolean saveSnapshotTick = (level.getGameTime() % FULL_SNAPSHOT_INTERVAL_TICKS) == 0L;
         boolean queueScrubTick = (level.getGameTime() % QUEUE_SCRUB_INTERVAL_TICKS) == 0L;
         boolean backfillScanTick = (level.getGameTime() % BACKFILL_SCAN_INTERVAL_TICKS) == 0L;
-        if (level.getServer() != null && level == level.getServer().overworld()) {
+        if (maintenanceTick && level.getServer() != null && level == level.getServer().overworld()) {
             TameDuelManager.tick(level.getServer());
         }
 
         boolean changed = false;
-        Set<UUID> seenRegistryLoaded = new HashSet<>();
         Set<UUID> loadedAliveTameIds = queueScrubTick ? new HashSet<>() : Set.of();
-        for (TameData data : TameRegistry.TAMES.values()) {
-            if (data == null || data.uuid == null) continue;
-            Entity entity = level.getEntity(data.uuid);
+        Set<UUID> seenLoaded = maintenanceTick ? new HashSet<>() : Set.of();
+        for (Entity entity : level.getAllEntities()) {
             if (!(entity instanceof TamableAnimal tame)) continue;
             if (!tame.isTame() || !tame.isAlive()) continue;
-            seenRegistryLoaded.add(data.uuid);
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) {
+                if (!backfillScanTick) {
+                    continue;
+                }
+                data = TameSpawnEvents.registerOrRestoreTame(tame, false);
+                if (data == null) {
+                    continue;
+                }
+                changed = true;
+            }
+            if (maintenanceTick) {
+                seenLoaded.add(data.uuid);
+            }
             if (queueScrubTick) {
                 loadedAliveTameIds.add(data.uuid);
                 if (data.tlId != null) {
                     loadedAliveTameIds.add(data.tlId);
                 }
             }
-            if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
+            if (syncLoadedTame(level, tame, data, maintenanceTick, saveLocationTick, saveSnapshotTick)) {
                 changed = true;
             }
         }
 
-        if (backfillScanTick) {
+        if (maintenanceTick && backfillScanTick) {
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof TamableAnimal tame)) continue;
                 if (!tame.isTame() || !tame.isAlive()) continue;
                 UUID tameId = tame.getUUID();
-                if (seenRegistryLoaded.contains(tameId)) continue;
+                if (seenLoaded.contains(tameId)) continue;
 
                 TameData data = TameRegistry.get(tameId);
                 if (data == null) {
@@ -88,7 +99,7 @@ public class TamePersistenceEvents {
                         loadedAliveTameIds.add(data.tlId);
                     }
                 }
-                if (syncLoadedTame(level, tame, data, saveLocationTick, saveSnapshotTick)) {
+                if (syncLoadedTame(level, tame, data, true, saveLocationTick, saveSnapshotTick)) {
                     changed = true;
                 }
             }
@@ -107,43 +118,32 @@ public class TamePersistenceEvents {
         }
     }
 
-    private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean saveLocationTick, boolean saveSnapshotTick) {
+    private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean maintenanceTick, boolean saveLocationTick, boolean saveSnapshotTick) {
         boolean changed = false;
         if (data.dead) {
             tame.remove(Entity.RemovalReason.DISCARDED);
             return false;
         }
-        if (data.bornDayTime <= 0L) {
-            data.bornDayTime = level.getDayTime();
+        boolean locationChanged = updateLiveLocation(level, tame, data);
+        if (saveLocationTick && locationChanged) {
+            data.lastKnownGameTime = level.getGameTime();
             changed = true;
         }
-        if (TameBedRegistrySync.syncFromEntity(tame, data)) {
-            changed = true;
-        }
-        if (tame.hasCustomName() && tame.getCustomName() != null) {
-            String currentName = tame.getCustomName().getString();
-            String normalized = stripLevelPrefix(currentName);
-            if (!normalized.isBlank() && !normalized.equals(data.name)) {
-                data.name = normalized;
+        if (maintenanceTick) {
+            if (data.bornDayTime <= 0L) {
+                data.bornDayTime = level.getDayTime();
                 changed = true;
             }
-        }
-        if (saveLocationTick) {
-            String dim = level.dimension().location().toString();
-            int x = tame.blockPosition().getX();
-            int y = tame.blockPosition().getY();
-            int z = tame.blockPosition().getZ();
-            if (!dim.equals(data.lastKnownDimension)
-                    || x != data.lastKnownX
-                    || y != data.lastKnownY
-                    || z != data.lastKnownZ
-                    || data.lastKnownGameTime != level.getGameTime()) {
-                data.lastKnownDimension = dim;
-                data.lastKnownX = x;
-                data.lastKnownY = y;
-                data.lastKnownZ = z;
-                data.lastKnownGameTime = level.getGameTime();
+            if (TameBedRegistrySync.syncFromEntity(tame, data)) {
                 changed = true;
+            }
+            if (tame.hasCustomName() && tame.getCustomName() != null) {
+                String currentName = tame.getCustomName().getString();
+                String normalized = stripLevelPrefix(currentName);
+                if (!normalized.isBlank() && !normalized.equals(data.name)) {
+                    data.name = normalized;
+                    changed = true;
+                }
             }
         }
         if (saveSnapshotTick || data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
@@ -157,6 +157,24 @@ public class TamePersistenceEvents {
         }
         TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
         return changed;
+    }
+
+    private static boolean updateLiveLocation(ServerLevel level, TamableAnimal tame, TameData data) {
+        String dim = level.dimension().location().toString();
+        int x = tame.blockPosition().getX();
+        int y = tame.blockPosition().getY();
+        int z = tame.blockPosition().getZ();
+        if (dim.equals(data.lastKnownDimension)
+                && x == data.lastKnownX
+                && y == data.lastKnownY
+                && z == data.lastKnownZ) {
+            return false;
+        }
+        data.lastKnownDimension = dim;
+        data.lastKnownX = x;
+        data.lastKnownY = y;
+        data.lastKnownZ = z;
+        return true;
     }
 
     private static String stripLevelPrefix(String name) {

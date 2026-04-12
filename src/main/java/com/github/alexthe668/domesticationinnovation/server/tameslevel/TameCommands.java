@@ -3352,25 +3352,11 @@ public class TameCommands {
             if (!chunksReady) {
                 if ((now - pending.createdTick) >= IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS) {
                     releaseImmediateChunkTeleport(sourceLevel, pending);
-                    if (pending.liveEntityOnly) {
-                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + ". Live entity cross-dimension teleport timed out.", ChatFormatting.RED);
-                        finished.add(entry.getKey());
-                        continue;
-                    }
-                    TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
-                    ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
-                    if (owner != null && data != null) {
-                        debugTeleport(owner, "unloaded chunk timeout rebuilding " + pending.tameName + " from snapshot");
-                        logRebuildTrace("pendingImmediateChunk.timeoutRebuild", data,
-                                "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
-                        RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
-                        if (recoverResult.entity != null) {
-                            if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot after chunk load timeout.", ChatFormatting.YELLOW);
-                        } else {
-                            if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + ". Chunk load timed out and snapshot rebuild failed: " + recoverResult.error, ChatFormatting.RED);
-                        }
-                    } else {
-                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + ". Chunk load timed out.", ChatFormatting.RED);
+                    if (!pending.silent) {
+                        String message = pending.liveEntityOnly
+                                ? "Failed to retrieve unloaded " + pending.tameName + ". Live entity cross-dimension teleport timed out."
+                                : "Failed to retrieve unloaded " + pending.tameName + ". Chunk load timed out. Use /tames recover.";
+                        notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                     }
                     finished.add(entry.getKey());
                 } else {
@@ -3396,29 +3382,11 @@ public class TameCommands {
             }
             if (pending.chunksReadyTick >= 0L && (now - pending.chunksReadyTick) >= 10L) {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
-                if (pending.liveEntityOnly) {
-                    if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Live entity not found.", ChatFormatting.RED);
-                    finished.add(entry.getKey());
-                    continue;
-                }
-                TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
-                ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
-                if (owner != null && data != null) {
-                    debugTeleport(owner, "unloaded wait rebuilding " + pending.tameName + " from snapshot");
-                    logRebuildTrace("pendingImmediateChunk.waitRebuild", data,
-                            "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
-                    RecoverResult recoverResult = recoverPetEntityAtLocation(owner, pending.target, data);
-                    if (recoverResult.entity != null) {
-                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Rebuilt unloaded " + pending.tameName + " from snapshot.", ChatFormatting.YELLOW);
-                    } else {
-                        String message = "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Snapshot rebuild failed: " + recoverResult.error;
-                        if ("stored type is not tamable".equalsIgnoreCase(recoverResult.error)) {
-                            message = "Horses cannot be teleported.";
-                        }
-                        if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
-                    }
-                } else {
-                    if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait.", ChatFormatting.RED);
+                if (!pending.silent) {
+                    String message = pending.liveEntityOnly
+                            ? "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Live entity not found."
+                            : "Failed to retrieve unloaded " + pending.tameName + " after chunk load wait. Use /tames recover.";
+                    notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                 }
                 finished.add(entry.getKey());
                 continue;
@@ -3981,19 +3949,7 @@ public class TameCommands {
             }
 
             if ((now - request.getTimestamp()) >= UNLOADED_TP_TIMEOUT_TICKS) {
-                boolean recovered = false;
-                String recoverError = "unknown";
-                if (data != null && isSameDimensionUnloadedRespawnFallback(owner, data)) {
-                    RecoverResult recoverResult = recoverPetEntity(null, owner, data);
-                    recovered = recoverResult.entity != null;
-                    recoverError = recoverResult.error;
-                }
-                if (recovered) {
-                    owner.sendSystemMessage(Component.literal(timeoutRecoveryMessageForLanternRequest(request)).withStyle(ChatFormatting.YELLOW));
-                } else {
-                    String detail = recoverError == null || recoverError.isBlank() ? "" : " Recover failed: " + recoverError + ".";
-                    owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout)." + detail).withStyle(ChatFormatting.RED));
-                }
+                owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use /tames recover.").withStyle(ChatFormatting.RED));
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
             }
@@ -11478,28 +11434,13 @@ public class TameCommands {
         logRebuildTrace("tpUnloadedHomeViaLanternOrRecover.route", data,
                 "owner=" + (owner == null ? null : owner.getUUID()) + " crossDimension=" + crossDimension + " validationError=" + (validationError == null ? "" : validationError) + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
         if (validationError != null) {
-            if (crossDimension) {
-                return UnloadedTpResult.fail(validationError);
-            }
-            return tryRebuildSnapshotTeleport(owner, target, data, validationError);
+            return UnloadedTpResult.fail(validationError);
         }
         return tryImmediateChunkLoadTeleport(source, data, target, crossDimension);
     }
 
     private static UnloadedTpResult tryRebuildSnapshotTeleport(ServerPlayer owner, SpawnTarget target, TameData data, String reason) {
-        if (owner == null || target == null || data == null) {
-            return UnloadedTpResult.fail(reason);
-        }
-        logRebuildTrace("tryRebuildSnapshotTeleport", data,
-                "owner=" + owner.getUUID() + " reason=" + reason + " targetDim=" + (target.level == null ? "null" : target.level.dimension().location()) + " targetPos=" + target.pos);
-        RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
-        if (recoverResult.entity != null) {
-            if (!isSuppressedUnloadedTeleportMessageOwner(owner.getUUID())) {
-                owner.sendSystemMessage(Component.literal("Rebuilt unloaded " + (data.name == null ? "unknown" : data.name) + " from snapshot (" + reason + ").").withStyle(ChatFormatting.YELLOW));
-            }
-            return UnloadedTpResult.queued();
-        }
-        return UnloadedTpResult.fail(reason + "; snapshot rebuild failed: " + recoverResult.error);
+        return UnloadedTpResult.fail(reason);
     }
 
     private static boolean isSameDimensionUnloadedRespawnFallback(ServerPlayer owner, TameData data) {
@@ -11699,27 +11640,15 @@ public class TameCommands {
             return UnloadedTpResult.fail("already loaded");
         }
         if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
-            if (liveEntityOnly) {
-                return UnloadedTpResult.fail("missing last known dimension");
-            }
-            RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
-            return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("missing last known dimension");
+            return UnloadedTpResult.fail("missing last known dimension");
         }
         ResourceLocation lastKnown = ResourceLocation.tryParse(data.lastKnownDimension);
         if (lastKnown == null) {
-            if (liveEntityOnly) {
-                return UnloadedTpResult.fail("invalid last known dimension");
-            }
-            RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
-            return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("invalid last known dimension");
+            return UnloadedTpResult.fail("invalid last known dimension");
         }
         ServerLevel sourceLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, lastKnown));
         if (sourceLevel == null) {
-            if (liveEntityOnly) {
-                return UnloadedTpResult.fail("source level unavailable");
-            }
-            RecoverResult recoverResult = recoverPetEntityAtLocation(owner, target, data);
-            return recoverResult.entity != null ? UnloadedTpResult.queued() : UnloadedTpResult.fail("source level unavailable");
+            return UnloadedTpResult.fail("source level unavailable");
         }
 
         BlockPos sourcePos = new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ);
