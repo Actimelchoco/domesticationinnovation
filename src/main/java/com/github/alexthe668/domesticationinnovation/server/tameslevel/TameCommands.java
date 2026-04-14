@@ -10096,7 +10096,7 @@ public class TameCommands {
         int success = 0;
         int failed = 0;
         int reincarnated = 0;
-        List<String> spentLabels = new ArrayList<>();
+        List<String> respawnedNames = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
 
@@ -10139,6 +10139,7 @@ public class TameCommands {
                 }
             }
             success++;
+            respawnedNames.add(tameDisplayName(data));
         }
 
         if (success <= 0) {
@@ -10153,10 +10154,10 @@ public class TameCommands {
         }
         final int respawnedCount = success;
         final int reincarnatedCount = reincarnated;
+        final String respawnedList = respawnedNames.isEmpty() ? "none" : String.join(", ", respawnedNames);
         source.sendSuccess(() -> Component.literal(
-                label + ": " + respawnedCount + " tame(s) for " + ownerName
-                        + (reincarnateAfter ? ", " + reincarnatedCount + " restored to saved progress" : "")
-                        + ", paid no cost."
+                label + ": " + respawnedCount + " tame(s) for " + ownerName + " -> " + respawnedList
+                        + (reincarnateAfter ? " (" + reincarnatedCount + " restored to saved progress)" : "")
         ).withStyle(ChatFormatting.GREEN), true);
         if (failed > 0 && !failReasons.isEmpty()) {
             source.sendFailure(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
@@ -10169,7 +10170,7 @@ public class TameCommands {
         int success = 0;
         int failed = 0;
         int reincarnated = 0;
-        List<String> spentLabels = new ArrayList<>();
+        List<String> respawnedNames = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
 
@@ -10222,7 +10223,6 @@ public class TameCommands {
                 failReasons.add(data.name + " (" + payment.error + ")");
                 continue;
             }
-            spentLabels.add(payment.label);
             if (reincarnateAfter) {
                 TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
                 if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
@@ -10231,6 +10231,7 @@ public class TameCommands {
                 }
             }
             success++;
+            respawnedNames.add(tameDisplayName(data));
         }
 
         if (success <= 0) {
@@ -10243,8 +10244,8 @@ public class TameCommands {
             }
             return error(player, message.toString());
         }
-        String spentText = spentLabels.isEmpty() ? "no cost" : String.join(", ", spentLabels);
-        player.sendSystemMessage(Component.literal(label + ": " + success + " tame(s)" + (reincarnateAfter ? ", " + reincarnated + " restored to saved progress" : "") + ", paid " + spentText + ".").withStyle(ChatFormatting.GREEN));
+        String respawnedList = respawnedNames.isEmpty() ? "none" : String.join(", ", respawnedNames);
+        player.sendSystemMessage(Component.literal(label + ": " + success + " tame(s) -> " + respawnedList + (reincarnateAfter ? " (" + reincarnated + " restored to saved progress)" : "") + ".").withStyle(ChatFormatting.GREEN));
         sendAffordabilityFailures(player, reincarnateAfter ? "Could not afford respawn reincarnation for" : "Could not afford respawn for", unaffordable);
         if (failed > 0 && !failReasons.isEmpty()) {
             player.sendSystemMessage(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));

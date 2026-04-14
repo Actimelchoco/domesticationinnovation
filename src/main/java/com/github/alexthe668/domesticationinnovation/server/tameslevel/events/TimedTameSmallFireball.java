@@ -27,7 +27,8 @@ public class TimedTameSmallFireball extends SmallFireball {
 
     @Override
     protected void onHitBlock(BlockHitResult result) {
-        // Keep vanilla entity-hit fire behavior, but don't let blaze_attack ignite blocks.
+        // Keep no-grief behavior, but still create an impact explosion effect.
+        TimedTameImpactExplosion.explodeOnBlockImpact(this, 1.5F, 1.8D, 0.35D, 0.08D);
         this.discard();
     }
 }

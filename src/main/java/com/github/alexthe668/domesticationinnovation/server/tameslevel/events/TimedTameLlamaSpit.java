@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.LlamaSpit;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
 
 public class TimedTameLlamaSpit extends LlamaSpit {
     private static final int MAX_LIFETIME_TICKS = 80;
@@ -23,5 +24,11 @@ public class TimedTameLlamaSpit extends LlamaSpit {
     @Override
     public boolean shouldBeSaved() {
         return false;
+    }
+
+    @Override
+    protected void onHitBlock(BlockHitResult result) {
+        TimedTameImpactExplosion.explodeOnBlockImpact(this, 1.25F, 1.7D, 0.30D, 0.06D);
+        this.discard();
     }
 }
