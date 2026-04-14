@@ -19676,21 +19676,14 @@ public class TameCommands {
             return null;
         }
         UUID duelA = availableA.get(random.nextInt(availableA.size()));
-        boolean unfair = random.nextDouble() < 0.05D;
-        UUID duelB;
-        if (unfair) {
-            duelB = availableB.get(random.nextInt(availableB.size()));
-        } else {
-            double targetPower = sessionParticipantPower(server, duelA);
-            duelB = closestPowerParticipant(server, availableB, targetPower);
-            if (duelB == null) {
-                duelB = availableB.get(random.nextInt(availableB.size()));
-            }
+        LinkedHashSet<UUID> opponents = pickSessionOneVOneOpponents(server, duelA, availableB, random);
+        if (opponents.isEmpty()) {
+            return null;
         }
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
         teamA.add(duelA);
-        teamB.add(duelB);
+        teamB.addAll(opponents);
         return new DuelSessionRound(teamA, teamB);
     }
 
@@ -19745,22 +19738,100 @@ public class TameCommands {
         if (duelA == null || pool.isEmpty()) {
             return null;
         }
-        boolean unfair = random.nextDouble() < 0.05D;
-        UUID duelB;
-        if (unfair) {
-            duelB = pool.get(random.nextInt(pool.size()));
-        } else {
-            double targetPower = sessionParticipantPower(server, duelA);
-            duelB = closestPowerParticipant(server, pool, targetPower);
-            if (duelB == null) {
-                duelB = pool.get(random.nextInt(pool.size()));
-            }
+        LinkedHashSet<UUID> opponents = pickSessionOneVOneOpponents(server, duelA, pool, random);
+        if (opponents.isEmpty()) {
+            return null;
         }
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
         teamA.add(duelA);
-        teamB.add(duelB);
+        teamB.addAll(opponents);
         return new DuelSessionRound(teamA, teamB);
+    }
+
+    private static LinkedHashSet<UUID> pickSessionOneVOneOpponents(MinecraftServer server, UUID anchor, List<UUID> candidates, ThreadLocalRandom random) {
+        LinkedHashSet<UUID> picked = new LinkedHashSet<>();
+        if (candidates == null || candidates.isEmpty()) {
+            return picked;
+        }
+        if (anchor == null) {
+            picked.add(candidates.get(random.nextInt(candidates.size())));
+            return picked;
+        }
+        double anchorPower = sessionParticipantPower(server, anchor);
+        double roll = random.nextDouble();
+        // 30%: closest-MMR opponent.
+        if (roll < 0.30D) {
+            UUID closest = closestPowerParticipant(server, candidates, anchorPower);
+            if (closest != null) {
+                picked.add(closest);
+                return picked;
+            }
+            picked.add(candidates.get(random.nextInt(candidates.size())));
+            return picked;
+        }
+        // 30%: random tame within 50 MMR; fallback to within 200; fallback closest.
+        if (roll < 0.60D) {
+            UUID near50 = randomWithinMmrWindow(server, candidates, anchorPower, 50.0D, random);
+            if (near50 != null) {
+                picked.add(near50);
+                return picked;
+            }
+            UUID near200 = randomWithinMmrWindow(server, candidates, anchorPower, 200.0D, random);
+            if (near200 != null) {
+                picked.add(near200);
+                return picked;
+            }
+            UUID closest = closestPowerParticipant(server, candidates, anchorPower);
+            picked.add(closest != null ? closest : candidates.get(random.nextInt(candidates.size())));
+            return picked;
+        }
+        // 10%: random tame within 200 MMR distance; fallback closest.
+        if (roll < 0.70D) {
+            UUID near200 = randomWithinMmrWindow(server, candidates, anchorPower, 200.0D, random);
+            if (near200 != null) {
+                picked.add(near200);
+                return picked;
+            }
+            UUID closest = closestPowerParticipant(server, candidates, anchorPower);
+            picked.add(closest != null ? closest : candidates.get(random.nextInt(candidates.size())));
+            return picked;
+        }
+        // 25%: add random opponents until opponent total MMR exceeds anchor MMR.
+        if (roll < 0.95D) {
+            List<UUID> shuffled = new ArrayList<>(candidates);
+            java.util.Collections.shuffle(shuffled, random);
+            double totalOpponentPower = 0.0D;
+            for (UUID candidate : shuffled) {
+                picked.add(candidate);
+                totalOpponentPower += sessionParticipantPower(server, candidate);
+                if (totalOpponentPower > anchorPower) {
+                    break;
+                }
+            }
+            if (!picked.isEmpty()) {
+                return picked;
+            }
+        }
+        // 5%: fully random opponent.
+        picked.add(candidates.get(random.nextInt(candidates.size())));
+        return picked;
+    }
+
+    private static UUID randomWithinMmrWindow(MinecraftServer server, List<UUID> candidates, double anchorPower, double maxDiff, ThreadLocalRandom random) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        List<UUID> near = new ArrayList<>();
+        for (UUID candidate : candidates) {
+            if (Math.abs(sessionParticipantPower(server, candidate) - anchorPower) <= maxDiff) {
+                near.add(candidate);
+            }
+        }
+        if (near.isEmpty()) {
+            return null;
+        }
+        return near.get(random.nextInt(near.size()));
     }
 
     private static DuelSessionRound createFfaTeamDeathmatchRound(MinecraftServer server, List<UUID> available, ThreadLocalRandom random) {
@@ -20277,15 +20348,15 @@ public class TameCommands {
     }
 
     private static void resolveTimedOutDuelSessionRound(MinecraftServer server, ActiveDuelSession session) {
-        double aliveFractionA = aliveFraction(session.currentRoundA);
-        double aliveFractionB = aliveFraction(session.currentRoundB);
+        int aliveA = aliveCount(session.currentRoundA);
+        int aliveB = aliveCount(session.currentRoundB);
         Set<UUID> losing;
-        if (aliveFractionA == aliveFractionB) {
-            int aliveA = aliveCount(session.currentRoundA);
-            int aliveB = aliveCount(session.currentRoundB);
-            losing = aliveA <= aliveB ? session.currentRoundA : session.currentRoundB;
+        if (aliveA != aliveB) {
+            losing = aliveA < aliveB ? session.currentRoundA : session.currentRoundB;
         } else {
-            losing = aliveFractionA < aliveFractionB ? session.currentRoundA : session.currentRoundB;
+            double healthPercentA = totalTeamHealthPercent(server, session.currentRoundA);
+            double healthPercentB = totalTeamHealthPercent(server, session.currentRoundB);
+            losing = healthPercentA <= healthPercentB ? session.currentRoundA : session.currentRoundB;
         }
         notifyDuelSessionOwners(server, session, Component.literal("Duel session round timed out after 5 minutes.").withStyle(ChatFormatting.YELLOW));
         forceEndDuelSessionSide(server, losing);
@@ -20303,6 +20374,29 @@ public class TameCommands {
             }
         }
         return count;
+    }
+
+    private static double totalTeamHealthPercent(MinecraftServer server, Set<UUID> ids) {
+        if (server == null || ids == null || ids.isEmpty()) {
+            return 0.0D;
+        }
+        double totalHealth = 0.0D;
+        double totalMax = 0.0D;
+        for (UUID id : ids) {
+            if (!TameDuelManager.isEntityInDuel(id)) {
+                continue;
+            }
+            LivingEntity living = findLoadedLivingParticipant(server, id);
+            if (living == null || !living.isAlive() || living.getMaxHealth() <= 0.0F) {
+                continue;
+            }
+            totalHealth += Math.max(0.0F, living.getHealth());
+            totalMax += living.getMaxHealth();
+        }
+        if (totalMax <= 0.0D) {
+            return 0.0D;
+        }
+        return totalHealth / totalMax;
     }
 
     private static double aliveFraction(Set<UUID> ids) {
