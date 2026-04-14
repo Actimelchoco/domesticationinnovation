@@ -466,21 +466,57 @@ public final class TameDuelManager {
             clearViewerEnemyGlow(server, participantId);
             clearTargetForParticipant(server, participantId);
             CompoundTag playerSnapshot = battle.playerSnapshots.get(participantId);
-            if (playerSnapshot != null && TameCommands.restoreDuelPlayerSnapshot(server, participantId, playerSnapshot.copy())) {
+            if (playerSnapshot != null && tryRestoreDuelPlayerSnapshot(server, participantId, playerSnapshot)) {
                 restoredCount++;
                 continue;
             }
             CompoundTag tameSnapshot = battle.tameSnapshots.get(participantId);
             if (tameSnapshot != null) {
-                if (TameCommands.restoreDuelParticipantSnapshot(server, tameSnapshot.copy())
-                        || TameCommands.resetDuelCombatState(server, participantId)) {
+                if (tryRestoreDuelParticipantSnapshot(server, tameSnapshot)
+                        || tryResetDuelCombatState(server, participantId, 2)) {
                     restoredCount++;
                 }
-            } else if (playerSnapshot == null && TameCommands.resetDuelCombatState(server, participantId)) {
+            } else if (playerSnapshot == null && tryResetDuelCombatState(server, participantId, 2)) {
                 restoredCount++;
             }
         }
         notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
+    }
+
+    private static boolean tryRestoreDuelPlayerSnapshot(MinecraftServer server, UUID participantId, CompoundTag playerSnapshot) {
+        if (playerSnapshot == null || playerSnapshot.isEmpty()) {
+            return false;
+        }
+        try {
+            return TameCommands.restoreDuelPlayerSnapshot(server, participantId, playerSnapshot.copy());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean tryRestoreDuelParticipantSnapshot(MinecraftServer server, CompoundTag tameSnapshot) {
+        if (tameSnapshot == null || tameSnapshot.isEmpty()) {
+            return false;
+        }
+        try {
+            return TameCommands.restoreDuelParticipantSnapshot(server, tameSnapshot.copy());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean tryResetDuelCombatState(MinecraftServer server, UUID participantId, int attempts) {
+        int tries = Math.max(1, attempts);
+        for (int i = 0; i < tries; i++) {
+            try {
+                if (TameCommands.resetDuelCombatState(server, participantId)) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+                // Keep duel cleanup alive even if one reset attempt blows up.
+            }
+        }
+        return false;
     }
 
     private static void syncPlayerEnemyGlow(MinecraftServer server, DuelBattle battle) {

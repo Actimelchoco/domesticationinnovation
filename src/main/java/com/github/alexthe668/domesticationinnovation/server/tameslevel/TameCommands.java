@@ -6365,7 +6365,7 @@ public class TameCommands {
             return error(owner, "A duel or duel session is already active for one of those players.");
         }
         owner.sendSystemMessage(Component.literal("Duel session started" + arenaLabel(arenaName) + ": " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.GREEN));
-        startNextDuelSessionRound(source.getServer(), session);
+        scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
 
@@ -6466,7 +6466,7 @@ public class TameCommands {
         }
         initiator.sendSystemMessage(Component.literal("Duel session" + arenaLabel(pending.arenaName) + " accepted by " + player.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         player.sendSystemMessage(Component.literal("Accepted duel session invite" + arenaLabel(pending.arenaName) + " from " + initiator.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
-        startNextDuelSessionRound(source.getServer(), session);
+        scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
 
@@ -6568,7 +6568,7 @@ public class TameCommands {
             return error(owner, "A duel or duel session is already active for one of those players.");
         }
         owner.sendSystemMessage(Component.literal("Duel session FFA started" + arenaLabel(arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
-        startNextDuelSessionRound(source.getServer(), session);
+        scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
 
@@ -6713,7 +6713,7 @@ public class TameCommands {
             return error(source.getPlayer(), "A duel or duel session is already active for one of those players.");
         }
         notifyDuelSessionOwners(source.getServer(), session, Component.literal("Duel session FFA started" + arenaLabel(pending.arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
-        startNextDuelSessionRound(source.getServer(), session);
+        scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
     }
 
@@ -19621,7 +19621,7 @@ public class TameCommands {
             session.currentRoundA = Set.of();
             session.currentRoundB = Set.of();
             session.roundStartedAtTick = -1L;
-            session.nextRoundAtTick = now + DUEL_SESSION_NEXT_ROUND_DELAY_TICKS;
+            scheduleNextDuelSessionRound(server, session, now);
         }
         for (UUID sessionId : endedSessions) {
             ActiveDuelSession removed = ACTIVE_DUEL_SESSIONS.remove(sessionId);
@@ -19676,6 +19676,22 @@ public class TameCommands {
         session.nextRoundAtTick = -1L;
         notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
         return true;
+    }
+
+    private static void scheduleNextDuelSessionRound(MinecraftServer server, ActiveDuelSession session) {
+        scheduleNextDuelSessionRound(server, session, -1L);
+    }
+
+    private static void scheduleNextDuelSessionRound(MinecraftServer server, ActiveDuelSession session, long nowTick) {
+        if (session == null) {
+            return;
+        }
+        long now = nowTick;
+        if (now < 0L) {
+            ServerLevel overworld = server == null ? null : server.overworld();
+            now = overworld == null ? 0L : overworld.getGameTime();
+        }
+        session.nextRoundAtTick = now + DUEL_SESSION_NEXT_ROUND_DELAY_TICKS;
     }
 
     private static DuelSessionRound createDuelSessionRound(MinecraftServer server, List<UUID> availableA, List<UUID> availableB) {
