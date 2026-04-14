@@ -697,6 +697,9 @@ public final class TameDuelManager {
         if (server == null || ownerId == null) return;
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
         if (owner != null) {
+            if (!PlayerDebugSettings.duelMessages(ownerId)) {
+                return;
+            }
             for (Component line : resultSummary) {
                 owner.sendSystemMessage(line);
             }
@@ -929,6 +932,9 @@ public final class TameDuelManager {
         for (UUID recipientId : recipients) {
             ServerPlayer player = server.getPlayerList().getPlayer(recipientId);
             if (player != null) {
+                if (!PlayerDebugSettings.duelMessages(recipientId)) {
+                    continue;
+                }
                 if (!PlayerDebugSettings.duelKillNotifications(recipientId)) {
                     continue;
                 }

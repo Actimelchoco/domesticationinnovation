@@ -2505,6 +2505,12 @@ public class TameCommands {
                                                 .executes(ctx -> setDuelSessionMessages(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelMessages")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
                                                 )))))
 
                         .then(Commands.literal("admin")
@@ -4442,7 +4448,7 @@ public class TameCommands {
         }
         else if (key.equals("debug")) {
             sendInfoPage(p, "Debug",
-                    "/tames debug enemyKilled|abilityUsed|attributeUsed|damage <true|false>",
+                    "/tames debug enemyKilled|duelMessages|duelKill|duelAssists|duelSessionMessage <true|false>",
                     "Toggles owner-local chat debug messages for combat and progression events."
             );
         }
@@ -10519,11 +10525,6 @@ public class TameCommands {
         if (snapshot.uuid == null) {
             return false;
         }
-        TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
-        if (loaded != null) {
-            logDeleteTrace("restoreDuelParticipantSnapshot.loadedDiscard", snapshot, loaded, "discard before restoring duel snapshot");
-            loaded.discard();
-        }
         SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
         if (target == null || target.level == null || target.pos == null) {
             return false;
@@ -10533,6 +10534,15 @@ public class TameCommands {
         snapshot.stored = false;
         TameRegistry.register(snapshot);
         cancelPendingImmediateChunkTeleport(server, snapshot);
+        TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
+        if (loaded != null && loaded.isAlive()) {
+            teleportTameToLocation(loaded, target);
+            refreshLoadedTameStatsAfterRebuild(loaded, snapshot, true);
+            finalizeRespawnState(loaded, snapshot);
+            TameData.syncTlIdToEntity(loaded, snapshot.tlId);
+            TameGoalInstaller.installIfMissing(loaded);
+            return true;
+        }
         RespawnResult result;
         beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
         try {
@@ -13234,12 +13244,20 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDuelMessages(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelMessages(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int duelToggleStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
+        boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
         boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
         boolean killNotifications = PlayerDebugSettings.duelKillNotifications(p.getUUID());
         boolean sessionMessages = PlayerDebugSettings.duelSessionMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Duel toggle -> assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Duel toggle -> duelMessages: " + duelMessages + ", assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -13279,8 +13297,9 @@ public class TameCommands {
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
         boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
+        boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
         boolean duelSessionMessage = PlayerDebugSettings.duelSessionMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelMessages: " + duelMessages + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -20447,7 +20466,9 @@ public class TameCommands {
         }
         for (UUID playerId : session.sessionPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-            if (player != null && PlayerDebugSettings.duelSessionMessages(playerId)) {
+            if (player != null
+                    && PlayerDebugSettings.duelMessages(playerId)
+                    && PlayerDebugSettings.duelSessionMessages(playerId)) {
                 player.sendSystemMessage(line);
             }
         }
