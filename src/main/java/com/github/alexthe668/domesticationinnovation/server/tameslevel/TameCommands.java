@@ -20145,8 +20145,11 @@ public class TameCommands {
                         continue;
                     }
                     applySessionSnapshotState(data, snapshot);
-                    CommandSourceStack source = owner.createCommandSourceStack();
-                    tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
+                    RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
+                    TamableAnimal rebuilt = recovered.entity;
+                    if (rebuilt != null && rebuilt.isAlive()) {
+                        applyMovementOrderCode(rebuilt, restorePlan.movementOrderCode());
+                    }
                     if (restorePlan.holdSit()) {
                         session.idleSitHoldUntilTick.put(id, now + 20L);
                     } else {
@@ -20298,7 +20301,6 @@ public class TameCommands {
         if (owner == null) {
             return;
         }
-        CommandSourceStack source = owner.createCommandSourceStack();
         for (UUID participantId : activeRound) {
             if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
                 continue;
@@ -20311,7 +20313,7 @@ public class TameCommands {
             if (loaded != null && loaded.isAlive()) {
                 continue;
             }
-            tpUnloadedHomeViaLanternOrRecover(source, owner, data, target);
+            recoverPetEntityAtLocation(owner, target, data);
         }
     }
 
