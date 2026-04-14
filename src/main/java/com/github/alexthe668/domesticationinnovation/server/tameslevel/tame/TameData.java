@@ -183,7 +183,7 @@ public class TameData {
         tag.putInt("kills", kills);
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
-        tag.putInt("duelMmr", Math.max(0, duelMmr));
+        tag.putInt("duelMmr", duelMmr);
         tag.putInt("duelKills", Math.max(0, duelKills));
         tag.putInt("duelAssists", Math.max(0, duelAssists));
         tag.putInt("duelDeaths", Math.max(0, duelDeaths));
@@ -346,8 +346,9 @@ public class TameData {
         data.kills = Math.max(0, tag.getInt("kills"));
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
-        data.duelMmr = Math.max(0, tag.getInt("duelMmr"));
-        if (data.duelMmr <= 0) {
+        if (tag.contains("duelMmr", Tag.TAG_INT)) {
+            data.duelMmr = tag.getInt("duelMmr");
+        } else {
             data.duelMmr = PlayerDuelStats.DEFAULT_MMR;
         }
         data.duelKills = Math.max(0, tag.getInt("duelKills"));

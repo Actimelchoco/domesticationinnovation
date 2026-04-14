@@ -12874,6 +12874,12 @@ public class TameCommands {
     private record DuelLeaderboardRankBucket(String label, ChatFormatting color, int minMmr) {
     }
 
+    private static final DuelLeaderboardRankBucket DUEL_RANK_NEG_LOSER = new DuelLeaderboardRankBucket("Loser", ChatFormatting.DARK_GRAY, Integer.MIN_VALUE);
+    private static final DuelLeaderboardRankBucket DUEL_RANK_NEG_OPFER = new DuelLeaderboardRankBucket("Opfer", ChatFormatting.GRAY, Integer.MIN_VALUE);
+    private static final DuelLeaderboardRankBucket DUEL_RANK_NEG_ZERO_AURA = new DuelLeaderboardRankBucket("Zero Aura", ChatFormatting.DARK_PURPLE, Integer.MIN_VALUE);
+    private static final DuelLeaderboardRankBucket DUEL_RANK_NEG_LAUCH = new DuelLeaderboardRankBucket("Lauch", ChatFormatting.DARK_GREEN, Integer.MIN_VALUE);
+    private static final DuelLeaderboardRankBucket DUEL_RANK_NEG_POPEL = new DuelLeaderboardRankBucket("Popel", ChatFormatting.DARK_RED, Integer.MIN_VALUE);
+
     private static final List<DuelLeaderboardRankBucket> DUEL_LEADERBOARD_RANKS = List.of(
             new DuelLeaderboardRankBucket("Technoblade", ChatFormatting.DARK_RED, 5000),
             new DuelLeaderboardRankBucket("Chuck Norris", ChatFormatting.GOLD, 4500),
@@ -12906,7 +12912,22 @@ public class TameCommands {
     );
 
     private static DuelLeaderboardRankBucket duelLeaderboardRankBucket(int mmr) {
-        int safeMmr = Math.max(0, mmr);
+        if (mmr < 0) {
+            if (mmr <= -1200) {
+                return DUEL_RANK_NEG_POPEL;
+            }
+            if (mmr <= -900) {
+                return DUEL_RANK_NEG_LAUCH;
+            }
+            if (mmr <= -600) {
+                return DUEL_RANK_NEG_ZERO_AURA;
+            }
+            if (mmr <= -300) {
+                return DUEL_RANK_NEG_OPFER;
+            }
+            return DUEL_RANK_NEG_LOSER;
+        }
+        int safeMmr = mmr;
         for (DuelLeaderboardRankBucket bucket : DUEL_LEADERBOARD_RANKS) {
             if (safeMmr >= bucket.minMmr()) {
                 return bucket;

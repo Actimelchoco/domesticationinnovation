@@ -25,7 +25,7 @@ public class PlayerDuelStats {
             tag.putUUID("playerUuid", playerUuid);
         }
         tag.putString("lastKnownName", lastKnownName == null ? "" : lastKnownName);
-        tag.putInt("duelMmr", Math.max(0, duelMmr));
+        tag.putInt("duelMmr", duelMmr);
         tag.putInt("duelKills", Math.max(0, duelKills));
         tag.putInt("duelAssists", Math.max(0, duelAssists));
         tag.putInt("duelDeaths", Math.max(0, duelDeaths));
@@ -45,8 +45,9 @@ public class PlayerDuelStats {
             data.lastKnownName = tag.getString("lastKnownName");
         }
         if (tag != null) {
-            data.duelMmr = Math.max(0, tag.getInt("duelMmr"));
-            if (data.duelMmr <= 0) {
+            if (tag.contains("duelMmr", Tag.TAG_INT)) {
+                data.duelMmr = tag.getInt("duelMmr");
+            } else {
                 data.duelMmr = DEFAULT_MMR;
             }
             data.duelKills = Math.max(0, tag.getInt("duelKills"));

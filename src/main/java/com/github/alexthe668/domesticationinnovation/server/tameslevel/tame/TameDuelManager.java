@@ -1548,7 +1548,7 @@ public final class TameDuelManager {
             if (stats.deaths > 0) {
                 creditedPoints *= 0.9D;
             }
-            tame.duelMmr = Math.max(0, tame.duelMmr + mmrDelta);
+            tame.duelMmr = tame.duelMmr + mmrDelta;
             tame.duelKills += Math.max(0, stats.kills);
             tame.duelAssists += Math.max(0, stats.assists);
             tame.duelDeaths += Math.max(0, stats.deaths);
@@ -1564,7 +1564,7 @@ public final class TameDuelManager {
         if (playerStats == null) {
             return;
         }
-        playerStats.duelMmr = Math.max(0, playerStats.duelMmr + mmrDelta);
+        playerStats.duelMmr = playerStats.duelMmr + mmrDelta;
         playerStats.duelKills += Math.max(0, stats.kills);
         playerStats.duelAssists += Math.max(0, stats.assists);
         playerStats.duelDeaths += Math.max(0, stats.deaths);
