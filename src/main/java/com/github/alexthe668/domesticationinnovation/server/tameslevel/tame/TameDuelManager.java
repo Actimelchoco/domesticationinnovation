@@ -24,6 +24,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 
@@ -40,6 +41,8 @@ public final class TameDuelManager {
     private static final double DUEL_MMR_K = 48.0D;
     private static final UUID DUEL_FOLLOW_RANGE_MOD = UUID.fromString("2b8f74de-3733-4f92-bad9-3d5f8a8d3f91");
     private static final double DUEL_FOLLOW_RANGE_BONUS = 64.0D;
+    private static final String DUEL_MOVEMENT_LOCK_KEY = "duel_movement_lock";
+    private static final double DUEL_PARTICIPANT_MAX_DRIFT_SQR = 96.0D * 96.0D;
 
     private static final class DuelBattle {
         private final UUID battleId;
@@ -150,12 +153,14 @@ public final class TameDuelManager {
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, true);
+            setDuelMovementLock(participantId, true);
             capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
         for (UUID participantId : cleanB) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
             TEAM_A_BY_ENTITY.put(participantId, false);
+            setDuelMovementLock(participantId, true);
             capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
@@ -236,6 +241,7 @@ public final class TameDuelManager {
         battle.teamA.remove(entityId);
         battle.teamB.remove(entityId);
         battle.participants.remove(entityId);
+        setDuelMovementLock(entityId, false);
         clearTargetForParticipant(server, entityId);
 
         if (battle.teamA.isEmpty() || battle.teamB.isEmpty()) {
@@ -376,6 +382,7 @@ public final class TameDuelManager {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
             applyDuelFollowRangeBoost(own);
+            keepParticipantNearBattle(server, own, enemyTeam);
             LivingEntity current = own.getTarget();
             if (isUsableCurrentDuelTarget(own, current)) {
                 setDuelCombatTarget(own, current);
@@ -388,6 +395,41 @@ public final class TameDuelManager {
             }
             setDuelCombatTarget(own, nearest);
         }
+    }
+
+    private static void keepParticipantNearBattle(MinecraftServer server, TamableAnimal participant, Set<UUID> enemyTeam) {
+        if (server == null || participant == null || enemyTeam == null || enemyTeam.isEmpty()) {
+            return;
+        }
+        LivingEntity nearestSameLevel = nearestLoadedOpponent(server, participant, enemyTeam);
+        LivingEntity anchor = nearestSameLevel != null ? nearestSameLevel : firstLoadedOpponent(server, enemyTeam);
+        if (anchor == null || !anchor.isAlive() || !(anchor.level() instanceof net.minecraft.server.level.ServerLevel targetLevel)) {
+            return;
+        }
+        boolean wrongDimension = participant.level() != anchor.level();
+        boolean tooFar = !wrongDimension && participant.distanceToSqr(anchor) > DUEL_PARTICIPANT_MAX_DRIFT_SQR;
+        if (!wrongDimension && !tooFar) {
+            return;
+        }
+        int slot = Math.floorMod(participant.getUUID().hashCode(), 8);
+        double angle = (Math.PI * 2.0D / 8.0D) * slot;
+        Vec3 targetPos = anchor.position().add(Math.cos(angle) * 3.0D, 0.0D, Math.sin(angle) * 3.0D);
+        TameCommands.autoFollowTeleportLoadedToLocation(participant, targetLevel, targetPos, participant.getYRot(), participant.getXRot());
+        participant.getNavigation().stop();
+        setDuelCombatTarget(participant, anchor);
+    }
+
+    private static LivingEntity firstLoadedOpponent(MinecraftServer server, Set<UUID> enemyTeam) {
+        if (server == null || enemyTeam == null || enemyTeam.isEmpty()) {
+            return null;
+        }
+        for (UUID enemyId : enemyTeam) {
+            LivingEntity living = findLoadedLivingParticipant(server, enemyId);
+            if (living != null && living.isAlive()) {
+                return living;
+            }
+        }
+        return null;
     }
 
     private static boolean isUsableCurrentDuelTarget(TamableAnimal own, LivingEntity current) {
@@ -463,6 +505,7 @@ public final class TameDuelManager {
             BATTLE_ID_BY_ENTITY.remove(participantId);
             TEAM_A_BY_ENTITY.remove(participantId);
             RECENT_DUEL_ELIMINATIONS.remove(participantId);
+            setDuelMovementLock(participantId, false);
             clearViewerEnemyGlow(server, participantId);
             clearTargetForParticipant(server, participantId);
             CompoundTag playerSnapshot = battle.playerSnapshots.get(participantId);
@@ -1677,6 +1720,30 @@ public final class TameDuelManager {
     private static TamableAnimal findLoadedTame(MinecraftServer server, UUID tameId) {
         LivingEntity entity = findLoadedLivingParticipant(server, tameId);
         return entity instanceof TamableAnimal tame && tame.isTame() ? tame : null;
+    }
+
+    public static synchronized boolean hasDuelMovementLock(UUID entityId) {
+        if (entityId == null || !isEntityInDuel(entityId)) {
+            return false;
+        }
+        TameData data = TameRegistry.get(entityId);
+        return data != null && data.cooldowns.containsKey(DUEL_MOVEMENT_LOCK_KEY);
+    }
+
+    private static void setDuelMovementLock(UUID entityId, boolean locked) {
+        if (entityId == null) {
+            return;
+        }
+        TameData data = TameRegistry.get(entityId);
+        if (data == null) {
+            return;
+        }
+        if (locked) {
+            data.cooldowns.put(DUEL_MOVEMENT_LOCK_KEY, Long.MAX_VALUE);
+        } else {
+            data.cooldowns.remove(DUEL_MOVEMENT_LOCK_KEY);
+        }
+        TameRegistry.markDirty();
     }
 
     private static LivingEntity findLoadedLivingParticipant(MinecraftServer server, UUID entityId) {

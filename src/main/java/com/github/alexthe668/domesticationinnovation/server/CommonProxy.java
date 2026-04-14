@@ -278,6 +278,36 @@ public class CommonProxy {
         }
     }
 
+    @SubscribeEvent
+    public void onEntityTeleport(EntityTeleportEvent event) {
+        if (event == null || !event.isCancelable()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+            return;
+        }
+        UUID tameId = tame.getUUID();
+        if (!TameCommands.isDuelSessionLocked(tameId)) {
+            return;
+        }
+        LivingEntity owner = tame.getOwner();
+        if (owner == null || owner.level() != tame.level()) {
+            return;
+        }
+        double beforeOwnerDistSqr = tame.distanceToSqr(owner);
+        double dx = event.getTargetX() - owner.getX();
+        double dy = event.getTargetY() - owner.getY();
+        double dz = event.getTargetZ() - owner.getZ();
+        double afterOwnerDistSqr = dx * dx + dy * dy + dz * dz;
+        // Block suspicious snapback teleports that pull duel participants directly to owner.
+        if (beforeOwnerDistSqr > 64.0D && afterOwnerDistSqr <= 16.0D) {
+            event.setCanceled(true);
+            if (tame.level().getServer() != null) {
+                TameDuelManager.refreshLoadedDuelParticipant(tame.level().getServer(), tame);
+            }
+        }
+    }
+
     private boolean canTickCollar(Entity entity){
         if(entity.level().isClientSide){
             return true;

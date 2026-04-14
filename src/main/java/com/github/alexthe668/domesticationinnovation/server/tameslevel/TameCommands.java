@@ -160,6 +160,7 @@ public class TameCommands {
     private static final int IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS = 5;
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
+    private static final double DUEL_SESSION_ARENA_MAX_DRIFT_SQR = 56.0D * 56.0D;
     private static final String TAG_GUARDIAN_TOOL_ORDER = "DIGuardianToolOrder";
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
@@ -17114,6 +17115,10 @@ public class TameCommands {
         return entityId != null && (TameDuelManager.isEntityInDuel(entityId) || isActiveDuelSessionParticipant(entityId));
     }
 
+    public static boolean isDuelSessionLocked(UUID entityId) {
+        return isDuelLocked(entityId);
+    }
+
     private static boolean isActiveDuelSessionParticipant(UUID entityId) {
         if (entityId == null || ACTIVE_DUEL_SESSIONS.isEmpty()) {
             return false;
@@ -19606,6 +19611,8 @@ public class TameCommands {
                 }
                 continue;
             }
+            enforceDuelSessionArenaAnchor(server, session.currentRoundA, session.spawnA);
+            enforceDuelSessionArenaAnchor(server, session.currentRoundB, session.spawnB);
             recoverUnloadedDuelSessionParticipants(server, session, session.currentRoundA, session.spawnA, session.ownerA);
             recoverUnloadedDuelSessionParticipants(server, session, session.currentRoundB, session.spawnB, session.ownerB);
             if (hasAnyActiveDuelParticipants(session.currentRoundA) && hasAnyActiveDuelParticipants(session.currentRoundB)) {
@@ -20413,6 +20420,28 @@ public class TameCommands {
             }
         }
         return count;
+    }
+
+    private static void enforceDuelSessionArenaAnchor(MinecraftServer server, Set<UUID> side, SpawnTarget spawn) {
+        if (server == null || side == null || side.isEmpty() || spawn == null || spawn.level == null || spawn.pos == null) {
+            return;
+        }
+        for (UUID id : side) {
+            if (id == null || !TameDuelManager.isEntityInDuel(id)) {
+                continue;
+            }
+            LivingEntity living = findLoadedLivingParticipant(server, id);
+            if (!(living instanceof TamableAnimal tame) || !tame.isAlive()) {
+                continue;
+            }
+            boolean wrongDimension = tame.level() != spawn.level;
+            boolean tooFar = !wrongDimension && tame.distanceToSqr(spawn.pos) > DUEL_SESSION_ARENA_MAX_DRIFT_SQR;
+            if (!wrongDimension && !tooFar) {
+                continue;
+            }
+            autoFollowTeleportLoadedToLocation(tame, spawn.level, spawn.pos, spawn.yRot, spawn.xRot);
+            TameDuelManager.refreshLoadedDuelParticipant(server, tame);
+        }
     }
 
     private static double totalTeamHealthPercent(MinecraftServer server, Set<UUID> ids) {

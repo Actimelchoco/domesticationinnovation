@@ -199,6 +199,7 @@ public class TameAutoFollowEvents {
                 && !data.hasHome
                 && !data.wanderLock
                 && !TameDuelManager.isTameInDuel(data.uuid)
+                && !TameCommands.isDuelSessionLocked(data.uuid)
                 && isFollowing(data)
                 && hasTeleportCapability(data);
     }
@@ -212,6 +213,7 @@ public class TameAutoFollowEvents {
                 && !data.hasHome
                 && !data.wanderLock
                 && !TameDuelManager.isTameInDuel(data.uuid)
+                && !TameCommands.isDuelSessionLocked(data.uuid)
                 && TameCommands.isLiveFollowing(tame)
                 && hasTeleportCapability(data);
     }
