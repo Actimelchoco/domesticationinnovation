@@ -6785,6 +6785,9 @@ public class TameCommands {
         }
         Set<UUID> losing = sideA ? session.currentRoundA : session.currentRoundB;
         boolean ended = forceEndDuelSessionSide(source.getServer(), losing);
+        // Reset survivors immediately too so both sides are restored in the same tick.
+        Set<UUID> surviving = losing == session.currentRoundA ? session.currentRoundB : session.currentRoundA;
+        ended |= forceEndDuelSessionSide(source.getServer(), surviving);
         if (ended) {
             player.sendSystemMessage(Component.literal("Forfeited the current duel session round.").withStyle(ChatFormatting.YELLOW));
             return true;
@@ -20406,6 +20409,9 @@ public class TameCommands {
         }
         notifyDuelSessionOwners(server, session, Component.literal("Duel session round timed out after 5 minutes.").withStyle(ChatFormatting.YELLOW));
         forceEndDuelSessionSide(server, losing);
+        // Reset survivors immediately too so no side carries state into next round.
+        Set<UUID> surviving = losing == session.currentRoundA ? session.currentRoundB : session.currentRoundA;
+        forceEndDuelSessionSide(server, surviving);
     }
 
     private static long duelSessionRoundTimeoutTicks() {
