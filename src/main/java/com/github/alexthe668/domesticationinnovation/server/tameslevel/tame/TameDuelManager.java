@@ -20,6 +20,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 
@@ -34,6 +38,8 @@ import java.util.UUID;
 
 public final class TameDuelManager {
     private static final double DUEL_MMR_K = 48.0D;
+    private static final UUID DUEL_FOLLOW_RANGE_MOD = UUID.fromString("2b8f74de-3733-4f92-bad9-3d5f8a8d3f91");
+    private static final double DUEL_FOLLOW_RANGE_BONUS = 64.0D;
 
     private static final class DuelBattle {
         private final UUID battleId;
@@ -324,24 +330,63 @@ public final class TameDuelManager {
         return nearestLoadedOpponent(server, tame, opponents);
     }
 
+    public static synchronized void assignDuelTarget(TamableAnimal tame, LivingEntity target) {
+        setDuelCombatTarget(tame, target);
+    }
+
+    public static synchronized void refreshLoadedDuelParticipant(MinecraftServer server, TamableAnimal tame) {
+        if (server == null || tame == null || !tame.isTame() || !tame.isAlive()) {
+            return;
+        }
+        UUID tameId = tame.getUUID();
+        if (!isEntityInDuel(tameId)) {
+            removeDuelFollowRangeBoost(tame);
+            return;
+        }
+        TameCommands.applyMovementOrderCode(tame, 2);
+        tame.setOrderedToSit(false);
+        if (tame instanceof IComandableMob commandableMob) {
+            commandableMob.setCommand(0);
+        }
+        applyDuelFollowRangeBoost(tame);
+        LivingEntity current = tame.getTarget();
+        if (isUsableCurrentDuelTarget(tame, current)) {
+            setDuelCombatTarget(tame, current);
+            return;
+        }
+        UUID battleId = BATTLE_ID_BY_ENTITY.get(tameId);
+        DuelBattle battle = battleId == null ? null : BATTLE_BY_ID.get(battleId);
+        Boolean teamA = TEAM_A_BY_ENTITY.get(tameId);
+        if (battle == null || teamA == null) {
+            clearDuelCombatTarget(tame);
+            return;
+        }
+        Set<UUID> opponents = teamA ? battle.teamB : battle.teamA;
+        LivingEntity nearest = nearestLoadedOpponent(server, tame, opponents);
+        if (nearest != null) {
+            setDuelCombatTarget(tame, nearest);
+        } else {
+            clearDuelCombatTarget(tame);
+        }
+    }
+
     private static void maintainTargets(MinecraftServer server, Set<UUID> ownTeam, Set<UUID> enemyTeam) {
         if (ownTeam == null || ownTeam.isEmpty() || enemyTeam == null || enemyTeam.isEmpty()) return;
         for (UUID ownId : ownTeam) {
             TamableAnimal own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
+            applyDuelFollowRangeBoost(own);
             LivingEntity current = own.getTarget();
             if (isUsableCurrentDuelTarget(own, current)) {
+                setDuelCombatTarget(own, current);
                 continue;
             }
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
-                own.setTarget(null);
-                own.getNavigation().stop();
+                clearDuelCombatTarget(own);
                 continue;
             }
-            if (own.getTarget() != nearest) {
-                own.setTarget(nearest);
-            }
+            setDuelCombatTarget(own, nearest);
         }
     }
 
@@ -365,6 +410,7 @@ public final class TameDuelManager {
         // Prevent vanilla follow-owner recovery from yanking duel tames back to their owner.
         TameCommands.applyMovementOrderCode(tame, 2);
         tame.setOrderedToSit(false);
+        applyDuelFollowRangeBoost(tame);
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
@@ -586,8 +632,65 @@ public final class TameDuelManager {
     private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
         TamableAnimal tame = findLoadedTame(server, participantId);
         if (tame == null) return;
+        clearDuelCombatTarget(tame);
+        removeDuelFollowRangeBoost(tame);
+    }
+
+    private static void setDuelCombatTarget(TamableAnimal tame, LivingEntity target) {
+        if (tame == null) {
+            return;
+        }
+        if (target == null || !target.isAlive()) {
+            clearDuelCombatTarget(tame);
+            return;
+        }
+        if (tame.getTarget() != target) {
+            tame.setTarget(target);
+        }
+        try {
+            tame.getBrain().setMemoryWithExpiry(MemoryModuleType.ANGRY_AT, target.getUUID(), 600L);
+            tame.getBrain().setMemoryWithExpiry(MemoryModuleType.ATTACK_TARGET, target, 600L);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void clearDuelCombatTarget(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
         tame.setTarget(null);
         tame.getNavigation().stop();
+        try {
+            tame.getBrain().eraseMemory(MemoryModuleType.ANGRY_AT);
+            tame.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void applyDuelFollowRangeBoost(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
+        AttributeInstance follow = tame.getAttribute(Attributes.FOLLOW_RANGE);
+        if (follow == null || follow.getModifier(DUEL_FOLLOW_RANGE_MOD) != null) {
+            return;
+        }
+        follow.addTransientModifier(new AttributeModifier(
+                DUEL_FOLLOW_RANGE_MOD,
+                "tl_duel_follow_range",
+                DUEL_FOLLOW_RANGE_BONUS,
+                AttributeModifier.Operation.ADDITION
+        ));
+    }
+
+    private static void removeDuelFollowRangeBoost(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
+        AttributeInstance follow = tame.getAttribute(Attributes.FOLLOW_RANGE);
+        if (follow != null) {
+            follow.removeModifier(DUEL_FOLLOW_RANGE_MOD);
+        }
     }
 
     private static void notifyOwner(MinecraftServer server, UUID ownerId, List<Component> resultSummary, List<Component> leaderboardSummary) {

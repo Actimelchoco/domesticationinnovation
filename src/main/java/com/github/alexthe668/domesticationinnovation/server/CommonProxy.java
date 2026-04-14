@@ -234,6 +234,13 @@ public class CommonProxy {
                     ensureDiProgressEntryForTame(living, null);
                 }
             }
+            if (!living.level().isClientSide
+                    && living.level().getServer() != null
+                    && living instanceof TamableAnimal tame
+                    && tame.isTame()
+                    && TameDuelManager.isEntityInDuel(tame.getUUID())) {
+                TameDuelManager.refreshLoadedDuelParticipant(living.level().getServer(), tame);
+            }
         }
     }
 

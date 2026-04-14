@@ -63,6 +63,20 @@ public class TameCombatEvents {
         if (!(event.getEntity() instanceof LivingEntity)) return;
         LivingEntity mob = event.getEntity();
         if (event.getAmount() <= 0.0F) return;
+        UUID victimParticipantId = resolveDuelParticipantUuid(mob);
+        UUID attackerParticipantId = resolveDuelParticipantUuid(event.getSource());
+        if (attackerParticipantId != null && victimParticipantId != null) {
+            if (TameDuelManager.isSameDuelTeam(attackerParticipantId, victimParticipantId)) {
+                event.setCanceled(true);
+                return;
+            }
+            boolean attackerInDuel = TameDuelManager.isEntityInDuel(attackerParticipantId);
+            boolean victimInDuel = TameDuelManager.isEntityInDuel(victimParticipantId);
+            if ((attackerInDuel || victimInDuel) && !TameDuelManager.areDuelOpponents(attackerParticipantId, victimParticipantId)) {
+                event.setCanceled(true);
+                return;
+            }
+        }
 
         TamableAnimal tame = resolveTameAttacker(event);
         if (tame != null && tame.isTame()) {
@@ -280,6 +294,27 @@ public class TameCombatEvents {
         }
         if (entity instanceof OwnableEntity ownable && ownable.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
             return tame;
+        }
+        return null;
+    }
+
+    private static UUID resolveDuelParticipantUuid(DamageSource source) {
+        if (source == null) {
+            return null;
+        }
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return player.getUUID();
+        }
+        TamableAnimal tame = resolveTameAttacker(source);
+        return tame != null && tame.isTame() ? tame.getUUID() : null;
+    }
+
+    private static UUID resolveDuelParticipantUuid(LivingEntity entity) {
+        if (entity instanceof ServerPlayer player) {
+            return player.getUUID();
+        }
+        if (entity instanceof TamableAnimal tame && tame.isTame()) {
+            return tame.getUUID();
         }
         return null;
     }

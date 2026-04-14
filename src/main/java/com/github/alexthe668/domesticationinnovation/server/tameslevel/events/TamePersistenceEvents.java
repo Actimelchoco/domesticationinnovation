@@ -124,6 +124,9 @@ public class TamePersistenceEvents {
             tame.remove(Entity.RemovalReason.DISCARDED);
             return false;
         }
+        if (maintenanceTick && level.getServer() != null && TameDuelManager.isEntityInDuel(tame.getUUID())) {
+            TameDuelManager.refreshLoadedDuelParticipant(level.getServer(), tame);
+        }
         boolean locationChanged = updateLiveLocation(level, tame, data);
         if (saveLocationTick && locationChanged) {
             data.lastKnownGameTime = level.getGameTime();

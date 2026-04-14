@@ -20406,7 +20406,7 @@ public class TameCommands {
         for (TamableAnimal tame : actingTames) {
             LivingEntity enemy = nearestLoadedLivingOpponent(tame, opponents);
             if (enemy != null) {
-                tame.setTarget(enemy);
+                TameDuelManager.assignDuelTarget(tame, enemy);
             }
         }
     }

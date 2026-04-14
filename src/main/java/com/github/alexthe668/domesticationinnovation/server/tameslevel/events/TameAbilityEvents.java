@@ -144,7 +144,7 @@ public class TameAbilityEvents {
                         && TameDuelManager.isTameInDuel(tame.getUUID())) {
                     LivingEntity duelTarget = TameDuelManager.findNearestLoadedOpponent(level.getServer(), tame);
                     if (duelTarget != null && duelTarget.isAlive() && !isFriendly(tame, duelTarget)) {
-                        tame.setTarget(duelTarget);
+                        TameDuelManager.assignDuelTarget(tame, duelTarget);
                         target = duelTarget;
                     }
                 }

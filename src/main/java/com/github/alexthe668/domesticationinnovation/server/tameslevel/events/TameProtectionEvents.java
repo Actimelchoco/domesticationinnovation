@@ -155,7 +155,7 @@ public class TameProtectionEvents {
             return;
         }
         if (tame.getTarget() != nearest) {
-            tame.setTarget(nearest);
+            TameDuelManager.assignDuelTarget(tame, nearest);
         }
         tame.getNavigation().moveTo(nearest, 1.15D);
     }
