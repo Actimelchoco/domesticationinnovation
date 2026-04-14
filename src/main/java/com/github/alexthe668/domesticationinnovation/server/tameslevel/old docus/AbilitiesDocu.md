@@ -12,7 +12,7 @@
 - `support`: utility/defensive/control abilities that do not count toward the cooldown nerf and are not affected by it.
 
 ### Current Type Map
-- `attack`: `arrow_shot`, `snowball_shot`, `ghast_fireball`, `creeper_explosion`, `wither_skull`, `blaze_attack`, `guardian_beam`, `elder_guardian_beam`, `trident`, `crossbow`, `evoker_fangs`, `dragon_fireball`, `llama_spit`, `lightning_strike`, `warden_scream`, `shulker_bullet`, `fishing`, `dash`, `shadow_hands`
+- `attack`: `arrow_shot`, `snowball_shot`, `ghast_fireball`, `creeper_explosion`, `wither_skull`, `blaze_attack`, `guardian_beam`, `elder_guardian_beam`, `trident`, `crossbow`, `evoker_fangs`, `dragon_fireball`, `llama_spit`, `lightning_strike`, `warden_scream`, `shulker_bullet`, `fishing`, `dash`, `flash`, `shadow_hands`
 - `heal`: `healing_aura`, `healing_bottle`, `battlefield_medic`, `triage_pulse`, `revitalizing_presence`, `life_gift`
 - `support`: `battle_strength`, `defensive_aura`, `ender_pearl_jump`, `berserker`, `bloodlust`, `retaliation_slow`, `immunity_frame`, `deflection`, `defusal`, `psychic_wall`, `guardian_repulse`, `last_stand_fury`, `shield_block`, `sky_launch`, `guardian_intercept`, `emergency_shield`, `body_block`, `cleanse_touch`, `pack_guard`
 

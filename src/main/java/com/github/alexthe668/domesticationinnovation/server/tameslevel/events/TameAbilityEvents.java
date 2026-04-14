@@ -84,6 +84,11 @@ public class TameAbilityEvents {
     private static final int OWNER_PROTECTION_TICK_RATE = 10;
     private static final int GUARDIAN_REPULSE_CHECK_RATE = 40;
     private static final int GUARDIAN_LOCK_ON_PARTICLE_RATE = 10;
+    private static final int FLASH_DASH_COUNT = 5;
+    private static final long FLASH_DASH_INTERVAL_TICKS = 10L;
+    private static final long FLASH_BASE_COOLDOWN_TICKS = 90L * 6L;
+    private static final String FLASH_CHAIN_REMAINING_KEY = "flash_chain_remaining";
+    private static final String FLASH_CHAIN_NEXT_TICK_KEY = "flash_chain_next_tick";
     private static final String PROJECTILE_DAMAGE_TAG = "TamesLevelProjectileDamage";
     private static final String PROJECTILE_SOURCE_TAG = "TamesLevelProjectileSource";
     private static final int SHORT_PROJECTILE_TICKS = 60;
@@ -192,6 +197,7 @@ public class TameAbilityEvents {
                     TamePerformanceProfiler.run("ability.arrow_shot", () -> handleArrowShot(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.fishing", () -> handleFishing(level, tame, data, currentTarget, now));
                     TamePerformanceProfiler.run("ability.dash", () -> handleDash(level, tame, data, currentTarget, now));
+                    TamePerformanceProfiler.run("ability.flash", () -> handleFlash(level, tame, data, currentTarget, now));
                 }
                 if (!abilitiesBlocked && allowOffensive && heavyPass) {
                     TamePerformanceProfiler.run("ability.healing_bottle", () -> handleHealingBottle(level, tame, data, now));
@@ -571,18 +577,76 @@ public class TameAbilityEvents {
         if (!isReady(data, "dash_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dash"));
+        float damage = offensiveAbilityCastDamage(data, "dash", levelValue);
+        if (!performDashStrike(level, tame, target, levelValue, damage)) return;
+
+        setAbilityCooldown(tame, data, "dash", "dash_tick", now, 90L);
+        debugAbilityUse(tame, "dash");
+    }
+
+    private static void handleFlash(ServerLevel level, TamableAnimal tame, TameData data, LivingEntity target, long now) {
+        if (!LevelSystem.hasAbility(data, "flash")) return;
+        if (target == null || !target.isAlive() || isFriendly(tame, target)
+                || ((target instanceof Player || target instanceof TamableAnimal) && !isDuelOpponent(tame, target))) {
+            clearFlashChain(data);
+            return;
+        }
+
+        long remaining = data.cooldowns.getOrDefault(FLASH_CHAIN_REMAINING_KEY, 0L);
+        long nextStrikeAt = data.cooldowns.getOrDefault(FLASH_CHAIN_NEXT_TICK_KEY, 0L);
+
+        if (remaining <= 0L) {
+            if (!isReady(data, "flash_tick", now)) return;
+            remaining = FLASH_DASH_COUNT;
+            nextStrikeAt = now;
+            setCooldown(data, FLASH_CHAIN_REMAINING_KEY, remaining);
+            setCooldown(data, FLASH_CHAIN_NEXT_TICK_KEY, nextStrikeAt);
+            setAbilityCooldown(tame, data, "flash", "flash_tick", now, FLASH_BASE_COOLDOWN_TICKS);
+            debugAbilityUse(tame, "flash");
+        }
+
+        if (now < nextStrikeAt) {
+            return;
+        }
+
+        int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "flash"));
+        float damage = offensiveAbilityCastDamage(data, "dash", levelValue);
+        performDashStrike(level, tame, target, levelValue, damage);
+
+        remaining = Math.max(0L, remaining - 1L);
+        if (remaining > 0L) {
+            setCooldown(data, FLASH_CHAIN_REMAINING_KEY, remaining);
+            setCooldown(data, FLASH_CHAIN_NEXT_TICK_KEY, now + FLASH_DASH_INTERVAL_TICKS);
+        } else {
+            clearFlashChain(data);
+        }
+    }
+
+    private static void clearFlashChain(TameData data) {
+        if (data == null) {
+            return;
+        }
+        data.cooldowns.remove(FLASH_CHAIN_REMAINING_KEY);
+        data.cooldowns.remove(FLASH_CHAIN_NEXT_TICK_KEY);
+    }
+
+    private static boolean performDashStrike(ServerLevel level, TamableAnimal tame, LivingEntity target, int levelValue, float damage) {
+        if (level == null || tame == null || target == null || !target.isAlive() || isFriendly(tame, target)) {
+            return false;
+        }
+        if ((target instanceof Player || target instanceof TamableAnimal) && !isDuelOpponent(tame, target)) {
+            return false;
+        }
         Vec3 start = tame.position();
         Vec3 toTarget = target.position().subtract(start);
         double distance = toTarget.length();
-        if (distance < 2.0D) return;
+        if (distance < 2.0D) return false;
         Vec3 dir = toTarget.normalize();
         double dashDistance = Math.min(4.0D + levelValue * 0.8D, Math.max(2.0D, distance));
         Vec3 end = resolveDashEndpoint(level, tame, start, dir, dashDistance);
-        if (end.distanceToSqr(start) < 0.25D) return;
+        if (end.distanceToSqr(start) < 0.25D) return false;
 
         AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
-        float damage = offensiveAbilityCastDamage(data, "dash", levelValue);
-
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, sweep)) {
             if (!nearby.isAlive()) continue;
             if (nearby == tame) continue;
@@ -597,9 +661,7 @@ public class TameAbilityEvents {
         tame.hurtMarked = true;
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), capParticles(tame, 6), 0.25D, 0.1D, 0.25D, 0.0D);
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 0.8F, 1.2F);
-
-        setAbilityCooldown(tame, data, "dash", "dash_tick", now, 90L);
-        debugAbilityUse(tame, "dash");
+        return true;
     }
 
     private static Vec3 resolveDashEndpoint(ServerLevel level, TamableAnimal tame, Vec3 start, Vec3 dir, double dashDistance) {
@@ -1881,6 +1943,7 @@ public class TameAbilityEvents {
             case "crossbow" -> 80L;
             case "fishing" -> 90L;
             case "dash" -> 90L;
+            case "flash" -> FLASH_BASE_COOLDOWN_TICKS;
             case "evoker_fangs" -> 100L;
             case "dragon_fireball" -> 140L;
             case "llama_spit" -> 50L;
@@ -1903,7 +1966,7 @@ public class TameAbilityEvents {
             case "lightning_strike", "shadow_hands" -> 0.80F;
             case "wither_skull" -> 0.75F;
             case "guardian_beam", "snowball_shot" -> 0.70F;
-            case "fishing", "dash" -> 0.65F;
+            case "fishing", "dash", "flash" -> 0.65F;
             case "warden_scream" -> 0.60F;
             case "ghast_fireball" -> 0.55F;
             case "evoker_fangs", "dragon_fireball" -> 0.50F;
@@ -1917,7 +1980,7 @@ public class TameAbilityEvents {
         return switch (abilityId) {
             case "arrow_shot", "trident", "crossbow", "llama_spit", "blaze_attack", "snowball_shot" -> 1.00F;
             case "elder_guardian_beam", "guardian_beam", "lightning_strike", "shulker_bullet" -> 0.85F;
-            case "fishing", "dash", "wither_skull", "sky_launch" -> 0.75F;
+            case "fishing", "dash", "flash", "wither_skull", "sky_launch" -> 0.75F;
             case "creeper_explosion", "ghast_fireball", "evoker_fangs", "dragon_fireball", "warden_scream" -> 0.50F;
             default -> 1.00F;
         };

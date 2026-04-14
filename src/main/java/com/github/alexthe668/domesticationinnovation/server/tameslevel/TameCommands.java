@@ -7012,7 +7012,7 @@ public class TameCommands {
     private static String buildAbilityInspectLine(TamableAnimal tame, TameData data, String id, int level, boolean longForm) {
         return switch (id) {
             case "arrow_shot", "creeper_explosion", "ghast_fireball", "blaze_attack", "guardian_beam",
-                    "elder_guardian_beam", "trident", "crossbow", "fishing", "dash", "dragon_fireball",
+                    "elder_guardian_beam", "trident", "crossbow", "fishing", "dash", "flash", "dragon_fireball",
                     "llama_spit", "snowball_shot", "lightning_strike", "warden_scream", "wither_skull",
                     "evoker_fangs", "shulker_bullet", "sky_launch" -> inspectReworkedAbilityLine(data, id, level, longForm);
             case "shadow_hands" -> longForm
@@ -7123,6 +7123,7 @@ public class TameCommands {
             case "lightning_strike" -> " + visual lightning";
             case "fishing" -> " + pull only";
             case "dash" -> " per target hit in sweep";
+            case "flash" -> " per target hit in each of 5 sweeps";
             case "crossbow" -> " total cast damage assuming all " + Math.max(1, level) + " arrows hit";
             case "shulker_bullet" -> " + levitation utility";
             case "sky_launch" -> " + launch (reduced by target max HP)";
@@ -7143,6 +7144,7 @@ public class TameCommands {
             case "guardian_beam" -> "single target beam";
             case "elder_guardian_beam" -> "single target beam";
             case "dash" -> "sweep box length " + fmt(Math.min(4.0D + safeLevel * 0.8D, 999.0D)) + ", width 2.2";
+            case "flash" -> "5x sweep dash chain, 0.5s interval, same sweep as dash";
             case "evoker_fangs" -> (safeLevel >= 3 ? "line of 10 fangs" : "ring of 10 fangs, radius 3.0");
             case "dragon_fireball" -> "dragon cloud AOE";
             case "lightning_strike" -> "single target strike";

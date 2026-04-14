@@ -169,6 +169,7 @@ public class LevelSystem {
         LLAMA_SPIT("llama_spit", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         FISHING("fishing", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         DASH("dash", AbilityType.ATTACK, true, Integer.MAX_VALUE),
+        FLASH("flash", AbilityType.ATTACK, true, Integer.MAX_VALUE),
         RETALIATION_SLOW("retaliation_slow", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         IMMUNITY_FRAME("immunity_frame", AbilityType.SUPPORT, true, Integer.MAX_VALUE),
         DEFLECTION("deflection", AbilityType.SUPPORT, false, 1),
