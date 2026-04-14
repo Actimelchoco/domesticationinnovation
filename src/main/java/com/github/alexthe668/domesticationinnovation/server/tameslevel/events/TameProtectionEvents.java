@@ -15,6 +15,7 @@ import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 public class TameProtectionEvents {
@@ -108,6 +109,7 @@ public class TameProtectionEvents {
     public static void onLivingTick(LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
+        if (isMutantCreeperMinionExploding(tame)) return;
 
         net.minecraft.world.entity.LivingEntity target = tame.getTarget();
         if (target == null) {
@@ -193,6 +195,34 @@ public class TameProtectionEvents {
 
     private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, net.minecraft.world.damagesource.DamageSource source) {
         if (tame == null || source == null || source.getEntity() != tame || !source.is(DamageTypeTags.IS_EXPLOSION)) {
+            return false;
+        }
+        return isMutantCreeperMinion(tame);
+    }
+
+    private static boolean isMutantCreeperMinionExploding(TamableAnimal tame) {
+        if (!isMutantCreeperMinion(tame)) {
+            return false;
+        }
+        try {
+            Method hasIgnited = tame.getClass().getMethod("hasIgnited");
+            Object ignited = hasIgnited.invoke(tame);
+            if (ignited instanceof Boolean flag && flag) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method getExplodeState = tame.getClass().getMethod("getExplodeState");
+            Object state = getExplodeState.invoke(tame);
+            return state instanceof Number number && number.intValue() > 0;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+        if (tame == null) {
             return false;
         }
         ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());

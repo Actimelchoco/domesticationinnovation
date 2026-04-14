@@ -21,6 +21,8 @@ import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.lang.reflect.Method;
+
 public class TameBehaviorEvents {
     @SubscribeEvent
     public static void onTameTick(LivingEvent.LivingTickEvent event) {
@@ -247,7 +249,13 @@ public class TameBehaviorEvents {
 
     private static boolean hasInvalidTarget(TamableAnimal tame) {
         LivingEntity target = tame.getTarget();
-        return target != null && !isValidCombatTarget(tame, target);
+        if (target == null) {
+            return false;
+        }
+        if (isMutantCreeperMinionExploding(tame)) {
+            return false;
+        }
+        return !isValidCombatTarget(tame, target);
     }
 
     private static boolean hasValidCurrentTarget(TamableAnimal tame) {
@@ -401,5 +409,36 @@ public class TameBehaviorEvents {
 
     private static int randomGuardianRelaxDuration(TamableAnimal tame) {
         return 600 + tame.getRandom().nextInt(1801);
+    }
+
+    private static boolean isMutantCreeperMinionExploding(TamableAnimal tame) {
+        if (!isMutantCreeperMinion(tame)) {
+            return false;
+        }
+        try {
+            Method hasIgnited = tame.getClass().getMethod("hasIgnited");
+            Object ignited = hasIgnited.invoke(tame);
+            if (ignited instanceof Boolean flag && flag) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method getExplodeState = tame.getClass().getMethod("getExplodeState");
+            Object state = getExplodeState.invoke(tame);
+            return state instanceof Number number && number.intValue() > 0;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return key != null
+                && "mutantmonsters".equals(key.getNamespace())
+                && "creeper_minion".equals(key.getPath());
     }
 }
