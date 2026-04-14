@@ -411,9 +411,12 @@ public final class TameDuelManager {
                 continue;
             }
             CompoundTag tameSnapshot = battle.tameSnapshots.get(participantId);
-            if (tameSnapshot != null && TameCommands.restoreDuelParticipantSnapshot(server, tameSnapshot.copy())) {
-                restoredCount++;
-            } else if (tameSnapshot == null && playerSnapshot == null && TameCommands.resetDuelCombatState(server, participantId)) {
+            if (tameSnapshot != null) {
+                if (TameCommands.restoreDuelParticipantSnapshot(server, tameSnapshot.copy())
+                        || TameCommands.resetDuelCombatState(server, participantId)) {
+                    restoredCount++;
+                }
+            } else if (playerSnapshot == null && TameCommands.resetDuelCombatState(server, participantId)) {
                 restoredCount++;
             }
         }

@@ -138,6 +138,7 @@ public class TameCommands {
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
     private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "old docus");
+    private static final int FOOD_POINTS_PER_APPROVED_ITEM = 100;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
@@ -942,8 +943,10 @@ public class TameCommands {
                         .then(Commands.literal("strongest")
                                 .executes(ctx -> strongest(ctx.getSource())))
                         .then(Commands.literal("recover")
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> recoverAllPets(ctx.getSource())))
                                 .then(Commands.argument("pet", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                        .suggests((ctx, b) -> suggestRecoverablePetNames(ctx.getSource(), b))
                                         .executes(ctx -> recoverPet(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
 
                         .then(Commands.literal("stat")
@@ -3056,8 +3059,6 @@ public class TameCommands {
                                 .then(Commands.literal("approve")
                                         .then(Commands.literal("item")
                                                 .executes(ctx -> adminApproveHeldItem(ctx.getSource())))
-                                        .then(Commands.literal("cheapItem")
-                                                .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource())))
                                         .then(Commands.literal("list")
                                                 .executes(ctx -> adminListApprovedItems(ctx.getSource())))
                                         .then(Commands.literal("remove")
@@ -3065,30 +3066,6 @@ public class TameCommands {
                                                 .then(Commands.argument("item", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestApprovedReincarnationItems(b))
                                                         .executes(ctx -> adminRemoveApprovedItem(
-                                                                ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "item")
-                                                        )))))
-                                .then(Commands.literal("cheapapprove")
-                                        .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
-                                        .then(Commands.literal("list")
-                                                .executes(ctx -> adminListApprovedItems(ctx.getSource())))
-                                        .then(Commands.literal("remove")
-                                                .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
-                                                .then(Commands.argument("item", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
-                                                        .executes(ctx -> adminRemoveCheapApprovedItem(
-                                                                ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "item")
-                                                        )))))
-                                .then(Commands.literal("cheapapprovedItem")
-                                        .executes(ctx -> adminApproveHeldCheapItem(ctx.getSource()))
-                                        .then(Commands.literal("list")
-                                                .executes(ctx -> adminListApprovedItems(ctx.getSource())))
-                                        .then(Commands.literal("remove")
-                                                .executes(ctx -> adminRemoveHeldCheapApprovedItem(ctx.getSource()))
-                                                .then(Commands.argument("item", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestCheapApprovedReincarnationItems(b))
-                                                        .executes(ctx -> adminRemoveCheapApprovedItem(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "item")
                                                         )))))
@@ -5561,11 +5538,11 @@ public class TameCommands {
             }
             return PaymentResult.ok("1 totem");
         }
-        int heldApprovedValue = approvedItemValue(held);
-        int requiredApprovedValue = normalizedItems * 5;
-        if (heldApprovedValue >= requiredApprovedValue) {
+        int requiredPaymentPoints = normalizedItems * FOOD_POINTS_PER_APPROVED_ITEM;
+        int heldPaymentPoints = approvedOrFoodPaymentPoints(held);
+        if (heldPaymentPoints >= requiredPaymentPoints) {
             if (consume) {
-                consumeApprovedItemValue(held, requiredApprovedValue);
+                consumeApprovedOrFoodPaymentPoints(held, requiredPaymentPoints);
             }
             return PaymentResult.ok(formatApprovedItemRequirement(normalizedItems));
         }
@@ -5607,15 +5584,12 @@ public class TameCommands {
         for (String id : TameRegistry.APPROVED_REINCARNATE_ITEMS) {
             names.add(approvedItemDisplayLabel(id) + " [normal]");
         }
-        for (String id : TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS) {
-            names.add(approvedItemDisplayLabel(id) + " [cheap]");
-        }
         names.sort(String::compareToIgnoreCase);
         return String.join(", ", names);
     }
 
     private static boolean isApprovedReincarnationItem(ItemStack stack) {
-        return approvedItemValue(stack) > 0;
+        return approvedItemValue(stack) > 0 || stackFoodPointsPerItem(stack) > 0;
     }
 
     private static int approvedItemValue(ItemStack stack) {
@@ -5630,34 +5604,57 @@ public class TameCommands {
         if (TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id)) {
             return stack.getCount() * 5;
         }
-        if (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id)) {
-            return stack.getCount();
-        }
         return 0;
+    }
+
+    private static int approvedOrFoodPaymentPoints(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return 0;
+        }
+        int approvedItems = approvedItemValue(stack) / 5;
+        if (approvedItems > 0) {
+            return approvedItems * FOOD_POINTS_PER_APPROVED_ITEM;
+        }
+        return stackFoodPointsPerItem(stack) * stack.getCount();
+    }
+
+    private static void consumeApprovedOrFoodPaymentPoints(ItemStack stack, int requiredPaymentPoints) {
+        if (stack == null || stack.isEmpty() || requiredPaymentPoints <= 0) {
+            return;
+        }
+        int approvedItems = approvedItemValue(stack) / 5;
+        if (approvedItems > 0) {
+            int itemsToConsume = (int) Math.ceil(requiredPaymentPoints / (double) FOOD_POINTS_PER_APPROVED_ITEM);
+            stack.shrink(itemsToConsume);
+            return;
+        }
+        int foodPointsPerItem = stackFoodPointsPerItem(stack);
+        if (foodPointsPerItem <= 0) {
+            return;
+        }
+        int itemsToConsume = (int) Math.ceil(requiredPaymentPoints / (double) foodPointsPerItem);
+        stack.shrink(itemsToConsume);
+    }
+
+    private static int stackFoodPointsPerItem(ItemStack stack) {
+        if (stack == null || stack.isEmpty() || !stack.isEdible() || stack.getItem().getFoodProperties() == null) {
+            return 0;
+        }
+        return Math.max(0, stack.getItem().getFoodProperties().getNutrition());
     }
 
     private static void consumeApprovedItemValue(ItemStack stack, int requiredValue) {
         if (stack == null || stack.isEmpty() || requiredValue <= 0) {
             return;
         }
-        ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
-        if (key == null) {
-            return;
-        }
-        String id = key.toString().toLowerCase(Locale.ROOT);
-        int valuePerItem = TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id) ? 5
-                : (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id) ? 1 : 0);
-        if (valuePerItem <= 0) {
-            return;
-        }
-        int itemsToConsume = (int) Math.ceil(requiredValue / (double) valuePerItem);
-        stack.shrink(itemsToConsume);
+        int requiredPaymentPoints = (int) Math.ceil(requiredValue / 5.0D) * FOOD_POINTS_PER_APPROVED_ITEM;
+        consumeApprovedOrFoodPaymentPoints(stack, requiredPaymentPoints);
     }
 
     private static String formatApprovedItemRequirement(int approvedItemCost) {
         int normalizedItems = Math.max(1, approvedItemCost);
-        int cheapItems = normalizedItems * 5;
-        return normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s") + " or " + cheapItems + " cheap approved item" + (cheapItems == 1 ? "" : "s");
+        int foodPoints = normalizedItems * FOOD_POINTS_PER_APPROVED_ITEM;
+        return normalizedItems + " approved item" + (normalizedItems == 1 ? "" : "s") + " or " + foodPoints + " food points";
     }
 
     private static boolean isReincarnationTotem(ItemStack stack) {
@@ -9499,8 +9496,8 @@ public class TameCommands {
 
     private static int recoverPet(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
-        TameData data = findOwnedTame(p.getUUID(), pet);
-        if (data == null) return error(p, "Pet not found.");
+        TameData data = findRecoverRequiredOwnedTame(p.getUUID(), pet);
+        if (data == null) return error(p, "No failed auto-follow tame found with that name.");
         if (data.stored) return error(p, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (isEffectivelyLoaded(source, p, data)) {
             return error(p, "Pet is already loaded/carried. Recover is only for lost/unloaded tames.");
@@ -9510,6 +9507,53 @@ public class TameCommands {
         clearAutoFollowRetryState(data);
         p.sendSystemMessage(Component.literal("Recovered " + data.name + " (no XP cost).").withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int recoverAllPets(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> recoverable = ownedRecoverRequiredTames(player.getUUID());
+        if (recoverable.isEmpty()) {
+            return error(player, "No failed auto-follow tames currently require /tames recover.");
+        }
+        int recoveredCount = 0;
+        int skippedLoaded = 0;
+        int failed = 0;
+        String firstFailure = null;
+        for (TameData data : recoverable) {
+            if (data == null) {
+                continue;
+            }
+            if (data.stored) {
+                failed++;
+                if (firstFailure == null) {
+                    firstFailure = tameDisplayName(data) + " is stored and can only be recovered with admin respawn.";
+                }
+                continue;
+            }
+            if (isEffectivelyLoaded(source, player, data)) {
+                clearAutoFollowRetryState(data);
+                skippedLoaded++;
+                continue;
+            }
+            RecoverResult recovered = recoverPetEntity(source, player, data);
+            if (recovered.entity == null) {
+                failed++;
+                if (firstFailure == null) {
+                    firstFailure = tameDisplayName(data) + ": " + recovered.error;
+                }
+                continue;
+            }
+            clearAutoFollowRetryState(data);
+            recoveredCount++;
+        }
+        if (recoveredCount <= 0 && failed > 0) {
+            return error(player, "Failed to recover tames: " + firstFailure);
+        }
+        player.sendSystemMessage(Component.literal("Recovered " + recoveredCount + " tame(s)." + (skippedLoaded > 0 ? " Cleared " + skippedLoaded + " already-loaded recover flag(s)." : "") + (failed > 0 ? " " + failed + " failed." : "")).withStyle(ChatFormatting.GREEN));
+        if (failed > 0 && firstFailure != null) {
+            player.sendSystemMessage(Component.literal("First failure: " + firstFailure).withStyle(ChatFormatting.YELLOW));
+        }
+        return recoveredCount;
     }
 
     private static int respawnPet(CommandSourceStack source, String pet, ReviveMode mode) {
@@ -11901,6 +11945,40 @@ public class TameCommands {
             return " Auto-follow will retry in 5 seconds.";
         }
         return "";
+    }
+
+    private static boolean requiresRecoverAfterAutoFollowFailure(TameData data) {
+        UUID key = autoFollowKey(data);
+        return key != null && AUTO_FOLLOW_RECOVER_REQUIRED.contains(key);
+    }
+
+    private static List<TameData> ownedRecoverRequiredTames(UUID ownerId) {
+        if (ownerId == null) {
+            return List.of();
+        }
+        List<TameData> out = new ArrayList<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !ownerId.equals(data.ownerUUID)) {
+                continue;
+            }
+            if (!requiresRecoverAfterAutoFollowFailure(data)) {
+                continue;
+            }
+            out.add(data);
+        }
+        return out;
+    }
+
+    private static TameData findRecoverRequiredOwnedTame(UUID ownerId, String name) {
+        if (ownerId == null || name == null || name.isBlank()) {
+            return null;
+        }
+        for (TameData data : ownedRecoverRequiredTames(ownerId)) {
+            if (data != null && data.name != null && data.name.equalsIgnoreCase(name)) {
+                return data;
+            }
+        }
+        return null;
     }
 
     private static boolean matchesDimensionFilter(TameData data, TamableAnimal loaded, ResourceLocation targetDimensionId) {
@@ -14740,7 +14818,7 @@ public class TameCommands {
     }
 
     private static int adminApproveHeldCheapItem(CommandSourceStack source) {
-        return adminApproveHeldItem(source, true);
+        return error(source.getPlayer(), "Cheap-approved items were removed. Use /tames admin approve item.");
     }
 
     private static int adminApproveHeldItem(CommandSourceStack source, boolean cheap) {
@@ -14754,11 +14832,11 @@ public class TameCommands {
             return error(p, "Could not resolve held item id.");
         }
 
-        Set<String> targetSet = cheap ? TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS : TameRegistry.APPROVED_REINCARNATE_ITEMS;
+        Set<String> targetSet = TameRegistry.APPROVED_REINCARNATE_ITEMS;
         boolean added = targetSet.add(itemId);
         TameRegistry.markDirty();
         if (added) {
-            p.sendSystemMessage(Component.literal((cheap ? "Cheap approved reincarnation item: " : "Approved reincarnation item: ") + itemId).withStyle(ChatFormatting.GREEN));
+            p.sendSystemMessage(Component.literal("Approved reincarnation item: " + itemId).withStyle(ChatFormatting.GREEN));
         } else {
             p.sendSystemMessage(Component.literal("Item already approved: " + itemId).withStyle(ChatFormatting.YELLOW));
         }
@@ -14771,22 +14849,17 @@ public class TameCommands {
             return 0;
         }
         List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
-        List<String> cheapApproved = new ArrayList<>(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
         approved.sort(String::compareToIgnoreCase);
-        cheapApproved.sort(String::compareToIgnoreCase);
-        if (approved.isEmpty() && cheapApproved.isEmpty()) {
+        if (approved.isEmpty()) {
             return error(player, "No approved reincarnation items are configured.");
         }
-        player.sendSystemMessage(Component.literal("Approved reincarnation items (" + (approved.size() + cheapApproved.size()) + "):").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("Approved reincarnation items (" + approved.size() + "):").withStyle(ChatFormatting.GOLD));
         for (String id : approved) {
             String label = approvedItemDisplayLabel(id);
             player.sendSystemMessage(Component.literal("- " + label + " [" + id + "]").withStyle(ChatFormatting.GRAY));
         }
-        for (String id : cheapApproved) {
-            String label = approvedItemDisplayLabel(id);
-            player.sendSystemMessage(Component.literal("- " + label + " [" + id + "] (cheap x1/5)").withStyle(ChatFormatting.DARK_GRAY));
-        }
-        return approved.size() + cheapApproved.size();
+        player.sendSystemMessage(Component.literal("Food can also pay: 100 food points = 1 approved item.").withStyle(ChatFormatting.DARK_GRAY));
+        return approved.size();
     }
 
     private static int adminListApprovedItems(CommandSourceStack source) {
@@ -14798,7 +14871,7 @@ public class TameCommands {
     }
 
     private static int adminRemoveCheapApprovedItem(CommandSourceStack source, String rawItemId) {
-        return adminRemoveApprovedItem(source, rawItemId, true);
+        return error(source.getPlayer(), "Cheap-approved items were removed.");
     }
 
     private static int adminRemoveHeldApprovedItem(CommandSourceStack source) {
@@ -14806,7 +14879,7 @@ public class TameCommands {
     }
 
     private static int adminRemoveHeldCheapApprovedItem(CommandSourceStack source) {
-        return adminRemoveHeldApprovedItem(source, true);
+        return error(source.getPlayer(), "Cheap-approved items were removed.");
     }
 
     private static int adminRemoveHeldApprovedItem(CommandSourceStack source, boolean cheap) {
@@ -14822,7 +14895,7 @@ public class TameCommands {
         if (itemId == null || itemId.isBlank()) {
             return error(player, "Could not resolve held item id.");
         }
-        return adminRemoveApprovedItem(source, itemId, cheap);
+        return adminRemoveApprovedItem(source, itemId, false);
     }
 
     private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId, boolean cheap) {
@@ -14834,12 +14907,13 @@ public class TameCommands {
         if (itemId.isBlank()) {
             return error(player, "Provide an item id to remove.");
         }
-        boolean removed = (cheap ? TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS : TameRegistry.APPROVED_REINCARNATE_ITEMS).remove(itemId);
+        boolean removed = TameRegistry.APPROVED_REINCARNATE_ITEMS.remove(itemId)
+                | TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.remove(itemId);
         if (!removed) {
             return error(player, "Item is not approved: " + itemId);
         }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal((cheap ? "Removed cheap approved reincarnation item: " : "Removed approved reincarnation item: ") + itemId).withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Removed approved reincarnation item: " + itemId).withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
@@ -14850,14 +14924,11 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestCheapApprovedReincarnationItems(SuggestionsBuilder builder) {
-        List<String> approved = new ArrayList<>(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
-        approved.sort(String::compareToIgnoreCase);
-        return SharedSuggestionProvider.suggest(approved, builder);
+        return SharedSuggestionProvider.suggest(List.of(), builder);
     }
 
     private static CompletableFuture<Suggestions> suggestAllApprovedReincarnationItems(SuggestionsBuilder builder) {
         List<String> approved = new ArrayList<>(TameRegistry.APPROVED_REINCARNATE_ITEMS);
-        approved.addAll(TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS);
         approved.sort(String::compareToIgnoreCase);
         return SharedSuggestionProvider.suggest(approved, builder);
     }
@@ -17968,43 +18039,41 @@ public class TameCommands {
         if (inventories == null || inventories.isEmpty() || requiredValue <= 0) {
             return false;
         }
-        int totalValue = 0;
+        int requiredPaymentPoints = (int) Math.ceil(requiredValue / 5.0D) * FOOD_POINTS_PER_APPROVED_ITEM;
+        int totalPaymentPoints = 0;
         for (InventoryAccess inventory : inventories) {
             for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-                totalValue += approvedItemValue(inventory.getItem(slot));
-                if (totalValue >= requiredValue) {
+                totalPaymentPoints += approvedOrFoodPaymentPoints(inventory.getItem(slot));
+                if (totalPaymentPoints >= requiredPaymentPoints) {
                     break;
                 }
             }
-            if (totalValue >= requiredValue) {
+            if (totalPaymentPoints >= requiredPaymentPoints) {
                 break;
             }
         }
-        if (totalValue < requiredValue) {
+        if (totalPaymentPoints < requiredPaymentPoints) {
             return false;
         }
-        int remaining = requiredValue;
+        int remaining = requiredPaymentPoints;
         for (InventoryAccess inventory : inventories) {
             for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
                 ItemStack stack = inventory.getItem(slot);
-                int stackValue = approvedItemValue(stack);
-                if (stackValue <= 0) {
+                int stackPoints = approvedOrFoodPaymentPoints(stack);
+                if (stackPoints <= 0) {
                     continue;
                 }
-                ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
-                if (key == null) {
-                    continue;
+                int pointsPerItem;
+                if (approvedItemValue(stack) > 0) {
+                    pointsPerItem = FOOD_POINTS_PER_APPROVED_ITEM;
+                } else {
+                    pointsPerItem = stackFoodPointsPerItem(stack);
                 }
-                String id = key.toString().toLowerCase(Locale.ROOT);
-                int valuePerItem = TameRegistry.APPROVED_REINCARNATE_ITEMS.contains(id) ? 5
-                        : (TameRegistry.CHEAP_APPROVED_REINCARNATE_ITEMS.contains(id) ? 1 : 0);
-                if (valuePerItem <= 0) {
-                    continue;
-                }
-                int itemsNeeded = (int) Math.ceil(remaining / (double) valuePerItem);
+                if (pointsPerItem <= 0) continue;
+                int itemsNeeded = (int) Math.ceil(remaining / (double) pointsPerItem);
                 int toConsume = Math.min(itemsNeeded, stack.getCount());
                 ItemStack removed = inventory.remove(slot, toConsume);
-                remaining -= removed.getCount() * valuePerItem;
+                remaining -= removed.getCount() * pointsPerItem;
             }
         }
         return remaining <= 0;
@@ -20695,6 +20764,17 @@ public class TameCommands {
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             suggestCommandString(b, d.name);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestRecoverablePetNames(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return b.buildFuture();
+        suggestCommandString(b, "all");
+        for (TameData data : ownedRecoverRequiredTames(player.getUUID())) {
+            if (data == null || data.name == null || data.name.isBlank()) continue;
+            suggestCommandString(b, data.name);
         }
         return b.buildFuture();
     }
