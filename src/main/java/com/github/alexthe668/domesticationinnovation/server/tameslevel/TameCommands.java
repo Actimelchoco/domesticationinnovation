@@ -19637,43 +19637,23 @@ public class TameCommands {
             return null;
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        boolean seedA = random.nextBoolean();
-        List<UUID> seedPool = new ArrayList<>(seedA ? availableA : availableB);
-        List<UUID> chasePool = new ArrayList<>(seedA ? availableB : availableA);
-        java.util.Collections.shuffle(seedPool, random);
-        java.util.Collections.shuffle(chasePool, random);
-
-        LinkedHashSet<UUID> seedTeam = new LinkedHashSet<>();
-        LinkedHashSet<UUID> chaseTeam = new LinkedHashSet<>();
-        int desiredSeedCount = (seedPool.size() < 2 || chasePool.size() < 2)
-                ? 1
-                : pickSmallBiasedTeamSize(2, seedPool.size(), random);
-        desiredSeedCount = Math.min(desiredSeedCount, seedPool.size());
-        for (int i = 0; i < desiredSeedCount; i++) {
-            seedTeam.add(seedPool.get(i));
+        List<UUID> all = new ArrayList<>(availableA.size() + availableB.size());
+        all.addAll(availableA);
+        all.addAll(availableB);
+        if (all.size() < 2) {
+            return null;
         }
-
-        double seedPower = sessionPowerTotal(server, seedTeam);
-        if (desiredSeedCount <= 1) {
-            UUID closest = closestPowerParticipant(server, chasePool, seedPower);
-            if (closest != null) {
-                chaseTeam.add(closest);
-            }
-        } else {
-            for (UUID candidate : chasePool) {
-                chaseTeam.add(candidate);
-                if (sessionPowerTotal(server, chaseTeam) >= seedPower) {
-                    break;
-                }
-            }
+        if (random.nextDouble() < teamDeathmatchChance(all.size())) {
+            return createAlternatingMmrRound(server, all);
         }
-        if (chaseTeam.isEmpty() && !chasePool.isEmpty()) {
-            chaseTeam.add(chasePool.get(0));
-        }
-        if (seedA) {
-            return new DuelSessionRound(seedTeam, chaseTeam);
-        }
-        return new DuelSessionRound(chaseTeam, seedTeam);
+        // Duel mode.
+        UUID duelA = availableA.get(random.nextInt(availableA.size()));
+        UUID duelB = availableB.get(random.nextInt(availableB.size()));
+        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+        teamA.add(duelA);
+        teamB.add(duelB);
+        return new DuelSessionRound(teamA, teamB);
     }
 
     private static DuelSessionRound createFfaDuelSessionRound(MinecraftServer server, List<UUID> available) {
@@ -19681,44 +19661,20 @@ public class TameCommands {
             return null;
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        List<UUID> shuffled = new ArrayList<>(available);
-        java.util.Collections.shuffle(shuffled, random);
+        List<UUID> all = new ArrayList<>(available);
+        if (all.size() < 2) {
+            return null;
+        }
+        if (random.nextDouble() < teamDeathmatchChance(all.size())) {
+            return createAlternatingMmrRound(server, all);
+        }
+        // Duel mode.
+        java.util.Collections.shuffle(all, random);
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
-        if (shuffled.size() < 4) {
-            teamA.add(shuffled.get(0));
-            UUID closest = closestPowerParticipant(server, shuffled.subList(1, shuffled.size()), sessionParticipantPower(server, shuffled.get(0)));
-            if (closest == null) {
-                closest = shuffled.get(1);
-            }
-            teamB.add(closest);
-            return new DuelSessionRound(teamA, teamB);
-        }
-        int maxFirstTeamSize = Math.max(2, shuffled.size() / 2);
-        int desiredA = pickSmallBiasedTeamSize(2, maxFirstTeamSize, random);
-        for (int i = 0; i < desiredA; i++) {
-            teamA.add(shuffled.get(i));
-        }
-        double teamAPower = sessionPowerTotal(server, teamA);
-        for (int i = desiredA; i < shuffled.size(); i++) {
-            UUID candidate = shuffled.get(i);
-            if (teamA.contains(candidate)) {
-                continue;
-            }
-            teamB.add(candidate);
-            if (sessionPowerTotal(server, teamB) >= teamAPower) {
-                break;
-            }
-        }
-        if (teamB.isEmpty()) {
-            for (UUID candidate : shuffled) {
-                if (!teamA.contains(candidate)) {
-                    teamB.add(candidate);
-                    break;
-                }
-            }
-        }
-        return teamA.isEmpty() || teamB.isEmpty() ? null : new DuelSessionRound(teamA, teamB);
+        teamA.add(all.get(0));
+        teamB.add(all.get(1));
+        return new DuelSessionRound(teamA, teamB);
     }
 
     private static int pickSmallBiasedTeamSize(int minSize, int maxSize, ThreadLocalRandom random) {
@@ -19739,6 +19695,45 @@ public class TameCommands {
             }
         }
         return max;
+    }
+
+    private static double teamDeathmatchChance(int involvedCount) {
+        int count = Math.max(0, involvedCount);
+        // 69% duel baseline, plus +1% team-deathmatch chance per involved participant.
+        return Math.min(1.0D, 0.31D + 0.01D * count);
+    }
+
+    private static DuelSessionRound createAlternatingMmrRound(MinecraftServer server, List<UUID> participants) {
+        if (participants == null || participants.size() < 2) {
+            return null;
+        }
+        List<UUID> sorted = new ArrayList<>(participants);
+        sorted.sort((a, b) -> {
+            int mmr = Double.compare(sessionParticipantPower(server, b), sessionParticipantPower(server, a));
+            if (mmr != 0) {
+                return mmr;
+            }
+            String sa = a == null ? "" : a.toString();
+            String sb = b == null ? "" : b.toString();
+            return sa.compareTo(sb);
+        });
+        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            UUID id = sorted.get(i);
+            if (id == null) {
+                continue;
+            }
+            if ((i & 1) == 0) {
+                teamA.add(id);
+            } else {
+                teamB.add(id);
+            }
+        }
+        if (teamA.isEmpty() || teamB.isEmpty()) {
+            return null;
+        }
+        return new DuelSessionRound(teamA, teamB);
     }
 
     private static UUID closestPowerParticipant(MinecraftServer server, List<UUID> candidates, double targetPower) {
