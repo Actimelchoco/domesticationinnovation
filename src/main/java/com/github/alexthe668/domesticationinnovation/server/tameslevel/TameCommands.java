@@ -12382,10 +12382,10 @@ public class TameCommands {
         int approvedItemsNeeded = missingTeleports <= 0 ? 0 : (int) Math.ceil(missingTeleports / 10.0D);
         ItemStack held = player.getMainHandItem();
         if (normalizedTeleports > 0 && (availableCredits > 0 || approvedItemsNeeded > 0)) {
-            int requiredApprovedValue = approvedItemsNeeded * 5;
-            if (approvedItemsNeeded == 0 || approvedItemValue(held) >= requiredApprovedValue) {
+            int requiredPaymentPoints = approvedItemsNeeded * FOOD_POINTS_PER_APPROVED_ITEM;
+            if (approvedItemsNeeded == 0 || approvedOrFoodPaymentPoints(held) >= requiredPaymentPoints) {
                 if (approvedItemsNeeded > 0) {
-                    consumeApprovedItemValue(held, requiredApprovedValue);
+                    consumeApprovedOrFoodPaymentPoints(held, requiredPaymentPoints);
                 }
                 int remainingCredits = Math.max(0, availableCredits + approvedItemsNeeded * 10 - normalizedTeleports);
                 TameRegistry.setTeleportApprovedCredits(player.getUUID(), remainingCredits);
