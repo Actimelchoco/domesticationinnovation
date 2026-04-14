@@ -12875,6 +12875,12 @@ public class TameCommands {
     }
 
     private static final List<DuelLeaderboardRankBucket> DUEL_LEADERBOARD_RANKS = List.of(
+            new DuelLeaderboardRankBucket("Technoblade", ChatFormatting.DARK_RED, 5000),
+            new DuelLeaderboardRankBucket("Chuck Norris", ChatFormatting.GOLD, 4500),
+            new DuelLeaderboardRankBucket("Zlatan", ChatFormatting.YELLOW, 4000),
+            new DuelLeaderboardRankBucket("Max Aura", ChatFormatting.AQUA, 3500),
+            new DuelLeaderboardRankBucket("Gigachad", ChatFormatting.RED, 3000),
+            new DuelLeaderboardRankBucket("Zen Level", ChatFormatting.LIGHT_PURPLE, 2500),
             new DuelLeaderboardRankBucket("SSL", ChatFormatting.LIGHT_PURPLE, 1900),
             new DuelLeaderboardRankBucket("GC3", ChatFormatting.RED, 1800),
             new DuelLeaderboardRankBucket("GC2", ChatFormatting.RED, 1700),
@@ -19637,22 +19643,58 @@ public class TameCommands {
             return null;
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        List<UUID> all = new ArrayList<>(availableA.size() + availableB.size());
-        all.addAll(availableA);
-        all.addAll(availableB);
-        if (all.size() < 2) {
+        // Non-FFA session: keep Team A and Team B separated (never mix pools).
+        if (random.nextDouble() < 0.69D) {
+            return createPoolSeparatedOneVOneRound(server, availableA, availableB, random);
+        }
+        return createPoolSeparatedTeamDeathmatchRound(server, availableA, availableB, random);
+    }
+
+    private static DuelSessionRound createPoolSeparatedOneVOneRound(MinecraftServer server, List<UUID> availableA, List<UUID> availableB, ThreadLocalRandom random) {
+        if (availableA == null || availableB == null || availableA.isEmpty() || availableB.isEmpty()) {
             return null;
         }
-        if (random.nextDouble() < teamDeathmatchChance(all.size())) {
-            return createAlternatingMmrRound(server, all);
-        }
-        // Duel mode.
         UUID duelA = availableA.get(random.nextInt(availableA.size()));
-        UUID duelB = availableB.get(random.nextInt(availableB.size()));
+        boolean unfair = random.nextDouble() < 0.05D;
+        UUID duelB;
+        if (unfair) {
+            duelB = availableB.get(random.nextInt(availableB.size()));
+        } else {
+            double targetPower = sessionParticipantPower(server, duelA);
+            duelB = closestPowerParticipant(server, availableB, targetPower);
+            if (duelB == null) {
+                duelB = availableB.get(random.nextInt(availableB.size()));
+            }
+        }
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
         teamA.add(duelA);
         teamB.add(duelB);
+        return new DuelSessionRound(teamA, teamB);
+    }
+
+    private static DuelSessionRound createPoolSeparatedTeamDeathmatchRound(MinecraftServer server, List<UUID> availableA, List<UUID> availableB, ThreadLocalRandom random) {
+        if (availableA == null || availableB == null || availableA.isEmpty() || availableB.isEmpty()) {
+            return null;
+        }
+        int maxPerSide = Math.min(availableA.size(), availableB.size());
+        int minPerSide = maxPerSide >= 2 ? 2 : 1;
+        int perSide = pickSmallBiasedTeamSize(minPerSide, maxPerSide, random);
+        List<UUID> pickA = new ArrayList<>(availableA);
+        List<UUID> pickB = new ArrayList<>(availableB);
+        java.util.Collections.shuffle(pickA, random);
+        java.util.Collections.shuffle(pickB, random);
+        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+        for (int i = 0; i < perSide && i < pickA.size(); i++) {
+            teamA.add(pickA.get(i));
+        }
+        for (int i = 0; i < perSide && i < pickB.size(); i++) {
+            teamB.add(pickB.get(i));
+        }
+        if (teamA.isEmpty() || teamB.isEmpty()) {
+            return null;
+        }
         return new DuelSessionRound(teamA, teamB);
     }
 
@@ -19662,19 +19704,65 @@ public class TameCommands {
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<UUID> all = new ArrayList<>(available);
-        if (all.size() < 2) {
+        double roll = random.nextDouble();
+        if (roll < 0.69D) {
+            return createFfaOneVOneRound(server, all, random);
+        }
+        if (roll < 0.99D) {
+            return createFfaTeamDeathmatchRound(server, all, random);
+        }
+        // 1%: all tames involved, split by highest MMR alternating.
+        return createAlternatingMmrRound(server, all);
+    }
+
+    private static DuelSessionRound createFfaOneVOneRound(MinecraftServer server, List<UUID> available, ThreadLocalRandom random) {
+        if (available == null || available.size() < 2) {
             return null;
         }
-        if (random.nextDouble() < teamDeathmatchChance(all.size())) {
-            return createAlternatingMmrRound(server, all);
+        List<UUID> pool = new ArrayList<>(available);
+        UUID duelA = pool.remove(random.nextInt(pool.size()));
+        if (duelA == null || pool.isEmpty()) {
+            return null;
         }
-        // Duel mode.
-        java.util.Collections.shuffle(all, random);
+        boolean unfair = random.nextDouble() < 0.05D;
+        UUID duelB;
+        if (unfair) {
+            duelB = pool.get(random.nextInt(pool.size()));
+        } else {
+            double targetPower = sessionParticipantPower(server, duelA);
+            duelB = closestPowerParticipant(server, pool, targetPower);
+            if (duelB == null) {
+                duelB = pool.get(random.nextInt(pool.size()));
+            }
+        }
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
-        teamA.add(all.get(0));
-        teamB.add(all.get(1));
+        teamA.add(duelA);
+        teamB.add(duelB);
         return new DuelSessionRound(teamA, teamB);
+    }
+
+    private static DuelSessionRound createFfaTeamDeathmatchRound(MinecraftServer server, List<UUID> available, ThreadLocalRandom random) {
+        if (available == null || available.size() < 2) {
+            return null;
+        }
+        if (available.size() == 2) {
+            LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+            LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+            teamA.add(available.get(0));
+            teamB.add(available.get(1));
+            return new DuelSessionRound(teamA, teamB);
+        }
+        int maxPerSide = Math.max(1, available.size() / 2);
+        int minPerSide = maxPerSide >= 2 ? 2 : 1;
+        int perSide = pickSmallBiasedTeamSize(minPerSide, maxPerSide, random);
+        int total = Math.min(available.size(), perSide * 2);
+        if (total < 2) {
+            return null;
+        }
+        List<UUID> picked = new ArrayList<>(available);
+        java.util.Collections.shuffle(picked, random);
+        return createAlternatingMmrRound(server, picked.subList(0, total));
     }
 
     private static int pickSmallBiasedTeamSize(int minSize, int maxSize, ThreadLocalRandom random) {
@@ -19695,12 +19783,6 @@ public class TameCommands {
             }
         }
         return max;
-    }
-
-    private static double teamDeathmatchChance(int involvedCount) {
-        int count = Math.max(0, involvedCount);
-        // 69% duel baseline, plus +1% team-deathmatch chance per involved participant.
-        return Math.min(1.0D, 0.31D + 0.01D * count);
     }
 
     private static DuelSessionRound createAlternatingMmrRound(MinecraftServer server, List<UUID> participants) {
