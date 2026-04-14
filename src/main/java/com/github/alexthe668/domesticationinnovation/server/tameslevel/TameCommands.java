@@ -3356,10 +3356,14 @@ public class TameCommands {
                     if (pending.autoFollow && data != null) {
                         noteAutoFollowImmediateTeleportFailure(server, data);
                     }
+                    if (data != null) {
+                        markRecoverRequired(data);
+                    }
                     if (!pending.silent) {
+                        String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
                         String message = pending.liveEntityOnly
-                                ? "Failed, use /tames recover."
-                                : "Failed, use /tames recover." + autoFollowRetryMessage(data);
+                                ? "Failed, " + recoverHint
+                                : "Failed, " + recoverHint + autoFollowRetryMessage(data);
                         notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                     }
                     finished.add(entry.getKey());
@@ -3390,10 +3394,14 @@ public class TameCommands {
                 if (pending.autoFollow && data != null) {
                     noteAutoFollowImmediateTeleportFailure(server, data);
                 }
+                if (data != null) {
+                    markRecoverRequired(data);
+                }
                 if (!pending.silent) {
+                    String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
                     String message = pending.liveEntityOnly
-                            ? "Failed, use /tames recover."
-                            : "Failed, use /tames recover." + autoFollowRetryMessage(data);
+                            ? "Failed, " + recoverHint
+                            : "Failed, " + recoverHint + autoFollowRetryMessage(data);
                     notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
                 }
                 finished.add(entry.getKey());
@@ -3957,11 +3965,25 @@ public class TameCommands {
             }
 
             if ((now - request.getTimestamp()) >= UNLOADED_TP_TIMEOUT_TICKS) {
-                owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use /tames recover.").withStyle(ChatFormatting.RED));
+                if (data != null) {
+                    markRecoverRequired(data);
+                }
+                owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use " + recoverCommandForName(request.getNametag()) + ".").withStyle(ChatFormatting.RED));
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
             }
         }
+    }
+
+    private static String recoverCommandForName(String tameName) {
+        String normalized = stripLevelPrefixes(tameName == null ? "" : tameName).replace("\"", "").trim();
+        if (normalized.isBlank()) {
+            return "/tames recover";
+        }
+        if (normalized.indexOf(' ') >= 0) {
+            return "/tames recover \"" + normalized + "\"";
+        }
+        return "/tames recover " + normalized;
     }
 
     private static String successMessageForLanternRequest(LanternRequest request) {
@@ -11917,6 +11939,15 @@ public class TameCommands {
         }
         AUTO_FOLLOW_RETRY_AFTER.remove(key);
         AUTO_FOLLOW_RECOVER_REQUIRED.remove(key);
+    }
+
+    private static void markRecoverRequired(TameData data) {
+        UUID key = autoFollowKey(data);
+        if (key == null) {
+            return;
+        }
+        AUTO_FOLLOW_RETRY_AFTER.remove(key);
+        AUTO_FOLLOW_RECOVER_REQUIRED.add(key);
     }
 
     private static void noteAutoFollowImmediateTeleportFailure(MinecraftServer server, TameData data) {

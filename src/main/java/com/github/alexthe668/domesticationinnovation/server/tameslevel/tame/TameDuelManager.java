@@ -356,16 +356,30 @@ public final class TameDuelManager {
     }
 
     private static void prepareParticipantForDuel(MinecraftServer server, UUID participantId) {
+        resetParticipantCooldownsForDuel(participantId);
         TamableAnimal tame = findLoadedTame(server, participantId);
         if (tame == null || !tame.isAlive()) {
             return;
         }
+        tame.setHealth(tame.getMaxHealth());
         // Prevent vanilla follow-owner recovery from yanking duel tames back to their owner.
         TameCommands.applyMovementOrderCode(tame, 2);
         tame.setOrderedToSit(false);
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
+    }
+
+    private static void resetParticipantCooldownsForDuel(UUID participantId) {
+        if (participantId == null) {
+            return;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data == null || data.cooldowns.isEmpty()) {
+            return;
+        }
+        data.cooldowns.clear();
+        TameRegistry.markDirty();
     }
 
     private static LivingEntity nearestLoadedOpponent(MinecraftServer server, TamableAnimal from, Set<UUID> opponentIds) {
