@@ -354,7 +354,7 @@ public class CommonProxy {
             if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {
                 TameableUtils.syncVisualCollarEnchants(event.getEntity());
             }
-            if (getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame") > 0 && !event.getEntity().level().isClientSide) {
+            if (!event.getEntity().level().isClientSide) {
                 int i = TameableUtils.getImmuneTime(event.getEntity());
                 if (i > 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), i - 1);
