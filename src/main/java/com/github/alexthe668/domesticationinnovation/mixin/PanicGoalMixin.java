@@ -1,7 +1,10 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.goal.PanicGoal;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,6 +29,10 @@ public class PanicGoalMixin {
     private void di_canUse(CallbackInfoReturnable<Boolean> cir){
         if(mob instanceof ModifedToBeTameable mob && mob.isTame()){
             cir.setReturnValue(false);
+            return;
+        }
+        if (shouldBlockFirePanic(mob)) {
+            cir.setReturnValue(false);
         }
     }
 
@@ -38,7 +45,19 @@ public class PanicGoalMixin {
     private void di_canContinueToUse(CallbackInfoReturnable<Boolean> cir){
         if(mob instanceof ModifedToBeTameable mob && mob.isTame()){
             cir.setReturnValue(false);
+            return;
+        }
+        if (shouldBlockFirePanic(mob)) {
+            cir.setReturnValue(false);
         }
 
+    }
+
+    private static boolean shouldBlockFirePanic(PathfinderMob mob) {
+        if (!(mob instanceof TamableAnimal tame) || !tame.isTame() || !mob.isOnFire()) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        return data != null && data.attributeLevels.getOrDefault("fire_resistance", 0) > 0;
     }
 }
