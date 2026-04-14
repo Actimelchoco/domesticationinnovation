@@ -1348,10 +1348,38 @@ public class CommonProxy {
         if (key == null || !"mutantmonsters".equals(key.getNamespace()) || !"creeper_minion".equals(key.getPath())) {
             return;
         }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(tame);
+            if (tlId != null) {
+                data = TameRegistry.getByTlId(tlId);
+            }
+        }
         try {
             Method method = tame.getClass().getMethod("setDestroyBlocks", boolean.class);
             method.setAccessible(true);
             method.invoke(tame, false);
+        } catch (Throwable ignored) {
+        }
+        try {
+            Method getExplosionRadius = tame.getClass().getMethod("getExplosionRadius");
+            Method setExplosionRadius = tame.getClass().getMethod("setExplosionRadius", float.class);
+            getExplosionRadius.setAccessible(true);
+            setExplosionRadius.setAccessible(true);
+            Object radiusObj = getExplosionRadius.invoke(tame);
+            if (!(radiusObj instanceof Number radiusNumber)) {
+                return;
+            }
+            float currentRadius = radiusNumber.floatValue();
+            CompoundTag tag = tame.getPersistentData();
+            float previousBonus = tag.getFloat("diMutantMinionAppliedRadiusBonus");
+            float baseRadius = Math.max(0.0F, currentRadius - previousBonus);
+            float newBonus = data == null ? 0.0F : (float) Math.max(0.0D, data.bonusKnockback);
+            float desiredRadius = Math.max(0.1F, baseRadius + newBonus);
+            if (Math.abs(desiredRadius - currentRadius) > 0.001F) {
+                setExplosionRadius.invoke(tame, desiredRadius);
+            }
+            tag.putFloat("diMutantMinionAppliedRadiusBonus", newBonus);
         } catch (Throwable ignored) {
         }
     }
