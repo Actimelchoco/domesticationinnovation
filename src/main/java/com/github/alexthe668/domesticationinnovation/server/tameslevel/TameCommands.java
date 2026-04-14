@@ -19566,6 +19566,10 @@ public class TameCommands {
                 }
                 continue;
             }
+            // Round ended outside the normal elimination chain; force-close both sides now so
+            // duel snapshots restore immediately instead of waiting for the next duel start.
+            forceEndDuelSessionSide(server, session.currentRoundA);
+            forceEndDuelSessionSide(server, session.currentRoundB);
             teleportDuelSessionIdleTamesHome(server, session, Set.of(), Set.of());
             syncIdleDuelSessionTames(server, session);
             session.currentRoundA = Set.of();
@@ -19575,6 +19579,11 @@ public class TameCommands {
         }
         for (UUID sessionId : endedSessions) {
             ActiveDuelSession removed = ACTIVE_DUEL_SESSIONS.remove(sessionId);
+            if (removed != null) {
+                // Safety cleanup in case any duel entries remained when session ends.
+                forceEndDuelSessionSide(server, removed.poolA);
+                forceEndDuelSessionSide(server, removed.poolB);
+            }
             unregisterActiveDuelSession(server, removed);
             if (removed != null) {
                 notifyDuelSessionOwners(server, removed, Component.literal("Duel session ended because one side no longer has available participants.").withStyle(ChatFormatting.YELLOW));
@@ -19628,7 +19637,6 @@ public class TameCommands {
             return null;
         }
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        boolean oneVOne = random.nextDouble() < 0.70D || availableA.size() < 2 || availableB.size() < 2;
         boolean seedA = random.nextBoolean();
         List<UUID> seedPool = new ArrayList<>(seedA ? availableA : availableB);
         List<UUID> chasePool = new ArrayList<>(seedA ? availableB : availableA);
@@ -19637,14 +19645,16 @@ public class TameCommands {
 
         LinkedHashSet<UUID> seedTeam = new LinkedHashSet<>();
         LinkedHashSet<UUID> chaseTeam = new LinkedHashSet<>();
-        int desiredSeedCount = oneVOne ? 1 : 2 + random.nextInt(Math.max(1, seedPool.size() - 1));
+        int desiredSeedCount = (seedPool.size() < 2 || chasePool.size() < 2)
+                ? 1
+                : pickSmallBiasedTeamSize(2, seedPool.size(), random);
         desiredSeedCount = Math.min(desiredSeedCount, seedPool.size());
         for (int i = 0; i < desiredSeedCount; i++) {
             seedTeam.add(seedPool.get(i));
         }
 
         double seedPower = sessionPowerTotal(server, seedTeam);
-        if (oneVOne) {
+        if (desiredSeedCount <= 1) {
             UUID closest = closestPowerParticipant(server, chasePool, seedPower);
             if (closest != null) {
                 chaseTeam.add(closest);
@@ -19673,10 +19683,9 @@ public class TameCommands {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<UUID> shuffled = new ArrayList<>(available);
         java.util.Collections.shuffle(shuffled, random);
-        boolean oneVOne = random.nextDouble() < 0.70D || shuffled.size() < 4;
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
-        if (oneVOne) {
+        if (shuffled.size() < 4) {
             teamA.add(shuffled.get(0));
             UUID closest = closestPowerParticipant(server, shuffled.subList(1, shuffled.size()), sessionParticipantPower(server, shuffled.get(0)));
             if (closest == null) {
@@ -19686,7 +19695,7 @@ public class TameCommands {
             return new DuelSessionRound(teamA, teamB);
         }
         int maxFirstTeamSize = Math.max(2, shuffled.size() / 2);
-        int desiredA = 2 + random.nextInt(maxFirstTeamSize - 1);
+        int desiredA = pickSmallBiasedTeamSize(2, maxFirstTeamSize, random);
         for (int i = 0; i < desiredA; i++) {
             teamA.add(shuffled.get(i));
         }
@@ -19710,6 +19719,26 @@ public class TameCommands {
             }
         }
         return teamA.isEmpty() || teamB.isEmpty() ? null : new DuelSessionRound(teamA, teamB);
+    }
+
+    private static int pickSmallBiasedTeamSize(int minSize, int maxSize, ThreadLocalRandom random) {
+        int min = Math.max(1, minSize);
+        int max = Math.max(min, maxSize);
+        if (min >= max) {
+            return min;
+        }
+        final double decay = 0.70D;
+        int span = max - min;
+        double totalWeight = (1.0D - Math.pow(decay, span + 1)) / (1.0D - decay);
+        double target = random.nextDouble() * totalWeight;
+        double cumulative = 0.0D;
+        for (int offset = 0; offset <= span; offset++) {
+            cumulative += Math.pow(decay, offset);
+            if (cumulative >= target) {
+                return min + offset;
+            }
+        }
+        return max;
     }
 
     private static UUID closestPowerParticipant(MinecraftServer server, List<UUID> candidates, double targetPower) {
