@@ -12,6 +12,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -86,6 +87,22 @@ public class TameProtectionEvents {
                 return;
             }
             event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onAttackAllowDuelPlayerPvp(LivingAttackEvent event) {
+        if (event == null || !event.isCanceled()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player victim)) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof Player attacker)) {
+            return;
+        }
+        if (TameDuelManager.areDuelOpponents(attacker.getUUID(), victim.getUUID())) {
+            event.setCanceled(false);
         }
     }
 
