@@ -365,10 +365,12 @@ public final class TameDuelManager {
             removeDuelFollowRangeBoost(tame);
             return;
         }
-        TameCommands.applyMovementOrderCode(tame, 2);
-        tame.setOrderedToSit(false);
-        if (tame instanceof IComandableMob commandableMob) {
-            commandableMob.setCommand(0);
+        if (!isLegendaryMonstersParticipant(tame)) {
+            TameCommands.applyMovementOrderCode(tame, 2);
+            tame.setOrderedToSit(false);
+            if (tame instanceof IComandableMob commandableMob) {
+                commandableMob.setCommand(0);
+            }
         }
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = tame.getTarget();
@@ -390,6 +392,14 @@ public final class TameDuelManager {
         } else {
             clearDuelCombatTarget(tame);
         }
+    }
+
+    private static boolean isLegendaryMonstersParticipant(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        String className = tame.getClass().getName();
+        return className != null && className.startsWith("net.miauczel.legendary_monsters.");
     }
 
     private static void maintainTargets(MinecraftServer server, Set<UUID> ownTeam, Set<UUID> enemyTeam) {
