@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.SpawnerTriggerSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
@@ -12,6 +13,7 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.living.MobSpawnEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -135,6 +137,24 @@ public class TameProtectionEvents {
         if (canPlayersBypassFriendlyFire(attacker, victim)) {
             event.setCanceled(false);
         }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onMobSpawnAllowSpawnerTrigger(MobSpawnEvent.FinalizeSpawn event) {
+        if (event == null || !event.isCanceled()) {
+            return;
+        }
+        if (event.getSpawnType() != net.minecraft.world.entity.MobSpawnType.SPAWNER) {
+            return;
+        }
+        if (event.getEntity() == null || event.getEntity().level() == null || event.getEntity().level().isClientSide()) {
+            return;
+        }
+        if (!SpawnerTriggerSupport.hasSpawnerTriggerTameInRange(event.getEntity().level(), new net.minecraft.world.phys.Vec3(event.getX(), event.getY(), event.getZ()), 16.0D)) {
+            return;
+        }
+        event.setSpawnCancelled(false);
+        event.setCanceled(false);
     }
 
     private static boolean canPlayersBypassFriendlyFire(Player attacker, Player victim) {
