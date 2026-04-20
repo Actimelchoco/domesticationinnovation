@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.LegendaryMonstersDuelCompat;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.TamableAnimal;
@@ -27,6 +28,10 @@ public abstract class TameableAnimalMixin extends Animal {
             cancellable = true
     )
     private void di_isAlliedTo(Entity other, CallbackInfoReturnable<Boolean> cir) {
+        if (LegendaryMonstersDuelCompat.shouldTreatAsNotAlliedInDuel(this, other)) {
+            cir.setReturnValue(false);
+            return;
+        }
         if(TameableUtils.hasSameOwnerAs(this, other)){
             cir.setReturnValue(true);
         }

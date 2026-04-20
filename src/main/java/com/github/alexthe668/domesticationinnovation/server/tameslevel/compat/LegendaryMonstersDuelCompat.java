@@ -1,9 +1,11 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.compat;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.UUID;
 
@@ -15,6 +17,21 @@ public final class LegendaryMonstersDuelCompat {
         UUID attackerId = resolveParticipantId(attacker);
         UUID targetId = resolveParticipantId(target);
         return attackerId != null && targetId != null && TameDuelManager.areDuelOpponents(attackerId, targetId);
+    }
+
+    public static boolean shouldTreatAsNotAlliedInDuel(Entity self, Entity other) {
+        if (!shouldAllowFriendlyFireInDuel(self, other)) {
+            return false;
+        }
+        return isLegendaryMonstersEntity(self) || isLegendaryMonstersEntity(other);
+    }
+
+    private static boolean isLegendaryMonstersEntity(Entity entity) {
+        if (entity == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+        return key != null && "legendary_monsters".equals(key.getNamespace());
     }
 
     private static UUID resolveParticipantId(Entity entity) {

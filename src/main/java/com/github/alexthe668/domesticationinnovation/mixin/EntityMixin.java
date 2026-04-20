@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.mixin;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.PsychicWallEntity;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.LegendaryMonstersDuelCompat;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
@@ -59,6 +60,10 @@ public class EntityMixin {
             cancellable = true
     )
     protected void di_isAlliedTo(Entity other, CallbackInfoReturnable<Boolean> cir) {
+        if (LegendaryMonstersDuelCompat.shouldTreatAsNotAlliedInDuel((Entity) (Object) this, other)) {
+            cir.setReturnValue(false);
+            return;
+        }
         if(TameableUtils.isTamed(other) && TameableUtils.isTamed((Entity)(Object)this) && TameableUtils.hasSameOwnerAs((LivingEntity) other, (Entity)(Object)this)){
             cir.setReturnValue(true);
         }
