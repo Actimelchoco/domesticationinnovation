@@ -11247,11 +11247,16 @@ public class TameCommands {
     }
 
     private static RecoverResult recoverPetEntityAtLocation(ServerPlayer owner, SpawnTarget target, TameData data) {
-        if (owner == null || target == null || target.level == null || target.pos == null || data == null) {
+        if (target == null || target.level == null || target.pos == null || data == null) {
             return RecoverResult.fail("invalid context");
         }
+        MinecraftServer server = target.level.getServer();
+        UUID resolvedOwnerId = owner != null ? owner.getUUID() : data.ownerUUID;
+        if (resolvedOwnerId == null) {
+            return RecoverResult.fail("missing owner");
+        }
         logRebuildTrace("recoverPetEntityAtLocation.begin", data,
-                "owner=" + owner.getUUID() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
+                "owner=" + resolvedOwnerId + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
         clearGuardianAnchor(data);
         if (isDeadEntry(data.uuid)) {
@@ -11259,7 +11264,7 @@ public class TameCommands {
             return RecoverResult.fail("tame is marked dead");
         }
         String logicalKey = logicalTameKey(data);
-        if (!logicalKey.isBlank() && hasLoadedLogicalDuplicate(owner.getServer(), data, logicalKey)) {
+        if (!logicalKey.isBlank() && hasLoadedLogicalDuplicate(server, data, logicalKey)) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "duplicate already loaded logicalKey=" + logicalKey);
             return RecoverResult.fail("duplicate already loaded");
         }
@@ -11294,7 +11299,7 @@ public class TameCommands {
         recovered.setUUID(data.uuid);
         recovered.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceTamedOwnerPreserveCollar(recovered, owner.getUUID());
+        enforceTamedOwnerPreserveCollar(recovered, resolvedOwnerId);
 
         if (!target.level.addFreshEntity(recovered)) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
@@ -11308,7 +11313,8 @@ public class TameCommands {
         }
         finalizeRespawnState(recovered, data);
 
-        data.ownerUUID = owner.getUUID();
+        data.ownerUUID = resolvedOwnerId;
+        data.stored = false;
         TameRegistry.bindEntityToData(recovered, data);
         data.lastKnownDimension = recovered.level().dimension().location().toString();
         data.lastKnownX = recovered.blockPosition().getX();
@@ -19813,6 +19819,7 @@ public class TameCommands {
             if (session == null) {
                 continue;
             }
+            refreshDuelSessionParticipantActivity(session);
             if (now >= session.nextIdleSitSyncTick) {
                 syncIdleDuelSessionTames(server, session);
                 session.nextIdleSitSyncTick = now + 20L;
@@ -19857,6 +19864,29 @@ public class TameCommands {
             if (removed != null) {
                 notifyDuelSessionOwners(server, removed, Component.literal("Duel session ended because one side no longer has available participants.").withStyle(ChatFormatting.YELLOW));
             }
+        }
+    }
+
+    private static void refreshDuelSessionParticipantActivity(ActiveDuelSession session) {
+        if (session == null) {
+            return;
+        }
+        boolean changed = false;
+        Set<UUID> participants = new LinkedHashSet<>();
+        participants.addAll(session.poolA);
+        participants.addAll(session.poolB);
+        participants.addAll(session.currentRoundA);
+        participants.addAll(session.currentRoundB);
+        for (UUID participantId : participants) {
+            TameData data = TameRegistry.get(participantId);
+            if (data == null || data.dead || !data.stored) {
+                continue;
+            }
+            data.stored = false;
+            changed = true;
+        }
+        if (changed) {
+            TameRegistry.markDirty();
         }
     }
 
@@ -20362,9 +20392,6 @@ public class TameCommands {
                 }
                 TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
                 if (tame == null || !tame.isAlive()) {
-                    if (owner == null) {
-                        continue;
-                    }
                     applySessionSnapshotState(data, snapshot);
                     RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
                     TamableAnimal rebuilt = recovered.entity;
@@ -20519,16 +20546,17 @@ public class TameCommands {
             return;
         }
         ServerPlayer owner = ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
-        if (owner == null) {
-            return;
-        }
         for (UUID participantId : activeRound) {
             if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
                 continue;
             }
             TameData data = TameRegistry.get(participantId);
-            if (data == null || data.dead || data.stored || hasPendingImmediateChunkTeleport(data)) {
+            if (data == null || data.dead || hasPendingImmediateChunkTeleport(data)) {
                 continue;
+            }
+            if (data.stored) {
+                data.stored = false;
+                TameRegistry.markDirty();
             }
             TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
             if (loaded != null && loaded.isAlive()) {
