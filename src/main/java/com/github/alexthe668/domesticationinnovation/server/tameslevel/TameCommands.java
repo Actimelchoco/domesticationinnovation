@@ -19979,25 +19979,29 @@ public class TameCommands {
         if (availableA == null || availableB == null || availableA.isEmpty() || availableB.isEmpty()) {
             return null;
         }
-        int maxPerSide = Math.min(availableA.size(), availableB.size());
-        int minPerSide = maxPerSide >= 2 ? 2 : 1;
-        int perSide = pickSmallBiasedTeamSize(minPerSide, maxPerSide, random);
+        int strategy = rollTeamDeathmatchStrategy(random);
+        boolean firstIsA = random.nextBoolean();
+        List<UUID> firstPool = firstIsA ? availableA : availableB;
+        List<UUID> secondPool = firstIsA ? availableB : availableA;
+        DuelSessionRound built = buildPoolSeparatedTeamDeathmatchByStrategy(server, firstPool, secondPool, random, strategy);
+        if (built != null && !built.teamA().isEmpty() && !built.teamB().isEmpty()) {
+            if (firstIsA) {
+                return built;
+            }
+            return new DuelSessionRound(new LinkedHashSet<>(built.teamB()), new LinkedHashSet<>(built.teamA()));
+        }
+
+        int perSide = Math.max(1, Math.min(availableA.size(), availableB.size()));
         List<UUID> pickA = new ArrayList<>(availableA);
         List<UUID> pickB = new ArrayList<>(availableB);
         java.util.Collections.shuffle(pickA, random);
         java.util.Collections.shuffle(pickB, random);
-        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
-        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
-        for (int i = 0; i < perSide && i < pickA.size(); i++) {
-            teamA.add(pickA.get(i));
-        }
-        for (int i = 0; i < perSide && i < pickB.size(); i++) {
-            teamB.add(pickB.get(i));
-        }
-        if (teamA.isEmpty() || teamB.isEmpty()) {
+        LinkedHashSet<UUID> fallbackA = pickRandomMembers(pickA, perSide, random);
+        LinkedHashSet<UUID> fallbackB = pickRandomMembers(pickB, perSide, random);
+        if (fallbackA.isEmpty() || fallbackB.isEmpty()) {
             return null;
         }
-        return new DuelSessionRound(teamA, teamB);
+        return new DuelSessionRound(fallbackA, fallbackB);
     }
 
     private static DuelSessionRound createFfaDuelSessionRound(MinecraftServer server, List<UUID> available) {
@@ -20133,16 +20137,12 @@ public class TameCommands {
             teamB.add(available.get(1));
             return new DuelSessionRound(teamA, teamB);
         }
-        int maxPerSide = Math.max(1, available.size() / 2);
-        int minPerSide = maxPerSide >= 2 ? 2 : 1;
-        int perSide = pickSmallBiasedTeamSize(minPerSide, maxPerSide, random);
-        int total = Math.min(available.size(), perSide * 2);
-        if (total < 2) {
-            return null;
+        int strategy = rollTeamDeathmatchStrategy(random);
+        DuelSessionRound built = buildFfaTeamDeathmatchByStrategy(server, available, random, strategy);
+        if (built != null && !built.teamA().isEmpty() && !built.teamB().isEmpty()) {
+            return built;
         }
-        List<UUID> picked = new ArrayList<>(available);
-        java.util.Collections.shuffle(picked, random);
-        return createAlternatingMmrRound(server, picked.subList(0, total));
+        return createAlternatingMmrRound(server, available);
     }
 
     private static int pickSmallBiasedTeamSize(int minSize, int maxSize, ThreadLocalRandom random) {
@@ -20209,6 +20209,233 @@ public class TameCommands {
             }
         }
         return best;
+    }
+
+    private static int rollTeamDeathmatchStrategy(ThreadLocalRandom random) {
+        double roll = random.nextDouble();
+        if (roll < 0.50D) {
+            return 1; // +-150, expand by 150
+        }
+        if (roll < 0.70D) {
+            return 2; // random pool/2 first-team size
+        }
+        if (roll < 0.90D) {
+            return 3; // +-500, expand by 500
+        }
+        if (roll < 0.99D) {
+            return 4; // +-1000, expand by 1000
+        }
+        return 5; // +-2000, expand by 2000
+    }
+
+    private static DuelSessionRound buildPoolSeparatedTeamDeathmatchByStrategy(MinecraftServer server, List<UUID> firstPool, List<UUID> secondPool, ThreadLocalRandom random, int strategy) {
+        if (firstPool == null || secondPool == null || firstPool.isEmpty() || secondPool.isEmpty()) {
+            return null;
+        }
+        LinkedHashSet<UUID> firstTeam;
+        List<UUID> secondCandidatePool;
+        if (strategy == 2) {
+            int firstMax = Math.max(1, firstPool.size() / 2);
+            int firstCount = 1 + random.nextInt(firstMax);
+            firstTeam = pickRandomMembers(firstPool, firstCount, random);
+            secondCandidatePool = new ArrayList<>(secondPool);
+        } else {
+            double baseRange = teamDeathmatchBaseRange(strategy);
+            double expandStep = baseRange;
+            UUID anchor = firstPool.get(random.nextInt(firstPool.size()));
+            double anchorPower = sessionParticipantPower(server, anchor);
+            List<UUID> firstInRange = expandToMinimumRangeCandidates(server, firstPool, anchorPower, baseRange, expandStep, 3);
+            if (firstInRange.isEmpty()) {
+                return null;
+            }
+            int firstMax = Math.max(1, (firstInRange.size() + 1) / 2);
+            int firstCount = 1 + random.nextInt(firstMax);
+            firstTeam = pickRandomMembers(firstInRange, firstCount, random);
+
+            double firstAvgPower = averageParticipantPower(server, new ArrayList<>(firstTeam));
+            UUID secondAnchor = closestPowerParticipant(server, secondPool, firstAvgPower);
+            if (secondAnchor == null) {
+                secondAnchor = secondPool.get(random.nextInt(secondPool.size()));
+            }
+            double secondAnchorPower = sessionParticipantPower(server, secondAnchor);
+            secondCandidatePool = expandToMinimumRangeCandidates(server, secondPool, secondAnchorPower, baseRange, expandStep, 3);
+        }
+        if (firstTeam.isEmpty()) {
+            return null;
+        }
+        double firstTeamPower = sessionPowerTotal(server, firstTeam);
+        LinkedHashSet<UUID> secondTeam = fillTeamByTeamFillerFormula(server, secondCandidatePool, firstTeam.size(), firstTeamPower, random);
+        if (secondTeam.isEmpty()) {
+            return null;
+        }
+        return new DuelSessionRound(firstTeam, secondTeam);
+    }
+
+    private static DuelSessionRound buildFfaTeamDeathmatchByStrategy(MinecraftServer server, List<UUID> available, ThreadLocalRandom random, int strategy) {
+        if (available == null || available.size() < 2) {
+            return null;
+        }
+        LinkedHashSet<UUID> firstTeam;
+        if (strategy == 2) {
+            int firstMax = Math.max(1, available.size() / 2);
+            int firstCount = 1 + random.nextInt(firstMax);
+            firstTeam = pickRandomMembers(available, firstCount, random);
+        } else {
+            double baseRange = teamDeathmatchBaseRange(strategy);
+            double expandStep = baseRange;
+            UUID anchor = available.get(random.nextInt(available.size()));
+            double anchorPower = sessionParticipantPower(server, anchor);
+            List<UUID> inRange = expandToMinimumRangeCandidates(server, available, anchorPower, baseRange, expandStep, 3);
+            if (inRange.isEmpty()) {
+                return null;
+            }
+            int firstMax = Math.max(1, (inRange.size() + 1) / 2);
+            int firstCount = 1 + random.nextInt(firstMax);
+            firstTeam = pickRandomMembers(inRange, firstCount, random);
+        }
+        if (firstTeam.isEmpty()) {
+            return null;
+        }
+        List<UUID> secondPool = new ArrayList<>(available);
+        secondPool.removeAll(firstTeam);
+        if (secondPool.isEmpty()) {
+            return null;
+        }
+        List<UUID> secondCandidatePool;
+        if (strategy == 2) {
+            secondCandidatePool = secondPool;
+        } else {
+            double baseRange = teamDeathmatchBaseRange(strategy);
+            double expandStep = baseRange;
+            double firstAvgPower = averageParticipantPower(server, new ArrayList<>(firstTeam));
+            UUID secondAnchor = closestPowerParticipant(server, secondPool, firstAvgPower);
+            if (secondAnchor == null) {
+                secondAnchor = secondPool.get(random.nextInt(secondPool.size()));
+            }
+            double secondAnchorPower = sessionParticipantPower(server, secondAnchor);
+            secondCandidatePool = expandToMinimumRangeCandidates(server, secondPool, secondAnchorPower, baseRange, expandStep, 3);
+        }
+        double firstPower = sessionPowerTotal(server, firstTeam);
+        LinkedHashSet<UUID> secondTeam = fillTeamByTeamFillerFormula(server, secondCandidatePool, firstTeam.size(), firstPower, random);
+        if (secondTeam.isEmpty()) {
+            return null;
+        }
+        return new DuelSessionRound(firstTeam, secondTeam);
+    }
+
+    private static double teamDeathmatchBaseRange(int strategy) {
+        return switch (strategy) {
+            case 1 -> 150.0D;
+            case 3 -> 500.0D;
+            case 4 -> 1000.0D;
+            case 5 -> 2000.0D;
+            default -> 0.0D;
+        };
+    }
+
+    private static List<UUID> expandToMinimumRangeCandidates(MinecraftServer server, List<UUID> pool, double anchorPower, double baseRange, double expandStep, int minimumCount) {
+        List<UUID> source = pool == null ? List.of() : pool;
+        if (source.isEmpty()) {
+            return new ArrayList<>();
+        }
+        double range = Math.max(1.0D, baseRange);
+        double step = Math.max(1.0D, expandStep);
+        int targetMin = Math.max(1, Math.min(minimumCount, source.size()));
+        List<UUID> inRange = participantsWithinPowerRange(server, source, anchorPower, range);
+        while (inRange.size() < targetMin && inRange.size() < source.size()) {
+            range += step;
+            inRange = participantsWithinPowerRange(server, source, anchorPower, range);
+        }
+        if (inRange.isEmpty()) {
+            return new ArrayList<>(source);
+        }
+        return inRange;
+    }
+
+    private static List<UUID> participantsWithinPowerRange(MinecraftServer server, List<UUID> pool, double anchorPower, double range) {
+        List<UUID> inRange = new ArrayList<>();
+        if (pool == null || pool.isEmpty()) {
+            return inRange;
+        }
+        double maxDiff = Math.max(0.0D, range);
+        for (UUID id : pool) {
+            if (id == null) {
+                continue;
+            }
+            if (Math.abs(sessionParticipantPower(server, id) - anchorPower) <= maxDiff) {
+                inRange.add(id);
+            }
+        }
+        return inRange;
+    }
+
+    private static LinkedHashSet<UUID> pickRandomMembers(List<UUID> pool, int count, ThreadLocalRandom random) {
+        LinkedHashSet<UUID> picked = new LinkedHashSet<>();
+        if (pool == null || pool.isEmpty() || count <= 0) {
+            return picked;
+        }
+        List<UUID> shuffled = new ArrayList<>(pool);
+        java.util.Collections.shuffle(shuffled, random);
+        int limit = Math.min(count, shuffled.size());
+        for (int i = 0; i < limit; i++) {
+            UUID id = shuffled.get(i);
+            if (id != null) {
+                picked.add(id);
+            }
+        }
+        return picked;
+    }
+
+    private static LinkedHashSet<UUID> fillTeamByTeamFillerFormula(MinecraftServer server, List<UUID> candidates, int enemyTeamSize, double enemyTeamPower, ThreadLocalRandom random) {
+        LinkedHashSet<UUID> filled = new LinkedHashSet<>();
+        if (candidates == null || candidates.isEmpty()) {
+            return filled;
+        }
+        List<UUID> remaining = new ArrayList<>(candidates);
+        java.util.Collections.shuffle(remaining, random);
+        boolean fillByCount = random.nextBoolean();
+        if (fillByCount) {
+            int targetSize = Math.max(1, enemyTeamSize);
+            while (filled.size() < targetSize && !remaining.isEmpty()) {
+                UUID next = remaining.remove(remaining.size() - 1);
+                if (next != null) {
+                    filled.add(next);
+                }
+            }
+        } else {
+            double power = 0.0D;
+            while (power <= enemyTeamPower && !remaining.isEmpty()) {
+                UUID next = remaining.remove(remaining.size() - 1);
+                if (next == null || filled.contains(next)) {
+                    continue;
+                }
+                filled.add(next);
+                power += sessionParticipantPower(server, next);
+            }
+        }
+        if (filled.isEmpty() && !remaining.isEmpty()) {
+            UUID next = remaining.remove(remaining.size() - 1);
+            if (next != null) {
+                filled.add(next);
+            }
+        }
+        return filled;
+    }
+
+    private static double averageParticipantPower(MinecraftServer server, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0.0D;
+        }
+        double total = 0.0D;
+        int count = 0;
+        for (UUID id : ids) {
+            if (id == null) {
+                continue;
+            }
+            total += sessionParticipantPower(server, id);
+            count++;
+        }
+        return count <= 0 ? 0.0D : total / (double) count;
     }
 
     private static List<UUID> availableSessionParticipants(MinecraftServer server, Set<UUID> pool) {

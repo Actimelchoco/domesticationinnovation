@@ -12,6 +12,8 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -101,9 +103,49 @@ public class TameProtectionEvents {
         if (!(event.getSource().getEntity() instanceof Player attacker)) {
             return;
         }
-        if (TameDuelManager.areDuelOpponents(attacker.getUUID(), victim.getUUID())) {
+        if (canPlayersBypassFriendlyFire(attacker, victim)) {
             event.setCanceled(false);
         }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onHurtAllowDuelPlayerPvp(LivingHurtEvent event) {
+        if (event == null || !event.isCanceled()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player victim)) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof Player attacker)) {
+            return;
+        }
+        if (canPlayersBypassFriendlyFire(attacker, victim)) {
+            event.setCanceled(false);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onAttackEntityAllowDuelPlayerPvp(AttackEntityEvent event) {
+        if (event == null || !event.isCanceled()) {
+            return;
+        }
+        Player attacker = event.getEntity();
+        if (!(event.getTarget() instanceof Player victim)) {
+            return;
+        }
+        if (canPlayersBypassFriendlyFire(attacker, victim)) {
+            event.setCanceled(false);
+        }
+    }
+
+    private static boolean canPlayersBypassFriendlyFire(Player attacker, Player victim) {
+        if (attacker == null || victim == null) {
+            return false;
+        }
+        UUID attackerId = attacker.getUUID();
+        UUID victimId = victim.getUUID();
+        return TameDuelManager.areDuelOpponents(attackerId, victimId)
+                || TameDuelManager.areDuelOwnersOpponents(attackerId, victimId);
     }
 
     @SubscribeEvent

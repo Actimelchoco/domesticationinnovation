@@ -177,6 +177,22 @@ public final class TameDuelManager {
         return attackerTeamA != targetTeamA;
     }
 
+    public static synchronized boolean areDuelOwnersOpponents(UUID attackerId, UUID targetId) {
+        if (attackerId == null || targetId == null || attackerId.equals(targetId)) {
+            return false;
+        }
+        for (DuelBattle battle : BATTLE_BY_ID.values()) {
+            if (battle == null) {
+                continue;
+            }
+            if ((attackerId.equals(battle.ownerA) && targetId.equals(battle.ownerB))
+                    || (attackerId.equals(battle.ownerB) && targetId.equals(battle.ownerA))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static synchronized boolean isEntityInDuel(UUID entityId) {
         return entityId != null && BATTLE_ID_BY_ENTITY.containsKey(entityId);
     }
