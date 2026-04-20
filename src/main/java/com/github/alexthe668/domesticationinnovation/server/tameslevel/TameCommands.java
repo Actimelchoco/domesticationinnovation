@@ -1599,6 +1599,20 @@ public class TameCommands {
                                         .executes(ctx -> duelSessionInbox(ctx.getSource())))
                                 .then(Commands.literal("ff")
                                         .executes(ctx -> duelSessionForfeit(ctx.getSource())))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionAddSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
+                                .then(Commands.literal("pull")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionPullSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
                                         .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                         .executes(ctx -> duelSessionCompact(
@@ -1624,6 +1638,20 @@ public class TameCommands {
                                         .executes(ctx -> duelSessionFfaInbox(ctx.getSource())))
                                 .then(Commands.literal("ff")
                                         .executes(ctx -> duelSessionForfeit(ctx.getSource())))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionAddSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
+                                .then(Commands.literal("pull")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> duelSessionPullSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
                                 .then(Commands.argument("selection", StringArgumentType.greedyString())
                                         .suggests((ctx, b) -> suggestCompactDuelSessionFfaSelection(ctx.getSource(), b))
                                         .executes(ctx -> duelSessionFfaCompact(
@@ -6764,6 +6792,147 @@ public class TameCommands {
             notifyDuelSessionOwners(source.getServer(), session, Component.literal("Duel session ended.").withStyle(ChatFormatting.YELLOW));
         }
         return 1;
+    }
+
+    private static int duelSessionAddSelection(CommandSourceStack source, String selectionSpec) {
+        return duelSessionModifySelection(source, selectionSpec, true);
+    }
+
+    private static int duelSessionPullSelection(CommandSourceStack source, String selectionSpec) {
+        return duelSessionModifySelection(source, selectionSpec, false);
+    }
+
+    private static int duelSessionModifySelection(CommandSourceStack source, String selectionSpec, boolean add) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        ActiveDuelSession session = getActiveDuelSession(player.getUUID());
+        if (session == null) {
+            return error(player, "No active duel session to modify.");
+        }
+        CompactDuelSideParseResult parsed = parseCompactDuelSide(source, player, selectionSpec);
+        if (!parsed.error.isBlank()) {
+            return error(player, parsed.error);
+        }
+        if (!parsed.targetPlayerNames.isEmpty()) {
+            return error(player, "Selection cannot include other players.");
+        }
+        TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
+        if (!resolved.error.isBlank()) {
+            return error(player, resolved.error);
+        }
+        Set<UUID> selectedIds = collectLivingEntityIds(resolved.members);
+        selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+        if (selectedIds.isEmpty()) {
+            return error(player, "No loaded/alive tames matched that selection.");
+        }
+
+        boolean ffa = session.freeForAll;
+        boolean sameOwnerRegular = !ffa && Objects.equals(session.ownerA, session.ownerB);
+        if (add && !ffa && !sameOwnerRegular
+                && !player.getUUID().equals(session.ownerA)
+                && !player.getUUID().equals(session.ownerB)) {
+            return error(player, "You are not one of the duel session owners.");
+        }
+
+        Set<UUID> ownPool = ffa
+                ? session.poolA
+                : player.getUUID().equals(session.ownerA) ? session.poolA
+                : player.getUUID().equals(session.ownerB) ? session.poolB
+                : null;
+        Set<UUID> otherPool = ffa
+                ? Set.of()
+                : ownPool == session.poolA ? session.poolB : session.poolA;
+
+        int changed = 0;
+        int blockedActive = 0;
+        int blockedOtherSide = 0;
+        int skipped = 0;
+
+        for (UUID participantId : selectedIds) {
+            if (participantId == null) {
+                continue;
+            }
+            if (add) {
+                if (sameOwnerRegular) {
+                    if (session.poolA.contains(participantId) || session.poolB.contains(participantId)) {
+                        skipped++;
+                        continue;
+                    }
+                    Set<UUID> targetPool = session.poolA.size() <= session.poolB.size() ? session.poolA : session.poolB;
+                    targetPool.add(participantId);
+                    captureDuelSessionSnapshot(source.getServer(), session, participantId);
+                    changed++;
+                    continue;
+                }
+                if (ownPool == null) {
+                    skipped++;
+                    continue;
+                }
+                if (ownPool.contains(participantId)) {
+                    skipped++;
+                    continue;
+                }
+                if (!otherPool.isEmpty() && otherPool.contains(participantId)) {
+                    blockedOtherSide++;
+                    continue;
+                }
+                ownPool.add(participantId);
+                captureDuelSessionSnapshot(source.getServer(), session, participantId);
+                changed++;
+            } else {
+                boolean inCurrentRound = session.currentRoundA.contains(participantId) || session.currentRoundB.contains(participantId);
+                if (inCurrentRound && TameDuelManager.isEntityInDuel(participantId)) {
+                    blockedActive++;
+                    continue;
+                }
+                boolean removed;
+                if (sameOwnerRegular) {
+                    removed = session.poolA.remove(participantId) || session.poolB.remove(participantId);
+                } else if (ownPool != null) {
+                    removed = ownPool.remove(participantId);
+                } else {
+                    removed = false;
+                }
+                if (removed) {
+                    session.currentRoundA = removeFromSet(session.currentRoundA, participantId);
+                    session.currentRoundB = removeFromSet(session.currentRoundB, participantId);
+                    session.idleSitHoldUntilTick.remove(participantId);
+                    changed++;
+                } else {
+                    skipped++;
+                }
+            }
+        }
+
+        if (changed > 0) {
+            teleportDuelSessionIdleTamesHome(source.getServer(), session, session.currentRoundA, session.currentRoundB);
+            syncIdleDuelSessionTames(source.getServer(), session);
+        }
+
+        String action = add ? "Added" : "Pulled";
+        StringBuilder message = new StringBuilder(action).append(" ").append(changed).append(" tame(s).");
+        if (blockedActive > 0) {
+            message.append(" ").append(blockedActive).append(" blocked (currently in a duel round).");
+        }
+        if (blockedOtherSide > 0) {
+            message.append(" ").append(blockedOtherSide).append(" blocked (other side pool).");
+        }
+        if (skipped > 0) {
+            message.append(" ").append(skipped).append(" unchanged.");
+        }
+        player.sendSystemMessage(Component.literal(message.toString()).withStyle(changed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return changed > 0 ? 1 : 0;
+    }
+
+    private static Set<UUID> removeFromSet(Set<UUID> base, UUID id) {
+        if (base == null || base.isEmpty() || id == null || !base.contains(id)) {
+            return base == null ? Set.of() : base;
+        }
+        LinkedHashSet<UUID> updated = new LinkedHashSet<>(base);
+        updated.remove(id);
+        return updated.isEmpty() ? Set.of() : Set.copyOf(updated);
     }
 
     private static boolean tryForfeitCurrentSessionRound(CommandSourceStack source, ServerPlayer player) {
