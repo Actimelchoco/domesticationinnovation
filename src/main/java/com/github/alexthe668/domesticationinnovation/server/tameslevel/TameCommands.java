@@ -161,6 +161,11 @@ public class TameCommands {
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final double DUEL_SESSION_ARENA_MAX_DRIFT_SQR = 56.0D * 56.0D;
+    private static final UUID RANKED_SESSION_OWNER_A = UUID.fromString("8ca9f9dd-cdc9-4d67-98aa-5f6ef6d76013");
+    private static final UUID RANKED_SESSION_OWNER_B = UUID.fromString("a9129d8e-1f49-40ce-aee0-27ec9dd6f483");
+    private static String RANKED_ARENA_NAME = "";
+    private static final LinkedHashSet<UUID> RANKED_POOL = new LinkedHashSet<>();
+    private static ActiveDuelSession RANKED_DUEL_SESSION;
     private static final String TAG_GUARDIAN_TOOL_ORDER = "DIGuardianToolOrder";
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
@@ -663,6 +668,7 @@ public class TameCommands {
         private final UUID ownerB;
         private final String arenaName;
         private final boolean freeForAll;
+        private final boolean ranked;
         private final LinkedHashSet<UUID> sessionPlayers;
         private final LinkedHashSet<UUID> poolA;
         private final LinkedHashSet<UUID> poolB;
@@ -679,12 +685,13 @@ public class TameCommands {
         private long nextRoundAtTick = -1L;
         private long nextIdleSitSyncTick = 0L;
 
-        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> sessionPlayers, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName, boolean freeForAll) {
+        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> sessionPlayers, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName, boolean freeForAll, boolean ranked) {
             this.sessionId = sessionId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
             this.arenaName = arenaName == null ? "" : arenaName;
             this.freeForAll = freeForAll;
+            this.ranked = ranked;
             this.sessionPlayers = new LinkedHashSet<>(sessionPlayers == null ? Set.of(ownerA, ownerB) : sessionPlayers);
             this.poolA = new LinkedHashSet<>(poolA);
             this.poolB = new LinkedHashSet<>(poolB);
@@ -1658,6 +1665,22 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "selection")
                                         ))))
+                        .then(Commands.literal("ranked")
+                                .executes(ctx -> rankedStatus(ctx.getSource()))
+                                .then(Commands.literal("add")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> rankedAddSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
+                                .then(Commands.literal("pull")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> rankedPullSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                )))))
                                 .then(Commands.literal("duelTeamOld")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
@@ -2959,6 +2982,25 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         IntegerArgumentType.getInteger(ctx, "minutes")
                                                 ))))
+                                .then(Commands.literal("ranked")
+                                        .executes(ctx -> adminRankedStatus(ctx.getSource()))
+                                        .then(Commands.literal("setArena")
+                                                .then(Commands.argument("arenaName", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestArenaNamesIncludingRanked(ctx.getSource(), b))
+                                                        .executes(ctx -> adminRankedSetArena(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "arenaName")
+                                                        ))))
+                                        .then(Commands.literal("clearArena")
+                                                .executes(ctx -> adminRankedClearArena(ctx.getSource())))
+                                        .then(Commands.literal("setA")
+                                                .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "A")))
+                                        .then(Commands.literal("setB")
+                                                .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "B")))
+                                        .then(Commands.literal("setWaitingA")
+                                                .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "waitingA")))
+                                        .then(Commands.literal("setWaitingB")
+                                                .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "waitingB"))))
                                 .then(Commands.literal("debug")
                                         .executes(ctx -> adminDebugStatus(ctx.getSource()))
                                         .then(Commands.literal("abilityUsed")
@@ -3353,6 +3395,7 @@ public class TameCommands {
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
         TamePerformanceProfiler.run("system.morning_registry_sweep", () -> processMorningRegistrySweep(server));
         TamePerformanceProfiler.run("system.pending_morning_lantern_recalls", () -> processPendingMorningLanternRecalls(server));
+        TamePerformanceProfiler.run("system.ranked_session_ensure", () -> ensureRankedSessionRunning(server));
         TamePerformanceProfiler.run("system.duel_sessions", () -> processDuelSessions(server));
     }
 
@@ -6313,6 +6356,10 @@ public class TameCommands {
     }
 
     private static int duelSessionCompactAtArena(CommandSourceStack source, String arenaName, String spec) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (isRankedArenaReserved(arenaName)) {
+            return player == null ? 0 : error(player, "Arena " + normalizeArenaName(arenaName) + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         return duelSessionCompact(source, spec, arenaName);
     }
 
@@ -6388,6 +6435,7 @@ public class TameCommands {
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
                 normalizeArenaName(arenaName),
+                false,
                 false
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
@@ -6487,6 +6535,7 @@ public class TameCommands {
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
                 pending.arenaName,
+                false,
                 false
         );
         removePendingDuelSession(pending.sessionId);
@@ -6539,6 +6588,10 @@ public class TameCommands {
     }
 
     private static int duelSessionFfaCompactAtArena(CommandSourceStack source, String arenaName, String selectionSpec) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (isRankedArenaReserved(arenaName)) {
+            return player == null ? 0 : error(player, "Arena " + normalizeArenaName(arenaName) + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         return duelSessionFfaCompact(source, selectionSpec, arenaName);
     }
 
@@ -6591,7 +6644,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
                 normalizeArenaName(arenaName),
-                true
+                true,
+                false
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
@@ -6735,7 +6789,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingA,
                 arena == null ? null : arena.waitingB,
                 pending.arenaName,
-                true
+                true,
+                false
         );
         removePendingFfaDuelSession(pending.sessionId);
         if (!registerActiveDuelSession(source.getServer(), session)) {
@@ -6918,6 +6973,120 @@ public class TameCommands {
         }
         if (blockedOtherSide > 0) {
             message.append(" ").append(blockedOtherSide).append(" blocked (other side pool).");
+        }
+        if (skipped > 0) {
+            message.append(" ").append(skipped).append(" unchanged.");
+        }
+        player.sendSystemMessage(Component.literal(message.toString()).withStyle(changed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return changed > 0 ? 1 : 0;
+    }
+
+    private static int rankedStatus(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String arenaName = rankedArenaName();
+        if (arenaName.isBlank()) {
+            player.sendSystemMessage(Component.literal("Ranked arena is not configured. Ask an admin to run /tames admin ranked setArena <arena>.").withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
+        int active = 0;
+        for (UUID id : RANKED_POOL) {
+            if (id != null && TameDuelManager.isEntityInDuel(id)) {
+                active++;
+            }
+        }
+        player.sendSystemMessage(Component.literal("Ranked arena: " + arenaName + ". Pool size: " + RANKED_POOL.size() + ". Active in duel: " + active + ".").withStyle(ChatFormatting.AQUA));
+        return 1;
+    }
+
+    private static int rankedAddSelection(CommandSourceStack source, String selectionSpec) {
+        return rankedModifySelection(source, selectionSpec, true);
+    }
+
+    private static int rankedPullSelection(CommandSourceStack source, String selectionSpec) {
+        return rankedModifySelection(source, selectionSpec, false);
+    }
+
+    private static int rankedModifySelection(CommandSourceStack source, String selectionSpec, boolean add) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String arenaName = rankedArenaName();
+        if (arenaName.isBlank()) {
+            return error(player, "Ranked arena is not configured. Ask an admin to run /tames admin ranked setArena <arena>.");
+        }
+        CompactDuelSideParseResult parsed = parseCompactDuelSide(source, player, selectionSpec);
+        if (!parsed.error.isBlank()) {
+            return error(player, parsed.error);
+        }
+        if (!parsed.targetPlayerNames.isEmpty()) {
+            return error(player, "Selection cannot include other players.");
+        }
+        TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
+        if (!resolved.error.isBlank()) {
+            return error(player, resolved.error);
+        }
+        Set<UUID> selectedIds = collectLivingEntityIds(resolved.members);
+        selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+        if (selectedIds.isEmpty()) {
+            return error(player, "No loaded/alive tames matched that selection.");
+        }
+
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        int changed = 0;
+        int blockedActive = 0;
+        int skipped = 0;
+
+        for (UUID participantId : selectedIds) {
+            if (participantId == null) {
+                continue;
+            }
+            if (add) {
+                if (!RANKED_POOL.add(participantId)) {
+                    skipped++;
+                    continue;
+                }
+                if (session != null) {
+                    session.poolA.add(participantId);
+                    captureDuelSessionSnapshot(source.getServer(), session, participantId);
+                }
+                changed++;
+                continue;
+            }
+            boolean inCurrentRound = session != null
+                    && (session.currentRoundA.contains(participantId) || session.currentRoundB.contains(participantId))
+                    && TameDuelManager.isEntityInDuel(participantId);
+            if (inCurrentRound) {
+                blockedActive++;
+                continue;
+            }
+            boolean removed = RANKED_POOL.remove(participantId);
+            if (session != null) {
+                removed |= session.poolA.remove(participantId);
+                session.currentRoundA = removeFromSet(session.currentRoundA, participantId);
+                session.currentRoundB = removeFromSet(session.currentRoundB, participantId);
+                session.idleSitHoldUntilTick.remove(participantId);
+            }
+            if (removed) {
+                changed++;
+            } else {
+                skipped++;
+            }
+        }
+
+        if (changed > 0 && session != null) {
+            teleportDuelSessionIdleTamesHome(source.getServer(), session, session.currentRoundA, session.currentRoundB);
+            syncIdleDuelSessionTames(source.getServer(), session);
+        }
+        ensureRankedSessionRunning(source.getServer());
+
+        String action = add ? "Added" : "Pulled";
+        StringBuilder message = new StringBuilder(action).append(" ").append(changed).append(" tame(s) in ranked.");
+        if (blockedActive > 0) {
+            message.append(" ").append(blockedActive).append(" blocked (currently in a duel round).");
         }
         if (skipped > 0) {
             message.append(" ").append(skipped).append(" unchanged.");
@@ -14458,6 +14627,95 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminRankedStatus(CommandSourceStack source) {
+        String arenaName = rankedArenaName();
+        String arenaLabel = arenaName.isBlank() ? "unset" : arenaName;
+        int poolSize = RANKED_POOL.size();
+        int active = 0;
+        for (UUID participantId : RANKED_POOL) {
+            if (participantId != null && TameDuelManager.isEntityInDuel(participantId)) {
+                active++;
+            }
+        }
+        final int activeCount = active;
+        source.sendSuccess(() -> Component.literal("Ranked arena: " + arenaLabel + " | pool: " + poolSize + " | active: " + activeCount + ".").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminRankedSetArena(CommandSourceStack source, String arenaName) {
+        ServerPlayer player = source.getPlayer();
+        initArenaRegistry(source.getServer());
+        String normalized = normalizeArenaName(arenaName);
+        if (normalized.isBlank()) {
+            return error(player, "Arena name cannot be blank.");
+        }
+        TameArenaRegistry.TameArena arena = TameArenaRegistry.getArena(normalized);
+        if (arena == null) {
+            return error(player, "Arena does not exist: " + normalized + ".");
+        }
+        String previous = rankedArenaName();
+        if (normalized.equals(previous)) {
+            ensureRankedSessionRunning(source.getServer());
+            return error(player, "Ranked arena is already set to " + normalized + ".");
+        }
+        RANKED_ARENA_NAME = normalized;
+        stopRankedSession(source.getServer());
+        ensureRankedSessionRunning(source.getServer());
+        source.sendSuccess(() -> Component.literal(
+                previous.isBlank()
+                        ? "Ranked arena set to " + normalized + "."
+                        : "Ranked arena changed from " + previous + " to " + normalized + "."
+        ).withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminRankedClearArena(CommandSourceStack source) {
+        String previous = rankedArenaName();
+        if (previous.isBlank()) {
+            return error(source.getPlayer(), "Ranked arena is already unset.");
+        }
+        RANKED_ARENA_NAME = "";
+        stopRankedSession(source.getServer());
+        source.sendSuccess(() -> Component.literal("Ranked arena cleared (previous: " + previous + ").").withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static int adminRankedSetSpawn(CommandSourceStack source, String slot) {
+        ServerPlayer player = source.getPlayer();
+        initArenaRegistry(source.getServer());
+        String arenaName = rankedArenaName();
+        if (arenaName.isBlank()) {
+            return error(player, "Ranked arena is not configured. Use /tames admin ranked setArena <arena>.");
+        }
+        TameArenaRegistry.TameArena arena = TameArenaRegistry.getArena(arenaName);
+        if (arena == null) {
+            return error(player, "Ranked arena does not exist anymore: " + arenaName + ".");
+        }
+        ResourceLocation dimensionId = player.serverLevel().dimension().location();
+        TameArenaRegistry.ArenaPoint point = new TameArenaRegistry.ArenaPoint(
+                dimensionId.toString(),
+                player.getX(),
+                player.getY(),
+                player.getZ(),
+                player.getYRot(),
+                player.getXRot()
+        );
+        TameArenaRegistry.TameArena updated = switch (slot) {
+            case "A" -> TameArenaRegistry.setSpawnA(arenaName, point);
+            case "B" -> TameArenaRegistry.setSpawnB(arenaName, point);
+            case "waitingA" -> TameArenaRegistry.setWaitingA(arenaName, point);
+            case "waitingB" -> TameArenaRegistry.setWaitingB(arenaName, point);
+            default -> null;
+        };
+        if (updated == null) {
+            return error(player, "Failed to update ranked arena " + arenaName + ".");
+        }
+        stopRankedSession(source.getServer());
+        ensureRankedSessionRunning(source.getServer());
+        source.sendSuccess(() -> Component.literal("Set ranked " + slot + " to " + arenaPointLabel(point) + ".").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private static int adminAbilityDamageNerfStatus(CommandSourceStack source) {
         source.sendSuccess(() -> Component.literal(
                 "Ability damage nerfs -> single: "
@@ -18941,6 +19199,10 @@ public class TameCommands {
     }
 
     private static int duelCompactAtArena(CommandSourceStack source, String arenaName, String spec) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (isRankedArenaReserved(arenaName)) {
+            return player == null ? 0 : error(player, "Arena " + normalizeArenaName(arenaName) + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         return duelCompact(source, spec, arenaName);
     }
 
@@ -19546,9 +19808,20 @@ public class TameCommands {
         return arenaName == null || arenaName.isBlank() ? "" : " at arena " + arenaName;
     }
 
+    private static String rankedArenaName() {
+        return RANKED_ARENA_NAME == null ? "" : normalizeArenaName(RANKED_ARENA_NAME);
+    }
+
+    private static boolean isRankedArenaReserved(String arenaName) {
+        String normalized = normalizeArenaName(arenaName);
+        return !normalized.isBlank() && normalized.equals(rankedArenaName());
+    }
+
     private static int listArenas(CommandSourceStack source) {
         initArenaRegistry(source.getServer());
-        List<String> names = TameArenaRegistry.getArenaNames();
+        List<String> names = TameArenaRegistry.getArenaNames().stream()
+                .filter(name -> !isRankedArenaReserved(name))
+                .toList();
         ServerPlayer player = source.getPlayer();
         if (names.isEmpty()) {
             player.sendSystemMessage(Component.literal("No arenas configured.").withStyle(ChatFormatting.GRAY));
@@ -19561,6 +19834,9 @@ public class TameCommands {
     private static int showArena(CommandSourceStack source, String arenaName) {
         initArenaRegistry(source.getServer());
         ServerPlayer player = source.getPlayer();
+        if (isRankedArenaReserved(arenaName)) {
+            return error(player, "Arena " + normalizeArenaName(arenaName) + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         TameArenaRegistry.TameArena arena = TameArenaRegistry.getArena(arenaName);
         if (arena == null) {
             return error(player, "Arena does not exist: " + arenaName + ".");
@@ -19591,6 +19867,9 @@ public class TameCommands {
         initArenaRegistry(source.getServer());
         ServerPlayer player = source.getPlayer();
         String normalized = normalizeArenaName(arenaName);
+        if (isRankedArenaReserved(normalized)) {
+            return error(player, "Arena " + normalized + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         if (!TameArenaRegistry.deleteArena(normalized)) {
             return error(player, "Arena does not exist: " + normalized + ".");
         }
@@ -19602,6 +19881,9 @@ public class TameCommands {
         initArenaRegistry(source.getServer());
         ServerPlayer player = source.getPlayer();
         String normalized = normalizeArenaName(arenaName);
+        if (isRankedArenaReserved(normalized)) {
+            return error(player, "Arena " + normalized + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
         TameArenaRegistry.TameArena existing = TameArenaRegistry.getArena(normalized);
         if (existing == null) {
             return error(player, "Arena does not exist: " + normalized + ".");
@@ -19808,8 +20090,99 @@ public class TameCommands {
         }
     }
 
+    private static void ensureRankedSessionRunning(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        String arenaName = rankedArenaName();
+        if (arenaName.isBlank()) {
+            stopRankedSession(server);
+            return;
+        }
+        ArenaSpawnSet arena = resolveArenaSpawns(server, arenaName, true);
+        if (arena == null) {
+            stopRankedSession(server);
+            return;
+        }
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        if (session != null && (!session.ranked || !arenaName.equals(session.arenaName))) {
+            stopRankedSession(server);
+            session = null;
+        }
+        if (session == null) {
+            ActiveDuelSession created = new ActiveDuelSession(
+                    UUID.randomUUID(),
+                    RANKED_SESSION_OWNER_A,
+                    RANKED_SESSION_OWNER_B,
+                    Set.of(),
+                    RANKED_POOL,
+                    Set.of(),
+                    arena.spawnA,
+                    arena.spawnB,
+                    arena.waitingA,
+                    arena.waitingB,
+                    arenaName,
+                    true,
+                    true
+            );
+            captureDuelSessionSnapshots(server, created);
+            setDuelSessionArenaChunksLoaded(server, created, true);
+            RANKED_DUEL_SESSION = created;
+            session = created;
+        }
+        if (session == null) {
+            return;
+        }
+        session.poolA.retainAll(RANKED_POOL);
+        for (UUID participantId : RANKED_POOL) {
+            if (participantId == null) {
+                continue;
+            }
+            if (session.poolA.add(participantId)) {
+                captureDuelSessionSnapshot(server, session, participantId);
+            }
+        }
+        if (session.nextRoundAtTick < 0L && session.currentRoundA.isEmpty() && session.currentRoundB.isEmpty()) {
+            scheduleNextDuelSessionRound(server, session);
+        }
+        syncRankedSessionPlayers(server, session);
+    }
+
+    private static void syncRankedSessionPlayers(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null || !session.ranked) {
+            return;
+        }
+        session.sessionPlayers.clear();
+        for (UUID participantId : session.poolA) {
+            UUID ownerId = participantOwnerForSession(server, participantId);
+            if (ownerId == null) {
+                continue;
+            }
+            if (server.getPlayerList().getPlayer(ownerId) != null) {
+                session.sessionPlayers.add(ownerId);
+            }
+        }
+    }
+
+    private static void stopRankedSession(MinecraftServer server) {
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        if (session == null) {
+            return;
+        }
+        if (server != null) {
+            forceEndDuelSessionSide(server, session.poolA);
+            forceEndDuelSessionSide(server, session.poolB);
+            setDuelSessionArenaChunksLoaded(server, session, false);
+        }
+        RANKED_DUEL_SESSION = null;
+    }
+
     private static void processDuelSessions(MinecraftServer server) {
-        if (server == null || ACTIVE_DUEL_SESSIONS.isEmpty()) {
+        if (server == null) {
+            return;
+        }
+        ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
+        if (ACTIVE_DUEL_SESSIONS.isEmpty() && rankedSession == null) {
             return;
         }
         ServerLevel overworld = server.overworld();
@@ -19853,6 +20226,43 @@ public class TameCommands {
             session.roundStartedAtTick = -1L;
             scheduleNextDuelSessionRound(server, session, now);
         }
+        if (rankedSession != null) {
+            refreshDuelSessionParticipantActivity(rankedSession);
+            syncRankedSessionPlayers(server, rankedSession);
+            enforceRankedOwnerOnlineRule(server, rankedSession);
+            if (now >= rankedSession.nextIdleSitSyncTick) {
+                syncIdleDuelSessionTames(server, rankedSession);
+                rankedSession.nextIdleSitSyncTick = now + 20L;
+            }
+            if (rankedSession.currentRoundA.isEmpty() || rankedSession.currentRoundB.isEmpty()) {
+                if (rankedSession.nextRoundAtTick >= 0L && now >= rankedSession.nextRoundAtTick) {
+                    if (!startNextDuelSessionRound(server, rankedSession)) {
+                        teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
+                        syncIdleDuelSessionTames(server, rankedSession);
+                        scheduleNextDuelSessionRound(server, rankedSession, now);
+                    }
+                }
+            } else {
+                enforceDuelSessionArenaAnchor(server, rankedSession.currentRoundA, rankedSession.spawnA);
+                enforceDuelSessionArenaAnchor(server, rankedSession.currentRoundB, rankedSession.spawnB);
+                recoverUnloadedDuelSessionParticipants(server, rankedSession, rankedSession.currentRoundA, rankedSession.spawnA, rankedSession.ownerA);
+                recoverUnloadedDuelSessionParticipants(server, rankedSession, rankedSession.currentRoundB, rankedSession.spawnB, rankedSession.ownerB);
+                if (hasAnyActiveDuelParticipants(rankedSession.currentRoundA) && hasAnyActiveDuelParticipants(rankedSession.currentRoundB)) {
+                    if (rankedSession.roundStartedAtTick >= 0L && now - rankedSession.roundStartedAtTick >= duelSessionRoundTimeoutTicks()) {
+                        resolveTimedOutDuelSessionRound(server, rankedSession);
+                    }
+                } else {
+                    forceEndDuelSessionSide(server, rankedSession.currentRoundA);
+                    forceEndDuelSessionSide(server, rankedSession.currentRoundB);
+                    teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
+                    syncIdleDuelSessionTames(server, rankedSession);
+                    rankedSession.currentRoundA = Set.of();
+                    rankedSession.currentRoundB = Set.of();
+                    rankedSession.roundStartedAtTick = -1L;
+                    scheduleNextDuelSessionRound(server, rankedSession, now);
+                }
+            }
+        }
         for (UUID sessionId : endedSessions) {
             ActiveDuelSession removed = ACTIVE_DUEL_SESSIONS.remove(sessionId);
             if (removed != null) {
@@ -19890,20 +20300,50 @@ public class TameCommands {
         }
     }
 
+    private static void enforceRankedOwnerOnlineRule(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null || !session.ranked) {
+            return;
+        }
+        for (UUID participantId : new ArrayList<>(session.currentRoundA)) {
+            if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
+                continue;
+            }
+            if (!isRankedParticipantOwnerOnline(server, participantId)) {
+                TameDuelManager.endDuelForEntity(server, participantId);
+            }
+        }
+        for (UUID participantId : new ArrayList<>(session.currentRoundB)) {
+            if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
+                continue;
+            }
+            if (!isRankedParticipantOwnerOnline(server, participantId)) {
+                TameDuelManager.endDuelForEntity(server, participantId);
+            }
+        }
+    }
+
+    private static boolean isRankedParticipantOwnerOnline(MinecraftServer server, UUID participantId) {
+        if (server == null || participantId == null) {
+            return false;
+        }
+        UUID ownerId = participantOwnerForSession(server, participantId);
+        return ownerId != null && server.getPlayerList().getPlayer(ownerId) != null;
+    }
+
     private static boolean startNextDuelSessionRound(MinecraftServer server, ActiveDuelSession session) {
         if (server == null || session == null) {
             return false;
         }
         DuelSessionRound round;
         if (session.freeForAll) {
-            List<UUID> available = availableSessionParticipants(server, session.poolA);
+            List<UUID> available = availableSessionParticipants(server, session, session.poolA);
             if (available.size() < 2) {
                 return false;
             }
             round = createFfaDuelSessionRound(server, available);
         } else {
-            List<UUID> availableA = availableSessionParticipants(server, session.poolA);
-            List<UUID> availableB = availableSessionParticipants(server, session.poolB);
+            List<UUID> availableA = availableSessionParticipants(server, session, session.poolA);
+            List<UUID> availableB = availableSessionParticipants(server, session, session.poolB);
             if (availableA.isEmpty() || availableB.isEmpty()) {
                 return false;
             }
@@ -19927,7 +20367,9 @@ public class TameCommands {
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
+        if (!session.ranked) {
+            notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
+        }
         return true;
     }
 
@@ -20438,11 +20880,14 @@ public class TameCommands {
         return count <= 0 ? 0.0D : total / (double) count;
     }
 
-    private static List<UUID> availableSessionParticipants(MinecraftServer server, Set<UUID> pool) {
+    private static List<UUID> availableSessionParticipants(MinecraftServer server, ActiveDuelSession session, Set<UUID> pool) {
         List<UUID> available = new ArrayList<>();
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive()) {
+                if (session != null && session.ranked && !isRankedParticipantOwnerOnline(server, id)) {
+                    continue;
+                }
                 available.add(id);
             }
         }
@@ -21679,6 +22124,14 @@ public class TameCommands {
     }
 
     private static CompletableFuture<Suggestions> suggestArenaNames(CommandSourceStack source, SuggestionsBuilder b) {
+        initArenaRegistry(source.getServer());
+        List<String> names = TameArenaRegistry.getArenaNames().stream()
+                .filter(name -> !isRankedArenaReserved(name))
+                .toList();
+        return SharedSuggestionProvider.suggest(names, b);
+    }
+
+    private static CompletableFuture<Suggestions> suggestArenaNamesIncludingRanked(CommandSourceStack source, SuggestionsBuilder b) {
         initArenaRegistry(source.getServer());
         return SharedSuggestionProvider.suggest(TameArenaRegistry.getArenaNames(), b);
     }
