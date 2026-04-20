@@ -516,7 +516,8 @@ public final class TameDuelManager {
             CompoundTag tameSnapshot = battle.tameSnapshots.get(participantId);
             if (tameSnapshot != null) {
                 if (tryRestoreDuelParticipantSnapshot(server, tameSnapshot)
-                        || tryResetDuelCombatState(server, participantId, 2)) {
+                        || tryResetDuelCombatState(server, participantId, 2)
+                        || tryEnsureDuelParticipantRestored(server, participantId, tameSnapshot)) {
                     restoredCount++;
                 }
             } else if (playerSnapshot == null && tryResetDuelCombatState(server, participantId, 2)) {
@@ -560,6 +561,17 @@ public final class TameDuelManager {
             }
         }
         return false;
+    }
+
+    private static boolean tryEnsureDuelParticipantRestored(MinecraftServer server, UUID participantId, CompoundTag tameSnapshot) {
+        if (tameSnapshot == null || tameSnapshot.isEmpty()) {
+            return false;
+        }
+        try {
+            return TameCommands.ensureDuelParticipantRestored(server, participantId, tameSnapshot.copy());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static void syncPlayerEnemyGlow(MinecraftServer server, DuelBattle battle) {

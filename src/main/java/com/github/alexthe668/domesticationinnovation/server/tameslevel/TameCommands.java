@@ -10567,6 +10567,48 @@ public class TameCommands {
         return true;
     }
 
+    public static boolean ensureDuelParticipantRestored(MinecraftServer server, UUID participantId, CompoundTag tameSnapshotTag) {
+        if (server == null || tameSnapshotTag == null || tameSnapshotTag.isEmpty()) {
+            return participantId != null && resetDuelCombatState(server, participantId);
+        }
+        if (restoreDuelParticipantSnapshot(server, tameSnapshotTag.copy())) {
+            return true;
+        }
+        TameData snapshot = TameData.fromTag(tameSnapshotTag.copy());
+        if (snapshot == null || snapshot.uuid == null) {
+            return participantId != null && resetDuelCombatState(server, participantId);
+        }
+        cancelPendingImmediateChunkTeleport(server, snapshot);
+        TamableAnimal loaded = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+        if (loaded != null && loaded.isAlive()) {
+            refreshLoadedTameStatsAfterRebuild(loaded, snapshot, true);
+            finalizeRespawnState(loaded, snapshot);
+            TameData.syncTlIdToEntity(loaded, snapshot.tlId);
+            TameGoalInstaller.installIfMissing(loaded);
+            return true;
+        }
+        SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
+        if (target != null && target.level != null && target.pos != null) {
+            ServerPlayer owner = snapshot.ownerUUID == null ? null : server.getPlayerList().getPlayer(snapshot.ownerUUID);
+            if (owner != null) {
+                RecoverResult recovered = recoverPetEntityAtLocation(owner, target, snapshot);
+                if (recovered.entity != null) {
+                    return true;
+                }
+            }
+            RespawnResult result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+            if (result.success) {
+                TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+                if (restored != null) {
+                    TameData.syncTlIdToEntity(restored, snapshot.tlId);
+                    TameGoalInstaller.installIfMissing(restored);
+                }
+                return true;
+            }
+        }
+        return participantId != null && resetDuelCombatState(server, participantId);
+    }
+
     public static boolean restoreDuelPlayerSnapshot(MinecraftServer server, UUID playerUuid, CompoundTag playerSnapshot) {
         if (server == null || playerUuid == null || playerSnapshot == null || playerSnapshot.isEmpty()) {
             return false;
