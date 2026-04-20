@@ -21,6 +21,7 @@
     "AxolotlMixin",
     "AlexsMobsFlutterMixin",
     "AlexsMobsFlutterPotMixin",
+    "BaseSpawnerMixin",
     "CatMixin",
     "EntityMixin",
     "FishingHookMixin",
