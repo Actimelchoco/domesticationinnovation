@@ -9,6 +9,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import net.minecraft.world.entity.Entity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
@@ -137,6 +138,9 @@ public class TamePersistenceEvents {
                 data.bornDayTime = level.getDayTime();
                 changed = true;
             }
+            if (syncCollarInfo(tame, data)) {
+                changed = true;
+            }
             if (TameBedRegistrySync.syncFromEntity(tame, data)) {
                 changed = true;
             }
@@ -160,6 +164,20 @@ public class TamePersistenceEvents {
         }
         TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
         return changed;
+    }
+
+    private static boolean syncCollarInfo(TamableAnimal tame, TameData data) {
+        if (tame == null || data == null) {
+            return false;
+        }
+        boolean hasCollar = TameableUtils.hasCollar(tame);
+        int tier = hasCollar ? Math.max(0, TameableUtils.getEnchantLevel(tame, Enchantments.ALL_DAMAGE_PROTECTION)) : 0;
+        if (data.hasCollarTag == hasCollar && data.collarTagTier == tier) {
+            return false;
+        }
+        data.hasCollarTag = hasCollar;
+        data.collarTagTier = tier;
+        return true;
     }
 
     private static boolean updateLiveLocation(ServerLevel level, TamableAnimal tame, TameData data) {

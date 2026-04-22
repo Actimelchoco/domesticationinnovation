@@ -7,6 +7,8 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.enchantment.Enchantments;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -81,6 +83,8 @@ public class TameData {
     public int petBedX = 0;
     public int petBedY = 0;
     public int petBedZ = 0;
+    public boolean hasCollarTag = false;
+    public int collarTagTier = 0;
 
     public double baseSpeed;
     public double bonusHealth;
@@ -155,6 +159,8 @@ public class TameData {
         this.homeZ = tame.blockPosition().getZ();
         this.hasPetBed = false;
         this.petBedDimension = "";
+        this.hasCollarTag = TameableUtils.hasCollar(tame);
+        this.collarTagTier = this.hasCollarTag ? Math.max(0, TameableUtils.getEnchantLevel(tame, Enchantments.ALL_DAMAGE_PROTECTION)) : 0;
         syncTlIdToEntity(tame, this.tlId);
         tame.save(entitySnapshot);
 
@@ -242,6 +248,8 @@ public class TameData {
         tag.putInt("petBedX", petBedX);
         tag.putInt("petBedY", petBedY);
         tag.putInt("petBedZ", petBedZ);
+        tag.putBoolean("hasCollarTag", hasCollarTag);
+        tag.putInt("collarTagTier", Math.max(0, collarTagTier));
         tag.putDouble("baseSpeed", baseSpeed);
         tag.putDouble("bonusHealth", bonusHealth);
         tag.putDouble("bonusDamage", bonusDamage);
@@ -413,6 +421,8 @@ public class TameData {
         data.petBedX = tag.getInt("petBedX");
         data.petBedY = tag.getInt("petBedY");
         data.petBedZ = tag.getInt("petBedZ");
+        data.hasCollarTag = tag.contains("hasCollarTag", Tag.TAG_BYTE) && tag.getBoolean("hasCollarTag");
+        data.collarTagTier = tag.contains("collarTagTier", Tag.TAG_INT) ? Math.max(0, tag.getInt("collarTagTier")) : 0;
         data.baseSpeed = tag.getDouble("baseSpeed");
         data.bonusHealth = tag.getDouble("bonusHealth");
         data.bonusDamage = tag.getDouble("bonusDamage");

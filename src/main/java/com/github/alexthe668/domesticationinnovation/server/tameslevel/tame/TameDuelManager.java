@@ -1143,7 +1143,7 @@ public final class TameDuelManager {
         }
         ordered.sort((a, b) -> compareBattlePlacement(server, battle, a, b));
 
-        lines.add(Component.literal("Duel results:").withStyle(ChatFormatting.GOLD));
+        lines.add(Component.literal("_____duel results_____").withStyle(ChatFormatting.GOLD));
         int rank = 1;
         for (UUID participantId : ordered) {
             SummaryParticipant participant = participantForSummary(server, battle, participantId);

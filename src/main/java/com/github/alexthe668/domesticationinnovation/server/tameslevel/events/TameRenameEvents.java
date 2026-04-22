@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerPlayer;
@@ -43,10 +44,7 @@ public class TameRenameEvents {
 
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null || data.name == null || data.name.isBlank()) return false;
-
-        String escapedName = data.name.replace("\\", "\\\\").replace("\"", "\\\"");
-        String command = "tame stat \"" + escapedName + "\"";
-        player.getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
+        TameCommands.showSneakInteractStats(player, tame);
 
         event.setCanceled(true);
         event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
