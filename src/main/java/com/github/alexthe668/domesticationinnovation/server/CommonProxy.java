@@ -1010,17 +1010,22 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onDuelEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (!isDuelRestrictedPlayer(event.getEntity())) {
-            return;
+        Player player = event.getEntity();
+        if (isDuelRestrictedPlayer(player) || isOwnerInteractingWithDuelTame(player, event.getTarget())) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
         }
-        event.setCanceled(true);
-        event.setCancellationResult(InteractionResult.FAIL);
     }
 
     @SubscribeEvent
     public void onInteractWithEntity(PlayerInteractEvent.EntityInteract event) {
         Player player = event.getEntity();
         if (isDuelRestrictedPlayer(player)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
+        if (isOwnerInteractingWithDuelTame(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
             return;
@@ -1225,6 +1230,17 @@ public class CommonProxy {
 
     private static boolean isDuelRestrictedPlayer(Player player) {
         return player != null && !player.level().isClientSide && TameDuelManager.isEntityInDuel(player.getUUID());
+    }
+
+    private static boolean isOwnerInteractingWithDuelTame(Player player, Entity target) {
+        if (player == null || target == null || player.level().isClientSide) {
+            return false;
+        }
+        if (!TameableUtils.isTamed(target) || !TameDuelManager.isEntityInDuel(target.getUUID())) {
+            return false;
+        }
+        UUID ownerId = TameableUtils.getOwnerUUIDOf(target);
+        return ownerId != null && ownerId.equals(player.getUUID());
     }
 
     private static boolean isAllowedDuelItemUse(ItemStack stack) {
