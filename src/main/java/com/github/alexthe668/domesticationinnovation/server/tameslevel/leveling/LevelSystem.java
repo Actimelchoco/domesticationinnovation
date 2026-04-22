@@ -122,6 +122,7 @@ public class LevelSystem {
         VICTIM_SIPHON("victim_siphon", 7),
         PIERCE("pierce", 5),
         BUBBLING("bubbling", Integer.MAX_VALUE),
+        QUICKY("quicky", Integer.MAX_VALUE),
         HERDING("herding", Integer.MAX_VALUE),
         AMPHIBIOUS("amphibious", 1),
         WALL_CLIMBER("wall_climber", 5),
@@ -422,6 +423,14 @@ public class LevelSystem {
         }
         String id = attributeId.trim().toLowerCase(java.util.Locale.ROOT);
         return clampAttributeLevel(id, data.attributeLevels.getOrDefault(id, 0));
+    }
+
+    public static double quickyCooldownMultiplier(TameData data) {
+        int level = Math.max(0, getAttributeLevel(data, "quicky"));
+        if (level <= 0) {
+            return 1.0D;
+        }
+        return Math.pow(0.96D, level);
     }
 
     public static boolean addAttribute(TameData data, String attributeId, int amount) {

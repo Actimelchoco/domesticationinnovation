@@ -125,6 +125,14 @@
 - `ability_power`
   - Effect: ability power multiplier `1.0 + 0.12 * level`.
 
+- `quicky`
+  - Effect: shortens cooldowns multiplicatively by `4%` per level.
+  - Formula: `effectiveCooldown = baseCooldown * (0.96 ^ level)`.
+  - Numeric example:
+    - L1: `100s -> 96.00s`
+    - L2: `100s -> 92.16s`
+    - L5: `100s -> 81.54s`
+
 - `emergency_cooldown_reduction`
   - Condition: HP <= `30%`.
   - Activation chance: `12% * level`, capped at `60%`.

@@ -7587,6 +7587,7 @@ public class TameCommands {
             case "explosion_resistance" -> id + " L" + level + ": reduces explosion damage by " + fmt(Math.min(0.55D, 0.15D + Math.max(0, level - 1) * 0.10D) * 100.0D) + "%";
             case "regeneration" -> id + " L" + level + ": heals " + fmt(0.5D + 0.5D * level) + " every " + fmt((Math.max(20L, (level >= 5 ? 20L : level >= 3 ? 30L : 40L) + 40L)) / 20.0D) + "s while damaged";
             case "ability_power" -> id + " L" + level + ": +" + fmt(level * 15.0D) + "% level-1 ability damage";
+            case "quicky" -> id + " L" + level + ": multiplies cooldowns by x" + fmt(Math.pow(0.96D, level)) + " (" + fmt((1.0D - Math.pow(0.96D, level)) * 100.0D) + "% shorter)";
             case "emergency_cooldown_reduction" -> id + " L" + level + ": at <=" + fmt((0.25D + Math.max(0, level - 1) * 0.025D) * 100.0D) + "% HP, " + fmt(Math.min(0.38D, 0.08D + 0.06D * level) * 100.0D) + "% chance to force next cooldown to 1s";
             case "totem" -> id + " L" + level + ": lethal save, cooldown " + fmt(Math.max(1L, 10L - Math.max(0, level - 1))) + "m";
             case "magnetic" -> id + " L" + level + ": pull utility; stronger target drag each level";

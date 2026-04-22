@@ -117,7 +117,7 @@ public final class OwnerProtectionAbilityModule {
         }
 
         long cooldownTicks = 400L;
-        setCooldown(data, "guardian_repulse_tick", now + cooldownTicks);
+        setAbilityCooldown(data, "guardian_repulse_tick", now, cooldownTicks);
         if (affected > 0 && tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, owner, now, affected * (1.0F + 0.25F * levelValue), 0.5F);
             level.sendParticles(ParticleTypes.CLOUD, owner.getX(), owner.getY(0.8D), owner.getZ(), 16, radius * 0.20D, 0.3D, radius * 0.20D, 0.03D);
@@ -148,7 +148,7 @@ public final class OwnerProtectionAbilityModule {
             affected++;
         }
 
-        setCooldown(data, "sky_launch_tick", now + 240L);
+        setAbilityCooldown(data, "sky_launch_tick", now, 240L);
         if (affected > 0 && tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, owner, now, affected * (1.5F + 0.25F * levelValue), 0.5F);
             level.sendParticles(ParticleTypes.SWEEP_ATTACK, owner.getX(), owner.getY(0.7D), owner.getZ(), 6, radius * 0.15D, 0.2D, radius * 0.15D, 0.0D);
@@ -170,7 +170,7 @@ public final class OwnerProtectionAbilityModule {
         event.setAmount(event.getAmount() * (1.0F - reduction));
 
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
-        setCooldown(data, "shield_block_tick", now + cooldownTicks);
+        setAbilityCooldown(data, "shield_block_tick", now, cooldownTicks);
         tame.setTarget(null);
         tame.getNavigation().stop();
         TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
@@ -191,7 +191,7 @@ public final class OwnerProtectionAbilityModule {
         event.setAmount(event.getAmount() * (1.0F - reduction));
 
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
-        setCooldown(data, "shield_block_tick", now + cooldownTicks);
+        setAbilityCooldown(data, "shield_block_tick", now, cooldownTicks);
         dashShieldBlockToOwner(level, owner, tame, data, levelValue);
         tame.setTarget(null);
         tame.getNavigation().stop();
@@ -250,6 +250,12 @@ public final class OwnerProtectionAbilityModule {
 
     private static boolean isReady(TameData data, String key, long now) {
         return now >= data.cooldowns.getOrDefault(key, 0L);
+    }
+
+    private static void setAbilityCooldown(TameData data, String key, long now, long baseTicks) {
+        long ticks = Math.max(1L, baseTicks);
+        ticks = Math.max(1L, Math.round(ticks * LevelSystem.quickyCooldownMultiplier(data)));
+        setCooldown(data, key, now + ticks);
     }
 
     private static void setCooldown(TameData data, String key, long tick) {

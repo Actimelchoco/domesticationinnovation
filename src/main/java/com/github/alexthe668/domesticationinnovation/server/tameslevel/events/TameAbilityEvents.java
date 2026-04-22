@@ -2068,15 +2068,15 @@ public class TameAbilityEvents {
     }
 
     private static double abilityCooldownMultiplier(TameData data, String sourceId) {
-        if (!LevelSystem.isAttackAbility(sourceId)) {
-            return 1.0D;
+        double attackNerfMultiplier = 1.0D;
+        if (LevelSystem.isAttackAbility(sourceId)) {
+            int abilityCount = countOwnedAttackAbilities(data);
+            if (abilityCount > 1) {
+                double percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent() / 100.0D;
+                attackNerfMultiplier = 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
+            }
         }
-        int abilityCount = countOwnedAttackAbilities(data);
-        if (abilityCount <= 1) {
-            return 1.0D;
-        }
-        double percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent() / 100.0D;
-        return 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
+        return attackNerfMultiplier * LevelSystem.quickyCooldownMultiplier(data);
     }
 
     private static int countOwnedAttackAbilities(TameData data) {
