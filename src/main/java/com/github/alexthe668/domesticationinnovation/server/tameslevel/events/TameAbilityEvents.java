@@ -256,6 +256,7 @@ public class TameAbilityEvents {
                     if (!attackerTame.isOrderedToSit()) {
                         TamePerformanceProfiler.run("feature.projectile_ability_damage_scaling", () -> applyProjectileAbilityDamageScaling(event));
                     }
+                    TamePerformanceProfiler.run("feature.external_projectile_bonus_damage", () -> applyExternalProjectileBonusDamage(attackerData, event));
                     TamePerformanceProfiler.run("attribute.damage_bonuses", () -> applyAttributeDamageBonuses(attackerTame, attackerData, event));
                     if (!attackerTame.isOrderedToSit()) {
                         TamePerformanceProfiler.run("ability.battle_strength", () -> handleBattleStrength(attackerTame, attackerData, event));
@@ -1881,7 +1882,21 @@ public class TameAbilityEvents {
         if (INTERNAL_BONUS_DAMAGE.get()) {
             return false;
         }
-        return event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame;
+        return (event.getSource().getEntity() == tame && event.getSource().getDirectEntity() == tame)
+                || isAlexsMobsProjectileBaseAttack(tame, event);
+    }
+
+    private static boolean isAlexsMobsProjectileBaseAttack(TamableAnimal tame, LivingHurtEvent event) {
+        if (tame == null || event == null || event.getSource() == null) {
+            return false;
+        }
+        Entity sourceEntity = event.getSource().getEntity();
+        Entity directEntity = event.getSource().getDirectEntity();
+        if (sourceEntity != tame || directEntity == null || directEntity == tame) {
+            return false;
+        }
+        ResourceLocation key = EntityType.getKey(directEntity.getType());
+        return key != null && "alexsmobs".equals(key.getNamespace());
     }
 
     private static boolean isMutantCreeperMinionExplosion(TamableAnimal tame, LivingHurtEvent event) {
@@ -2001,6 +2016,22 @@ public class TameAbilityEvents {
     public static float offensiveDamageBonusBonusFromLevelOne(TameData data, float scaling) {
         double bonusDamage = data == null ? 0.0D : Math.max(0.0D, data.bonusDamage);
         return (float) (bonusDamage * 0.05D * scaling);
+    }
+
+    private static void applyExternalProjectileBonusDamage(TameData data, LivingHurtEvent event) {
+        if (data == null || event == null || event.getSource() == null) {
+            return;
+        }
+        Entity direct = event.getSource().getDirectEntity();
+        if (!isAlexsMobsPollenBall(direct)) {
+            return;
+        }
+        float bonus = (float) Math.max(0.0D, data.bonusDamage);
+        if (bonus <= 0.0F) {
+            return;
+        }
+        event.setAmount(event.getAmount() + bonus);
+        noteDamageContributor("bonus_damage");
     }
 
     private static float tameBaseDamage(TamableAnimal tame) {
@@ -2568,6 +2599,14 @@ public class TameAbilityEvents {
         }
         event.setAmount(damage);
         return true;
+    }
+
+    private static boolean isAlexsMobsPollenBall(Entity entity) {
+        if (entity == null) {
+            return false;
+        }
+        ResourceLocation key = EntityType.getKey(entity.getType());
+        return key != null && "alexsmobs".equals(key.getNamespace()) && "pollen_ball".equals(key.getPath());
     }
 
     private static float singleTargetDamage(float amount) {

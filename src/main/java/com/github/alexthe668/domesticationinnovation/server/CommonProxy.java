@@ -2224,7 +2224,21 @@ public class CommonProxy {
             return false;
         }
         return (event.getSource().getEntity() == attacker && event.getSource().getDirectEntity() == attacker)
+                || isAlexsMobsProjectileBaseAttack(attacker, event)
                 || isMutantCreeperMinionExplosion(attacker, event);
+    }
+
+    private static boolean isAlexsMobsProjectileBaseAttack(LivingEntity attacker, LivingAttackEvent event) {
+        if (attacker == null || event == null || event.getSource() == null) {
+            return false;
+        }
+        Entity sourceEntity = event.getSource().getEntity();
+        Entity directEntity = event.getSource().getDirectEntity();
+        if (sourceEntity != attacker || directEntity == null || directEntity == attacker) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(directEntity.getType());
+        return key != null && "alexsmobs".equals(key.getNamespace());
     }
 
     private static boolean isMutantCreeperMinionExplosion(LivingEntity attacker, LivingAttackEvent event) {
