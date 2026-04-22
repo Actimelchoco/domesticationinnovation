@@ -8,6 +8,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.BlockPos;
@@ -75,6 +76,7 @@ public class TameBehaviorEvents {
     public static void onTameMount(EntityMountEvent event) {
         if (!event.isMounting()) return;
         if (!(event.getEntityMounting() instanceof TamableAnimal tame) || !tame.isTame()) return;
+        if (TLAdminRuntimeSettings.sitOnChairsEnabled()) return;
 
         Entity mount = event.getEntityBeingMounted();
         ResourceLocation mountedType = ForgeRegistries.ENTITY_TYPES.getKey(mount.getType());
@@ -83,7 +85,8 @@ public class TameBehaviorEvents {
         boolean valhelsiaNamespace = "valhelsia_structures".equals(namespace)
                 || "valhelsia_furniture".equals(namespace)
                 || "valhelsia_furnitures".equals(namespace);
-        if (!valhelsiaNamespace) return;
+        boolean createNamespace = "create".equals(namespace);
+        if (!valhelsiaNamespace && !createNamespace) return;
 
         String path = mountedType.getPath();
         if (!path.contains("seat") && !path.contains("chair")) return;

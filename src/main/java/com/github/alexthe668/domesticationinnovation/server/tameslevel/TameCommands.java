@@ -1054,6 +1054,10 @@ public class TameCommands {
                         .then(Commands.literal("enterPortalsByThemselves")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("sitOnChairs")
+                                .requires(source -> source.hasPermission(2))
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("graveyard")
                                 .executes(ctx -> graveyard(ctx.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -3475,6 +3479,9 @@ public class TameCommands {
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportTameToLocation(tame, pending.target);
+                if (liveData != null && liveData.movementOrder == 1) {
+                    applyMovementOrderCode(tame, 1);
+                }
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleported unloaded " + pending.tameName + ".", ChatFormatting.GREEN);
                 finished.add(entry.getKey());
@@ -4197,7 +4204,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -4452,6 +4459,14 @@ public class TameCommands {
                     "Default is false.",
                     "False: your tames cannot enter portals on their own.",
                     "They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport."
+            );
+        }
+        else if (key.equals("sitonchairs") || key.equals("sit_on_chairs")) {
+            sendInfoPage(p, "SitOnChairs",
+                    "/tames sitOnChairs <true|false>",
+                    "Admin runtime toggle (default false).",
+                    "false: tames are blocked from mounting seat/chair entities (including Create seats/chairs).",
+                    "true: that seat/chair mount block is disabled."
             );
         }
         else if (key.equals("inspect")) {
@@ -5194,6 +5209,14 @@ public class TameCommands {
         TameRegistry.setEnterPortalsByThemselves(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Tames entering portals by themselves " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setSitOnChairs(CommandSourceStack source, boolean enabled) {
+        TLAdminRuntimeSettings.setSitOnChairsEnabled(enabled);
+        source.sendSuccess(() -> Component.literal(
+                "Tames sitOnChairs is now " + (enabled ? "ENABLED" : "DISABLED") + "."
+        ).withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -12316,6 +12339,9 @@ public class TameCommands {
                     "sourceDim=" + sourceLevel.dimension().location() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
             try {
                 teleportTameToLocation(tame, target);
+                if (data.movementOrder == 1) {
+                    applyMovementOrderCode(tame, 1);
+                }
                 return UnloadedTpResult.queued();
             } finally {
                 loadChunksAround(sourceLevel, ticketId, sourcePos, false);
@@ -12729,12 +12755,14 @@ public class TameCommands {
     private static int teleportHomeBatch(CommandSourceStack source, ServerPlayer player, List<TameData> requested, String label, int deadSkipped) {
         List<TamableAnimal> loadedTargets = new ArrayList<>();
         List<SpawnTarget> loadedDestinations = new ArrayList<>();
+        List<TameData> loadedData = new ArrayList<>();
         List<TameData> unloadedTargets = new ArrayList<>();
         List<SpawnTarget> unloadedDestinations = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
         int skippedDuel = 0;
         List<String> failedNames = new ArrayList<>();
+        boolean movementChanged = false;
 
         for (TameData data : requested) {
             if (data == null || data.uuid == null) {
@@ -12767,18 +12795,34 @@ public class TameCommands {
             }
             loadedTargets.add(tame);
             loadedDestinations.add(target);
+            loadedData.add(data);
         }
         for (int i = 0; i < loadedTargets.size(); i++) {
-            teleportTameToLocation(loadedTargets.get(i), loadedDestinations.get(i));
+            TamableAnimal tame = loadedTargets.get(i);
+            teleportTameToLocation(tame, loadedDestinations.get(i));
+            applyMovementOrderCode(tame, 1);
+            TameData data = i < loadedData.size() ? loadedData.get(i) : null;
+            if (data != null && data.movementOrder != 1) {
+                data.movementOrder = 1;
+                movementChanged = true;
+            }
         }
         for (int i = 0; i < unloadedTargets.size(); i++) {
-            UnloadedTpResult unloaded = tpUnloadedHomeViaLanternOrRecover(source, player, unloadedTargets.get(i), unloadedDestinations.get(i));
+            TameData data = unloadedTargets.get(i);
+            UnloadedTpResult unloaded = tpUnloadedHomeViaLanternOrRecover(source, player, data, unloadedDestinations.get(i));
             if (unloaded.success) {
                 queued++;
+                if (data != null && data.movementOrder != 1) {
+                    data.movementOrder = 1;
+                    movementChanged = true;
+                }
             } else {
                 queueFailed++;
-                failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
+                failedNames.add((data.name == null ? "unknown" : data.name) + " (" + unloaded.error + ")");
             }
+        }
+        if (movementChanged) {
+            TameRegistry.markDirty();
         }
         sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, 0, 0);
         sendDuelCommandSkipNotice(player, skippedDuel, "tp");
@@ -22956,6 +23000,7 @@ public class TameCommands {
         suggestCommandString(b, "arise");
         suggestCommandString(b, "graveyard");
         suggestCommandString(b, "reincarnate");
+        suggestCommandString(b, "sitOnChairs");
         suggestCommandString(b, "inspect");
         suggestCommandString(b, "search");
         suggestCommandString(b, "duel");

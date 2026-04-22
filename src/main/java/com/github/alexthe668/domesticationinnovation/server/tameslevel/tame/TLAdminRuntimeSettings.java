@@ -8,6 +8,7 @@ public final class TLAdminRuntimeSettings {
     private static volatile boolean healthSiphonEnabled = true;
     private static volatile boolean herdingAffectsTames = false;
     private static volatile boolean postTpStabilizationEnabled = true;
+    private static volatile boolean sitOnChairsEnabled = false;
     private static volatile float singleTargetAbilityDamageMultiplier = 1.0F;
     private static volatile float aoeAbilityDamageMultiplier = 1.0F;
     private static volatile float abilityCountCooldownNerfPercent = 25.0F;
@@ -43,6 +44,14 @@ public final class TLAdminRuntimeSettings {
 
     public static void setPostTpStabilizationEnabled(boolean enabled) {
         postTpStabilizationEnabled = enabled;
+    }
+
+    public static boolean sitOnChairsEnabled() {
+        return sitOnChairsEnabled;
+    }
+
+    public static void setSitOnChairsEnabled(boolean enabled) {
+        sitOnChairsEnabled = enabled;
     }
 
     public static float singleTargetAbilityDamageMultiplier() {
