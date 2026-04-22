@@ -19552,6 +19552,14 @@ public class TameCommands {
             if (trimmed.isBlank()) {
                 continue;
             }
+            String lowerTrimmed = trimmed.toLowerCase(Locale.ROOT);
+            if (lowerTrimmed.startsWith("myself ")) {
+                includeSelf = true;
+                trimmed = trimmed.substring("myself ".length()).trim();
+                if (trimmed.isBlank()) {
+                    continue;
+                }
+            }
             if (trimmed.equalsIgnoreCase("myself") || trimmed.equalsIgnoreCase(owner.getGameProfile().getName())) {
                 includeSelf = true;
                 continue;
@@ -22735,7 +22743,6 @@ public class TameCommands {
         String trimmed = remaining.trim();
         if (trimmed.isBlank()) {
             suggestCommandString(b, "myself");
-            suggestCommandString(b, "myself all");
             suggestCommandString(b, "all");
             suggestCommandString(b, "follow");
             suggestCommandString(b, "sit");
@@ -22750,7 +22757,6 @@ public class TameCommands {
         String lower = trimmed.toLowerCase(Locale.ROOT);
         if ("myself".equals(lower)) {
             SuggestionsBuilder tail = b.createOffset(b.getStart() + trimmed.length());
-            tail.suggest(" all");
             tail.suggest(" group");
             tail.suggest(" type");
             tail.suggest(" name");
