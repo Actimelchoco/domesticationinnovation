@@ -18,6 +18,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_MESSAGES = new HashMap<>();
+    private static final Map<UUID, Boolean> DUEL_SUMMARY_MESSAGES = new HashMap<>();
 
     public static boolean enemyKilled(UUID player) {
         return ENEMY_KILLED.getOrDefault(player, false);
@@ -63,6 +64,10 @@ public final class PlayerDebugSettings {
         return DUEL_MESSAGES.getOrDefault(player, true);
     }
 
+    public static boolean duelSummaryMessages(UUID player) {
+        return DUEL_SUMMARY_MESSAGES.getOrDefault(player, false);
+    }
+
     public static void setAbilityUsed(UUID player, boolean enabled) {
         ABILITY_USED.put(player, enabled);
     }
@@ -97,5 +102,9 @@ public final class PlayerDebugSettings {
 
     public static void setDuelMessages(UUID player, boolean enabled) {
         DUEL_MESSAGES.put(player, enabled);
+    }
+
+    public static void setDuelSummaryMessages(UUID player, boolean enabled) {
+        DUEL_SUMMARY_MESSAGES.put(player, enabled);
     }
 }

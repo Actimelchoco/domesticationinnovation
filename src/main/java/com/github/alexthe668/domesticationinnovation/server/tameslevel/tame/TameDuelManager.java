@@ -817,8 +817,10 @@ public final class TameDuelManager {
             if (!PlayerDebugSettings.duelMessages(ownerId)) {
                 return;
             }
-            for (Component line : resultSummary) {
-                owner.sendSystemMessage(line);
+            if (PlayerDebugSettings.duelSummaryMessages(ownerId)) {
+                for (Component line : resultSummary) {
+                    owner.sendSystemMessage(line);
+                }
             }
             for (Component line : leaderboardSummary) {
                 owner.sendSystemMessage(line);
@@ -1136,7 +1138,9 @@ public final class TameDuelManager {
             double resultPoints = duelResultPoints(stats);
             boolean died = stats.deaths > 0;
             LivingEntity currentEntity = died ? null : findLoadedLivingParticipant(server, participantId);
-            MutableComponent row = Component.literal(rank + ". ").withStyle(ChatFormatting.GOLD)
+            boolean teamAEntry = battle.originalTeamA.contains(participantId);
+            ChatFormatting rankColor = teamAEntry ? ChatFormatting.AQUA : ChatFormatting.RED;
+            MutableComponent row = Component.literal(rank + ". ").withStyle(rankColor)
                     .append(Component.literal("(" + ownerInitials(server, participant.ownerId()) + ") ").withStyle(ChatFormatting.GRAY));
             if (participant.player()) {
                 row = row.append(Component.literal("[P] ").withStyle(ChatFormatting.BLUE));

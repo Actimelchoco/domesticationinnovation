@@ -677,6 +677,7 @@ public class TameCommands {
         private final SpawnTarget waitingA;
         private final SpawnTarget waitingB;
         private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
+        private final Map<UUID, SpawnTarget> rankedPlayerReturnTargets = new HashMap<>();
         private final Map<UUID, Long> idleSitHoldUntilTick = new HashMap<>();
         private final Map<ResourceKey<Level>, Set<ChunkPos>> forcedArenaChunks = new HashMap<>();
         private final LinkedHashSet<UUID> queuedPullAfterRound = new LinkedHashSet<>();
@@ -1681,13 +1682,13 @@ public class TameCommands {
                                                 .executes(ctx -> rankedPullSelection(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "selection")
-                                                )))))
-                        .then(Commands.literal("participants")
-                                .executes(ctx -> participantsList(ctx.getSource(), false, false))
-                                .then(Commands.literal("owned")
-                                        .executes(ctx -> participantsList(ctx.getSource(), true, false)))
-                                .then(Commands.literal("active")
-                                        .executes(ctx -> participantsList(ctx.getSource(), false, true))))
+                                                ))))
+                                .then(Commands.literal("participants")
+                                        .executes(ctx -> participantsList(ctx.getSource(), false, false))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> participantsList(ctx.getSource(), true, false)))
+                                        .then(Commands.literal("active")
+                                                .executes(ctx -> participantsList(ctx.getSource(), false, true)))))
                                 .then(Commands.literal("duelTeamOld")
                                         .then(Commands.literal("invite")
                                                 .then(Commands.argument("player", StringArgumentType.word())
@@ -2568,6 +2569,12 @@ public class TameCommands {
                                 .then(Commands.literal("duelMessages")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDuelMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelSumm")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelSummaryMessages(
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 )))))
@@ -4572,7 +4579,7 @@ public class TameCommands {
         }
         else if (key.equals("debug")) {
             sendInfoPage(p, "Debug",
-                    "/tames debug enemyKilled|duelMessages|duelKill|duelAssists|duelSessionMessage <true|false>",
+                    "/tames debug enemyKilled|duelMessages|duelSumm|duelKill|duelAssists|duelSessionMessage <true|false>",
                     "Toggles owner-local chat debug messages for combat and progression events."
             );
         }
@@ -7072,12 +7079,12 @@ public class TameCommands {
             return 0;
         }
         MinecraftServer server = source.getServer();
-        LinkedHashSet<UUID> participantIds = collectDuelSessionParticipantIds();
+        LinkedHashSet<UUID> participantIds = collectRankedParticipantIds();
         if (participantIds.isEmpty()) {
-            player.sendSystemMessage(Component.literal("No duel session participants found.").withStyle(ChatFormatting.YELLOW));
+            player.sendSystemMessage(Component.literal("No ranked participants found.").withStyle(ChatFormatting.YELLOW));
             return 1;
         }
-        List<String> lines = new ArrayList<>();
+        List<RankedParticipantEntry> entries = new ArrayList<>();
         for (UUID participantId : participantIds) {
             if (participantId == null) {
                 continue;
@@ -7089,44 +7096,50 @@ public class TameCommands {
             if (ownedOnly && (ownerId == null || !ownerId.equals(player.getUUID()))) {
                 continue;
             }
-            lines.add(participantSummaryLine(server, participantId));
+            RankedParticipantEntry entry = buildRankedParticipantEntry(server, participantId);
+            if (entry != null) {
+                entries.add(entry);
+            }
         }
-        lines.sort(String::compareToIgnoreCase);
-        if (lines.isEmpty()) {
+        entries.sort((a, b) -> {
+            int mmr = Integer.compare(b.mmr(), a.mmr());
+            if (mmr != 0) {
+                return mmr;
+            }
+            return a.name().compareToIgnoreCase(b.name());
+        });
+        if (entries.isEmpty()) {
             String scope = activeOnly ? "active" : ownedOnly ? "owned" : "matching";
             player.sendSystemMessage(Component.literal("No " + scope + " participants found.").withStyle(ChatFormatting.YELLOW));
             return 1;
         }
         String scope = ownedOnly ? "owned" : activeOnly ? "active" : "all";
-        player.sendSystemMessage(Component.literal("Participants (" + scope + "): " + lines.size()).withStyle(ChatFormatting.AQUA));
-        int shown = 0;
-        for (String line : lines) {
-            if (line == null || line.isBlank()) {
-                continue;
+        int limit = Math.min(200, entries.size());
+        player.sendSystemMessage(Component.literal("---- Ranked Participants | " + scope + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        String activeRankBucket = null;
+        for (int i = 0; i < limit; i++) {
+            RankedParticipantEntry entry = entries.get(i);
+            DuelLeaderboardRankBucket rankBucket = duelLeaderboardRankBucket(entry.mmr());
+            if (!rankBucket.label().equals(activeRankBucket)) {
+                activeRankBucket = rankBucket.label();
+                player.sendSystemMessage(Component.literal("---" + activeRankBucket + ":---").withStyle(rankBucket.color()));
             }
-            player.sendSystemMessage(Component.literal("- " + line).withStyle(ChatFormatting.GRAY));
-            shown++;
-            if (shown >= 200) {
-                break;
-            }
+            MutableComponent line = Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
+                    .append(Component.literal("(" + ownerInitials(server, entry.ownerUuid()) + ") ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal("(" + entry.mmr() + ") ").withStyle(rankBucket.color()))
+                    .append(Component.literal(entry.name() + " ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal("(" + shortEntityTypeName(entry.type()) + ")").withStyle(ChatFormatting.DARK_GRAY));
+            player.sendSystemMessage(line);
         }
-        if (lines.size() > shown) {
-            player.sendSystemMessage(Component.literal("... and " + (lines.size() - shown) + " more.").withStyle(ChatFormatting.DARK_GRAY));
+        if (entries.size() > limit) {
+            player.sendSystemMessage(Component.literal("... and " + (entries.size() - limit) + " more.").withStyle(ChatFormatting.DARK_GRAY));
         }
         return 1;
     }
 
-    private static LinkedHashSet<UUID> collectDuelSessionParticipantIds() {
+    private static LinkedHashSet<UUID> collectRankedParticipantIds() {
         LinkedHashSet<UUID> ids = new LinkedHashSet<>();
-        for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
-            if (session == null) {
-                continue;
-            }
-            ids.addAll(session.poolA);
-            ids.addAll(session.poolB);
-            ids.addAll(session.currentRoundA);
-            ids.addAll(session.currentRoundB);
-        }
+        ids.addAll(RANKED_POOL);
         ActiveDuelSession ranked = RANKED_DUEL_SESSION;
         if (ranked != null) {
             ids.addAll(ranked.poolA);
@@ -7137,29 +7150,52 @@ public class TameCommands {
         return ids;
     }
 
-    private static String participantSummaryLine(MinecraftServer server, UUID participantId) {
+    private static RankedParticipantEntry buildRankedParticipantEntry(MinecraftServer server, UUID participantId) {
         if (participantId == null) {
-            return "unknown";
+            return null;
         }
-        boolean active = TameDuelManager.isEntityInDuel(participantId);
+        int mmr = (int) Math.round(sessionParticipantPower(server, participantId));
         ServerPlayer onlinePlayer = server == null ? null : server.getPlayerList().getPlayer(participantId);
         if (onlinePlayer != null) {
-            return "player " + onlinePlayer.getGameProfile().getName() + " [" + (active ? "active" : "idle") + "]";
+            return new RankedParticipantEntry(
+                    participantId,
+                    participantId,
+                    onlinePlayer.getGameProfile().getName(),
+                    "minecraft:player",
+                    mmr
+            );
         }
         TameData data = TameRegistry.get(participantId);
         if (data != null) {
-            String name = data.name == null || data.name.isBlank() ? participantId.toString() : data.name;
-            String type = data.type == null || data.type.isBlank() ? "unknown" : data.type;
-            String owner = resolveKnownOwnerName(server, data.ownerUUID, "unknown");
-            return name + " (" + type + ") owner " + owner + " [" + (active ? "active" : "idle") + "]";
+            return new RankedParticipantEntry(
+                    participantId,
+                    data.ownerUUID,
+                    data.name == null || data.name.isBlank() ? participantId.toString() : data.name,
+                    data.type == null || data.type.isBlank() ? "unknown" : data.type,
+                    mmr
+            );
         }
         LivingEntity living = findLoadedLivingParticipant(server, participantId);
         if (living != null) {
-            String type = String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(living.getType()));
-            String name = living.getName().getString();
-            return name + " (" + type + ") [" + (active ? "active" : "idle") + "]";
+            ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(living.getType());
+            return new RankedParticipantEntry(
+                    participantId,
+                    participantOwnerForSession(server, participantId),
+                    living.getName().getString(),
+                    typeKey == null ? "unknown" : typeKey.toString(),
+                    mmr
+            );
         }
-        return participantId + " [" + (active ? "active" : "idle") + "]";
+        return new RankedParticipantEntry(
+                participantId,
+                participantOwnerForSession(server, participantId),
+                participantId.toString(),
+                "unknown",
+                mmr
+        );
+    }
+
+    private record RankedParticipantEntry(UUID participantId, UUID ownerUuid, String name, String type, int mmr) {
     }
 
     private static int rankedAddSelection(CommandSourceStack source, String selectionSpec) {
@@ -7186,13 +7222,36 @@ public class TameCommands {
         if (!parsed.targetPlayerNames.isEmpty()) {
             return error(player, "Selection cannot include other players.");
         }
-        TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
-        if (!resolved.error.isBlank()) {
-            return error(player, resolved.error);
+        boolean selfOnly = parsed.selection != null
+                && parsed.selection.includeSelf
+                && (parsed.selection.tameSelections == null || parsed.selection.tameSelections.isEmpty());
+        Set<UUID> selectedIds = new LinkedHashSet<>();
+        if (selfOnly) {
+            if (add) {
+                for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
+                    if (tame != null && tame.isAlive()) {
+                        selectedIds.add(tame.getUUID());
+                    }
+                }
+            } else {
+                for (UUID participantId : RANKED_POOL) {
+                    if (participantId != null && player.getUUID().equals(participantOwnerForSession(source.getServer(), participantId))) {
+                        selectedIds.add(participantId);
+                    }
+                }
+            }
+        } else {
+            TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
+            if (!resolved.error.isBlank()) {
+                return error(player, resolved.error);
+            }
+            selectedIds.addAll(collectLivingEntityIds(resolved.members));
+            selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
         }
-        Set<UUID> selectedIds = collectLivingEntityIds(resolved.members);
-        selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
         if (selectedIds.isEmpty()) {
+            if (selfOnly && !add) {
+                return error(player, "You have no ranked tames to pull.");
+            }
             return error(player, "No loaded/alive tames matched that selection.");
         }
 
@@ -13811,13 +13870,21 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setDuelSummaryMessages(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelSummaryMessages(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel ended summary messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int duelToggleStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
         boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
         boolean killNotifications = PlayerDebugSettings.duelKillNotifications(p.getUUID());
         boolean sessionMessages = PlayerDebugSettings.duelSessionMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Duel toggle -> duelMessages: " + duelMessages + ", assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
+        boolean duelSummaryMessages = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
+        p.sendSystemMessage(Component.literal("Duel toggle -> duelMessages: " + duelMessages + ", duelSumm: " + duelSummaryMessages + ", assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -13859,7 +13926,8 @@ public class TameCommands {
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
         boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
         boolean duelSessionMessage = PlayerDebugSettings.duelSessionMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelMessages: " + duelMessages + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
+        boolean duelSumm = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelMessages: " + duelMessages + ", duelSumm: " + duelSumm + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -20340,6 +20408,7 @@ public class TameCommands {
         if (server != null) {
             forceEndDuelSessionSide(server, session.poolA);
             forceEndDuelSessionSide(server, session.poolB);
+            restoreRankedRoundPlayers(server, session);
             setDuelSessionArenaChunksLoaded(server, session, false);
         }
         RANKED_DUEL_SESSION = null;
@@ -20425,6 +20494,7 @@ public class TameCommands {
                     forceEndDuelSessionSide(server, rankedSession.currentRoundB);
                     teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
                     syncIdleDuelSessionTames(server, rankedSession);
+                    restoreRankedRoundPlayers(server, rankedSession);
                     rankedSession.currentRoundA = Set.of();
                     rankedSession.currentRoundB = Set.of();
                     rankedSession.roundStartedAtTick = -1L;
@@ -20539,6 +20609,7 @@ public class TameCommands {
         if (round == null || round.teamA.isEmpty() || round.teamB.isEmpty()) {
             return false;
         }
+        captureRankedRoundPlayerReturnTargets(server, session, round.teamA, round.teamB);
         teleportDuelSessionIdleTamesHome(server, session, round.teamA, round.teamB);
         teleportDuelSessionParticipants(server, round.teamA, session.spawnA);
         teleportDuelSessionParticipants(server, round.teamB, session.spawnB);
@@ -20554,9 +20625,7 @@ public class TameCommands {
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        if (!session.ranked) {
-            notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
-        }
+        notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
         return true;
     }
 
@@ -21168,6 +21237,47 @@ public class TameCommands {
             teleportSessionPoolHome(server, session, session.ownerB, session.poolB, active, session.waitingB);
         } else {
             teleportSessionPoolHome(server, session, session.ownerB, session.poolB, active, session.waitingB);
+        }
+    }
+
+    private static void captureRankedRoundPlayerReturnTargets(MinecraftServer server, ActiveDuelSession session, Set<UUID> teamA, Set<UUID> teamB) {
+        if (server == null || session == null || !session.ranked) {
+            return;
+        }
+        LinkedHashSet<UUID> participants = new LinkedHashSet<>();
+        if (teamA != null) {
+            participants.addAll(teamA);
+        }
+        if (teamB != null) {
+            participants.addAll(teamB);
+        }
+        for (UUID participantId : participants) {
+            if (participantId == null || session.rankedPlayerReturnTargets.containsKey(participantId)) {
+                continue;
+            }
+            LivingEntity living = findLoadedLivingParticipant(server, participantId);
+            if (!(living instanceof ServerPlayer player) || !player.isAlive()) {
+                continue;
+            }
+            session.rankedPlayerReturnTargets.put(
+                    participantId,
+                    new SpawnTarget(player.serverLevel(), player.position(), player.getYRot(), player.getXRot())
+            );
+        }
+    }
+
+    private static void restoreRankedRoundPlayers(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null || !session.ranked || session.rankedPlayerReturnTargets.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, SpawnTarget> entry : new ArrayList<>(session.rankedPlayerReturnTargets.entrySet())) {
+            UUID participantId = entry.getKey();
+            SpawnTarget target = entry.getValue();
+            ServerPlayer player = participantId == null ? null : server.getPlayerList().getPlayer(participantId);
+            if (player != null && target != null && target.level != null && target.pos != null) {
+                player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
+            }
+            session.rankedPlayerReturnTargets.remove(participantId);
         }
     }
 
