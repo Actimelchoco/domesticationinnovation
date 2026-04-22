@@ -24,9 +24,11 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -164,6 +166,9 @@ public final class TameDuelManager {
             capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
+        // Ensure participants have a valid target immediately after duel-start prep.
+        maintainTargets(server, battle.teamA, battle.teamB);
+        maintainTargets(server, battle.teamB, battle.teamA);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -398,6 +403,17 @@ public final class TameDuelManager {
         if (tame == null) {
             return false;
         }
+        ResourceLocation typeKey = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (typeKey != null && "legendary_monsters".equals(typeKey.getNamespace())) {
+            return true;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data != null && data.type != null) {
+            String normalized = data.type.trim().toLowerCase(java.util.Locale.ROOT);
+            if (normalized.startsWith("legendary_monsters:") || normalized.startsWith("legendary_monsters.")) {
+                return true;
+            }
+        }
         String className = tame.getClass().getName();
         return className != null && className.startsWith("net.miauczel.legendary_monsters.");
     }
@@ -475,7 +491,7 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
-        // Prevent vanilla follow-owner recovery from yanking duel tames back to their owner.
+        // Set follow once at duel start so participant AI stays combat-active.
         TameCommands.applyMovementOrderCode(tame, 2);
         tame.setOrderedToSit(false);
         applyDuelFollowRangeBoost(tame);
