@@ -32,6 +32,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
+    private String rankedArenaName = "";
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -217,6 +218,14 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public String getRankedArenaName() {
+        return rankedArenaName == null ? "" : rankedArenaName;
+    }
+
+    public void setRankedArenaName(String rankedArenaName) {
+        this.rankedArenaName = rankedArenaName == null ? "" : rankedArenaName.trim();
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         ListTag tamesTag = new ListTag();
@@ -369,6 +378,9 @@ public class TameRegistrySavedData extends SavedData {
             teleportCreditsTag.add(row);
         }
         tag.put("ownerTeleportApprovedCredits", teleportCreditsTag);
+        if (rankedArenaName != null && !rankedArenaName.isBlank()) {
+            tag.putString("rankedArenaName", rankedArenaName);
+        }
         return tag;
     }
 
@@ -537,6 +549,9 @@ public class TameRegistrySavedData extends SavedData {
                     data.ownerTeleportApprovedCredits.put(row.getUUID("ownerUUID"), credits);
                 }
             }
+        }
+        if (tag.contains("rankedArenaName", Tag.TAG_STRING)) {
+            data.rankedArenaName = tag.getString("rankedArenaName").trim();
         }
         return data;
     }
