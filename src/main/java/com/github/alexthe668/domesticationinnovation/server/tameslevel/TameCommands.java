@@ -4183,8 +4183,8 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, duel, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
-        p.sendSystemMessage(Component.literal("Examples: /tames info guardian, /tames info tool guardian, /tames info duel accept, /tames info duel duelleaderboard, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
     }
@@ -4456,6 +4456,17 @@ public class TameCommands {
                     "Searches your registered tames by ability, attribute, or tame class."
             );
         }
+        else if (key.equals("arena")) {
+            sendInfoPage(p, "Arena",
+                    "/tames arena",
+                    "/tames arena create <arenaName>",
+                    "/tames arena <arenaName> setA|setB|setWaitingA|setWaitingB",
+                    "/tames arena <arenaName> duel|duelSession|duelSessionFFA <spec>",
+                    "Arenas store spawn and waiting points used by duel commands.",
+                    "If an arena is reserved for ranked, /tames arena cannot use or edit it.",
+                    "Use /tames admin ranked ... to edit a ranked-reserved arena."
+            );
+        }
         else if (key.equals("duel")) {
             sendInfoPage(p, "Duel",
                     "/tames duel <selection> [vs <selection>]",
@@ -4465,6 +4476,40 @@ public class TameCommands {
                     "Duels are TL's ranked PvP/PvE team-fight system for both players and tames.",
                     "A duel can be same-owner practice, direct player-vs-player, or multi-player team duels depending on the selectors used.",
                     "Use the duel subtopics for the exact command forms."
+            );
+        }
+        else if (key.equals("duelsession") || key.equals("duel session")) {
+            sendInfoPage(p, "DuelSession",
+                    "/tames duelSession <left selection> vs <right selection>",
+                    "/tames duelSession accept <player> vs <your selection>",
+                    "/tames duelSession add <selection>",
+                    "/tames duelSession pull <selection>",
+                    "/tames duelSession ff",
+                    "Runs repeated round-based duels between two sides.",
+                    "pull is blocked for tames currently active in the running round."
+            );
+        }
+        else if (key.equals("duelsessionffa") || key.equals("duel session ffa")) {
+            sendInfoPage(p, "DuelSessionFFA",
+                    "/tames duelSessionFFA <selection>",
+                    "/tames duelSessionFFA accept <player> vs <your selection>",
+                    "/tames duelSessionFFA add <selection>",
+                    "/tames duelSessionFFA pull <selection>",
+                    "/tames duelSessionFFA ff",
+                    "Runs repeated FFA-based rounds with dynamic team generation."
+            );
+        }
+        else if (key.equals("ranked")) {
+            sendInfoPage(p, "Ranked",
+                    "/tames ranked",
+                    "/tames ranked add <selection>",
+                    "/tames ranked pull <selection>",
+                    "/tames admin ranked setArena <arenaName>",
+                    "/tames admin ranked setA|setB|setWaitingA|setWaitingB",
+                    "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
+                    "Only tames whose owners are online are selected into rounds.",
+                    "Offline-owner tames stay idle at waiting until their owner is online again.",
+                    "The ranked arena is reserved and cannot be used through /tames arena."
             );
         }
         else if (key.equals("duel duel")) {
