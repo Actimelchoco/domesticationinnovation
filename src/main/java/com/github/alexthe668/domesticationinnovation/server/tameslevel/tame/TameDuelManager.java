@@ -15,6 +15,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.world.BossEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -27,6 +28,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -368,10 +370,12 @@ public final class TameDuelManager {
             removeDuelFollowRangeBoost(tame);
             return;
         }
-        TameCommands.applyMovementOrderCode(tame, 2);
-        tame.setOrderedToSit(false);
-        if (tame instanceof IComandableMob commandableMob) {
-            commandableMob.setCommand(0);
+        if (!isLegendaryMonstersMossyGolem(tame)) {
+            TameCommands.applyMovementOrderCode(tame, 2);
+            tame.setOrderedToSit(false);
+            if (tame instanceof IComandableMob commandableMob) {
+                commandableMob.setCommand(0);
+            }
         }
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = tame.getTarget();
@@ -468,13 +472,29 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
-        // Set follow once at duel start so participant AI stays combat-active.
-        TameCommands.applyMovementOrderCode(tame, 2);
-        tame.setOrderedToSit(false);
+        if (!isLegendaryMonstersMossyGolem(tame)) {
+            // Set follow once at duel start so participant AI stays combat-active.
+            TameCommands.applyMovementOrderCode(tame, 2);
+            tame.setOrderedToSit(false);
+        }
         applyDuelFollowRangeBoost(tame);
-        if (tame instanceof IComandableMob commandableMob) {
+        if (tame instanceof IComandableMob commandableMob && !isLegendaryMonstersMossyGolem(tame)) {
             commandableMob.setCommand(0);
         }
+    }
+
+    private static boolean isLegendaryMonstersMossyGolem(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (key != null
+                && "legendary_monsters".equals(key.getNamespace())
+                && "mossy_golem".equals(key.getPath())) {
+            return true;
+        }
+        String className = tame.getClass().getName();
+        return className != null && className.toLowerCase(java.util.Locale.ROOT).contains("mossygolem");
     }
 
     private static void resetParticipantCooldownsForDuel(UUID participantId) {

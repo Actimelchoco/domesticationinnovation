@@ -264,7 +264,8 @@ public class TameCombatEvents {
         if (event == null || event.getSource() == null) {
             return null;
         }
-        if (event.getSource().getEntity() instanceof ServerPlayer player) {
+        ServerPlayer player = resolvePlayerAttacker(event.getSource());
+        if (player != null) {
             return player.getUUID();
         }
         TamableAnimal tame = resolveTameAttacker(event.getSource());
@@ -302,11 +303,25 @@ public class TameCombatEvents {
         if (source == null) {
             return null;
         }
-        if (source.getEntity() instanceof ServerPlayer player) {
+        ServerPlayer player = resolvePlayerAttacker(source);
+        if (player != null) {
             return player.getUUID();
         }
         TamableAnimal tame = resolveTameAttacker(source);
         return tame != null && tame.isTame() ? tame.getUUID() : null;
+    }
+
+    private static ServerPlayer resolvePlayerAttacker(DamageSource source) {
+        if (source == null) {
+            return null;
+        }
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return player;
+        }
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof ServerPlayer player) {
+            return player;
+        }
+        return null;
     }
 
     private static UUID resolveDuelParticipantUuid(LivingEntity entity) {

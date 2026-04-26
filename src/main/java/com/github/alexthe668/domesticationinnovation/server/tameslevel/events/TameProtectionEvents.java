@@ -101,7 +101,8 @@ public class TameProtectionEvents {
         if (!(event.getEntity() instanceof Player victim)) {
             return;
         }
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
+        Player attacker = resolvePlayerAttacker(event.getSource());
+        if (attacker == null) {
             return;
         }
         if (canPlayersBypassFriendlyFire(attacker, victim)) {
@@ -117,7 +118,8 @@ public class TameProtectionEvents {
         if (!(event.getEntity() instanceof Player victim)) {
             return;
         }
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
+        Player attacker = resolvePlayerAttacker(event.getSource());
+        if (attacker == null) {
             return;
         }
         if (canPlayersBypassFriendlyFire(attacker, victim)) {
@@ -236,8 +238,24 @@ public class TameProtectionEvents {
         if (attacker instanceof Player player) {
             return player.getUUID();
         }
+        if (direct instanceof Projectile projectile && projectile.getOwner() instanceof Player player) {
+            return player.getUUID();
+        }
         TamableAnimal tame = resolveTameAttacker(attacker, direct);
         return tame == null ? null : tame.getUUID();
+    }
+
+    private static Player resolvePlayerAttacker(net.minecraft.world.damagesource.DamageSource source) {
+        if (source == null) {
+            return null;
+        }
+        if (source.getEntity() instanceof Player player) {
+            return player;
+        }
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof Player owner) {
+            return owner;
+        }
+        return null;
     }
 
     private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, LivingAttackEvent event) {

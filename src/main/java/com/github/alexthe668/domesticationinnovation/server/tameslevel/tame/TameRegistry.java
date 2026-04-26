@@ -41,6 +41,7 @@ public class TameRegistry {
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
+    private static final Set<UUID> RANKED_PARTICIPANTS = new LinkedHashSet<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -110,6 +111,8 @@ public class TameRegistry {
         OWNER_TELEPORT_APPROVED_CREDITS.clear();
         OWNER_TELEPORT_APPROVED_CREDITS.putAll(savedData.getOwnerTeleportApprovedCredits());
         RANKED_ARENA_NAME = savedData.getRankedArenaName();
+        RANKED_PARTICIPANTS.clear();
+        RANKED_PARTICIPANTS.addAll(savedData.getRankedParticipants());
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
             LAST_DEATHS.entrySet().removeIf(entry -> {
                 TameDeathRecord record = entry.getValue();
@@ -274,6 +277,7 @@ public class TameRegistry {
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
+        savedData.setRankedParticipants(RANKED_PARTICIPANTS);
         savedData.setDirty();
     }
 
@@ -287,6 +291,22 @@ public class TameRegistry {
             return;
         }
         RANKED_ARENA_NAME = normalized;
+        markDirty();
+    }
+
+    public static Set<UUID> getRankedParticipants() {
+        return Set.copyOf(RANKED_PARTICIPANTS);
+    }
+
+    public static void setRankedParticipants(Set<UUID> participants) {
+        RANKED_PARTICIPANTS.clear();
+        if (participants != null) {
+            for (UUID participantId : participants) {
+                if (participantId != null) {
+                    RANKED_PARTICIPANTS.add(participantId);
+                }
+            }
+        }
         markDirty();
     }
 

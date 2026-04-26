@@ -166,6 +166,7 @@ public class TameCommands {
     private static final UUID RANKED_SESSION_OWNER_B = UUID.fromString("a9129d8e-1f49-40ce-aee0-27ec9dd6f483");
     private static String RANKED_ARENA_NAME = "";
     private static final LinkedHashSet<UUID> RANKED_POOL = new LinkedHashSet<>();
+    private static boolean RANKED_POOL_LOADED_FROM_REGISTRY = false;
     private static ActiveDuelSession RANKED_DUEL_SESSION;
     private static final String TAG_GUARDIAN_TOOL_ORDER = "DIGuardianToolOrder";
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
@@ -3470,6 +3471,7 @@ public class TameCommands {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = event.getServer();
         if (server == null) return;
+        TamePerformanceProfiler.run("system.ranked_pool_load", TameCommands::ensureRankedPoolLoadedFromRegistry);
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
         TamePerformanceProfiler.run("system.morning_registry_sweep", () -> processMorningRegistrySweep(server));
         TamePerformanceProfiler.run("system.pending_morning_lantern_recalls", () -> processPendingMorningLanternRecalls(server));
@@ -7574,6 +7576,10 @@ public class TameCommands {
             } else {
                 skipped++;
             }
+        }
+
+        if (changed > 0) {
+            persistRankedPoolToRegistry();
         }
 
         if (changed > 0 && session != null) {
@@ -20980,11 +20986,12 @@ public class TameCommands {
         if (session == null || !session.ranked || session.queuedPullAfterRound.isEmpty()) {
             return;
         }
+        boolean changed = false;
         for (UUID participantId : new ArrayList<>(session.queuedPullAfterRound)) {
             if (participantId == null || TameDuelManager.isEntityInDuel(participantId)) {
                 continue;
             }
-            RANKED_POOL.remove(participantId);
+            changed |= RANKED_POOL.remove(participantId);
             session.poolA.remove(participantId);
             session.poolB.remove(participantId);
             session.currentRoundA = removeFromSet(session.currentRoundA, participantId);
@@ -20992,6 +20999,25 @@ public class TameCommands {
             session.idleSitHoldUntilTick.remove(participantId);
             session.queuedPullAfterRound.remove(participantId);
         }
+        if (changed) {
+            persistRankedPoolToRegistry();
+        }
+    }
+
+    private static void ensureRankedPoolLoadedFromRegistry() {
+        if (RANKED_POOL_LOADED_FROM_REGISTRY || !TameRegistry.isInitialized()) {
+            return;
+        }
+        RANKED_POOL.clear();
+        RANKED_POOL.addAll(TameRegistry.getRankedParticipants());
+        RANKED_POOL_LOADED_FROM_REGISTRY = true;
+    }
+
+    private static void persistRankedPoolToRegistry() {
+        if (!TameRegistry.isInitialized()) {
+            return;
+        }
+        TameRegistry.setRankedParticipants(new LinkedHashSet<>(RANKED_POOL));
     }
 
     private static boolean isRankedParticipantOwnerOnline(MinecraftServer server, UUID participantId) {
