@@ -9,9 +9,6 @@ import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(targets = "net.miauczel.legendary_monsters.entity.ai.goal.ITamableMonster.IAnimatedTamableMob")
@@ -42,13 +39,5 @@ public abstract class LegendaryMonstersAnimatedTamableMobMixin extends TamableAn
             return;
         }
         this.setTarget(null);
-    }
-
-    @Inject(method = "m_7307_", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void tl$allowDuelOpponentAsEnemy(Entity other, CallbackInfoReturnable<Boolean> cir) {
-        if (other != null && TameDuelManager.areDuelOpponents(this.getUUID(), other.getUUID())) {
-            // Entity#isAlliedTo -> false means "not allied", so combat goals can proceed.
-            cir.setReturnValue(false);
-        }
     }
 }

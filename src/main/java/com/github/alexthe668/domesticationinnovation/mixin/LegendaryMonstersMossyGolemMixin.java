@@ -11,9 +11,6 @@ import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
@@ -74,11 +71,23 @@ public abstract class LegendaryMonstersMossyGolemMixin extends TamableAnimal {
         }
     }
 
-    @Inject(method = "m_7307_", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void tl$allowDuelOpponentTargeting(Entity other, CallbackInfoReturnable<Boolean> cir) {
-        if (other != null && TameDuelManager.areDuelOpponents(this.getUUID(), other.getUUID())) {
-            cir.setReturnValue(false);
+    @Overwrite(remap = false)
+    public void stopAttackingAllies() {
+        LivingEntity target = this.getTarget();
+        if (!(target instanceof TamableAnimal tameTarget)) {
+            return;
         }
+        LivingEntity owner = this.getOwner();
+        if (owner == null) {
+            return;
+        }
+        if (tameTarget.getOwner() != owner) {
+            return;
+        }
+        if (TameDuelManager.areDuelOpponents(this.getUUID(), tameTarget.getUUID())) {
+            return;
+        }
+        this.setTarget(null);
     }
 
     private static boolean isWithinArcAndRange(float distance, float maxDistance, float relativeYaw, float arc) {
