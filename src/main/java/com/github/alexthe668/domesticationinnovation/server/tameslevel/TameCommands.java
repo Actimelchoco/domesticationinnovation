@@ -4087,6 +4087,7 @@ public class TameCommands {
 
         List<TameData> loaded = new ArrayList<>();
         List<TameData> unloaded = new ArrayList<>();
+        List<TameData> duel = new ArrayList<>();
         List<TameData> stored = new ArrayList<>();
         List<TameData> dead = new ArrayList<>();
         for (TameData d : tames) {
@@ -4094,6 +4095,8 @@ public class TameCommands {
                 stored.add(d);
             } else if (isDeadEntry(d.uuid)) {
                 dead.add(d);
+            } else if (isDuelLocked(d.uuid)) {
+                duel.add(d);
             } else if (isLoadedAnywhere(source.getServer(), d.uuid)) {
                 loaded.add(d);
             } else {
@@ -4103,6 +4106,7 @@ public class TameCommands {
 
         loaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         unloaded.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
+        duel.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         stored.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
         dead.sort(Comparator.comparing(d -> d.name.toLowerCase(Locale.ROOT)));
 
@@ -4110,6 +4114,10 @@ public class TameCommands {
         p.sendSystemMessage(Component.literal("Loaded (" + loaded.size() + "):").withStyle(ChatFormatting.GREEN));
         for (TameData d : loaded) {
             p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name).withStyle(ChatFormatting.GREEN));
+        }
+        p.sendSystemMessage(Component.literal("Duel (" + duel.size() + "):").withStyle(ChatFormatting.GOLD));
+        for (TameData d : duel) {
+            p.sendSystemMessage(Component.literal("- [" + d.level + "] " + d.name).withStyle(ChatFormatting.GOLD));
         }
         p.sendSystemMessage(Component.literal("Stored (" + stored.size() + "):").withStyle(ChatFormatting.LIGHT_PURPLE));
         for (TameData d : stored) {
@@ -4179,7 +4187,7 @@ public class TameCommands {
         else if (key.equals("loaded")) {
             sendInfoPage(p, "Loaded",
                     "/tames loaded",
-                    "Shows your loaded, unloaded, and dead registry entries."
+                    "Shows your loaded, duel, unloaded, and dead registry entries."
             );
         }
         else if (key.equals("stat") || key.equals("stats")) {
@@ -22342,6 +22350,9 @@ public class TameCommands {
         if (data.dead) {
             return "dead";
         }
+        if (isDuelLocked(data)) {
+            return "duel";
+        }
         return isLoadedAnywhere(server, data.uuid) ? "loaded" : "unloaded";
     }
 
@@ -22355,20 +22366,26 @@ public class TameCommands {
         if (data.dead) {
             return ChatFormatting.GRAY;
         }
+        if (isDuelLocked(data)) {
+            return ChatFormatting.GOLD;
+        }
         return loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
     }
 
     private static int statusOrder(TameData data, MinecraftServer server) {
         if (data == null) {
-            return 4;
+            return 5;
         }
         if (data.stored) {
-            return 2;
-        }
-        if (data.dead) {
             return 3;
         }
-        return isLoadedAnywhere(server, data.uuid) ? 0 : 1;
+        if (data.dead) {
+            return 4;
+        }
+        if (isDuelLocked(data)) {
+            return 1;
+        }
+        return isLoadedAnywhere(server, data.uuid) ? 0 : 2;
     }
 
     private static long daysAlive(CommandSourceStack source, TameData data) {
