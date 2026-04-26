@@ -677,7 +677,6 @@ public class TameCommands {
         private final SpawnTarget spawnB;
         private final SpawnTarget waitingA;
         private final SpawnTarget waitingB;
-        private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
         private final Map<UUID, SpawnTarget> rankedPlayerReturnTargets = new HashMap<>();
         private final Map<UUID, Long> idleSitHoldUntilTick = new HashMap<>();
         private final Map<ResourceKey<Level>, Set<ChunkPos>> forcedArenaChunks = new HashMap<>();
@@ -1940,13 +1939,127 @@ public class TameCommands {
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
 
                         .then(Commands.literal("duelleaderboard")
-                                .executes(ctx -> duelLeaderboardSimple(ctx.getSource(), false, false))
-                                .then(Commands.literal("long")
-                                        .executes(ctx -> duelLeaderboardSimple(ctx.getSource(), false, true)))
+                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false))
+                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
                                 .then(Commands.literal("all")
-                                        .executes(ctx -> duelLeaderboardSimple(ctx.getSource(), true, false))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE, false)))
+                                .then(Commands.literal("everytame")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE, false)))
+                                .then(Commands.literal("owned")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, 10, false))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE, false)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE, false))))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, 10, false))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE, false)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE, false)))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), 10, false))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, false)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, false)))
+                                                .then(Commands.literal("owned")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), 10, false))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, false)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, false))))))
+                                .then(Commands.argument("mode", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestDuelLeaderboardModes(b))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, 10, false))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, false)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, false)))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, 10, false))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, Integer.MAX_VALUE, false)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, Integer.MAX_VALUE, false))))
                                         .then(Commands.literal("long")
-                                                .executes(ctx -> duelLeaderboardSimple(ctx.getSource(), true, true)))))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, 10, true))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, true)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, true)))))
+                                .then(Commands.literal("long")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, true))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE, true)))
+                                        .then(Commands.literal("everytame")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE, true)))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, 10, true))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE, true)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE, true))))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, 10, true))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE, true)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE, true)))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), 10, true))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, true)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE, true)))))
+                                        .then(Commands.argument("mode", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestDuelLeaderboardModes(b))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, 10, true))
+                                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                .then(Commands.literal("all")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, true)))
+                                                .then(Commands.literal("everytame")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), true, null, null, Integer.MAX_VALUE, true)))
+                                                .then(Commands.literal("owned")
+                                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, 10, true))
+                                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, IntegerArgumentType.getInteger(ctx, "limit"), true)))
+                                                        .then(Commands.literal("all")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, Integer.MAX_VALUE, true)))
+                                                        .then(Commands.literal("everytame")
+                                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "mode"), false, null, null, Integer.MAX_VALUE, true)))))))
 
                         .then(Commands.literal("follow")
                                 .executes(ctx -> setMovementState(ctx.getSource(), true, MovementOrder.FOLLOW))
@@ -4170,11 +4283,14 @@ public class TameCommands {
             sendInfoPage(p, "DuelLeaderboard",
                     "/tames duelleaderboard",
                     "/tames duelleaderboard long",
+                    "/tames duelleaderboard [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame|owned]",
+                    "/tames duelleaderboard group <groupName> [<number>|all|everytame]",
+                    "/tames duelleaderboard type <typeName> [<number>|all|everytame|owned]",
                     "/tames duelleaderboard all",
                     "/tames duelleaderboard all long",
-                    "Default scope is owned entries only, same as ranked participants.",
-                    "'all' includes everyone.",
-                    "'long' adds the full stats line: mmr / wins / losses / duels / kills / assists / deaths / points.",
+                    "Default is top 10 across all players.",
+                    "'owned' limits to your entries.",
+                    "'long' adds the full stats line: wins / losses / duels / kills / assists / deaths / points.",
                     "Only participants with at least 1 recorded duel are shown."
             );
         }
@@ -4538,10 +4654,13 @@ public class TameCommands {
             sendInfoPage(p, "Duel DuelLeaderboard",
                     "/tames duelleaderboard",
                     "/tames duelleaderboard long",
+                    "/tames duelleaderboard [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame|owned]",
+                    "/tames duelleaderboard group <groupName> [<number>|all|everytame]",
+                    "/tames duelleaderboard type <typeName> [<number>|all|everytame|owned]",
                     "/tames duelleaderboard all",
                     "/tames duelleaderboard all long",
                     "Shows duel ranking for players and tames with at least 1 duel.",
-                    "Default scope is owned entries only; add 'all' to include everyone."
+                    "Default is top 10 across all players."
             );
         }
         else if (key.equals("debug")) {
@@ -5642,9 +5761,8 @@ public class TameCommands {
         if (requested.isEmpty()) {
             return error(player, "No loaded reincarnation-eligible tames found for " + label + ".");
         }
-        int totalLevelsRestored = 0;
         int restored = 0;
-        List<String> spentLabels = new ArrayList<>();
+        List<String> reincarnatedNames = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         for (TameData data : requested) {
@@ -5667,8 +5785,7 @@ public class TameCommands {
             }
             if (LevelSystem.restoreHighestProgressWithoutXpCost(tame, data)) {
                 restored++;
-                spentLabels.add(payment.label);
-                totalLevelsRestored += restoredLevels;
+                reincarnatedNames.add(tameDisplayName(data));
             } else {
                 failed.add(tameDisplayName(data) + " (failed to restore saved progress)");
             }
@@ -5684,7 +5801,7 @@ public class TameCommands {
             return error(player, message.toString());
         }
         player.sendSystemMessage(Component.literal(
-                "Reincarnated " + restored + " tame(s) for " + String.join(", ", spentLabels) + " (" + totalLevelsRestored + " total level(s) restored)."
+                "Reincarnated " + restored + " tame(s): " + String.join(", ", reincarnatedNames) + "."
         ).withStyle(ChatFormatting.GREEN));
         sendAffordabilityFailures(player, "Could not afford reincarnation for", unaffordable);
         if (!failed.isEmpty()) {
@@ -6576,6 +6693,8 @@ public class TameCommands {
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
         }
+        teleportDuelSessionIdleTamesHome(source.getServer(), session, Set.of(), Set.of());
+        syncIdleDuelSessionTames(source.getServer(), session);
         owner.sendSystemMessage(Component.literal("Duel session started" + arenaLabel(arenaName) + ": " + teamSelectionLabel(leftSelection) + " vs " + teamSelectionLabel(rightSelection) + ".").withStyle(ChatFormatting.GREEN));
         scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
@@ -6677,6 +6796,8 @@ public class TameCommands {
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(player, "A duel or duel session is already active for one of those players.");
         }
+        teleportDuelSessionIdleTamesHome(source.getServer(), session, Set.of(), Set.of());
+        syncIdleDuelSessionTames(source.getServer(), session);
         initiator.sendSystemMessage(Component.literal("Duel session" + arenaLabel(pending.arenaName) + " accepted by " + player.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         player.sendSystemMessage(Component.literal("Accepted duel session invite" + arenaLabel(pending.arenaName) + " from " + initiator.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         scheduleNextDuelSessionRound(source.getServer(), session);
@@ -6785,6 +6906,8 @@ public class TameCommands {
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
         }
+        teleportDuelSessionIdleTamesHome(source.getServer(), session, Set.of(), Set.of());
+        syncIdleDuelSessionTames(source.getServer(), session);
         owner.sendSystemMessage(Component.literal("Duel session FFA started" + arenaLabel(arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
         scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
@@ -6931,6 +7054,8 @@ public class TameCommands {
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(source.getPlayer(), "A duel or duel session is already active for one of those players.");
         }
+        teleportDuelSessionIdleTamesHome(source.getServer(), session, Set.of(), Set.of());
+        syncIdleDuelSessionTames(source.getServer(), session);
         notifyDuelSessionOwners(source.getServer(), session, Component.literal("Duel session FFA started" + arenaLabel(pending.arenaName) + " with " + pool.size() + " participants.").withStyle(ChatFormatting.GREEN));
         scheduleNextDuelSessionRound(source.getServer(), session);
         return 1;
@@ -7052,7 +7177,6 @@ public class TameCommands {
                     }
                     Set<UUID> targetPool = session.poolA.size() <= session.poolB.size() ? session.poolA : session.poolB;
                     targetPool.add(participantId);
-                    captureDuelSessionSnapshot(source.getServer(), session, participantId);
                     changed++;
                     continue;
                 }
@@ -7069,7 +7193,6 @@ public class TameCommands {
                     continue;
                 }
                 ownPool.add(participantId);
-                captureDuelSessionSnapshot(source.getServer(), session, participantId);
                 changed++;
             } else {
                 boolean inCurrentRound = session.currentRoundA.contains(participantId) || session.currentRoundB.contains(participantId);
@@ -7368,7 +7491,6 @@ public class TameCommands {
                 if (session != null) {
                     session.poolA.add(participantId);
                     session.queuedPullAfterRound.remove(participantId);
-                    captureDuelSessionSnapshot(source.getServer(), session, participantId);
                 }
                 changed++;
                 continue;
@@ -7772,7 +7894,7 @@ public class TameCommands {
             case "berserker" -> id + " L" + level + ": at <=20% HP, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(400L) + "; cooldown " + fmtSeconds(2000L);
             case "bloodlust" -> id + " L" + level + ": on kill, gain Strength " + romanAmp(level - 1) + " and Resistance " + romanAmp(defensiveAuraInfoAmplifier(level)) + " for " + fmtSeconds(200L) + "; no cooldown";
             case "retaliation_slow" -> id + " L" + level + ": on hurt, " + fmt(Math.min(0.85D, 0.20D + level * 0.04D) * 100.0D) + "% proc; radius " + fmt(2.0D + Math.max(0, level - (level / 3)) * 0.35D) + ", Slowness " + romanAmp(level / 3) + " for " + fmtSeconds(40L + level * 10L) + "; cooldown " + fmtSeconds(60L);
-            case "immunity_frame" -> id + " L" + level + ": first hit is canceled and starts invulnerability for " + fmtSeconds(Math.min(100L, 5L + 5L * level)) + "; cooldown " + fmtSeconds(200L) + "; caps at 5.0s by level 19; while active, this tame cannot use abilities; passive/no active cast DPS";
+            case "immunity_frame" -> id + " L" + level + ": first hit is canceled and starts invulnerability for " + fmtSeconds(Math.min(100L, 5L + 5L * level)) + "; cooldown " + fmtSeconds(250L) + "; caps at 5.0s by level 19; while active, this tame cannot use abilities; passive/no active cast DPS";
             case "deflection" -> id + " L" + level + ": projectile deflect; reverses incoming projectile to 20% speed; passive reactive trigger";
             case "defusal" -> id + " L" + level + ": cancels nearby explosions; range " + fmt(10.0D + (level / 3) * 10.0D) + ", cooldown " + fmtSeconds(Math.max(0L, 100L - Math.max(0, level - 1) * 20L));
             case "psychic_wall" -> id + " L" + level + ": wall width " + (level + 1) + ", owner protect range " + fmt(5.0D + Math.max(0, level - 1) * 1.5D) + ", lifespan " + fmtSeconds(100L * level) + ", cooldown " + fmtSeconds(260L * level + 60L);
@@ -10349,9 +10471,11 @@ public class TameCommands {
         }
         String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
         ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
-        if (owner == null) {
-            return adminError(source, ownerName + " must be online for admin tp.");
+        ServerPlayer destinationPlayer = owner != null ? owner : source.getPlayer();
+        if (destinationPlayer == null) {
+            return adminError(source, ownerName + " is offline and admin tp needs a player executor destination.");
         }
+        String destinationLabel = owner != null ? ownerName : "executor location";
         TameData data = findOwnedTameAny(ownerId, pet);
         if (data == null) {
             return adminError(source, "Pet not found for " + ownerName + ".");
@@ -10364,7 +10488,7 @@ public class TameCommands {
         }
         TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
         if (tame == null) {
-            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, destinationPlayer, data);
             if (!unloaded.success) {
                 return adminError(source, "Failed to tp unloaded tame for " + ownerName + ": " + unloaded.error);
             }
@@ -10372,10 +10496,10 @@ public class TameCommands {
             if (orderOverride != null && loadedAfterTeleport != null) {
                 applyMovementOverride(loadedAfterTeleport, orderOverride);
             }
-            source.sendSuccess(() -> Component.literal("Admin teleported unloaded " + tameDisplayName(data) + " to " + ownerName + "."), false);
+            source.sendSuccess(() -> Component.literal("Admin teleported unloaded " + tameDisplayName(data) + " to " + destinationLabel + "."), false);
             return 1;
         }
-        boolean crossDimension = isCrossDimension(tame, owner);
+        boolean crossDimension = isCrossDimension(tame, destinationPlayer);
         if (crossDimension) {
             if (orderOverride != null) {
                 applyMovementOverride(tame, orderOverride);
@@ -10384,22 +10508,22 @@ public class TameCommands {
                     (ServerLevel) tame.level(),
                     tame.blockPosition(),
                     data,
-                    new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot()),
+                    new SpawnTarget(destinationPlayer.serverLevel(), destinationPlayer.position(), destinationPlayer.getYRot(), destinationPlayer.getXRot()),
                     true,
                     false
             );
             if (!queued.success) {
                 return adminError(source, "Failed to queue cross-dimension tame teleport for " + ownerName + ": " + queued.error);
             }
-            source.sendSuccess(() -> Component.literal("Admin queued cross-dimension teleport for " + tameDisplayName(data) + " to " + ownerName + "."), false);
+            source.sendSuccess(() -> Component.literal("Admin queued cross-dimension teleport for " + tameDisplayName(data) + " to " + destinationLabel + "."), false);
             return 1;
         }
-        teleportTameToPlayer(tame, owner);
+        teleportTameToPlayer(tame, destinationPlayer);
         TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
         if (orderOverride != null && loadedAfterTeleport != null) {
             applyMovementOverride(loadedAfterTeleport, orderOverride);
         }
-        source.sendSuccess(() -> Component.literal("Admin teleported " + tameDisplayName(data) + " to " + ownerName + "."), false);
+        source.sendSuccess(() -> Component.literal("Admin teleported " + tameDisplayName(data) + " to " + destinationLabel + "."), false);
         return 1;
     }
 
@@ -10417,9 +10541,12 @@ public class TameCommands {
             return adminError(source, "Unknown player: " + playerName);
         }
         String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
-        ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
-        if (owner == null) {
-            return adminError(source, ownerName + " must be online for admin tp.");
+        ServerPlayer destinationPlayer = source.getServer().getPlayerList().getPlayer(ownerId);
+        if (destinationPlayer == null) {
+            destinationPlayer = source.getPlayer();
+        }
+        if (destinationPlayer == null) {
+            return adminError(source, ownerName + " is offline and admin tp needs a player executor destination.");
         }
 
         List<TameData> requested = ownedTames(ownerId);
@@ -10431,10 +10558,10 @@ public class TameCommands {
             if (data == null || data.dead) {
                 continue;
             }
-            if (isEffectivelyLoaded(source, owner, data)) {
+            if (isEffectivelyLoaded(source, destinationPlayer, data)) {
                 continue;
             }
-            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, destinationPlayer, data);
             if (unloaded.success) {
                 queued++;
             } else {
@@ -10517,9 +10644,12 @@ public class TameCommands {
             return adminError(source, "Unknown player: " + playerName);
         }
         String ownerName = resolveKnownOwnerName(source.getServer(), ownerId, playerName);
-        ServerPlayer owner = source.getServer().getPlayerList().getPlayer(ownerId);
-        if (owner == null) {
-            return adminError(source, ownerName + " must be online for admin tp.");
+        ServerPlayer destinationPlayer = source.getServer().getPlayerList().getPlayer(ownerId);
+        if (destinationPlayer == null) {
+            destinationPlayer = source.getPlayer();
+        }
+        if (destinationPlayer == null) {
+            return adminError(source, ownerName + " is offline and admin tp needs a player executor destination.");
         }
 
         List<TameData> requested = selection.select(ownerId);
@@ -10540,29 +10670,29 @@ public class TameCommands {
             }
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, ownerId, data.uuid);
             if (tame == null) {
-                String queueError = validateUnloadedTeleportForPlayer(source, owner, data);
+                String queueError = validateUnloadedTeleportForPlayer(source, destinationPlayer, data);
                 if (queueError != null) {
                     failed++;
                     failedNames.add(tameDisplayName(data) + " (" + queueError + ")");
                     continue;
                 }
                 unloadedTargets.add(data);
-                if (isCrossDimension(data, owner)) {
+                if (isCrossDimension(data, destinationPlayer)) {
                     crossDimension++;
                 }
                 continue;
             }
             loadedTargets.add(tame);
-            if (isCrossDimension(tame, owner)) {
+            if (isCrossDimension(tame, destinationPlayer)) {
                 crossDimension++;
             }
         }
 
         for (TamableAnimal tame : loadedTargets) {
-            teleportTameToPlayer(tame, owner);
+            teleportTameToPlayer(tame, destinationPlayer);
         }
         for (TameData data : unloadedTargets) {
-            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, owner, data);
+            UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, destinationPlayer, data);
             if (unloaded.success) {
                 queued++;
             } else {
@@ -10975,7 +11105,6 @@ public class TameCommands {
 
     private record SpawnTarget(ServerLevel level, Vec3 pos, float yRot, float xRot) {}
     private record ArenaSpawnSet(String arenaName, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB) {}
-    private record IdleSessionRestorePlan(SpawnTarget target, int movementOrderCode, boolean holdSit) {}
 
     private static SpawnTarget resolveRespawnTarget(CommandSourceStack source, ServerPlayer player, TameData data, boolean toMe) {
         if (toMe || data == null) {
@@ -13562,7 +13691,7 @@ public class TameCommands {
     }
 
     private static int duelLeaderboardSimple(CommandSourceStack source, boolean includeAll, boolean longForm) {
-        return duelLeaderboard(source, "mmr", includeAll, null, null, Integer.MAX_VALUE, longForm);
+        return duelLeaderboard(source, "mmr", includeAll, null, null, 10, longForm);
     }
 
     private static int duelLeaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit) {
@@ -13623,14 +13752,13 @@ public class TameCommands {
 
         sortDuelLeaderboardEntries(entries, m);
         if (entries.isEmpty()) return error(p, "No duel leaderboard entries found.");
-        int upperBound = longForm ? 200 : 500;
-        int limit = Math.min(Math.max(1, requestedLimit), Math.min(upperBound, entries.size()));
-        String scope = includeAll ? "all" : "owned";
+        int limit = Math.min(Math.max(1, requestedLimit), entries.size());
+        String scope = includeAll ? "all players" : "owned";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
         String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
         p.sendSystemMessage(Component.literal("---- Duel Leaderboard | " + scope + " | " + (longForm ? "long" : "short") + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         if (longForm) {
-            p.sendSystemMessage(Component.literal("mmr / wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
+            p.sendSystemMessage(Component.literal("wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
         }
         String activeRankBucket = null;
         for (int i = 0; i < limit; i++) {
@@ -13644,21 +13772,14 @@ public class TameCommands {
             }
             DuelLeaderboardRankBucket rankBucket = duelLeaderboardRankBucket(entry.mmr());
             MutableComponent line = Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
-                    .append(Component.literal("(" + ownerInitials(source.getServer(), entry.ownerUuid()) + ") ").withStyle(ChatFormatting.GRAY));
-            if (entry.player()) {
-                line = line.append(Component.literal("[P] ").withStyle(ChatFormatting.BLUE));
-            } else {
-                line = line.append(Component.literal("[" + Math.max(1, entry.level()) + "] ").withStyle(ChatFormatting.YELLOW));
-            }
-            line = line.append(Component.literal("(" + entry.mmr() + ") ").withStyle(rankBucket.color()))
+                    .append(Component.literal("(" + entry.mmr() + ") ").withStyle(rankBucket.color()))
+                    .append(Component.literal("(" + ownerInitials(source.getServer(), entry.ownerUuid()) + ") ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal(entry.name() + " ").withStyle(ChatFormatting.AQUA))
                     .append(Component.literal("(" + shortEntityTypeName(entry.type()) + ")").withStyle(ChatFormatting.DARK_GRAY));
             p.sendSystemMessage(line);
             if (longForm) {
                 line = Component.literal("   ").withStyle(ChatFormatting.DARK_GRAY)
                         .append(Component.literal("(").withStyle(ChatFormatting.DARK_GRAY))
-                        .append(Component.literal(String.valueOf(entry.mmr())).withStyle(ChatFormatting.GOLD))
-                        .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                         .append(Component.literal(String.valueOf(entry.wins())).withStyle(ChatFormatting.GREEN))
                         .append(Component.literal("/").withStyle(ChatFormatting.DARK_GRAY))
                         .append(Component.literal(String.valueOf(entry.losses())).withStyle(ChatFormatting.RED))
@@ -20175,7 +20296,6 @@ public class TameCommands {
         }
         for (UUID participantId : participantIdsToAdd) {
             if (session.poolA.add(participantId)) {
-                captureDuelSessionSnapshot(server, session, participantId);
                 added++;
             }
         }
@@ -20199,7 +20319,6 @@ public class TameCommands {
         for (UUID playerId : session.sessionPlayers) {
             ACTIVE_DUEL_SESSION_BY_PLAYER.put(playerId, session.sessionId);
         }
-        captureDuelSessionSnapshots(server, session);
         setDuelSessionArenaChunksLoaded(server, session, true);
         return true;
     }
@@ -20539,6 +20658,7 @@ public class TameCommands {
             return;
         }
         ActiveDuelSession session = RANKED_DUEL_SESSION;
+        boolean sessionCreated = false;
         if (session != null && (!session.ranked || !arenaName.equals(session.arenaName))) {
             stopRankedSession(server);
             session = null;
@@ -20559,22 +20679,28 @@ public class TameCommands {
                     true,
                     true
             );
-            captureDuelSessionSnapshots(server, created);
             setDuelSessionArenaChunksLoaded(server, created, true);
             RANKED_DUEL_SESSION = created;
             session = created;
+            sessionCreated = true;
         }
         if (session == null) {
             return;
         }
+        int poolSizeBeforeSync = session.poolA.size();
         session.poolA.retainAll(RANKED_POOL);
+        boolean poolChanged = poolSizeBeforeSync != session.poolA.size();
         for (UUID participantId : RANKED_POOL) {
             if (participantId == null) {
                 continue;
             }
             if (session.poolA.add(participantId)) {
-                captureDuelSessionSnapshot(server, session, participantId);
+                poolChanged = true;
             }
+        }
+        if (sessionCreated || poolChanged) {
+            teleportDuelSessionIdleTamesHome(server, session, session.currentRoundA, session.currentRoundB);
+            syncIdleDuelSessionTames(server, session);
         }
         if (session.nextRoundAtTick < 0L && session.currentRoundA.isEmpty() && session.currentRoundB.isEmpty()) {
             scheduleNextDuelSessionRound(server, session);
@@ -21545,12 +21671,10 @@ public class TameCommands {
                 }
                 UUID effectiveOwnerId = data.ownerUUID != null ? data.ownerUUID : ownerId;
                 ServerPlayer owner = effectiveOwnerId == null ? null : server.getPlayerList().getPlayer(effectiveOwnerId);
-                TameData snapshot = duelSessionSnapshot(session, id);
-                IdleSessionRestorePlan restorePlan = planIdleSessionRestore(server, snapshot, data, owner, waitingTarget);
-                if (restorePlan == null) {
-                    continue;
+                SpawnTarget target = waitingTarget;
+                if (target == null && owner != null) {
+                    target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
                 }
-                SpawnTarget target = restorePlan.target();
                 if (target == null || target.level == null || target.pos == null) {
                     continue;
                 }
@@ -21559,153 +21683,23 @@ public class TameCommands {
                 }
                 TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
                 if (tame == null || !tame.isAlive()) {
-                    applySessionSnapshotState(data, snapshot);
                     RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
                     TamableAnimal rebuilt = recovered.entity;
                     if (rebuilt != null && rebuilt.isAlive()) {
-                        applyMovementOrderCode(rebuilt, restorePlan.movementOrderCode());
+                        applyMovementOrderCode(rebuilt, 1);
                     }
-                    if (restorePlan.holdSit()) {
-                        session.idleSitHoldUntilTick.put(id, now + 20L);
-                    } else {
-                        session.idleSitHoldUntilTick.remove(id);
-                    }
+                    session.idleSitHoldUntilTick.put(id, now + 20L);
                     continue;
                 }
                 teleportTameToLocation(tame, target);
-                applyMovementOrderCode(tame, restorePlan.movementOrderCode());
-                if (restorePlan.holdSit()) {
-                    session.idleSitHoldUntilTick.put(id, now + 20L);
-                } else {
-                    session.idleSitHoldUntilTick.remove(id);
-                }
+                applyMovementOrderCode(tame, 1);
+                session.idleSitHoldUntilTick.put(id, now + 20L);
             }
         } finally {
             for (UUID suppressOwnerId : suppressedOwners) {
                 endSuppressedUnloadedTeleportMessages(suppressOwnerId);
             }
         }
-    }
-
-    private static void captureDuelSessionSnapshots(MinecraftServer server, ActiveDuelSession session) {
-        if (server == null || session == null) {
-            return;
-        }
-        session.tameSnapshots.clear();
-        for (UUID participantId : session.poolA) {
-            captureDuelSessionSnapshot(server, session, participantId);
-        }
-        for (UUID participantId : session.poolB) {
-            captureDuelSessionSnapshot(server, session, participantId);
-        }
-    }
-
-    private static void captureDuelSessionSnapshot(MinecraftServer server, ActiveDuelSession session, UUID participantId) {
-        if (server == null || session == null || participantId == null || session.tameSnapshots.containsKey(participantId)) {
-            return;
-        }
-        TameData data = TameRegistry.get(participantId);
-        if (data == null) {
-            return;
-        }
-        TameData snapshot = TameData.fromTag(data.toTag().copy());
-        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
-        if (loaded != null && loaded.isAlive()) {
-            CompoundTag entitySnapshot = new CompoundTag();
-            loaded.save(entitySnapshot);
-            snapshot.entitySnapshot = entitySnapshot;
-            snapshot.lastKnownDimension = loaded.level().dimension().location().toString();
-            snapshot.lastKnownX = loaded.blockPosition().getX();
-            snapshot.lastKnownY = loaded.blockPosition().getY();
-            snapshot.lastKnownZ = loaded.blockPosition().getZ();
-        }
-        session.tameSnapshots.put(participantId, snapshot.toTag());
-    }
-
-    private static TameData duelSessionSnapshot(ActiveDuelSession session, UUID participantId) {
-        if (session == null || participantId == null) {
-            return null;
-        }
-        CompoundTag snapshot = session.tameSnapshots.get(participantId);
-        return snapshot == null || snapshot.isEmpty() ? null : TameData.fromTag(snapshot.copy());
-    }
-
-    private static IdleSessionRestorePlan planIdleSessionRestore(MinecraftServer server, TameData snapshot, TameData liveData, ServerPlayer owner, SpawnTarget waitingTarget) {
-        TameData basis = snapshot != null ? snapshot : liveData;
-        if (basis == null) {
-            return null;
-        }
-        int movementOrderCode = Math.max(0, Math.min(3, basis.movementOrder));
-        SpawnTarget fallback = spawnTargetFromTameData(server, basis);
-        SpawnTarget target = switch (movementOrderCode) {
-            case 0 -> owner != null
-                    ? new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot())
-                    : fallback;
-            case 1 -> waitingTarget != null ? waitingTarget : fallback;
-            case 2, 3 -> fallback;
-            default -> fallback;
-        };
-        if (target == null || target.level == null || target.pos == null) {
-            return null;
-        }
-        return new IdleSessionRestorePlan(target, movementOrderCode, movementOrderCode == 1);
-    }
-
-    private static SpawnTarget spawnTargetFromTameData(MinecraftServer server, TameData data) {
-        if (server == null || data == null || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
-            return null;
-        }
-        ResourceLocation dimId = ResourceLocation.tryParse(data.lastKnownDimension);
-        if (dimId == null) {
-            return null;
-        }
-        ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimId));
-        if (level == null) {
-            return null;
-        }
-        float yRot = 0.0F;
-        float xRot = 0.0F;
-        if (data.entitySnapshot != null && data.entitySnapshot.contains("Rotation", Tag.TAG_LIST)) {
-            ListTag rotation = data.entitySnapshot.getList("Rotation", Tag.TAG_FLOAT);
-            if (rotation.size() >= 2) {
-                yRot = rotation.getFloat(0);
-                xRot = rotation.getFloat(1);
-            }
-        }
-        return new SpawnTarget(level, new Vec3(data.lastKnownX + 0.5D, data.lastKnownY, data.lastKnownZ + 0.5D), yRot, xRot);
-    }
-
-    private static void applySessionSnapshotState(TameData liveData, TameData snapshot) {
-        if (liveData == null || snapshot == null) {
-            return;
-        }
-        liveData.lastKnownDimension = snapshot.lastKnownDimension;
-        liveData.lastKnownX = snapshot.lastKnownX;
-        liveData.lastKnownY = snapshot.lastKnownY;
-        liveData.lastKnownZ = snapshot.lastKnownZ;
-        liveData.lastKnownGameTime = snapshot.lastKnownGameTime;
-        liveData.movementOrder = snapshot.movementOrder;
-        liveData.hasHome = snapshot.hasHome;
-        liveData.homeDimension = snapshot.homeDimension;
-        liveData.homeX = snapshot.homeX;
-        liveData.homeY = snapshot.homeY;
-        liveData.homeZ = snapshot.homeZ;
-        liveData.hasPreviousHome = snapshot.hasPreviousHome;
-        liveData.previousHomeDimension = snapshot.previousHomeDimension;
-        liveData.previousHomeX = snapshot.previousHomeX;
-        liveData.previousHomeY = snapshot.previousHomeY;
-        liveData.previousHomeZ = snapshot.previousHomeZ;
-        liveData.guardianReturnTicks = snapshot.guardianReturnTicks;
-        liveData.guardianRelaxing = snapshot.guardianRelaxing;
-        liveData.guardianNextPhaseTick = snapshot.guardianNextPhaseTick;
-        liveData.guardianTargetUuid = snapshot.guardianTargetUuid;
-        liveData.guardianTargetStuckTicks = snapshot.guardianTargetStuckTicks;
-        liveData.guardianTargetBestDistanceSq = snapshot.guardianTargetBestDistanceSq;
-        liveData.bodyguardRange = snapshot.bodyguardRange;
-        liveData.guardianSetAnchors.clear();
-        liveData.guardianSetAnchors.putAll(snapshot.guardianSetAnchors);
-        liveData.entitySnapshot = snapshot.entitySnapshot == null ? new CompoundTag() : snapshot.entitySnapshot.copy();
-        TameRegistry.markDirty();
     }
 
     private static void recoverUnloadedDuelSessionParticipants(MinecraftServer server, ActiveDuelSession session, Set<UUID> activeRound, SpawnTarget target, UUID ownerId) {

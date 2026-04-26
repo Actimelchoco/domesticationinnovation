@@ -743,17 +743,13 @@ public class CommonProxy {
             int immunityFrameLevel = getAbilityOrEnchantLevel(event.getEntity(), "immunity_frame");
             if (immunityFrameLevel > 0) {
                 int level = immunityFrameLevel;
-                long gameTime = event.getEntity().level().getGameTime();
-                long lastProcTick = TameableUtils.getImmuneLastProcTick(event.getEntity());
-                boolean procReadyByTime = lastProcTick == Long.MIN_VALUE || gameTime - lastProcTick >= 500L;
                 if (TameableUtils.getImmuneTime(event.getEntity()) > 0) {
                     flag = true;
                     event.setCanceled(true);
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");
-                } else if (TameableUtils.getImmuneCooldown(event.getEntity()) <= 0 && procReadyByTime) {
+                } else if (TameableUtils.getImmuneCooldown(event.getEntity()) <= 0) {
                     TameableUtils.setImmuneTime(event.getEntity(), Math.min(100, 5 + level * 5));
-                    TameableUtils.setImmuneCooldown(event.getEntity(), 500);
-                    TameableUtils.setImmuneLastProcTick(event.getEntity(), gameTime);
+                    TameableUtils.setImmuneCooldown(event.getEntity(), 250);
                     flag = true;
                     event.setCanceled(true);
                     debugDiAbilityUse(event.getEntity(), "immunity_frame");
