@@ -78,6 +78,7 @@ public class TameData {
     public int guardianTargetStuckTicks = 0;
     public double guardianTargetBestDistanceSq = 0.0D;
     public int bodyguardRange = 12;
+    public String oreScentingOreId = "";
     public boolean hasPetBed = false;
     public String petBedDimension = "";
     public int petBedX = 0;
@@ -243,6 +244,7 @@ public class TameData {
         tag.putInt("guardianTargetStuckTicks", guardianTargetStuckTicks);
         tag.putDouble("guardianTargetBestDistanceSq", guardianTargetBestDistanceSq);
         tag.putInt("bodyguardRange", bodyguardRange);
+        tag.putString("oreScentingOreId", oreScentingOreId == null ? "" : oreScentingOreId);
         tag.putBoolean("hasPetBed", hasPetBed);
         tag.putString("petBedDimension", petBedDimension == null ? "" : petBedDimension);
         tag.putInt("petBedX", petBedX);
@@ -416,6 +418,7 @@ public class TameData {
         data.guardianTargetStuckTicks = Math.max(0, tag.getInt("guardianTargetStuckTicks"));
         data.guardianTargetBestDistanceSq = tag.contains("guardianTargetBestDistanceSq", Tag.TAG_DOUBLE) ? Math.max(0.0D, tag.getDouble("guardianTargetBestDistanceSq")) : 0.0D;
         data.bodyguardRange = tag.contains("bodyguardRange", Tag.TAG_INT) ? Math.max(1, tag.getInt("bodyguardRange")) : 12;
+        data.oreScentingOreId = tag.contains("oreScentingOreId", Tag.TAG_STRING) ? tag.getString("oreScentingOreId") : "";
         data.hasPetBed = tag.getBoolean("hasPetBed");
         data.petBedDimension = tag.contains("petBedDimension", Tag.TAG_STRING) ? tag.getString("petBedDimension") : "";
         data.petBedX = tag.getInt("petBedX");

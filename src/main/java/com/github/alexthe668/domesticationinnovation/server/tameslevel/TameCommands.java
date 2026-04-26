@@ -973,6 +973,16 @@ public class TameCommands {
                                         .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true))
                                         .then(Commands.literal("long")
                                                 .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true)))))
+                        .then(Commands.literal("orescenting")
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedOreScentingPetNames(ctx.getSource(), b))
+                                        .then(Commands.argument("oreId", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOreScentingOreIds(ctx.getSource(), b))
+                                                .executes(ctx -> setOreScentingTarget(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "name"),
+                                                        StringArgumentType.getString(ctx, "oreId")
+                                                )))))
                         .then(Commands.literal("reincarnate")
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
@@ -3050,6 +3060,8 @@ public class TameCommands {
                                                 ))))
                                 .then(Commands.literal("ranked")
                                         .executes(ctx -> adminRankedStatus(ctx.getSource()))
+                                        .then(Commands.literal("duelff")
+                                                .executes(ctx -> adminRankedDuelFf(ctx.getSource())))
                                         .then(Commands.literal("setArena")
                                                 .then(Commands.argument("arenaName", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestArenaNamesIncludingRanked(ctx.getSource(), b))
@@ -5168,6 +5180,42 @@ public class TameCommands {
         tame.setHealth(tame.getMaxHealth());
         refreshRegistrySnapshotFor(tame);
         TameRegistry.markDirty();
+    }
+
+    private static int setOreScentingTarget(CommandSourceStack source, String tameName, String oreIdRaw) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameData data = findOwnedTame(player.getUUID(), tameName);
+        if (data == null) {
+            return error(player, "Loaded/alive tame not found.");
+        }
+        String normalized = normalizeOreScentingOreId(oreIdRaw);
+        if (normalized.isBlank() || "none".equals(normalized)) {
+            data.oreScentingOreId = "";
+            TameRegistry.markDirty();
+            player.sendSystemMessage(Component.literal("Orescenting disabled for " + tameDisplayName(data) + ".").withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
+        if (LevelSystem.getAttributeLevel(data, "ore_scenting") <= 0) {
+            return error(player, tameDisplayName(data) + " does not have ore_scenting.");
+        }
+        ResourceLocation oreKey = ResourceLocation.tryParse(normalized);
+        if (oreKey == null) {
+            return error(player, "Invalid ore id: " + oreIdRaw);
+        }
+        var oreBlock = ForgeRegistries.BLOCKS.getValue(oreKey);
+        if (oreBlock == null || oreBlock.defaultBlockState().isAir()) {
+            return error(player, "Unknown ore block id: " + normalized);
+        }
+        if (!oreBlock.defaultBlockState().is(net.minecraftforge.common.Tags.Blocks.ORES)) {
+            return error(player, "Block is not tagged as an ore: " + normalized);
+        }
+        data.oreScentingOreId = oreKey.toString();
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Orescenting for " + tameDisplayName(data) + " set to " + data.oreScentingOreId + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
     }
 
     private static int reincarnationOverview(CommandSourceStack source) {
@@ -11531,6 +11579,7 @@ public class TameCommands {
         into.savedAbilityLevels.putAll(from.savedAbilityLevels);
         into.savedAttributeLevels.clear();
         into.savedAttributeLevels.putAll(from.savedAttributeLevels);
+        into.oreScentingOreId = from.oreScentingOreId;
         into.duelMmr = from.duelMmr;
         into.duelKills = from.duelKills;
         into.duelAssists = from.duelAssists;
@@ -15185,6 +15234,28 @@ public class TameCommands {
         }
         final int activeCount = active;
         source.sendSuccess(() -> Component.literal("Ranked arena: " + arenaLabel + " | pool: " + poolSize + " | active: " + activeCount + ".").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminRankedDuelFf(CommandSourceStack source) {
+        MinecraftServer server = source == null ? null : source.getServer();
+        ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
+        if (server == null || rankedSession == null) {
+            return error(source.getPlayer(), "No ranked session is running.");
+        }
+        if (rankedSession.currentRoundA.isEmpty() || rankedSession.currentRoundB.isEmpty()) {
+            return error(source.getPlayer(), "No active ranked duel round to forfeit.");
+        }
+        forceEndDuelSessionSide(server, rankedSession.currentRoundA);
+        forceEndDuelSessionSide(server, rankedSession.currentRoundB);
+        teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
+        syncIdleDuelSessionTames(server, rankedSession);
+        restoreRankedRoundPlayers(server, rankedSession);
+        rankedSession.currentRoundA = Set.of();
+        rankedSession.currentRoundB = Set.of();
+        rankedSession.roundStartedAtTick = -1L;
+        scheduleNextDuelSessionRound(server, rankedSession);
+        source.sendSuccess(() -> Component.literal("Forfeited current ranked duel round.").withStyle(ChatFormatting.YELLOW), true);
         return 1;
     }
 
@@ -20811,7 +20882,6 @@ public class TameCommands {
         if (rankedSession != null) {
             refreshDuelSessionParticipantActivity(rankedSession);
             syncRankedSessionPlayers(server, rankedSession);
-            enforceRankedOwnerOnlineRule(server, rankedSession);
             applyQueuedRankedPulls(server, rankedSession);
             if (now >= rankedSession.nextIdleSitSyncTick) {
                 syncIdleDuelSessionTames(server, rankedSession);
@@ -21486,9 +21556,6 @@ public class TameCommands {
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive()) {
-                if (session != null && session.ranked && !isRankedParticipantOwnerOnline(server, id)) {
-                    continue;
-                }
                 available.add(id);
             }
         }
@@ -22239,6 +22306,30 @@ public class TameCommands {
         return value;
     }
 
+    private static String normalizeOreScentingOreId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.isBlank()) {
+            return "";
+        }
+        if ("none".equals(value)) {
+            return "none";
+        }
+        if (value.startsWith("block.")) {
+            value = value.substring("block.".length());
+            int firstDot = value.indexOf('.');
+            if (firstDot > 0 && !value.contains(":")) {
+                value = value.substring(0, firstDot) + ":" + value.substring(firstDot + 1);
+            }
+        }
+        if (!value.contains(":")) {
+            value = "minecraft:" + value;
+        }
+        return value;
+    }
+
     private static TameData findOwnedTame(UUID owner, String name) {
         if (owner == null || name == null) return null;
         TameData best = null;
@@ -22504,6 +22595,41 @@ public class TameCommands {
             if (!p.getUUID().equals(d.ownerUUID)) continue;
             if (isInactiveEntry(d.uuid)) continue;
             suggestCommandString(b, d.name);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestOwnedOreScentingPetNames(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) {
+            return b.buildFuture();
+        }
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.name == null || data.name.isBlank()) continue;
+            if (!player.getUUID().equals(data.ownerUUID)) continue;
+            if (isInactiveEntry(data.uuid)) continue;
+            if (LevelSystem.getAttributeLevel(data, "ore_scenting") <= 0) continue;
+            suggestCommandString(b, data.name);
+        }
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestOreScentingOreIds(CommandSourceStack source, SuggestionsBuilder b) {
+        suggestCommandString(b, "none");
+        List<String> oreIds = new ArrayList<>();
+        for (ResourceLocation blockId : ForgeRegistries.BLOCKS.getKeys()) {
+            if (blockId == null) {
+                continue;
+            }
+            var block = ForgeRegistries.BLOCKS.getValue(blockId);
+            if (block == null || !block.defaultBlockState().is(net.minecraftforge.common.Tags.Blocks.ORES)) {
+                continue;
+            }
+            oreIds.add(blockId.toString());
+        }
+        oreIds.sort(String::compareToIgnoreCase);
+        for (String oreId : oreIds) {
+            suggestCommandString(b, oreId);
         }
         return b.buildFuture();
     }

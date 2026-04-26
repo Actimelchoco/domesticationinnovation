@@ -1114,8 +1114,9 @@ public class TameableUtils {
         return Math.min(0.05D, 0.010D + (safeLevel - 5) * 0.008D);
     }
 
-    public static void detectRandomOres(LivingEntity attractor, int interval, int range, int effectLength, int maxOres) {
+    public static void detectRandomOres(LivingEntity attractor, int interval, int range, int effectLength, int maxOres, @Nullable String preferredOreId) {
         int tick = (attractor.tickCount + attractor.getId()) % interval;
+        ResourceLocation preferredOreKey = preferredOreId == null || preferredOreId.isBlank() ? null : ResourceLocation.tryParse(preferredOreId);
         if (tick <= 30) {
             attractor.xRotO = attractor.getXRot();
             attractor.setXRot((float) Math.sin(tick * 0.6F) * 30F);
@@ -1136,7 +1137,9 @@ public class TameableUtils {
                     for (int k = 0; k <= range && k >= -range; k = (k <= 0 ? 1 : 0) - k) {
                         BlockPos offset = blockpos.offset(j, i, k);
                         BlockState state = attractor.level().getBlockState(offset);
-                        if (state.is(Tags.Blocks.ORES)) {
+                        ResourceLocation blockKey = ForgeRegistries.BLOCKS.getKey(state.getBlock());
+                        boolean matchesPreferred = preferredOreKey == null || (blockKey != null && blockKey.equals(preferredOreKey));
+                        if (state.is(Tags.Blocks.ORES) && matchesPreferred) {
                             if (ores.size() < maxOres) {
                                 ores.add(offset);
                             } else {

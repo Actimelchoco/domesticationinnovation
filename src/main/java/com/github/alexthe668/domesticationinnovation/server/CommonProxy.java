@@ -592,8 +592,15 @@ public class CommonProxy {
             }
             int oreLvl = getDiEffectLevel(event.getEntity(), "ore_scenting");
             if (oreLvl > 0 && !event.getEntity().level().isClientSide) {
-                int interval = 100 + Math.max(150, 550 - oreLvl * 100);
-                TameableUtils.detectRandomOres(event.getEntity(), interval, 5 + oreLvl * 2, oreLvl * 50, oreLvl * 3);
+                TameData tameData = TameRegistry.get(event.getEntity().getUUID());
+                String preferredOreId = tameData == null ? "" : tameData.oreScentingOreId;
+                if (preferredOreId == null || preferredOreId.isBlank()) {
+                    preferredOreId = "";
+                }
+                if (!preferredOreId.isBlank()) {
+                    int interval = 100 + Math.max(150, 550 - oreLvl * 100);
+                    TameableUtils.detectRandomOres(event.getEntity(), interval, 5 + oreLvl * 2, oreLvl * 50, oreLvl * 3, preferredOreId);
+                }
             }
             if (TameableUtils.isZombiePet(event.getEntity()) && !event.getEntity().level().isClientSide && event.getEntity() instanceof Mob mob) {
                 if (mob.getTarget() instanceof Player && ((Player) mob.getTarget()).isCreative()) {
