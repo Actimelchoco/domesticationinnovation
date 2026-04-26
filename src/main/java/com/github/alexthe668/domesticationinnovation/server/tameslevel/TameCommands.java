@@ -7444,15 +7444,18 @@ public class TameCommands {
         boolean selfOnly = parsed.selection != null
                 && parsed.selection.includeSelf
                 && (parsed.selection.tameSelections == null || parsed.selection.tameSelections.isEmpty());
+        boolean includeSelfRequested = parsed.selection != null && parsed.selection.includeSelf;
         Set<UUID> selectedIds = new LinkedHashSet<>();
         if (selfOnly) {
             if (add) {
+                selectedIds.add(player.getUUID());
                 for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
                     if (tame != null && tame.isAlive()) {
                         selectedIds.add(tame.getUUID());
                     }
                 }
             } else {
+                selectedIds.add(player.getUUID());
                 for (UUID participantId : RANKED_POOL) {
                     if (participantId != null && player.getUUID().equals(participantOwnerForSession(source.getServer(), participantId))) {
                         selectedIds.add(participantId);
@@ -7465,13 +7468,14 @@ public class TameCommands {
                 return error(player, resolved.error);
             }
             selectedIds.addAll(collectLivingEntityIds(resolved.members));
-            selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+            selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
+                    && !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
         }
         if (selectedIds.isEmpty()) {
             if (selfOnly && !add) {
                 return error(player, "You have no ranked tames to pull.");
             }
-            return error(player, "No loaded/alive tames matched that selection.");
+            return error(player, "No loaded/alive ranked participants matched that selection.");
         }
 
         ActiveDuelSession session = RANKED_DUEL_SESSION;
@@ -7528,7 +7532,7 @@ public class TameCommands {
         ensureRankedSessionRunning(source.getServer());
 
         String action = add ? "Added" : "Pulled";
-        StringBuilder message = new StringBuilder(action).append(" ").append(changed).append(" tame(s) in ranked.");
+        StringBuilder message = new StringBuilder(action).append(" ").append(changed).append(" participant(s) in ranked.");
         if (blockedActive > 0) {
             message.append(" ").append(blockedActive).append(" queued for pull right after the current duel round.");
         }
