@@ -3754,6 +3754,9 @@ public class TameCommands {
             if (data == null || !data.dead || data.uuid == null) {
                 continue;
             }
+            if (isDuelLocked(data.uuid)) {
+                continue;
+            }
             if (ownerUuid != null && !ownerUuid.equals(data.ownerUUID)) {
                 continue;
             }
@@ -4206,10 +4209,10 @@ public class TameCommands {
         for (TameData d : tames) {
             if (d.stored) {
                 stored.add(d);
-            } else if (isDeadEntry(d.uuid)) {
-                dead.add(d);
             } else if (isDuelLocked(d.uuid)) {
                 duel.add(d);
+            } else if (isDeadEntry(d.uuid)) {
+                dead.add(d);
             } else if (isLoadedAnywhere(source.getServer(), d.uuid)) {
                 loaded.add(d);
             } else {
@@ -18143,7 +18146,21 @@ public class TameCommands {
     }
 
     private static boolean isActiveDuelSessionParticipant(UUID entityId) {
-        if (entityId == null || ACTIVE_DUEL_SESSIONS.isEmpty()) {
+        if (entityId == null) {
+            return false;
+        }
+        ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
+        if (rankedSession != null
+                && (rankedSession.poolA.contains(entityId)
+                || rankedSession.poolB.contains(entityId)
+                || rankedSession.currentRoundA.contains(entityId)
+                || rankedSession.currentRoundB.contains(entityId))) {
+            return true;
+        }
+        if (RANKED_POOL.contains(entityId)) {
+            return true;
+        }
+        if (ACTIVE_DUEL_SESSIONS.isEmpty()) {
             return false;
         }
         for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
@@ -22329,6 +22346,9 @@ public class TameCommands {
         if (data == null) {
             return "";
         }
+        if (isDuelLocked(data)) {
+            return " [DUEL]";
+        }
         if (data.stored) {
             return " [STORED]";
         }
@@ -22342,14 +22362,14 @@ public class TameCommands {
         if (data == null) {
             return "unknown";
         }
+        if (isDuelLocked(data)) {
+            return "duel";
+        }
         if (data.stored) {
             return "stored";
         }
         if (data.dead) {
             return "dead";
-        }
-        if (isDuelLocked(data)) {
-            return "duel";
         }
         return isLoadedAnywhere(server, data.uuid) ? "loaded" : "unloaded";
     }
@@ -22358,14 +22378,14 @@ public class TameCommands {
         if (data == null) {
             return ChatFormatting.WHITE;
         }
+        if (isDuelLocked(data)) {
+            return ChatFormatting.GOLD;
+        }
         if (data.stored) {
             return ChatFormatting.LIGHT_PURPLE;
         }
         if (data.dead) {
             return ChatFormatting.GRAY;
-        }
-        if (isDuelLocked(data)) {
-            return ChatFormatting.GOLD;
         }
         return loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
     }
@@ -22374,14 +22394,14 @@ public class TameCommands {
         if (data == null) {
             return 5;
         }
+        if (isDuelLocked(data)) {
+            return 1;
+        }
         if (data.stored) {
             return 3;
         }
         if (data.dead) {
             return 4;
-        }
-        if (isDuelLocked(data)) {
-            return 1;
         }
         return isLoadedAnywhere(server, data.uuid) ? 0 : 2;
     }
