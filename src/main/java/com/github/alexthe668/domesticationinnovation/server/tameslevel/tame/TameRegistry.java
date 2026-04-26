@@ -40,6 +40,7 @@ public class TameRegistry {
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
+    private static String RANKED_ARENA_NAME = "";
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -108,6 +109,7 @@ public class TameRegistry {
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         OWNER_TELEPORT_APPROVED_CREDITS.clear();
         OWNER_TELEPORT_APPROVED_CREDITS.putAll(savedData.getOwnerTeleportApprovedCredits());
+        RANKED_ARENA_NAME = savedData.getRankedArenaName();
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
             LAST_DEATHS.entrySet().removeIf(entry -> {
                 TameDeathRecord record = entry.getValue();
@@ -271,7 +273,21 @@ public class TameRegistry {
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
+        savedData.setRankedArenaName(RANKED_ARENA_NAME);
         savedData.setDirty();
+    }
+
+    public static String getRankedArenaName() {
+        return RANKED_ARENA_NAME == null ? "" : RANKED_ARENA_NAME;
+    }
+
+    public static void setRankedArenaName(String arenaName) {
+        String normalized = arenaName == null ? "" : arenaName.trim();
+        if (Objects.equals(RANKED_ARENA_NAME, normalized)) {
+            return;
+        }
+        RANKED_ARENA_NAME = normalized;
+        markDirty();
     }
 
     public static int getTeleportApprovedCredits(UUID ownerUuid) {

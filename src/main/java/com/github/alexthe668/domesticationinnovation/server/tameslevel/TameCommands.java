@@ -15069,6 +15069,7 @@ public class TameCommands {
             return error(player, "Ranked arena is already set to " + normalized + ".");
         }
         RANKED_ARENA_NAME = normalized;
+        TameRegistry.setRankedArenaName(normalized);
         stopRankedSession(source.getServer());
         ensureRankedSessionRunning(source.getServer());
         source.sendSuccess(() -> Component.literal(
@@ -15085,6 +15086,7 @@ public class TameCommands {
             return error(source.getPlayer(), "Ranked arena is already unset.");
         }
         RANKED_ARENA_NAME = "";
+        TameRegistry.setRankedArenaName("");
         stopRankedSession(source.getServer());
         source.sendSuccess(() -> Component.literal("Ranked arena cleared (previous: " + previous + ").").withStyle(ChatFormatting.YELLOW), true);
         return 1;
@@ -20227,6 +20229,12 @@ public class TameCommands {
     }
 
     private static String rankedArenaName() {
+        if ((RANKED_ARENA_NAME == null || RANKED_ARENA_NAME.isBlank()) && TameRegistry.isInitialized()) {
+            String persisted = TameRegistry.getRankedArenaName();
+            if (persisted != null && !persisted.isBlank()) {
+                RANKED_ARENA_NAME = persisted;
+            }
+        }
         return RANKED_ARENA_NAME == null ? "" : normalizeArenaName(RANKED_ARENA_NAME);
     }
 
