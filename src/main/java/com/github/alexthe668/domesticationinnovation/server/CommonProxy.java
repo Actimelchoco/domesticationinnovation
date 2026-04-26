@@ -450,6 +450,7 @@ public class CommonProxy {
             if (shadowHandsLevel > 0 && event.getEntity() instanceof Mob mob) {
                 DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), TameableUtils.getShadowPunchTimes(mob));
                 if (!mob.level().isClientSide) {
+                    spawnShadowHandsFallbackParticles((ServerLevel) mob.level(), mob, shadowHandsLevel);
                     Entity punching = TameableUtils.getPetAttackTarget(mob);
                     int[] punchProgress = TameableUtils.getShadowPunchTimes(mob);
                     if (punching != null && punching.isAlive() && mob.hasLineOfSight(punching) && mob.distanceTo(punching) < 16) {
@@ -671,6 +672,7 @@ public class CommonProxy {
                     }
                     TameableUtils.setBlazingProtectionCooldown(event.getEntity(), cooldown);
                 }
+                spawnBlazingProtectionFallbackParticles((ServerLevel) event.getEntity().level(), event.getEntity(), TameableUtils.getBlazingProtectionBars(event.getEntity()));
             }
             int healingAuraLevel = getAbilityOrEnchantLevel(event.getEntity(), "healing_aura");
             if (healingAuraLevel > 0 && !event.getEntity().level().isClientSide) {
@@ -2202,6 +2204,36 @@ public class CommonProxy {
     private static double healthSiphonRange(int level) {
         int safeLevel = Math.max(1, level);
         return Math.min(128.0D, 32.0D + Math.max(0, safeLevel - 1) * 16.0D);
+    }
+
+    private static void spawnShadowHandsFallbackParticles(ServerLevel level, Mob mob, int shadowHandsLevel) {
+        if (level == null || mob == null || shadowHandsLevel <= 0 || mob.tickCount % 6 != 0) {
+            return;
+        }
+        int particles = Math.min(8, Math.max(3, shadowHandsLevel));
+        double radius = mob.getBbWidth() + 0.35D;
+        double y = mob.getY(0.7D);
+        for (int i = 0; i < particles; i++) {
+            double angle = (Math.PI * 2.0D / particles) * i + (mob.tickCount * 0.17D);
+            double x = mob.getX() + Math.cos(angle) * radius;
+            double z = mob.getZ() + Math.sin(angle) * radius;
+            level.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, x, y, z, 1, 0.01D, 0.01D, 0.01D, 0.0D);
+        }
+    }
+
+    private static void spawnBlazingProtectionFallbackParticles(ServerLevel level, LivingEntity entity, int bars) {
+        if (level == null || entity == null || bars <= 0 || entity.tickCount % 8 != 0) {
+            return;
+        }
+        int particles = Math.min(10, Math.max(3, bars));
+        double radius = entity.getBbWidth() + 0.25D;
+        double y = entity.getY(0.5D);
+        for (int i = 0; i < particles; i++) {
+            double angle = (Math.PI * 2.0D / particles) * i + (entity.tickCount * 0.14D);
+            double x = entity.getX() + Math.cos(angle) * radius;
+            double z = entity.getZ() + Math.sin(angle) * radius;
+            level.sendParticles(ParticleTypes.FLAME, x, y, z, 1, 0.01D, 0.02D, 0.01D, 0.0D);
+        }
     }
 
     private static int blazingProtectionBarCap(int level) {
