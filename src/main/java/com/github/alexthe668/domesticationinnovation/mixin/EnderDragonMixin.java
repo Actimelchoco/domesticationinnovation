@@ -20,7 +20,7 @@ public abstract class EnderDragonMixin extends Mob {
     }
 
     @Inject(
-            method = "hurt",
+            method = "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z",
             at = @At("HEAD"),
             cancellable = true
     )
