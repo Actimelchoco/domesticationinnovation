@@ -7483,6 +7483,7 @@ public class TameCommands {
         if (player == null) {
             return 0;
         }
+        scrubInvalidRankedParticipants(source.getServer());
         String arenaName = rankedArenaName();
         if (arenaName.isBlank()) {
             return error(player, "Ranked arena is not configured. Ask an admin to run /tames admin ranked setArena <arena>.");
@@ -18343,6 +18344,10 @@ public class TameCommands {
         if (entityId == null) {
             return false;
         }
+        TameData data = TameRegistry.get(entityId);
+        if (data != null && isDeadEntry(data.uuid)) {
+            return false;
+        }
         ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
         if (rankedSession != null
                 && (rankedSession.poolA.contains(entityId)
@@ -20696,6 +20701,15 @@ public class TameCommands {
                 .append(Component.literal(".").withStyle(ChatFormatting.GOLD));
     }
 
+    private static Component duelStartedComponent(MinecraftServer server, Set<UUID> teamA, Set<UUID> teamB) {
+        return Component.empty()
+                .append(Component.literal("Duel Started: ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(duelParticipantNames(server, teamA)).withStyle(ChatFormatting.AQUA))
+                .append(Component.literal(" vs ").withStyle(ChatFormatting.GOLD))
+                .append(Component.literal(duelParticipantNames(server, teamB)).withStyle(ChatFormatting.RED))
+                .append(Component.literal(".").withStyle(ChatFormatting.GOLD));
+    }
+
     private static Integer readExternalPetCommandTag(TamableAnimal tame) {
         if (!usesExternalPetCommandTag(tame)) {
             return null;
@@ -20774,6 +20788,45 @@ public class TameCommands {
             }
         }
         return names.isEmpty() ? "-" : String.join(", ", names);
+    }
+
+    private static String duelParticipantNames(MinecraftServer server, Set<UUID> participantIds) {
+        if (participantIds == null || participantIds.isEmpty()) {
+            return "-";
+        }
+        List<String> names = new ArrayList<>();
+        for (UUID participantId : participantIds) {
+            if (participantId == null) {
+                continue;
+            }
+            String name = duelParticipantName(server, participantId);
+            if (name != null && !name.isBlank()) {
+                names.add(name);
+            }
+        }
+        return names.isEmpty() ? "-" : String.join(", ", names);
+    }
+
+    private static String duelParticipantName(MinecraftServer server, UUID participantId) {
+        if (participantId == null) {
+            return "";
+        }
+        ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(participantId);
+        if (player != null) {
+            return player.getGameProfile().getName();
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data != null && data.name != null && !data.name.isBlank()) {
+            return data.name;
+        }
+        LivingEntity loaded = findLoadedLivingParticipant(server, participantId);
+        if (loaded != null) {
+            String loadedName = loaded.getName().getString();
+            if (loadedName != null && !loadedName.isBlank()) {
+                return loadedName;
+            }
+        }
+        return participantId.toString();
     }
 
     private static List<LivingEntity> sideMembersForPendingDuel(MinecraftServer server, PendingDuelMatch match, boolean sideA) {
@@ -20862,6 +20915,7 @@ public class TameCommands {
         if (server == null) {
             return;
         }
+        scrubInvalidRankedParticipants(server);
         String arenaName = rankedArenaName();
         if (arenaName.isBlank()) {
             stopRankedSession(server);
@@ -20957,6 +21011,7 @@ public class TameCommands {
         if (server == null) {
             return;
         }
+        clearDeadParticipantsFromActiveDuels(server);
         ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
         if (ACTIVE_DUEL_SESSIONS.isEmpty() && rankedSession == null) {
             return;
@@ -21183,7 +21238,7 @@ public class TameCommands {
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
         session.nextRoundAtTick = -1L;
-        notifyDuelSessionOwners(server, session, duelStartedComponent(resolveLoadedRoundMembers(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB)));
+        notifyDuelSessionOwners(server, session, duelStartedComponent(server, round.teamA, round.teamB));
         return true;
     }
 
@@ -22174,6 +22229,72 @@ public class TameCommands {
         }
         TameData data = TameRegistry.get(participantId);
         return data == null ? null : data.ownerUUID;
+    }
+
+    private static void scrubInvalidRankedParticipants(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        LinkedHashSet<UUID> candidates = new LinkedHashSet<>(RANKED_POOL);
+        if (session != null) {
+            candidates.addAll(session.poolA);
+            candidates.addAll(session.poolB);
+            candidates.addAll(session.currentRoundA);
+            candidates.addAll(session.currentRoundB);
+            candidates.addAll(session.queuedPullAfterRound);
+        }
+        boolean changed = false;
+        for (UUID participantId : candidates) {
+            if (isValidRankedParticipant(server, participantId)) {
+                continue;
+            }
+            if (participantId != null && TameDuelManager.isEntityInDuel(participantId)) {
+                TameDuelManager.endDuelForEntity(server, participantId);
+            }
+            changed |= RANKED_POOL.remove(participantId);
+            if (session != null) {
+                changed |= session.poolA.remove(participantId);
+                changed |= session.poolB.remove(participantId);
+                changed |= session.queuedPullAfterRound.remove(participantId);
+                session.currentRoundA = removeFromSet(session.currentRoundA, participantId);
+                session.currentRoundB = removeFromSet(session.currentRoundB, participantId);
+                session.idleSitHoldUntilTick.remove(participantId);
+                session.rankedPlayerReturnTargets.remove(participantId);
+            }
+        }
+        if (changed) {
+            persistRankedPoolToRegistry();
+        }
+    }
+
+    private static boolean isValidRankedParticipant(MinecraftServer server, UUID participantId) {
+        if (participantId == null) {
+            return false;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(participantId);
+        if (player != null) {
+            return true;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data != null) {
+            return data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
+        }
+        return TameRegistry.getPlayerDuelStats().containsKey(participantId);
+    }
+
+    private static void clearDeadParticipantsFromActiveDuels(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || !isDeadEntry(data.uuid)) {
+                continue;
+            }
+            if (TameDuelManager.isEntityInDuel(data.uuid)) {
+                TameDuelManager.endDuelForEntity(server, data.uuid);
+            }
+        }
     }
 
     private static void notifyDuelSessionOwners(MinecraftServer server, ActiveDuelSession session, Component line) {
