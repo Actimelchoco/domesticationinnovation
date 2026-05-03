@@ -23,6 +23,7 @@
     "AlexsMobsFlutterPotMixin",
     "BaseSpawnerMixin",
     "CatMixin",
+    "EnderDragonMixin",
     "EntityMixin",
     "FishingHookMixin",
     "FloatGoalMixin",
