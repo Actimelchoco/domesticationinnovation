@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -42,6 +43,7 @@ public class TameRegistry {
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
     private static final Set<UUID> RANKED_PARTICIPANTS = new LinkedHashSet<>();
+    private static final List<CompoundTag> TEMPORARY_TAMES = new ArrayList<>();
     private static TameRegistrySavedData savedData;
 
     public static void init(MinecraftServer server) {
@@ -113,6 +115,8 @@ public class TameRegistry {
         RANKED_ARENA_NAME = savedData.getRankedArenaName();
         RANKED_PARTICIPANTS.clear();
         RANKED_PARTICIPANTS.addAll(savedData.getRankedParticipants());
+        TEMPORARY_TAMES.clear();
+        TEMPORARY_TAMES.addAll(savedData.getTemporaryTames());
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
             LAST_DEATHS.entrySet().removeIf(entry -> {
                 TameDeathRecord record = entry.getValue();
@@ -278,6 +282,7 @@ public class TameRegistry {
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
         savedData.setRankedParticipants(RANKED_PARTICIPANTS);
+        savedData.setTemporaryTames(TEMPORARY_TAMES);
         savedData.setDirty();
     }
 
@@ -306,6 +311,27 @@ public class TameRegistry {
                     RANKED_PARTICIPANTS.add(participantId);
                 }
             }
+        }
+        markDirty();
+    }
+
+    public static List<CompoundTag> getTemporaryTames() {
+        List<CompoundTag> out = new ArrayList<>(TEMPORARY_TAMES.size());
+        for (CompoundTag row : TEMPORARY_TAMES) {
+            if (row != null && !row.isEmpty()) {
+                out.add(row.copy());
+            }
+        }
+        return out;
+    }
+
+    public static void archiveTemporaryTame(CompoundTag row) {
+        if (row == null || row.isEmpty()) {
+            return;
+        }
+        TEMPORARY_TAMES.add(0, row.copy());
+        while (TEMPORARY_TAMES.size() > 512) {
+            TEMPORARY_TAMES.remove(TEMPORARY_TAMES.size() - 1);
         }
         markDirty();
     }

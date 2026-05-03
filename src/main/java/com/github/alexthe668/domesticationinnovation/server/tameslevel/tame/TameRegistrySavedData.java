@@ -34,6 +34,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
     private String rankedArenaName = "";
     private final Set<UUID> rankedParticipants = new LinkedHashSet<>();
+    private final List<CompoundTag> temporaryTames = new ArrayList<>();
 
     public Map<UUID, TameData> getTames() {
         return tames;
@@ -242,6 +243,22 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public List<CompoundTag> getTemporaryTames() {
+        return temporaryTames;
+    }
+
+    public void setTemporaryTames(List<CompoundTag> temporaryTames) {
+        this.temporaryTames.clear();
+        if (temporaryTames == null) {
+            return;
+        }
+        for (CompoundTag row : temporaryTames) {
+            if (row != null && !row.isEmpty()) {
+                this.temporaryTames.add(row.copy());
+            }
+        }
+    }
+
     @Override
     public CompoundTag save(CompoundTag tag) {
         ListTag tamesTag = new ListTag();
@@ -407,6 +424,13 @@ public class TameRegistrySavedData extends SavedData {
             rankedParticipantsTag.add(row);
         }
         tag.put("rankedParticipants", rankedParticipantsTag);
+        ListTag temporaryTamesTag = new ListTag();
+        for (CompoundTag row : temporaryTames) {
+            if (row != null && !row.isEmpty()) {
+                temporaryTamesTag.add(row.copy());
+            }
+        }
+        tag.put("temporaryTames", temporaryTamesTag);
         return tag;
     }
 
@@ -586,6 +610,14 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.rankedParticipants.add(row.getUUID("participantUUID"));
+            }
+        }
+        if (tag.contains("temporaryTames", Tag.TAG_LIST)) {
+            ListTag temporaryList = tag.getList("temporaryTames", Tag.TAG_COMPOUND);
+            for (Tag entry : temporaryList) {
+                if (entry instanceof CompoundTag row && !row.isEmpty()) {
+                    data.temporaryTames.add(row.copy());
+                }
             }
         }
         return data;

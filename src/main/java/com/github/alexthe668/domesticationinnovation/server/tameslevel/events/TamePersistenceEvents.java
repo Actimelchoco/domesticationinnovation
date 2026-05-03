@@ -18,6 +18,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Locale;
 
 public class TamePersistenceEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
@@ -119,6 +120,44 @@ public class TamePersistenceEvents {
         }
     }
 
+    public static void onTameEntityLeave(TamableAnimal tame) {
+        if (tame == null || tame.level().isClientSide) {
+            return;
+        }
+        if (!isTemporarySummonTame(tame)) {
+            return;
+        }
+        UUID uuid = tame.getUUID();
+        UUID tlId = TameData.getTlId(tame);
+        TameData byUuid = TameRegistry.get(uuid);
+        if (byUuid == null && tlId != null) {
+            byUuid = TameRegistry.getByTlId(tlId);
+        }
+        if (byUuid == null || byUuid.uuid == null) {
+            return;
+        }
+        net.minecraft.nbt.CompoundTag row = new net.minecraft.nbt.CompoundTag();
+        row.putUUID("uuid", byUuid.uuid);
+        if (byUuid.tlId != null) {
+            row.putUUID("tlId", byUuid.tlId);
+        }
+        if (byUuid.ownerUUID != null) {
+            row.putUUID("ownerUUID", byUuid.ownerUUID);
+        }
+        row.putString("name", byUuid.name == null ? tame.getName().getString() : byUuid.name);
+        row.putString("type", byUuid.type == null ? "" : byUuid.type);
+        row.putString("reason", "temporary_despawn");
+        row.putString("dimension", tame.level().dimension().location().toString());
+        row.putInt("x", tame.blockPosition().getX());
+        row.putInt("y", tame.blockPosition().getY());
+        row.putInt("z", tame.blockPosition().getZ());
+        row.putLong("gameTime", tame.level().getGameTime());
+        row.putLong("unixMillis", System.currentTimeMillis());
+        TameRegistry.archiveTemporaryTame(row);
+        TameRegistry.remove(byUuid.uuid);
+        TameRegistry.removeDeathsForIdentity(byUuid.uuid, byUuid.tlId);
+    }
+
     private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean maintenanceTick, boolean saveLocationTick, boolean saveSnapshotTick) {
         boolean changed = false;
         if (data.dead) {
@@ -203,5 +242,30 @@ public class TamePersistenceEvents {
             return "";
         }
         return LEVEL_PREFIX.matcher(name).replaceFirst("");
+    }
+
+    private static boolean isTemporarySummonTame(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        if (tame.requiresCustomPersistence()) {
+            return false;
+        }
+        net.minecraft.nbt.CompoundTag tag = tame.getPersistentData();
+        for (String key : tag.getAllKeys()) {
+            if (key == null) {
+                continue;
+            }
+            String normalized = key.toLowerCase(Locale.ROOT);
+            if (normalized.contains("summon")
+                    || normalized.contains("temporary")
+                    || normalized.contains("temp")
+                    || normalized.contains("duration")
+                    || normalized.contains("lifetime")
+                    || normalized.contains("despawn")) {
+                return true;
+            }
+        }
+        return false;
     }
 }

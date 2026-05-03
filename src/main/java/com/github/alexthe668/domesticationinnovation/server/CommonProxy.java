@@ -262,6 +262,9 @@ public class CommonProxy {
             if (living.getPersistentData().getBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG)) {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
             }
+            if (living instanceof TamableAnimal tame && tame.isTame()) {
+                TamePersistenceEvents.onTameEntityLeave(tame);
+            }
             if (TameableUtils.couldBeTamed(living) && TameableUtils.hasEnchant(living, DIEnchantmentRegistry.HEALTH_BOOST)) {
                 TameableUtils.setSafePetHealth(living, living.getHealth());
             }

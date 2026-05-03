@@ -3244,6 +3244,10 @@ public class TameCommands {
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "file")
                                                         )))))
+                                .then(Commands.literal("temporaries")
+                                        .executes(ctx -> adminListTemporaries(ctx.getSource())))
+                                .then(Commands.literal("tempoaries")
+                                        .executes(ctx -> adminListTemporaries(ctx.getSource())))
                                 .then(Commands.literal("tp")
                                         .then(Commands.literal("allOwners")
                                                 .executes(ctx -> adminTpAllOwners(ctx.getSource(), false))
@@ -16172,6 +16176,47 @@ public class TameCommands {
 
     private static int adminListApprovedItems(CommandSourceStack source) {
         return listApprovedReincarnationItems(source);
+    }
+
+    private static int adminListTemporaries(CommandSourceStack source) {
+        List<CompoundTag> rows = TameRegistry.getTemporaryTames();
+        if (rows.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No temporary tame removals recorded.").withStyle(ChatFormatting.GRAY), false);
+            return 1;
+        }
+        int limit = Math.min(30, rows.size());
+        source.sendSuccess(() -> Component.literal("Temporary tame removals (" + rows.size() + ", showing " + limit + "):").withStyle(ChatFormatting.GOLD), false);
+        MinecraftServer server = source.getServer();
+        for (int i = 0; i < limit; i++) {
+            CompoundTag row = rows.get(i);
+            String name = row.getString("name");
+            String type = row.getString("type");
+            UUID ownerId = row.hasUUID("ownerUUID") ? row.getUUID("ownerUUID") : null;
+            String ownerName = ownerId == null ? "-" : ownerId.toString();
+            if (server != null && ownerId != null) {
+                ServerPlayer online = server.getPlayerList().getPlayer(ownerId);
+                if (online != null) {
+                    ownerName = online.getGameProfile().getName();
+                }
+            }
+            String when = formatDeathTime(row.contains("unixMillis", Tag.TAG_LONG) ? row.getLong("unixMillis") : 0L);
+            String where = row.getString("dimension") + " @ " + row.getInt("x") + " " + row.getInt("y") + " " + row.getInt("z");
+            String reason = row.getString("reason");
+            final String finalName = name == null || name.isBlank() ? "unknown" : name;
+            final String finalOwnerName = ownerName;
+            final String finalType = type == null || type.isBlank() ? "unknown" : type;
+            final String finalWhere = where;
+            final String finalReason = reason == null || reason.isBlank() ? "temporary_despawn" : reason;
+            final String finalWhen = when;
+            source.sendSuccess(() -> Component.literal("- ")
+                    .append(Component.literal(finalName).withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(" | owner: " + finalOwnerName).withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal(" | type: " + finalType).withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(" | " + finalWhere).withStyle(ChatFormatting.DARK_AQUA))
+                    .append(Component.literal(" | " + finalReason).withStyle(ChatFormatting.RED))
+                    .append(Component.literal(" | " + finalWhen).withStyle(ChatFormatting.DARK_PURPLE)), false);
+        }
+        return 1;
     }
 
     private static int adminRemoveApprovedItem(CommandSourceStack source, String rawItemId) {
