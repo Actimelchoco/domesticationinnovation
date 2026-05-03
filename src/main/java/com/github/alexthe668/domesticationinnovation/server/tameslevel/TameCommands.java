@@ -13483,12 +13483,18 @@ public class TameCommands {
         int availableCredits = TameRegistry.getTeleportApprovedCredits(player.getUUID());
         int missingTeleports = Math.max(0, normalizedTeleports - availableCredits);
         int approvedItemsNeeded = missingTeleports <= 0 ? 0 : (int) Math.ceil(missingTeleports / 10.0D);
-        ItemStack held = player.getMainHandItem();
+        ItemStack paymentStack = player.getMainHandItem();
+        int requiredPaymentPoints = approvedItemsNeeded * FOOD_POINTS_PER_APPROVED_ITEM;
+        if (approvedItemsNeeded > 0 && approvedOrFoodPaymentPoints(paymentStack) < requiredPaymentPoints) {
+            ItemStack offhand = player.getOffhandItem();
+            if (approvedOrFoodPaymentPoints(offhand) >= requiredPaymentPoints) {
+                paymentStack = offhand;
+            }
+        }
         if (normalizedTeleports > 0 && (availableCredits > 0 || approvedItemsNeeded > 0)) {
-            int requiredPaymentPoints = approvedItemsNeeded * FOOD_POINTS_PER_APPROVED_ITEM;
-            if (approvedItemsNeeded == 0 || approvedOrFoodPaymentPoints(held) >= requiredPaymentPoints) {
+            if (approvedItemsNeeded == 0 || approvedOrFoodPaymentPoints(paymentStack) >= requiredPaymentPoints) {
                 if (approvedItemsNeeded > 0) {
-                    consumeApprovedOrFoodPaymentPoints(held, requiredPaymentPoints);
+                    consumeApprovedOrFoodPaymentPoints(paymentStack, requiredPaymentPoints);
                 }
                 int remainingCredits = Math.max(0, availableCredits + approvedItemsNeeded * 10 - normalizedTeleports);
                 TameRegistry.setTeleportApprovedCredits(player.getUUID(), remainingCredits);

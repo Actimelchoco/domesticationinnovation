@@ -137,14 +137,22 @@ public class TameCombatEvents {
             if (data.entitySnapshot != null) {
                 tame.save(data.entitySnapshot);
             }
-            data.dead = true;
-            data.deadGameTime = tame.level().getGameTime();
-            data.deadUnixMillis = System.currentTimeMillis();
-            data.deathDimension = tame.level().dimension().location().toString();
-            data.deathX = tame.blockPosition().getX();
-            data.deathY = tame.blockPosition().getY();
-            data.deathZ = tame.blockPosition().getZ();
-            if (!diedInDuel) {
+            if (diedInDuel) {
+                data.dead = false;
+                data.deadGameTime = 0L;
+                data.deadUnixMillis = 0L;
+                data.deathDimension = "";
+                data.deathX = 0;
+                data.deathY = 0;
+                data.deathZ = 0;
+            } else {
+                data.dead = true;
+                data.deadGameTime = tame.level().getGameTime();
+                data.deadUnixMillis = System.currentTimeMillis();
+                data.deathDimension = tame.level().dimension().location().toString();
+                data.deathX = tame.blockPosition().getX();
+                data.deathY = tame.blockPosition().getY();
+                data.deathZ = tame.blockPosition().getZ();
                 String deathMessage = event.getSource().getLocalizedDeathMessage(tame).getString();
                 TameDeathRecord deathRecord = TameDeathRecord.fromTame(data, tame, tame.level().getGameTime());
                 TameRegistry.archiveDeath(deathRecord);
