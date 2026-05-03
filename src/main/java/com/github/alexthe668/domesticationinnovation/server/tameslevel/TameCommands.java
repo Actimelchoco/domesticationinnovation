@@ -7516,19 +7516,25 @@ public class TameCommands {
                 }
             }
         } else {
-            TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
-            if (!resolved.error.isBlank()) {
-                return error(player, resolved.error);
+            if (add) {
+                TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
+                if (!resolved.error.isBlank()) {
+                    return error(player, resolved.error);
+                }
+                selectedIds.addAll(collectLivingEntityIds(resolved.members));
+                selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
+                        && !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+            } else {
+                selectedIds.addAll(resolveOwnedRankedParticipantsFromSelection(source.getServer(), player, parsed.selection));
             }
-            selectedIds.addAll(collectLivingEntityIds(resolved.members));
-            selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
-                    && !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
         }
         if (selectedIds.isEmpty()) {
             if (selfOnly && !add) {
                 return error(player, "You have no ranked tames to pull.");
             }
-            return error(player, "No loaded/alive ranked participants matched that selection.");
+            return error(player, add
+                    ? "No loaded/alive ranked participants matched that selection."
+                    : "No ranked participants matched that selection.");
         }
 
         ActiveDuelSession session = RANKED_DUEL_SESSION;
@@ -7653,6 +7659,62 @@ public class TameCommands {
             return;
         }
         recoverPetEntityAtLocation(owner, target, data);
+    }
+
+    private static Set<UUID> resolveOwnedRankedParticipantsFromSelection(MinecraftServer server, ServerPlayer owner, TeamSelection selection) {
+        LinkedHashSet<UUID> resolved = new LinkedHashSet<>();
+        if (owner == null || selection == null) {
+            return resolved;
+        }
+        LinkedHashSet<UUID> ownedRanked = new LinkedHashSet<>();
+        for (UUID participantId : collectRankedParticipantIds()) {
+            if (participantId == null) {
+                continue;
+            }
+            if (!owner.getUUID().equals(participantOwnerForSession(server, participantId))) {
+                continue;
+            }
+            ownedRanked.add(participantId);
+        }
+        if (selection.includeSelf && ownedRanked.contains(owner.getUUID())) {
+            resolved.add(owner.getUUID());
+        }
+        if (selection.tameSelections == null || selection.tameSelections.isEmpty()) {
+            return resolved;
+        }
+        LinkedHashSet<UUID> selectedTameIds = new LinkedHashSet<>();
+        for (DuelSelection tameSelection : selection.tameSelections) {
+            for (TameData data : resolveOwnedTameDataSelection(owner.getUUID(), tameSelection)) {
+                if (data != null && data.uuid != null) {
+                    selectedTameIds.add(data.uuid);
+                }
+            }
+        }
+        for (UUID tameId : selectedTameIds) {
+            if (ownedRanked.contains(tameId)) {
+                resolved.add(tameId);
+            }
+        }
+        return resolved;
+    }
+
+    private static List<TameData> resolveOwnedTameDataSelection(UUID ownerId, DuelSelection selection) {
+        if (ownerId == null || selection == null) {
+            return List.of();
+        }
+        return switch (selection.kind) {
+            case ALL -> ownedTames(ownerId);
+            case GROUP -> ownedGroup(ownerId, selection.value);
+            case TYPE -> ownedType(ownerId, selection.value);
+            case STATE -> {
+                MovementOrder order = parseMovementOrder(selection.value);
+                yield order == null ? List.of() : ownedState(ownerId, order);
+            }
+            case SINGLE -> {
+                TameData data = findOwnedTame(ownerId, selection.value);
+                yield data == null ? List.of() : List.of(data);
+            }
+        };
     }
 
     private static Set<UUID> removeFromSet(Set<UUID> base, UUID id) {
@@ -21634,6 +21696,22 @@ public class TameCommands {
 
     private static List<UUID> availableSessionParticipants(MinecraftServer server, ActiveDuelSession session, Set<UUID> pool) {
         List<UUID> available = new ArrayList<>();
+        if (session != null && session.ranked) {
+            for (UUID id : pool) {
+                if (id == null) {
+                    continue;
+                }
+                if (server != null && server.getPlayerList().getPlayer(id) != null) {
+                    available.add(id);
+                    continue;
+                }
+                TameData data = TameRegistry.get(id);
+                if (data != null && !data.dead) {
+                    available.add(id);
+                }
+            }
+            return available;
+        }
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive()) {
