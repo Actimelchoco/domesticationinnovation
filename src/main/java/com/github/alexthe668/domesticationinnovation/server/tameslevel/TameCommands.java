@@ -7549,6 +7549,9 @@ public class TameCommands {
                     session.poolA.add(participantId);
                     session.queuedPullAfterRound.remove(participantId);
                 }
+                if (!TameDuelManager.isEntityInDuel(participantId)) {
+                    unloadRankedParticipantTame(source.getServer(), participantId);
+                }
                 changed++;
                 continue;
             }
@@ -7572,6 +7575,7 @@ public class TameCommands {
                 session.idleSitHoldUntilTick.remove(participantId);
             }
             if (removed) {
+                loadPulledRankedParticipantNearOwner(source.getServer(), participantId);
                 changed++;
             } else {
                 skipped++;
@@ -7598,6 +7602,57 @@ public class TameCommands {
         }
         player.sendSystemMessage(Component.literal(message.toString()).withStyle(changed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return changed > 0 ? 1 : 0;
+    }
+
+    private static void unloadRankedParticipantTame(MinecraftServer server, UUID participantId) {
+        if (server == null || participantId == null) {
+            return;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data == null || data.dead || data.uuid == null) {
+            return;
+        }
+        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        if (loaded == null || !loaded.isAlive()) {
+            return;
+        }
+        CompoundTag refreshedSnapshot = new CompoundTag();
+        TameRegistry.bindEntityToData(loaded, data);
+        loaded.save(refreshedSnapshot);
+        data.entitySnapshot = refreshedSnapshot;
+        data.lastKnownDimension = loaded.level().dimension().location().toString();
+        data.lastKnownX = loaded.blockPosition().getX();
+        data.lastKnownY = loaded.blockPosition().getY();
+        data.lastKnownZ = loaded.blockPosition().getZ();
+        data.lastKnownGameTime = loaded.level().getGameTime();
+        loaded.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
+        loaded.discard();
+        TameRegistry.markDirty();
+    }
+
+    private static void loadPulledRankedParticipantNearOwner(MinecraftServer server, UUID participantId) {
+        if (server == null || participantId == null) {
+            return;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data == null || data.dead || data.uuid == null) {
+            return;
+        }
+        UUID ownerId = data.ownerUUID;
+        if (ownerId == null) {
+            return;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
+        if (owner == null || !owner.isAlive()) {
+            return;
+        }
+        SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        if (loaded != null && loaded.isAlive()) {
+            teleportTameToLocation(loaded, target);
+            return;
+        }
+        recoverPetEntityAtLocation(owner, target, data);
     }
 
     private static Set<UUID> removeFromSet(Set<UUID> base, UUID id) {
@@ -21742,6 +21797,10 @@ public class TameCommands {
             if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                 continue;
             }
+            if (session.ranked) {
+                unloadRankedParticipantTame(server, id);
+                continue;
+            }
             LivingEntity living = findLoadedLivingParticipant(server, id);
             TamableAnimal tame = living instanceof TamableAnimal candidate ? candidate : null;
             if (tame == null || !tame.isAlive()) {
@@ -21760,6 +21819,16 @@ public class TameCommands {
 
     private static void teleportSessionPoolHome(MinecraftServer server, ActiveDuelSession session, UUID ownerId, Set<UUID> pool, Set<UUID> activeRound, SpawnTarget waitingTarget) {
         if (server == null || session == null || ownerId == null || pool == null || activeRound == null) {
+            return;
+        }
+        if (session.ranked) {
+            for (UUID id : pool) {
+                if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
+                    continue;
+                }
+                unloadRankedParticipantTame(server, id);
+                session.idleSitHoldUntilTick.remove(id);
+            }
             return;
         }
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
