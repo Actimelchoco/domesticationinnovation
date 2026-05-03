@@ -7615,7 +7615,7 @@ public class TameCommands {
         if (server == null || participantId == null) {
             return;
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data == null || data.dead || data.uuid == null) {
             return;
         }
@@ -7641,7 +7641,7 @@ public class TameCommands {
         if (server == null || participantId == null) {
             return;
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data == null || data.dead || data.uuid == null) {
             return;
         }
@@ -22227,7 +22227,7 @@ public class TameCommands {
         if (player != null) {
             return player.getUUID();
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         return data == null ? null : data.ownerUUID;
     }
 
@@ -22276,11 +22276,22 @@ public class TameCommands {
         if (player != null) {
             return true;
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
             return data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
         }
         return TameRegistry.getPlayerDuelStats().containsKey(participantId);
+    }
+
+    private static TameData rankedTameDataForParticipant(UUID participantId) {
+        if (participantId == null) {
+            return null;
+        }
+        TameData direct = TameRegistry.get(participantId);
+        if (direct != null) {
+            return direct;
+        }
+        return TameRegistry.getByTlId(participantId);
     }
 
     private static void clearDeadParticipantsFromActiveDuels(MinecraftServer server) {
