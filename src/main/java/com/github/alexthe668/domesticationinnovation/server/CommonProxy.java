@@ -236,6 +236,10 @@ public class CommonProxy {
                     && tame.isTame()
                     && TameDuelManager.isEntityInDuel(tame.getUUID())) {
                 TameDuelManager.refreshLoadedDuelParticipant(living.level().getServer(), tame);
+            } else if (!living.level().isClientSide
+                    && living instanceof TamableAnimal tame
+                    && tame.isTame()) {
+                TameDuelManager.restorePostDuelTargetGoalsIfNeeded(tame);
             }
         }
     }

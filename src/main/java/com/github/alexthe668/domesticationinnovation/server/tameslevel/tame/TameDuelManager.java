@@ -24,6 +24,9 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
@@ -111,6 +114,17 @@ public final class TameDuelManager {
     private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
     private static final Map<UUID, Set<String>> BLUE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, Set<String>> ORANGE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
+    private static final Map<UUID, List<GoalSnapshotEntry>> MOSSY_GOLEM_TARGET_GOAL_BACKUPS = new HashMap<>();
+
+    private static final class GoalSnapshotEntry {
+        private final int priority;
+        private final Goal goal;
+
+        private GoalSnapshotEntry(int priority, Goal goal) {
+            this.priority = priority;
+            this.goal = goal;
+        }
+    }
 
     private TameDuelManager() {
     }
@@ -367,9 +381,11 @@ public final class TameDuelManager {
         }
         UUID tameId = tame.getUUID();
         if (!isEntityInDuel(tameId)) {
+            restoreMossyGolemTargetGoalsIfNeeded(tame);
             removeDuelFollowRangeBoost(tame);
             return;
         }
+        ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
         if (!isLegendaryMonstersMossyGolem(tame)) {
             TameCommands.applyMovementOrderCode(tame, 2);
             tame.setOrderedToSit(false);
@@ -472,6 +488,7 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
+        ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
         if (!isLegendaryMonstersMossyGolem(tame)) {
             // Set follow once at duel start so participant AI stays combat-active.
             TameCommands.applyMovementOrderCode(tame, 2);
@@ -495,6 +512,68 @@ public final class TameDuelManager {
         }
         String className = tame.getClass().getName();
         return className != null && className.toLowerCase(java.util.Locale.ROOT).contains("mossygolem");
+    }
+
+    public static synchronized void restorePostDuelTargetGoalsIfNeeded(TamableAnimal tame) {
+        restoreMossyGolemTargetGoalsIfNeeded(tame);
+    }
+
+    private static void ensureMossyGolemDuelTargetGoalsIfNeeded(TamableAnimal tame) {
+        if (tame == null || !isLegendaryMonstersMossyGolem(tame)) {
+            return;
+        }
+        UUID tameId = tame.getUUID();
+        if (tameId == null || MOSSY_GOLEM_TARGET_GOAL_BACKUPS.containsKey(tameId)) {
+            return;
+        }
+        List<GoalSnapshotEntry> backup = new ArrayList<>();
+        for (WrappedGoal wrapped : new ArrayList<>(tame.targetSelector.getAvailableGoals())) {
+            Goal goal = wrapped.getGoal();
+            if (goal == null) {
+                continue;
+            }
+            backup.add(new GoalSnapshotEntry(wrapped.getPriority(), goal));
+            tame.targetSelector.removeGoal(goal);
+        }
+        MOSSY_GOLEM_TARGET_GOAL_BACKUPS.put(tameId, backup);
+        tame.targetSelector.addGoal(1, new DuelOpponentNearestTargetGoal(tame));
+    }
+
+    private static void restoreMossyGolemTargetGoalsIfNeeded(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
+        UUID tameId = tame.getUUID();
+        if (tameId == null) {
+            return;
+        }
+        List<GoalSnapshotEntry> backup = MOSSY_GOLEM_TARGET_GOAL_BACKUPS.remove(tameId);
+        if (backup == null) {
+            return;
+        }
+        for (WrappedGoal wrapped : new ArrayList<>(tame.targetSelector.getAvailableGoals())) {
+            Goal goal = wrapped.getGoal();
+            if (goal != null) {
+                tame.targetSelector.removeGoal(goal);
+            }
+        }
+        for (GoalSnapshotEntry entry : backup) {
+            if (entry == null || entry.goal == null) {
+                continue;
+            }
+            tame.targetSelector.addGoal(Math.max(0, entry.priority), entry.goal);
+        }
+    }
+
+    private static final class DuelOpponentNearestTargetGoal extends NearestAttackableTargetGoal<LivingEntity> {
+        private DuelOpponentNearestTargetGoal(TamableAnimal tame) {
+            super(tame, LivingEntity.class, 10, true, false, target ->
+                    tame != null
+                            && target != null
+                            && target.isAlive()
+                            && TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID()));
+            this.targetConditions.ignoreLineOfSight();
+        }
     }
 
     private static void resetParticipantCooldownsForDuel(UUID participantId) {
@@ -764,6 +843,7 @@ public final class TameDuelManager {
         if (tame == null) return;
         clearDuelCombatTarget(tame);
         removeDuelFollowRangeBoost(tame);
+        restoreMossyGolemTargetGoalsIfNeeded(tame);
     }
 
     private static void setDuelCombatTarget(TamableAnimal tame, LivingEntity target) {
