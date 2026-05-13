@@ -1069,33 +1069,10 @@ public class TameCommands {
                                 .requires(source -> source.hasPermission(2))
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("collar")
-                                .executes(ctx -> collarList(ctx.getSource(), false))
-                                .then(Commands.literal("notag")
-                                        .executes(ctx -> collarList(ctx.getSource(), true)))
-                                .then(Commands.literal("removeTag")
-                                        .executes(ctx -> collarRemoveTag(ctx.getSource()))))
-                        .then(Commands.literal("graveyard")
-                                .executes(ctx -> graveyard(ctx.getSource(), 10))
-                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
-                                        .executes(ctx -> graveyard(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "limit")))))
-                        .then(Commands.literal("search")
-                                .then(Commands.literal("ability")
-                                        .then(Commands.argument("id", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestAbilities(b))
-                                                .executes(ctx -> searchTamesByAbility(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
-                                .then(Commands.literal("attribute")
-                                        .then(Commands.argument("id", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestAttributes(b))
-                                                .executes(ctx -> searchTamesByAttribute(ctx.getSource(), StringArgumentType.getString(ctx, "id")))))
-                                .then(Commands.literal("class")
-                                        .then(Commands.argument("id", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestClasses(b))
-                                                .executes(ctx -> searchTamesByClass(ctx.getSource(), StringArgumentType.getString(ctx, "id"))))))
-                        .then(Commands.literal("deaths")
-                                .executes(ctx -> recentDeaths(ctx.getSource(), 10))
-                                .then(Commands.argument("number", IntegerArgumentType.integer(1, 200))
-                                        .executes(ctx -> recentDeaths(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "number")))))
+                        .then(TameCollarCommands.build())
+                        .then(TameHistoryCommands.graveyard())
+                        .then(TameSearchCommands.build())
+                        .then(TameHistoryCommands.deaths())
                         .then(Commands.literal("show")
                                 .then(Commands.argument("player", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
@@ -5360,7 +5337,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int collarList(CommandSourceStack source, boolean noTagOnly) {
+    static int collarList(CommandSourceStack source, boolean noTagOnly) {
         ServerPlayer player = source == null ? null : source.getPlayer();
         if (player == null) {
             return 0;
@@ -5404,7 +5381,7 @@ public class TameCommands {
         return matches.size();
     }
 
-    private static int collarRemoveTag(CommandSourceStack source) {
+    static int collarRemoveTag(CommandSourceStack source) {
         ServerPlayer player = source == null ? null : source.getPlayer();
         if (player == null) {
             return 0;
@@ -7951,7 +7928,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int searchTamesByAbility(CommandSourceStack source, String abilityId) {
+    static int searchTamesByAbility(CommandSourceStack source, String abilityId) {
         ServerPlayer player = source.getPlayer();
         String id = abilityId == null ? "" : abilityId.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(player, "Ability name cannot be blank.");
@@ -7959,7 +7936,7 @@ public class TameCommands {
         return searchOwnedTames(source, "Ability", id, data -> LevelSystem.hasAbility(data, id));
     }
 
-    private static int searchTamesByAttribute(CommandSourceStack source, String attributeId) {
+    static int searchTamesByAttribute(CommandSourceStack source, String attributeId) {
         ServerPlayer player = source.getPlayer();
         String id = attributeId == null ? "" : attributeId.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(player, "Attribute name cannot be blank.");
@@ -7967,7 +7944,7 @@ public class TameCommands {
         return searchOwnedTames(source, "Attribute", id, data -> LevelSystem.getAttributeLevel(data, id) > 0);
     }
 
-    private static int searchTamesByClass(CommandSourceStack source, String className) {
+    static int searchTamesByClass(CommandSourceStack source, String className) {
         ServerPlayer player = source.getPlayer();
         String id = className == null ? "" : className.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(player, "Class name cannot be blank.");
@@ -11077,7 +11054,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int graveyard(CommandSourceStack source, int requestedLimit) {
+    static int graveyard(CommandSourceStack source, int requestedLimit) {
         ServerPlayer player = source.getPlayer();
         List<TameData> dead = ownedDeadTames(player.getUUID());
         if (dead.isEmpty()) {
@@ -14195,7 +14172,7 @@ public class TameCommands {
         return Math.max(0, data.kills) * 4 + Math.max(0, data.assists);
     }
 
-    private static int recentDeaths(CommandSourceStack source, int requestedLimit) {
+    static int recentDeaths(CommandSourceStack source, int requestedLimit) {
         ServerPlayer p = source.getPlayer();
         List<DeathHistoryRow> entries = collectDeathHistoryRows(p.getUUID());
         if (entries.isEmpty()) {
@@ -23679,7 +23656,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestAbilities(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestAbilities(SuggestionsBuilder b) {
         LevelSystem.knownAbilityIds().forEach(id -> suggestCommandString(b, id));
         return b.buildFuture();
     }
@@ -23692,12 +23669,12 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestAttributes(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestAttributes(SuggestionsBuilder b) {
         LevelSystem.knownAttributeIds().forEach(id -> suggestCommandString(b, id));
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestClasses(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestClasses(SuggestionsBuilder b) {
         classNames().forEach(name -> suggestCommandString(b, name));
         return b.buildFuture();
     }
