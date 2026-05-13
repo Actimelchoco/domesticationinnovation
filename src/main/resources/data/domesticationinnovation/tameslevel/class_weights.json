@@ -1,6 +1,62 @@
 {
   "preferredAttributeWeightMultiplier": 30.0,
   "preferredAbilityWeightMultiplier": 9.0,
+  "classRarity": {
+    "legendary": [
+      "gandalf",
+      "striker",
+      "unstable_god",
+      "vorgottenlunchbox"
+    ],
+    "epic": [
+      "desmond_doss",
+      "thor",
+      "assassin",
+      "attributer",
+      "bee",
+      "blaze",
+      "crackhead",
+      "creeper",
+      "disco",
+      "dolphin",
+      "drowned",
+      "enderman",
+      "evoker",
+      "fisher",
+      "frost",
+      "ghast",
+      "goofygirl",
+      "guardian",
+      "healer",
+      "iron_golem",
+      "mage",
+      "maniac",
+      "phantom",
+      "piglin",
+      "protectedbitch",
+      "shooter",
+      "shulker",
+      "skeleton",
+      "speedster",
+      "spider",
+      "sponge",
+      "warden",
+      "witch",
+      "wither",
+      "zombie"
+    ],
+    "rare": [
+      "supporter",
+      "knight",
+      "defuser"
+    ],
+    "common": [
+      "tanker",
+      "none",
+      "ordinary",
+      "dps"
+    ]
+  },
   "defaultCategoryWeights": {
     "base": 90.0,
     "attribute": 10.0,

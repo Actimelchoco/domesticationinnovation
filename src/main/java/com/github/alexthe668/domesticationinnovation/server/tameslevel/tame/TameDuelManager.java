@@ -833,7 +833,7 @@ public final class TameDuelManager {
                 continue;
             }
             TameData snapshot = TameData.fromTag(snapshotTag.copy());
-            TameCommands.copyPersistentDuelStats(persisted, snapshot);
+            TameDuelSnapshots.copyPersistentStats(persisted, snapshot);
             entry.setValue(snapshot.toTag());
         }
     }

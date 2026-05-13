@@ -12,6 +12,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
@@ -51,17 +52,20 @@ final class ClassWeightConfig {
     private final double preferredAbilityWeightMultiplier;
     private final CategoryWeights defaultCategoryWeights;
     private final Map<String, Double> defaultBaseStatWeights;
+    private final Map<TameClass, Double> classRollWeights;
     private final Map<TameClass, ClassWeights> classes;
 
     private ClassWeightConfig(double preferredAttributeWeightMultiplier,
                               double preferredAbilityWeightMultiplier,
                               CategoryWeights defaultCategoryWeights,
                               Map<String, Double> defaultBaseStatWeights,
+                              Map<TameClass, Double> classRollWeights,
                               Map<TameClass, ClassWeights> classes) {
         this.preferredAttributeWeightMultiplier = preferredAttributeWeightMultiplier;
         this.preferredAbilityWeightMultiplier = preferredAbilityWeightMultiplier;
         this.defaultCategoryWeights = defaultCategoryWeights;
         this.defaultBaseStatWeights = defaultBaseStatWeights;
+        this.classRollWeights = classRollWeights;
         this.classes = classes;
     }
 
@@ -133,14 +137,53 @@ final class ClassWeightConfig {
                     autoPreferredWeightBalance
             ));
         }
+        Map<TameClass, Double> classRollWeights = parseClassRollWeights(root);
 
         return new ClassWeightConfig(
                 preferredAttributeWeightMultiplier,
                 preferredAbilityWeightMultiplier,
                 defaultCategoryWeights,
                 defaultBaseStatWeights,
+                classRollWeights,
                 Collections.unmodifiableMap(classes)
         );
+    }
+
+    private static Map<TameClass, Double> parseClassRollWeights(JsonObject root) {
+        if (!root.has("classRarity") || !root.get("classRarity").isJsonObject()) {
+            return legacyClassRollWeights();
+        }
+        Map<TameClass, Double> weights = new LinkedHashMap<>();
+        JsonObject classRarity = root.getAsJsonObject("classRarity");
+        for (TameClass.Rarity rarity : TameClass.Rarity.values()) {
+            String key = rarity.name().toLowerCase(Locale.ROOT);
+            if (!classRarity.has(key) || !classRarity.get(key).isJsonArray()) {
+                continue;
+            }
+            java.util.List<TameClass> bucket = new java.util.ArrayList<>();
+            for (JsonElement element : classRarity.getAsJsonArray(key)) {
+                TameClass tameClass = TameClass.ensureRegistered(element.getAsString());
+                if (tameClass != null) {
+                    bucket.add(tameClass);
+                }
+            }
+            if (bucket.isEmpty()) {
+                continue;
+            }
+            double perClassWeight = rarity.weight() / bucket.size();
+            for (TameClass tameClass : bucket) {
+                weights.put(tameClass, perClassWeight);
+            }
+        }
+        return Collections.unmodifiableMap(weights);
+    }
+
+    private static Map<TameClass, Double> legacyClassRollWeights() {
+        Map<TameClass, Double> weights = new LinkedHashMap<>();
+        for (TameClass tameClass : TameClass.values()) {
+            weights.put(tameClass, tameClass.rarity().weight());
+        }
+        return Collections.unmodifiableMap(weights);
     }
 
     private static CategoryWeights parseCategoryWeights(JsonObject object) {
@@ -187,6 +230,10 @@ final class ClassWeightConfig {
 
     double defaultBaseStatWeight(String rewardId, double fallback) {
         return defaultBaseStatWeights.getOrDefault(normalize(rewardId), fallback);
+    }
+
+    Map<TameClass, Double> classRollWeights() {
+        return classRollWeights;
     }
 
     double baseStatMultiplier(TameClass tameClass, String rewardId) {

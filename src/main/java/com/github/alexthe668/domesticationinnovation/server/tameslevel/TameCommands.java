@@ -29,6 +29,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Play
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameArenaRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelSnapshots;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
@@ -138,7 +139,7 @@ public class TameCommands {
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
-    private static final Path DOC_SOURCE_BASE = Path.of("src", "main", "java", "com", "github", "alexthe668", "domesticationinnovation", "server", "tameslevel", "old docus");
+    private static final Path DOC_SOURCE_BASE = Path.of("docs", "old", "tameslevel");
     private static final int FOOD_POINTS_PER_APPROVED_ITEM = 20;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
@@ -1027,30 +1028,7 @@ public class TameCommands {
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
                         .then(Commands.literal("approvedItems")
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
-                        .then(Commands.literal("bed")
-                                .executes(ctx -> listOwnedBeds(ctx.getSource()))
-                                .then(Commands.literal("long")
-                                        .executes(ctx -> listOwnedBedsLong(ctx.getSource())))
-                                .then(Commands.literal("noBed")
-                                        .executes(ctx -> listOwnedBedsWithoutBed(ctx.getSource())))
-                                .then(Commands.literal("set")
-                                        .then(Commands.argument("name", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                .executes(ctx -> setOwnedBed(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                .then(Commands.literal("remove")
-                                        .then(Commands.literal("all")
-                                                .executes(ctx -> removeOwnedBedsAll(ctx.getSource())))
-                                        .then(Commands.literal("group")
-                                                .then(Commands.argument("group", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                        .executes(ctx -> removeOwnedBedsGroup(ctx.getSource(), StringArgumentType.getString(ctx, "group")))))
-                                        .then(Commands.literal("type")
-                                                .then(Commands.argument("type", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                        .executes(ctx -> removeOwnedBedsType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
-                                        .then(Commands.argument("name", StringArgumentType.string())
-                                                .suggests((ctx, b) -> suggestOwnedPetNamesWithBeds(ctx.getSource(), b))
-                                                .executes(ctx -> removeOwnedBed(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                        .then(TameBedCommands.build())
                         .then(Commands.literal("doNotAttackAnimals")
                                 .executes(ctx -> listDoNotAttack(ctx.getSource()))
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -3256,8 +3234,8 @@ public class TameCommands {
                                                                         IntegerArgumentType.getInteger(ctx, "amount")
                                                                 ))))))
 
-                                .then(adminAbilityCommand())
-                                .then(adminAttributeCommand()))
+                                .then(TameAdminRewardCommands.ability())
+                                .then(TameAdminRewardCommands.attribute()))
                                 .then(Commands.literal("removeTarget")
                                         .executes(ctx -> removeTargetAll(ctx.getSource()))
                                         .then(Commands.argument("name", StringArgumentType.string())
@@ -3281,170 +3259,6 @@ public class TameCommands {
         );
 
         dispatcher.register(Commands.literal("tame").redirect(root));
-    }
-
-    private static LiteralArgumentBuilder<CommandSourceStack> adminAbilityCommand() {
-        return Commands.literal("ability")
-                .then(Commands.literal("add")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .then(Commands.argument("id", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                        .executes(ctx -> abilityAdd(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> abilityAdd(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                )))))
-                        .then(Commands.argument("id", StringArgumentType.word())
-                                .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                .then(Commands.argument("pet", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                        .executes(ctx -> abilityAdd(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> abilityAdd(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                ))))))
-                .then(Commands.literal("remove")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .then(Commands.argument("id", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                        .executes(ctx -> abilityRemove(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> abilityRemove(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                )))))
-                        .then(Commands.argument("id", StringArgumentType.word())
-                                .suggests((ctx, b) -> suggestAdminAbilities(b))
-                                .then(Commands.argument("pet", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                        .executes(ctx -> abilityRemove(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> abilityRemove(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                ))))))
-                .then(Commands.literal("clear")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .executes(ctx -> abilityClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
-                .then(Commands.literal("list")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .executes(ctx -> abilityList(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))));
-    }
-
-    private static LiteralArgumentBuilder<CommandSourceStack> adminAttributeCommand() {
-        return Commands.literal("attribute")
-                .then(Commands.literal("add")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .then(Commands.argument("id", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestAttributes(b))
-                                        .executes(ctx -> attributeAdd(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> attributeAdd(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                )))))
-                        .then(Commands.argument("id", StringArgumentType.word())
-                                .suggests((ctx, b) -> suggestAttributes(b))
-                                .then(Commands.argument("pet", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                        .executes(ctx -> attributeAdd(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> attributeAdd(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                ))))))
-                .then(Commands.literal("remove")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .then(Commands.argument("id", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestAttributes(b))
-                                        .executes(ctx -> attributeRemove(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> attributeRemove(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                )))))
-                        .then(Commands.argument("id", StringArgumentType.word())
-                                .suggests((ctx, b) -> suggestAttributes(b))
-                                .then(Commands.argument("pet", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                        .executes(ctx -> attributeRemove(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "pet"),
-                                                StringArgumentType.getString(ctx, "id"),
-                                                1
-                                        ))
-                                        .then(Commands.argument("levels", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> attributeRemove(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "pet"),
-                                                        StringArgumentType.getString(ctx, "id"),
-                                                        IntegerArgumentType.getInteger(ctx, "levels")
-                                                ))))))
-                .then(Commands.literal("clear")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .executes(ctx -> attributeClear(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
-                .then(Commands.literal("list")
-                        .then(Commands.argument("pet", StringArgumentType.string())
-                                .suggests((ctx, b) -> suggestAllAliveTameNames(b))
-                                .executes(ctx -> attributeList(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))));
     }
 
     @SubscribeEvent
@@ -5426,7 +5240,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int listOwnedBeds(CommandSourceStack source) {
+    static int listOwnedBeds(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5459,7 +5273,7 @@ public class TameCommands {
         return withBeds.size() + withoutBeds.size();
     }
 
-    private static int listOwnedBedsLong(CommandSourceStack source) {
+    static int listOwnedBedsLong(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5495,7 +5309,7 @@ public class TameCommands {
         return withBeds.size();
     }
 
-    private static int listOwnedBedsWithoutBed(CommandSourceStack source) {
+    static int listOwnedBedsWithoutBed(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5514,7 +5328,7 @@ public class TameCommands {
         return withoutBeds.size();
     }
 
-    private static int setOwnedBed(CommandSourceStack source, String petName) {
+    static int setOwnedBed(CommandSourceStack source, String petName) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5543,7 +5357,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int removeOwnedBed(CommandSourceStack source, String petName) {
+    static int removeOwnedBed(CommandSourceStack source, String petName) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5561,7 +5375,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int removeOwnedBedsAll(CommandSourceStack source) {
+    static int removeOwnedBedsAll(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5569,7 +5383,7 @@ public class TameCommands {
         return removeOwnedBeds(source, player, ownedTames(player.getUUID()), "all your tames");
     }
 
-    private static int removeOwnedBedsGroup(CommandSourceStack source, String group) {
+    static int removeOwnedBedsGroup(CommandSourceStack source, String group) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5577,7 +5391,7 @@ public class TameCommands {
         return removeOwnedBeds(source, player, ownedGroup(player.getUUID(), group), "group '" + group + "'");
     }
 
-    private static int removeOwnedBedsType(CommandSourceStack source, String typeFilter) {
+    static int removeOwnedBedsType(CommandSourceStack source, String typeFilter) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -11634,65 +11448,7 @@ public class TameCommands {
     }
 
     public static void copyPersistentDuelStats(TameData from, TameData into) {
-        if (from == null || into == null) {
-            return;
-        }
-        into.level = from.level;
-        into.xp = from.xp;
-        into.xpToNext = from.xpToNext;
-        into.kills = from.kills;
-        into.assists = from.assists;
-        into.deaths = from.deaths;
-        into.bonusHealth = from.bonusHealth;
-        into.bonusDamage = from.bonusDamage;
-        into.bonusSpeed = from.bonusSpeed;
-        into.bonusArmor = from.bonusArmor;
-        into.bonusArmorToughness = from.bonusArmorToughness;
-        into.bonusKnockback = from.bonusKnockback;
-        into.bonusKnockbackResist = from.bonusKnockbackResist;
-        into.tameClass = from.tameClass;
-        into.classRerollsUsed = from.classRerollsUsed;
-        into.levelRewardHistory.clear();
-        for (CompoundTag rewardEntry : from.levelRewardHistory) {
-            if (rewardEntry != null && !rewardEntry.isEmpty()) {
-                into.levelRewardHistory.add(rewardEntry.copy());
-            }
-        }
-        into.abilities.clear();
-        into.abilities.addAll(from.abilities);
-        into.abilityLevels.clear();
-        into.abilityLevels.putAll(from.abilityLevels);
-        into.attributeLevels.clear();
-        into.attributeLevels.putAll(from.attributeLevels);
-        into.hasSavedProgress = from.hasSavedProgress;
-        into.savedProgressCost = from.savedProgressCost;
-        into.savedLevel = from.savedLevel;
-        into.savedXp = from.savedXp;
-        into.savedXpToNext = from.savedXpToNext;
-        into.savedKills = from.savedKills;
-        into.savedAssists = from.savedAssists;
-        into.savedBonusHealth = from.savedBonusHealth;
-        into.savedBonusDamage = from.savedBonusDamage;
-        into.savedBonusSpeed = from.savedBonusSpeed;
-        into.savedBonusArmor = from.savedBonusArmor;
-        into.savedBonusArmorToughness = from.savedBonusArmorToughness;
-        into.savedBonusKnockback = from.savedBonusKnockback;
-        into.savedBonusKnockbackResist = from.savedBonusKnockbackResist;
-        into.savedAbilities.clear();
-        into.savedAbilities.addAll(from.savedAbilities);
-        into.savedAbilityLevels.clear();
-        into.savedAbilityLevels.putAll(from.savedAbilityLevels);
-        into.savedAttributeLevels.clear();
-        into.savedAttributeLevels.putAll(from.savedAttributeLevels);
-        into.oreScentingOreId = from.oreScentingOreId;
-        into.duelMmr = from.duelMmr;
-        into.duelKills = from.duelKills;
-        into.duelAssists = from.duelAssists;
-        into.duelDeaths = from.duelDeaths;
-        into.duelWins = from.duelWins;
-        into.duelLosses = from.duelLosses;
-        into.duelCount = from.duelCount;
-        into.duelPoints = from.duelPoints;
+        TameDuelSnapshots.copyPersistentStats(from, into);
     }
 
     private static SpawnTarget resolveDuelRespawnTarget(MinecraftServer server, TameData data) {
@@ -14567,7 +14323,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int abilityAdd(CommandSourceStack source, String pet, String id, int levels) {
+    static int abilityAdd(CommandSourceStack source, String pet, String id, int levels) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14580,7 +14336,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int abilityRemove(CommandSourceStack source, String pet, String id, int levels) {
+    static int abilityRemove(CommandSourceStack source, String pet, String id, int levels) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14593,7 +14349,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int abilityClear(CommandSourceStack source, String pet) {
+    static int abilityClear(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14605,7 +14361,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int abilityList(CommandSourceStack source, String pet) {
+    static int abilityList(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14617,7 +14373,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int attributeAdd(CommandSourceStack source, String pet, String id, int levels) {
+    static int attributeAdd(CommandSourceStack source, String pet, String id, int levels) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14627,7 +14383,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int attributeRemove(CommandSourceStack source, String pet, String id, int levels) {
+    static int attributeRemove(CommandSourceStack source, String pet, String id, int levels) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14637,7 +14393,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int attributeClear(CommandSourceStack source, String pet) {
+    static int attributeClear(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -14647,7 +14403,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int attributeList(CommandSourceStack source, String pet) {
+    static int attributeList(CommandSourceStack source, String pet) {
         ServerPlayer p = source.getPlayer();
         TameData d = resolveAdminAliveTame(p, pet);
         if (d == null) return 0;
@@ -22921,7 +22677,7 @@ public class TameCommands {
         return null;
     }
 
-    private static CompletableFuture<Suggestions> suggestOwnedPetNames(CommandSourceStack source, SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestOwnedPetNames(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
@@ -23033,7 +22789,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestOwnedPetNamesWithBeds(CommandSourceStack source, SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestOwnedPetNamesWithBeds(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {
@@ -23172,7 +22928,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestOwnedGroups(CommandSourceStack source, SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestOwnedGroups(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         Set<String> seen = new HashSet<>();
@@ -23189,7 +22945,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestOwnedTypes(CommandSourceStack source, SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestOwnedTypes(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         Set<String> seenPath = new HashSet<>();
@@ -23661,7 +23417,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestAdminAbilities(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestAdminAbilities(SuggestionsBuilder b) {
         for (String id : LevelSystem.knownAbilityIds()) {
             if ("berserker".equalsIgnoreCase(id) || "passive".equalsIgnoreCase(id)) continue;
             suggestCommandString(b, id);
@@ -23679,7 +23435,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestAllAliveTameNames(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestAllAliveTameNames(SuggestionsBuilder b) {
         Set<String> seen = new HashSet<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (isDeadEntry(d.uuid)) continue;

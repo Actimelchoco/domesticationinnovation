@@ -9,10 +9,10 @@ public final class TameClass {
     private static final Map<String, TameClass> REGISTRY = new LinkedHashMap<>();
 
     public enum Rarity {
-        COMMON(17.5D),
-        RARE(20.0D / 3.0D),
-        EPIC(9.0D / 35.0D),
-        LEGENDARY(0.25D);
+        COMMON(70.0D),
+        RARE(20.0D),
+        EPIC(9.0D),
+        LEGENDARY(1.0D);
 
         private final double weight;
 

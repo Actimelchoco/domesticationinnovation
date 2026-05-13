@@ -2080,8 +2080,7 @@ public class TameAbilityEvents {
     }
 
     private static void setAbilityCooldown(TamableAnimal tame, TameData data, String sourceId, String key, long now, long baseTicks) {
-        long ticks = Math.max(1L, baseTicks);
-        ticks = Math.max(1L, Math.round(ticks * abilityCooldownMultiplier(data, sourceId)));
+        long ticks = AbilityCooldowns.scaledCooldownTicks(data, sourceId, baseTicks);
 
         int emergency = attributeLevel(data, "emergency_cooldown_reduction");
         if (emergency > 0) {
@@ -2096,38 +2095,6 @@ public class TameAbilityEvents {
             }
         }
         setCooldown(data, key, now + ticks);
-    }
-
-    private static double abilityCooldownMultiplier(TameData data, String sourceId) {
-        double attackNerfMultiplier = 1.0D;
-        if (LevelSystem.isAttackAbility(sourceId)) {
-            int abilityCount = countOwnedAttackAbilities(data);
-            if (abilityCount > 1) {
-                double percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent() / 100.0D;
-                attackNerfMultiplier = 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
-            }
-        }
-        return attackNerfMultiplier * LevelSystem.quickyCooldownMultiplier(data);
-    }
-
-    private static int countOwnedAttackAbilities(TameData data) {
-        if (data == null) {
-            return 0;
-        }
-        int count = 0;
-        for (var entry : data.abilityLevels.entrySet()) {
-            if (entry.getValue() > 0 && LevelSystem.isAttackAbility(entry.getKey())) {
-                count++;
-            }
-        }
-        if (count == 0 && !data.abilities.isEmpty()) {
-            for (String abilityId : data.abilities) {
-                if (LevelSystem.isAttackAbility(abilityId)) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
 
     private static void spawnLightningVisual(ServerLevel level, double x, double y, double z, TamableAnimal tame) {

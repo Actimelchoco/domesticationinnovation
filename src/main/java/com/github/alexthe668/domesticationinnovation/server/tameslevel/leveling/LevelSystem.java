@@ -688,12 +688,7 @@ public class LevelSystem {
     // ===============================
 
     public static TameClass rollClass() {
-        List<WeightedOption<TameClass>> options = new ArrayList<>();
-        for (TameClass tameClass : TameClass.values()) {
-            options.add(new WeightedOption<>(tameClass, tameClass.rarity().weight()));
-        }
-        TameClass rolled = pickWeighted(options);
-        return rolled == null ? TameClass.ORDINARY : rolled;
+        return TameClassRoller.roll(CLASS_WEIGHT_CONFIG);
     }
 
     public static void ensureClassAssigned(TamableAnimal tame, TameData data, boolean notifyOwner) {
