@@ -9,10 +9,10 @@ public final class TameClass {
     private static final Map<String, TameClass> REGISTRY = new LinkedHashMap<>();
 
     public enum Rarity {
-        COMMON(10.0D),
-        RARE(6.0D),
-        EPIC(3.0D),
-        LEGENDARY(1.0D);
+        COMMON(17.5D),
+        RARE(20.0D / 3.0D),
+        EPIC(9.0D / 35.0D),
+        LEGENDARY(0.25D);
 
         private final double weight;
 
@@ -26,19 +26,54 @@ public final class TameClass {
     }
 
     public static final TameClass TANKER = registerBuiltin("tanker", Rarity.COMMON);
-    public static final TameClass DPS = registerBuiltin("dps", Rarity.COMMON);
-    public static final TameClass ASSASSIN = registerBuiltin("assassin", Rarity.COMMON);
-    public static final TameClass SUPPORTER = registerBuiltin("supporter", Rarity.COMMON);
-    public static final TameClass MAGE = registerBuiltin("mage", Rarity.COMMON);
-    public static final TameClass SHOOTER = registerBuiltin("shooter", Rarity.COMMON);
-    public static final TameClass MANIAC = registerBuiltin("maniac", Rarity.COMMON);
-    public static final TameClass ATTRIBUTER = registerBuiltin("attributer", Rarity.COMMON);
-    public static final TameClass SPONGE = registerBuiltin("sponge", Rarity.COMMON);
+    public static final TameClass NONE = registerBuiltin("none", Rarity.COMMON);
     public static final TameClass ORDINARY = registerBuiltin("ordinary", Rarity.COMMON);
-    public static final TameClass UNSTABLE_GOD = registerBuiltin("unstable_god", Rarity.EPIC);
-    public static final TameClass STRIKER = registerBuiltin("striker", Rarity.EPIC);
-    public static final TameClass GANDALF = registerBuiltin("gandalf", Rarity.EPIC);
-    public static final TameClass VORGOTTENLUNCHBOX = registerBuiltin("vorgottenlunchbox", Rarity.EPIC);
+    public static final TameClass DPS = registerBuiltin("dps", Rarity.COMMON);
+
+    public static final TameClass SUPPORTER = registerBuiltin("supporter", Rarity.RARE);
+    public static final TameClass KNIGHT = registerBuiltin("knight", Rarity.RARE);
+    public static final TameClass DEFUSER = registerBuiltin("defuser", Rarity.RARE);
+
+    public static final TameClass DESMOND_DOSS = registerBuiltin("desmond_doss", Rarity.EPIC);
+    public static final TameClass THOR = registerBuiltin("thor", Rarity.EPIC);
+    public static final TameClass ASSASSIN = registerBuiltin("assassin", Rarity.EPIC);
+    public static final TameClass ATTRIBUTER = registerBuiltin("attributer", Rarity.EPIC);
+    public static final TameClass BEE = registerBuiltin("bee", Rarity.EPIC);
+    public static final TameClass BLAZE = registerBuiltin("blaze", Rarity.EPIC);
+    public static final TameClass CRACKHEAD = registerBuiltin("crackhead", Rarity.EPIC);
+    public static final TameClass CREEPER = registerBuiltin("creeper", Rarity.EPIC);
+    public static final TameClass DISCO = registerBuiltin("disco", Rarity.EPIC);
+    public static final TameClass DOLPHIN = registerBuiltin("dolphin", Rarity.EPIC);
+    public static final TameClass DROWNED = registerBuiltin("drowned", Rarity.EPIC);
+    public static final TameClass ENDERMAN = registerBuiltin("enderman", Rarity.EPIC);
+    public static final TameClass EVOKER = registerBuiltin("evoker", Rarity.EPIC);
+    public static final TameClass FISHER = registerBuiltin("fisher", Rarity.EPIC);
+    public static final TameClass FROST = registerBuiltin("frost", Rarity.EPIC);
+    public static final TameClass GHAST = registerBuiltin("ghast", Rarity.EPIC);
+    public static final TameClass GOOFYGIRL = registerBuiltin("goofygirl", Rarity.EPIC);
+    public static final TameClass GUARDIAN = registerBuiltin("guardian", Rarity.EPIC);
+    public static final TameClass HEALER = registerBuiltin("healer", Rarity.EPIC);
+    public static final TameClass IRON_GOLEM = registerBuiltin("iron_golem", Rarity.EPIC);
+    public static final TameClass MAGE = registerBuiltin("mage", Rarity.EPIC);
+    public static final TameClass MANIAC = registerBuiltin("maniac", Rarity.EPIC);
+    public static final TameClass PHANTOM = registerBuiltin("phantom", Rarity.EPIC);
+    public static final TameClass PIGLIN = registerBuiltin("piglin", Rarity.EPIC);
+    public static final TameClass PROTECTEDBITCH = registerBuiltin("protectedbitch", Rarity.EPIC);
+    public static final TameClass SHOOTER = registerBuiltin("shooter", Rarity.EPIC);
+    public static final TameClass SHULKER = registerBuiltin("shulker", Rarity.EPIC);
+    public static final TameClass SKELETON = registerBuiltin("skeleton", Rarity.EPIC);
+    public static final TameClass SPEEDSTER = registerBuiltin("speedster", Rarity.EPIC);
+    public static final TameClass SPIDER = registerBuiltin("spider", Rarity.EPIC);
+    public static final TameClass SPONGE = registerBuiltin("sponge", Rarity.EPIC);
+    public static final TameClass WARDEN = registerBuiltin("warden", Rarity.EPIC);
+    public static final TameClass WITCH = registerBuiltin("witch", Rarity.EPIC);
+    public static final TameClass WITHER = registerBuiltin("wither", Rarity.EPIC);
+    public static final TameClass ZOMBIE = registerBuiltin("zombie", Rarity.EPIC);
+
+    public static final TameClass GANDALF = registerBuiltin("gandalf", Rarity.LEGENDARY);
+    public static final TameClass STRIKER = registerBuiltin("striker", Rarity.LEGENDARY);
+    public static final TameClass UNSTABLE_GOD = registerBuiltin("unstable_god", Rarity.LEGENDARY);
+    public static final TameClass VORGOTTENLUNCHBOX = registerBuiltin("vorgottenlunchbox", Rarity.LEGENDARY);
 
     private final String id;
     private final Rarity rarity;

@@ -280,8 +280,8 @@
     "dps": {
       "category": {
         "base": 96.0,
-        "attribute": 3.0,
-        "ability": 1.0
+        "attribute": 0.3,
+        "ability": 0.1
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0,
@@ -644,8 +644,8 @@
     "none": {
       "category": {
         "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
+        "attribute": 1.0,
+        "ability": 1.0
       },
       "preferredAttributeWeightMultiplier": 1.0,
       "preferredAbilityWeightMultiplier": 1.0,
@@ -1035,8 +1035,8 @@
     "tanker": {
       "category": {
         "base": 90.0,
-        "attribute": 10.0,
-        "ability": 10.0
+        "attribute": 1.0,
+        "ability": 1.0
       },
       "preferredAttributeWeightMultiplier": 0.0,
       "preferredAbilityWeightMultiplier": 0.0,
