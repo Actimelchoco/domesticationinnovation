@@ -39,6 +39,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
+    private static final Set<String> DISABLED_TAME_TYPE_IDS = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
@@ -108,6 +109,8 @@ public class TameRegistry {
         OWNER_GROUPS.putAll(savedData.getOwnerGroups());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
+        DISABLED_TAME_TYPE_IDS.clear();
+        DISABLED_TAME_TYPE_IDS.addAll(savedData.getDisabledTameTypeIds());
         PLAYER_DUEL_STATS.clear();
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         OWNER_TELEPORT_APPROVED_CREDITS.clear();
@@ -278,6 +281,7 @@ public class TameRegistry {
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
         savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
+        savedData.setDisabledTameTypeIds(DISABLED_TAME_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
@@ -490,6 +494,48 @@ public class TameRegistry {
         return true;
     }
 
+    public static Set<String> getDisabledTameTypes() {
+        return Set.copyOf(DISABLED_TAME_TYPE_IDS);
+    }
+
+    public static boolean isTameTypeDisabled(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        String typeId = key == null ? tame.getType().toString() : key.toString();
+        return isTameTypeDisabled(typeId);
+    }
+
+    public static boolean isTameTypeDisabled(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        return normalized != null && DISABLED_TAME_TYPE_IDS.contains(normalized);
+    }
+
+    public static boolean addDisabledTameType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        if (!DISABLED_TAME_TYPE_IDS.add(normalized)) {
+            return false;
+        }
+        markDirty();
+        return true;
+    }
+
+    public static boolean removeDisabledTameType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        if (!DISABLED_TAME_TYPE_IDS.remove(normalized)) {
+            return false;
+        }
+        markDirty();
+        return true;
+    }
+
     private static String normalizeTypeId(String typeId) {
         if (typeId == null || typeId.isBlank()) {
             return null;
@@ -499,6 +545,25 @@ public class TameRegistry {
             normalized = normalized.substring("entity.".length());
         }
         return normalized;
+    }
+
+    private static String normalizeTameTypeId(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return null;
+        }
+        String normalized = typeId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+            int firstDot = normalized.indexOf('.');
+            if (firstDot > 0 && !normalized.contains(":")) {
+                normalized = normalized.substring(0, firstDot) + ":" + normalized.substring(firstDot + 1);
+            }
+        }
+        if (!normalized.contains(":")) {
+            normalized = "minecraft:" + normalized;
+        }
+        ResourceLocation parsed = ResourceLocation.tryParse(normalized);
+        return parsed == null ? normalized : parsed.toString();
     }
 
     public static boolean canEnterPortalsByThemselves(UUID ownerUuid) {

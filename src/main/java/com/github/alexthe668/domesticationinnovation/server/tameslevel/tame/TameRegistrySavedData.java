@@ -30,6 +30,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
+    private final Set<String> disabledTameTypeIds = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
     private String rankedArenaName = "";
@@ -177,6 +178,22 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 this.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+    }
+
+    public Set<String> getDisabledTameTypeIds() {
+        return disabledTameTypeIds;
+    }
+
+    public void setDisabledTameTypeIds(Set<String> disabledTameTypeIds) {
+        this.disabledTameTypeIds.clear();
+        if (disabledTameTypeIds != null) {
+            for (String id : disabledTameTypeIds) {
+                if (id == null || id.isBlank()) {
+                    continue;
+                }
+                this.disabledTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
     }
@@ -388,6 +405,14 @@ public class TameRegistrySavedData extends SavedData {
             invertedCallOrderTag.add(net.minecraft.nbt.StringTag.valueOf(id));
         }
         tag.put("invertedCallOrderTypeIds", invertedCallOrderTag);
+        ListTag disabledTameTypesTag = new ListTag();
+        for (String id : disabledTameTypeIds) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            disabledTameTypesTag.add(net.minecraft.nbt.StringTag.valueOf(id));
+        }
+        tag.put("disabledTameTypeIds", disabledTameTypesTag);
         ListTag playerDuelStatsTag = new ListTag();
         for (PlayerDuelStats stats : playerDuelStats.values()) {
             if (stats == null || stats.playerUuid == null) {
@@ -572,6 +597,18 @@ public class TameRegistrySavedData extends SavedData {
                     String id = stringTag.getAsString();
                     if (id != null && !id.isBlank()) {
                         data.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                    }
+                }
+            }
+        }
+        if (tag.contains("disabledTameTypeIds", Tag.TAG_LIST)) {
+            data.disabledTameTypeIds.clear();
+            ListTag disabledTameTypesTag = tag.getList("disabledTameTypeIds", Tag.TAG_STRING);
+            for (Tag entry : disabledTameTypesTag) {
+                if (entry instanceof net.minecraft.nbt.StringTag stringTag) {
+                    String id = stringTag.getAsString();
+                    if (id != null && !id.isBlank()) {
+                        data.disabledTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
                     }
                 }
             }

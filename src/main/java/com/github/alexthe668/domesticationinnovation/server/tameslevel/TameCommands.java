@@ -3000,6 +3000,8 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 ))))
+                                .then(TameAdminDisableTameCommands.build("disableTame"))
+                                .then(TameAdminDisableTameCommands.build("dissableTame"))
                                 .then(Commands.literal("postTpStabilization")
                                         .executes(ctx -> adminPostTpStabilizationStatus(ctx.getSource()))
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -15227,6 +15229,55 @@ public class TameCommands {
         return 1;
     }
 
+    static int adminDisableTameTypeUsage(CommandSourceStack source) {
+        String known = String.join(", ", knownTameTypeSuggestions());
+        if (known.isBlank()) {
+            known = "none";
+        }
+        String finalKnown = known;
+        source.sendSuccess(() -> Component.literal("Usage: /tames admin disableTame disable <type>. Known types: " + finalKnown + ".").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    static int adminDisableTameType(CommandSourceStack source, String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return adminError(source, "Type id required.");
+        }
+        if (TameRegistry.isTameTypeDisabled(rawType)) {
+            source.sendSuccess(() -> Component.literal("Tame type is already disabled: " + rawType + ".").withStyle(ChatFormatting.YELLOW), false);
+            return 0;
+        }
+        if (!TameRegistry.addDisabledTameType(rawType)) {
+            return adminError(source, "Invalid tame type: " + rawType + ".");
+        }
+        source.sendSuccess(() -> Component.literal("Disabled tame registration for type: " + rawType + ". Existing registered tames of that type are unchanged.").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    static int adminViewDisabledTameTypes(CommandSourceStack source) {
+        List<String> disabled = new ArrayList<>(TameRegistry.getDisabledTameTypes());
+        disabled.sort(String::compareToIgnoreCase);
+        String text = disabled.isEmpty() ? "none" : String.join(", ", disabled);
+        source.sendSuccess(() -> Component.literal("Disabled tame registration types: " + text + ".").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    static int adminRemoveTameTypeDisableUsage(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("Usage: /tames admin disableTame remove <type>.").withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    static int adminRemoveTameTypeDisable(CommandSourceStack source, String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return adminError(source, "Type id required.");
+        }
+        if (!TameRegistry.removeDisabledTameType(rawType)) {
+            return adminError(source, "Tame type is not disabled: " + rawType + ".");
+        }
+        source.sendSuccess(() -> Component.literal("Removed tame registration disable for type: " + rawType + ".").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
     private static int adminAbilityCooldownNerfStatus(CommandSourceStack source) {
         float percent = TLAdminRuntimeSettings.abilityCountCooldownNerfPercent();
         source.sendSuccess(() -> Component.literal(
@@ -22969,6 +23020,56 @@ public class TameCommands {
             }
         }
         return b.buildFuture();
+    }
+
+    static CompletableFuture<Suggestions> suggestKnownTameTypes(SuggestionsBuilder b) {
+        return SharedSuggestionProvider.suggest(knownTameTypeSuggestions(), b);
+    }
+
+    private static List<String> knownTameTypeSuggestions() {
+        Set<String> typeIds = new LinkedHashSet<>();
+        typeIds.add("minecraft:horse");
+        typeIds.add("horse");
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null) {
+                continue;
+            }
+            addTypeSuggestion(typeIds, tameTypeId(data));
+        }
+        for (String disabled : TameRegistry.getDisabledTameTypes()) {
+            addTypeSuggestion(typeIds, disabled);
+        }
+        List<String> sorted = new ArrayList<>(typeIds);
+        sorted.sort(String::compareToIgnoreCase);
+        return sorted;
+    }
+
+    static CompletableFuture<Suggestions> suggestDisabledTameTypes(SuggestionsBuilder b) {
+        Set<String> typeIds = new LinkedHashSet<>();
+        for (String disabled : TameRegistry.getDisabledTameTypes()) {
+            addTypeSuggestion(typeIds, disabled);
+        }
+        List<String> sorted = new ArrayList<>(typeIds);
+        sorted.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(sorted, b);
+    }
+
+    private static void addTypeSuggestion(Set<String> typeIds, String typeId) {
+        if (typeIds == null || typeId == null || typeId.isBlank()) {
+            return;
+        }
+        String full = normalizeTypeFilter(typeId);
+        if (full.isBlank()) {
+            return;
+        }
+        typeIds.add(full);
+        int sep = full.indexOf(':');
+        if (sep >= 0 && "minecraft".equals(full.substring(0, sep))) {
+            String path = full.substring(sep + 1);
+            if (!path.isBlank()) {
+                typeIds.add(path);
+            }
+        }
     }
 
     private static CompletableFuture<Suggestions> suggestCurrentCallOrderInvertedTypes(SuggestionsBuilder b) {

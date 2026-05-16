@@ -254,6 +254,9 @@ public class TameSpawnEvents {
                 return syncedDead;
             }
         }
+        if (TameRegistry.isTameTypeDisabled(tame)) {
+            return null;
+        }
         TameData data = new TameData(tame);
         if (data.ownerUUID == null && tame.getOwnerUUID() != null) {
             data.ownerUUID = tame.getOwnerUUID();
