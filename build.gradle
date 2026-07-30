@@ -36,7 +36,7 @@ apply plugin: 'org.spongepowered.mixin'
 
 version = '1.7.1-1.20.1'
 group = 'com.github.alexthe668' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
-archivesBaseName = 'domesticationinnovation-tameslevel-extension-v28.1'
+archivesBaseName = 'domesticationinnovation-tameslevel-extension-v28.2'
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
@@ -142,8 +142,12 @@ dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     implementation fg.deobf("curse.maven:citadel-331936:4848887")
-    def localWaystonesJar = file('C:/Users/bruns/Documents/linggango server/mods/waystones-forge-1.20.1-14.1.18.jar')
-    def localBalmJar = file('C:/Users/bruns/Documents/linggango server/mods/balm-forge-1.20.1-7.3.38-all.jar')
+    def localWaystonesJar = fileTree('C:/Users/bruns/Documents/linggango server/mods') {
+        include 'waystones-forge-1.20.1-*.jar'
+    }.singleFile
+    def localBalmJar = fileTree('C:/Users/bruns/Documents/linggango server/mods') {
+        include 'balm-forge-1.20.1-*-all.jar'
+    }.singleFile
     if (localWaystonesJar.exists()) {
         compileOnly files(localWaystonesJar)
     }

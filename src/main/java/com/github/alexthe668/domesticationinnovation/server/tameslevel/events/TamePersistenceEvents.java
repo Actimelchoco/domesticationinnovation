@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
@@ -18,7 +19,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Locale;
 
 public class TamePersistenceEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
@@ -244,28 +244,25 @@ public class TamePersistenceEvents {
         return LEVEL_PREFIX.matcher(name).replaceFirst("");
     }
 
-    private static boolean isTemporarySummonTame(TamableAnimal tame) {
+    public static boolean isTemporarySummonTame(TamableAnimal tame) {
+        return !temporarySummonTriggerKeys(tame).isEmpty();
+    }
+
+    public static Set<String> temporarySummonTriggerKeys(TamableAnimal tame) {
+        Set<String> matches = new HashSet<>();
         if (tame == null) {
-            return false;
+            return matches;
         }
         if (tame.requiresCustomPersistence()) {
-            return false;
+            return matches;
         }
         net.minecraft.nbt.CompoundTag tag = tame.getPersistentData();
-        for (String key : tag.getAllKeys()) {
-            if (key == null) {
-                continue;
-            }
-            String normalized = key.toLowerCase(Locale.ROOT);
-            if (normalized.contains("summon")
-                    || normalized.contains("temporary")
-                    || normalized.contains("temp")
-                    || normalized.contains("duration")
-                    || normalized.contains("lifetime")
-                    || normalized.contains("despawn")) {
-                return true;
-            }
+        if (tag.getBoolean(TameCommands.ADMIN_CLONE_TRANSIENT_TAG)) {
+            matches.add(TameCommands.ADMIN_CLONE_TRANSIENT_TAG);
         }
-        return false;
+        if (tag.getBoolean(TameCommands.ADMIN_CLONE_SILENT_TAG)) {
+            matches.add(TameCommands.ADMIN_CLONE_SILENT_TAG);
+        }
+        return matches;
     }
 }

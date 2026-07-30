@@ -22,6 +22,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ti
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TimedTameTrident;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TimedTameWitherSkull;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.NoGriefLargeFireball;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
@@ -3061,6 +3062,20 @@ public class TameCommands {
                                         .then(Commands.literal("teleport")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugTeleport(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("temporary")
+                                                .then(Commands.argument("pet", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                        .executes(ctx -> adminDebugTemporaryTame(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet")
+                                                        ))))
+                                        .then(Commands.literal("tempoary")
+                                                .then(Commands.argument("pet", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                        .executes(ctx -> adminDebugTemporaryTame(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "pet")
+                                                        ))))
                                         .then(Commands.literal("damageDealt")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugDamage(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
@@ -4070,7 +4085,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int infoOverview(CommandSourceStack source) {
+    static int infoOverview(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
@@ -4080,7 +4095,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int infoDetail(CommandSourceStack source, String topic) {
+    static int infoDetail(CommandSourceStack source, String topic) {
         ServerPlayer p = source.getPlayer();
         String key = topic.trim().toLowerCase(Locale.ROOT);
         if (key.equals("leaderboard")) {
@@ -4547,11 +4562,11 @@ public class TameCommands {
         return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
-    private static int infoAbility(CommandSourceStack source, String abilityName) {
+    static int infoAbility(CommandSourceStack source, String abilityName) {
         return infoAbility(source, abilityName, null);
     }
 
-    private static int infoAbility(CommandSourceStack source, String abilityName, Integer previewLevel) {
+    static int infoAbility(CommandSourceStack source, String abilityName, Integer previewLevel) {
         ServerPlayer p = source.getPlayer();
         String id = abilityName == null ? "" : abilityName.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(p, "Ability name cannot be blank.");
@@ -4592,11 +4607,11 @@ public class TameCommands {
         player.sendSystemMessage(Component.literal("Use /tames inspect <pet> for exact current damage and cooldown on a specific tame.").withStyle(ChatFormatting.DARK_AQUA));
     }
 
-    private static int infoAttribute(CommandSourceStack source, String attributeName) {
+    static int infoAttribute(CommandSourceStack source, String attributeName) {
         return infoAttribute(source, attributeName, null);
     }
 
-    private static int infoAttribute(CommandSourceStack source, String attributeName, Integer previewLevel) {
+    static int infoAttribute(CommandSourceStack source, String attributeName, Integer previewLevel) {
         ServerPlayer p = source.getPlayer();
         String id = attributeName == null ? "" : attributeName.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) return error(p, "Attribute name cannot be blank.");
@@ -4660,7 +4675,7 @@ public class TameCommands {
         return TameData.fromTag(tag);
     }
 
-    private static int infoClass(CommandSourceStack source, String className) {
+    static int infoClass(CommandSourceStack source, String className) {
         ServerPlayer p = source.getPlayer();
         TameClass tameClass = TameClass.parse(className);
         if (tameClass == null) return error(p, "Unknown class: " + className);
@@ -5045,7 +5060,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int listDoNotAttack(CommandSourceStack source) {
+    static int listDoNotAttack(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5067,7 +5082,7 @@ public class TameCommands {
         return sorted.size();
     }
 
-    private static int toggleDoNotAttackType(CommandSourceStack source, String rawMobType) {
+    static int toggleDoNotAttackType(CommandSourceStack source, String rawMobType) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5086,7 +5101,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int removeDoNotAttackType(CommandSourceStack source, String rawMobType) {
+    static int removeDoNotAttackType(CommandSourceStack source, String rawMobType) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5104,7 +5119,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setDoNotAttackAnimals(CommandSourceStack source, boolean enabled) {
+    static int setDoNotAttackAnimals(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5115,7 +5130,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setHealthSiphonEnabled(CommandSourceStack source, boolean enabled) {
+    static int setHealthSiphonEnabled(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5126,7 +5141,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setHerdingAffectsTames(CommandSourceStack source, boolean enabled) {
+    static int setHerdingAffectsTames(CommandSourceStack source, boolean enabled) {
         TLAdminRuntimeSettings.setHerdingAffectsTames(enabled);
         source.sendSuccess(() -> Component.literal(
                 "Herding affecting tames is now " + (enabled ? "ENABLED" : "DISABLED") + "."
@@ -5134,7 +5149,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setEnterPortalsByThemselves(CommandSourceStack source, boolean enabled) {
+    static int setEnterPortalsByThemselves(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return 0;
@@ -5145,7 +5160,7 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setSitOnChairs(CommandSourceStack source, boolean enabled) {
+    static int setSitOnChairs(CommandSourceStack source, boolean enabled) {
         TLAdminRuntimeSettings.setSitOnChairsEnabled(enabled);
         source.sendSuccess(() -> Component.literal(
                 "Tames sitOnChairs is now " + (enabled ? "ENABLED" : "DISABLED") + "."
@@ -5581,7 +5596,7 @@ public class TameCommands {
         return null;
     }
 
-    private static CompletableFuture<Suggestions> suggestCurrentPlayerDoNotAttackTypes(CommandSourceStack source, SuggestionsBuilder builder) {
+    static CompletableFuture<Suggestions> suggestCurrentPlayerDoNotAttackTypes(CommandSourceStack source, SuggestionsBuilder builder) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             return builder.buildFuture();
@@ -14166,6 +14181,43 @@ public class TameCommands {
         boolean teleport = PlayerDebugSettings.teleport(p.getUUID());
         boolean perf = TamePerformanceProfiler.isEnabled();
         p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage + ", teleport: " + teleport + ", perf: " + perf).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int adminDebugTemporaryTame(CommandSourceStack source, String petName) {
+        ServerPlayer p = source.getPlayer();
+        List<TameData> matches = findAliveTamesByName(petName);
+        if (matches.isEmpty()) {
+            return error(p, "No alive tame found with that name.");
+        }
+        if (matches.size() > 1) {
+            return error(p, "Ambiguous tame name (" + matches.size() + " matches). Rename duplicates first.");
+        }
+
+        TameData data = matches.get(0);
+        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        if (tame == null) {
+            return error(p, tameDisplayName(data) + " is not loaded; teleport to it or load its chunk first.");
+        }
+
+        Set<String> triggerKeys = TamePersistenceEvents.temporarySummonTriggerKeys(tame);
+        List<String> allKeys = new ArrayList<>(tame.getPersistentData().getAllKeys());
+        allKeys.sort(String.CASE_INSENSITIVE_ORDER);
+        List<String> sortedTriggers = new ArrayList<>(triggerKeys);
+        sortedTriggers.sort(String.CASE_INSENSITIVE_ORDER);
+
+        UUID entityTlId = TameData.getTlId(tame);
+        boolean byUuid = TameRegistry.get(tame.getUUID()) != null;
+        boolean byTlId = entityTlId != null && TameRegistry.getByTlId(entityTlId) != null;
+
+        p.sendSystemMessage(Component.literal("Temporary debug for " + tameDisplayName(data) + ":").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("temporaryOnLeave=" + !triggerKeys.isEmpty()
+                + ", requiresCustomPersistence=" + tame.requiresCustomPersistence()).withStyle(triggerKeys.isEmpty() ? ChatFormatting.GREEN : ChatFormatting.RED));
+        p.sendSystemMessage(Component.literal("registry uuid=" + data.uuid + ", tlId=" + data.tlId + ", owner=" + data.ownerUUID).withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("entity uuid=" + tame.getUUID() + ", tlId=" + entityTlId + ", owner=" + tame.getOwnerUUID()).withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("registryMatch uuid=" + byUuid + ", tlId=" + byTlId).withStyle(byUuid || byTlId ? ChatFormatting.GREEN : ChatFormatting.RED));
+        p.sendSystemMessage(Component.literal("temporary trigger keys: " + (sortedTriggers.isEmpty() ? "<none>" : String.join(", ", sortedTriggers))).withStyle(sortedTriggers.isEmpty() ? ChatFormatting.GREEN : ChatFormatting.RED));
+        p.sendSystemMessage(Component.literal("persistent keys: " + (allKeys.isEmpty() ? "<none>" : String.join(", ", allKeys))).withStyle(ChatFormatting.DARK_GRAY));
         return 1;
     }
 
@@ -23012,7 +23064,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestEntityTypes(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestEntityTypes(SuggestionsBuilder b) {
         for (ResourceLocation id : ForgeRegistries.ENTITY_TYPES.getKeys()) {
             suggestCommandString(b, id.toString());
             if ("minecraft".equals(id.getNamespace())) {
@@ -23474,7 +23526,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestInfoTopics(SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestInfoTopics(SuggestionsBuilder b) {
         suggestCommandString(b, "leaderboard");
         suggestCommandString(b, "duelleaderboard");
         suggestCommandString(b, "deaths");
