@@ -2651,21 +2651,42 @@ public class TameCommands {
                                                         .executes(ctx -> adminAddCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
-                                                        ))))
+                                                        )))
+                                                .then(Commands.literal("id")
+                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                                .executes(ctx -> adminAddCallOrderInvert(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "typeId")
+                                                                )))))
                                         .then(Commands.literal("remove")
                                                 .then(Commands.argument("typeId", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestCurrentCallOrderInvertedTypes(b))
                                                         .executes(ctx -> adminRemoveCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
-                                                        ))))
+                                                        )))
+                                                .then(Commands.literal("id")
+                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestCurrentCallOrderInvertedTypes(b))
+                                                                .executes(ctx -> adminRemoveCallOrderInvert(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "typeId")
+                                                                )))))
                                         .then(Commands.literal("invert")
                                                 .then(Commands.argument("typeId", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                                         .executes(ctx -> adminToggleCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
-                                                        )))))
+                                                        )))
+                                                .then(Commands.literal("id")
+                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                                .executes(ctx -> adminToggleCallOrderInvert(
+                                                                        ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "typeId")
+                                                                ))))))
                                 .then(Commands.literal("player")
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
