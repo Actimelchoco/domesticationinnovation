@@ -36,6 +36,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
 import com.mojang.authlib.GameProfile;
+import com.mojang.datafixers.util.Pair;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -59,6 +60,11 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
+import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -104,6 +110,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1551,6 +1558,9 @@ public class TameCommands {
                                         .executes(ctx -> duelForfeit(ctx.getSource())))
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource())))
+                                .then(Commands.literal("clearPending")
+                                        .requires(source -> source.hasPermission(2))
+                                        .executes(ctx -> duelClearPending(ctx.getSource())))
                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
                                         .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                         .executes(ctx -> duelCompact(
@@ -3353,6 +3363,7 @@ public class TameCommands {
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportTameToLocation(tame, pending.target);
+                resendTeleportedEntityToOwner(owner, server, pending.tameUuid, pending.tlId);
                 if (liveData != null && liveData.movementOrder == 1) {
                     applyMovementOrderCode(tame, 1);
                 }
@@ -13532,6 +13543,7 @@ public class TameCommands {
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
+                resendEntityToOwner(owner, moved);
             }
             clearAutoFollowRetryState(data);
             return true;
@@ -13546,9 +13558,53 @@ public class TameCommands {
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
+                resendEntityToOwner(owner, moved);
             }
         }
         return result.success;
+    }
+
+    private static void resendTeleportedEntityToOwner(ServerPlayer owner, MinecraftServer server, UUID tameUuid, UUID tlId) {
+        if (owner == null || server == null) {
+            return;
+        }
+        TamableAnimal moved = findLoadedTameByIdentity(server, tameUuid, tlId);
+        if (moved != null) {
+            resendEntityToOwner(owner, moved);
+        }
+    }
+
+    private static void resendEntityToOwner(ServerPlayer owner, TamableAnimal tame) {
+        if (owner == null || tame == null || owner.connection == null) {
+            return;
+        }
+        sendClientPacket(owner, tame.getAddEntityPacket());
+        sendClientPacket(owner, new ClientboundTeleportEntityPacket(tame));
+        List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
+        if (values != null && !values.isEmpty()) {
+            sendClientPacket(owner, new ClientboundSetEntityDataPacket(tame.getId(), values));
+        }
+        Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
+        if (!attributes.isEmpty()) {
+            sendClientPacket(owner, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
+        }
+        List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = tame.getItemBySlot(slot);
+            if (!stack.isEmpty()) {
+                equipment.add(Pair.of(slot, stack.copy()));
+            }
+        }
+        if (!equipment.isEmpty()) {
+            sendClientPacket(owner, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
+        }
+    }
+
+    private static void sendClientPacket(ServerPlayer player, Packet<?> packet) {
+        if (player == null || packet == null || player.connection == null) {
+            return;
+        }
+        player.connection.send(packet);
     }
 
     public static boolean hasPendingImmediateChunkTeleport(TameData data) {
@@ -20355,6 +20411,70 @@ public class TameCommands {
         }
         if (sessionId.equals(PENDING_DUEL_SESSION_BY_PLAYER.get(removed.targetPlayerUuid))) {
             PENDING_DUEL_SESSION_BY_PLAYER.remove(removed.targetPlayerUuid);
+        }
+    }
+
+    private static int duelClearPending(CommandSourceStack source) {
+        MinecraftServer server = source.getServer();
+        int duelInviteCount = countPendingDuelInvites();
+        int pendingMatchCount = PENDING_DUEL_MATCHES.size();
+        int pendingSessionCount = PENDING_DUEL_SESSIONS.size();
+        int pendingFfaSessionCount = PENDING_DUEL_SESSION_FFA.size();
+        int cleared = duelInviteCount + pendingMatchCount + pendingSessionCount + pendingFfaSessionCount;
+
+        if (server != null) {
+            notifyClearedPendingDuels(server);
+        }
+
+        DUEL_INVITES.clear();
+        PENDING_DUEL_MATCHES.clear();
+        PENDING_DUEL_MATCH_BY_PLAYER.clear();
+        PENDING_DUEL_SESSIONS.clear();
+        PENDING_DUEL_SESSION_BY_PLAYER.clear();
+        PENDING_DUEL_SESSION_FFA.clear();
+        PENDING_DUEL_SESSION_FFA_BY_PLAYER.clear();
+
+        ServerPlayer player = source.getPlayer();
+        if (player != null) {
+            player.sendSystemMessage(Component.literal(
+                    "Cleared pending duel state: "
+                            + duelInviteCount + " invite(s), "
+                            + pendingMatchCount + " staged duel(s), "
+                            + pendingSessionCount + " duel session invite(s), "
+                            + pendingFfaSessionCount + " duel session FFA invite(s)."
+            ).withStyle(ChatFormatting.YELLOW));
+        }
+        return cleared <= 0 ? 1 : cleared;
+    }
+
+    private static int countPendingDuelInvites() {
+        int count = 0;
+        for (Map<UUID, DuelInvite> incoming : DUEL_INVITES.values()) {
+            if (incoming != null) {
+                count += incoming.size();
+            }
+        }
+        return count;
+    }
+
+    private static void notifyClearedPendingDuels(MinecraftServer server) {
+        Component message = Component.literal("Pending duel invites and duel session invitations were cleared by an admin.")
+                .withStyle(ChatFormatting.YELLOW);
+        Set<UUID> recipients = new LinkedHashSet<>();
+        recipients.addAll(DUEL_INVITES.keySet());
+        for (Map<UUID, DuelInvite> incoming : DUEL_INVITES.values()) {
+            if (incoming != null) {
+                recipients.addAll(incoming.keySet());
+            }
+        }
+        recipients.addAll(PENDING_DUEL_MATCH_BY_PLAYER.keySet());
+        recipients.addAll(PENDING_DUEL_SESSION_BY_PLAYER.keySet());
+        recipients.addAll(PENDING_DUEL_SESSION_FFA_BY_PLAYER.keySet());
+        for (UUID playerId : recipients) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                player.sendSystemMessage(message);
+            }
         }
     }
 

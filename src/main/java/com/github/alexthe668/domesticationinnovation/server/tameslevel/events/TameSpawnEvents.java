@@ -174,6 +174,9 @@ public class TameSpawnEvents {
     public static TameData registerOrRestoreTame(TamableAnimal tame, boolean notifyClassIfNew, boolean allowDeadIdentitySync) {
         if (tame == null || !tame.isTame()) return null;
         if (purgeInvalidPrefixedTame(tame)) return null;
+        if (TameRegistry.isTameTypeDisabled(tame)) {
+            return null;
+        }
         UUID entityTlId = TameData.readOrCreateTlId(tame);
         TameData existing = TameRegistry.get(tame.getUUID());
         if (existing != null) {
@@ -253,9 +256,6 @@ public class TameSpawnEvents {
             if (syncedDead != null) {
                 return syncedDead;
             }
-        }
-        if (TameRegistry.isTameTypeDisabled(tame)) {
-            return null;
         }
         TameData data = new TameData(tame);
         if (data.ownerUUID == null && tame.getOwnerUUID() != null) {
