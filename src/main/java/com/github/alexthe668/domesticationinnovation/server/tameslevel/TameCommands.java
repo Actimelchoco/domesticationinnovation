@@ -105,6 +105,8 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.common.world.ForgeChunkManager;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.fml.ModContainer;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.registries.ForgeRegistries;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
@@ -2956,6 +2958,8 @@ public class TameCommands {
                                                                 "setFollow",
                                                                 BoolArgumentType.getBool(ctx, "value")
                                                         )))))
+                                .then(Commands.literal("version")
+                                        .executes(ctx -> adminVersion(ctx.getSource())))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
                                 .then(Commands.literal("repairMissingDuelRewards")
@@ -16892,6 +16896,26 @@ public class TameCommands {
                             ? "Explicit invert overrides: none"
                             : "Explicit invert overrides: " + String.join(", ", overrideTypes)
             ), false);
+        }
+        return 1;
+    }
+
+    private static int adminVersion(CommandSourceStack source) {
+        Optional<? extends ModContainer> modContainer = ModList.get().getModContainerById(DomesticationMod.MODID);
+        String version = "unknown";
+        String fileName = "unknown";
+        if (modContainer.isPresent()) {
+            version = String.valueOf(modContainer.get().getModInfo().getVersion());
+            Path path = modContainer.get().getModInfo().getOwningFile().getFile().getFilePath();
+            if (path != null && path.getFileName() != null) {
+                fileName = path.getFileName().toString();
+            }
+        }
+        Component line = Component.literal("Version: " + version + " | Jar: " + fileName).withStyle(ChatFormatting.AQUA);
+        if (source.getPlayer() != null) {
+            source.getPlayer().sendSystemMessage(line);
+        } else {
+            source.sendSuccess(() -> line, false);
         }
         return 1;
     }
