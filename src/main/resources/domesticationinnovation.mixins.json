@@ -5,6 +5,7 @@
   "target": "@env(DEFAULT)",
   "refmap": "domesticationinnovation.refmap.json",
   "mixins": [
+    "ArmageddonAdditionalBossEntityMixin",
     "ArmageddonBringerOfDoomEntityMixin",
     "ArmageddonBringerOfDoomP2EntityMixin",
     "ArmageddonTheChaosEntityMixin",

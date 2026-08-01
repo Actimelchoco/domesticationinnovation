@@ -15,6 +15,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -27,6 +28,14 @@ import java.util.List;
 public class ArmageddonCompatUtil {
 
     private ArmageddonCompatUtil() {
+    }
+
+    public static void addBossTameTargetGoal(Mob boss) {
+        if (boss == null) {
+            return;
+        }
+        boss.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(boss, TamableAnimal.class, 0, false, false,
+                tame -> isValidBossTameTarget(boss, tame)));
     }
 
     public static boolean isValidBossTameTarget(Mob boss, LivingEntity target) {

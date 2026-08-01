@@ -171,6 +171,7 @@ public class TameCommands {
     private static final int MORNING_LANTERN_RADIUS = 64;
     private static final int IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS = 5;
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
+    private static final long TELEPORT_CLIENT_REFRESH_DELAY_TICKS = 20L;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final double DUEL_SESSION_ARENA_MAX_DRIFT_SQR = 56.0D * 56.0D;
     private static final UUID RANKED_SESSION_OWNER_A = UUID.fromString("8ca9f9dd-cdc9-4d67-98aa-5f6ef6d76013");
@@ -183,6 +184,7 @@ public class TameCommands {
     private static final long GUARDIAN_TOOL_CONFIRM_TICKS = 20L * 60L;
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
     private static final Map<UUID, PendingImmediateChunkTeleport> PENDING_IMMEDIATE_CHUNK_TELEPORTS = new HashMap<>();
+    private static final Map<UUID, PendingTeleportClientRefresh> PENDING_TELEPORT_CLIENT_REFRESH = new HashMap<>();
     private static final Map<UUID, Long> AUTO_FOLLOW_RETRY_AFTER = new HashMap<>();
     private static final Set<UUID> AUTO_FOLLOW_RECOVER_REQUIRED = new HashSet<>();
     private static final long AUTO_FOLLOW_RETRY_DELAY_TICKS = 100L;
@@ -3097,6 +3099,14 @@ public class TameCommands {
                                         .then(Commands.literal("teleport")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                         .executes(ctx -> adminSetDebugTeleport(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("shadowhands")
+                                                .executes(ctx -> adminDebugShadowHandsStatus(ctx.getSource()))
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugShadowHands(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("shadownhands")
+                                                .executes(ctx -> adminDebugShadowHandsStatus(ctx.getSource()))
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> adminSetDebugShadowHands(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                                         .then(Commands.literal("temporary")
                                                 .then(Commands.argument("pet", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestAllAliveTameNames(b))
@@ -3318,6 +3328,9 @@ public class TameCommands {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = event.getServer();
         if (server == null) return;
+        if (!PENDING_TELEPORT_CLIENT_REFRESH.isEmpty()) {
+            PENDING_TELEPORT_CLIENT_REFRESH.entrySet().removeIf(entry -> processPendingTeleportClientRefresh(server, entry.getKey(), entry.getValue()));
+        }
         TamePerformanceProfiler.run("system.ranked_pool_load", TameCommands::ensureRankedPoolLoadedFromRegistry);
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
         TamePerformanceProfiler.run("system.morning_registry_sweep", () -> processMorningRegistrySweep(server));
@@ -3388,7 +3401,7 @@ public class TameCommands {
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportTameToLocation(tame, pending.target);
-                resendTeleportedEntityToOwner(owner, server, pending.tameUuid, pending.tlId);
+                resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
                 if (liveData != null && liveData.movementOrder == 1) {
                     applyMovementOrderCode(tame, 1);
                 }
@@ -13414,7 +13427,11 @@ public class TameCommands {
         TamableAnimal moved = result.entity();
         if (moved != null) {
             applyMovementOverride(moved, MovementOrder.FOLLOW);
+            queueDelayedTeleportClientRefresh(player, moved);
         }
+    }
+
+    private record PendingTeleportClientRefresh(UUID tameUuid, UUID tlId, String dimensionId, long dueTick) {
     }
 
     public static boolean autoFollowTeleportLoadedToOwner(TamableAnimal tame, ServerPlayer player) {
@@ -13462,6 +13479,12 @@ public class TameCommands {
         );
         if (!result.success()) {
             System.err.println("[TamesLevel] Command tphome failed for tame " + tame.getUUID() + ": " + result.error());
+            return;
+        }
+        TamableAnimal moved = result.entity();
+        if (moved != null) {
+            ServerPlayer owner = ownerPlayerForRefresh(tame, moved, data);
+            queueDelayedTeleportClientRefresh(owner, moved);
         }
     }
 
@@ -13568,7 +13591,7 @@ public class TameCommands {
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
-                resendEntityToOwner(owner, moved);
+                resendEntityToRelevantPlayers(moved);
             }
             clearAutoFollowRetryState(data);
             return true;
@@ -13583,45 +13606,103 @@ public class TameCommands {
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
-                resendEntityToOwner(owner, moved);
+                resendEntityToRelevantPlayers(moved);
             }
         }
         return result.success;
     }
 
-    private static void resendTeleportedEntityToOwner(ServerPlayer owner, MinecraftServer server, UUID tameUuid, UUID tlId) {
-        if (owner == null || server == null) {
+    private static void resendTeleportedEntityToRelevantPlayers(MinecraftServer server, UUID tameUuid, UUID tlId) {
+        if (server == null) {
             return;
         }
         TamableAnimal moved = findLoadedTameByIdentity(server, tameUuid, tlId);
         if (moved != null) {
-            resendEntityToOwner(owner, moved);
+            resendEntityToRelevantPlayers(moved);
         }
     }
 
-    private static void resendEntityToOwner(ServerPlayer owner, TamableAnimal tame) {
-        if (owner == null || tame == null || owner.connection == null) {
+    private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, TamableAnimal tame) {
+        if (tame == null || tame.level() == null || tame.level().getServer() == null) {
             return;
         }
-        sendClientPacket(owner, tame.getAddEntityPacket());
-        sendClientPacket(owner, new ClientboundTeleportEntityPacket(tame));
-        List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
-        if (values != null && !values.isEmpty()) {
-            sendClientPacket(owner, new ClientboundSetEntityDataPacket(tame.getId(), values));
+        MinecraftServer server = tame.level().getServer();
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        UUID key = tame.getUUID();
+        PENDING_TELEPORT_CLIENT_REFRESH.put(key, new PendingTeleportClientRefresh(
+                tame.getUUID(),
+                TameData.getTlId(tame),
+                tame.level().dimension().location().toString(),
+                now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS
+        ));
+    }
+
+    private static boolean processPendingTeleportClientRefresh(MinecraftServer server, UUID key, PendingTeleportClientRefresh pending) {
+        if (server == null || pending == null) {
+            return true;
         }
-        Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
-        if (!attributes.isEmpty()) {
-            sendClientPacket(owner, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        if (pending.dueTick() > now) {
+            return false;
         }
-        List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemStack stack = tame.getItemBySlot(slot);
-            if (!stack.isEmpty()) {
-                equipment.add(Pair.of(slot, stack.copy()));
+        TamableAnimal moved = findLoadedTameByIdentity(server, pending.tameUuid(), pending.tlId());
+        if (moved == null || !moved.isAlive()) {
+            return true;
+        }
+        if (!moved.level().dimension().location().toString().equals(pending.dimensionId())) {
+            return true;
+        }
+        resendEntityToRelevantPlayers(moved);
+        return true;
+    }
+
+    private static ServerPlayer ownerPlayerForRefresh(TamableAnimal original, TamableAnimal moved, TameData data) {
+        MinecraftServer server = moved == null || moved.level() == null ? null : moved.level().getServer();
+        if (server == null && original != null && original.level() != null) {
+            server = original.level().getServer();
+        }
+        if (server == null) {
+            return null;
+        }
+        UUID ownerId = null;
+        if (data != null && data.ownerUUID != null) {
+            ownerId = data.ownerUUID;
+        } else if (moved != null && moved.getOwnerUUID() != null) {
+            ownerId = moved.getOwnerUUID();
+        } else if (original != null) {
+            ownerId = original.getOwnerUUID();
+        }
+        return ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
+    }
+
+    private static void resendEntityToRelevantPlayers(TamableAnimal tame) {
+        if (tame == null || !(tame.level() instanceof ServerLevel level)) {
+            return;
+        }
+        for (ServerPlayer viewer : level.players()) {
+            if (viewer == null || viewer.connection == null || viewer.isRemoved()) {
+                continue;
             }
-        }
-        if (!equipment.isEmpty()) {
-            sendClientPacket(owner, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
+            sendClientPacket(viewer, tame.getAddEntityPacket());
+            sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
+            List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
+            if (values != null && !values.isEmpty()) {
+                sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
+            }
+            Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
+            if (!attributes.isEmpty()) {
+                sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
+            }
+            List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = tame.getItemBySlot(slot);
+                if (!stack.isEmpty()) {
+                    equipment.add(Pair.of(slot, stack.copy()));
+                }
+            }
+            if (!equipment.isEmpty()) {
+                sendClientPacket(viewer, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
+            }
         }
     }
 
@@ -14166,6 +14247,20 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminSetDebugShadowHands(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setShadowHands(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Admin debug shadowHands set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int adminDebugShadowHandsStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        boolean enabled = PlayerDebugSettings.shadowHands(p.getUUID());
+        p.sendSystemMessage(Component.literal("Admin debug shadowHands: " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int setDuelAssistMessages(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setDuelAssistMessages(p.getUUID(), enabled);
@@ -14260,8 +14355,9 @@ public class TameCommands {
         boolean ability = PlayerDebugSettings.abilityUsed(p.getUUID());
         boolean damage = PlayerDebugSettings.damage(p.getUUID());
         boolean teleport = PlayerDebugSettings.teleport(p.getUUID());
+        boolean shadowHands = PlayerDebugSettings.shadowHands(p.getUUID());
         boolean perf = TamePerformanceProfiler.isEnabled();
-        p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage + ", teleport: " + teleport + ", perf: " + perf).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Admin Debug -> abilityUsed: " + ability + ", damageDealt: " + damage + ", teleport: " + teleport + ", shadowHands: " + shadowHands + ", perf: " + perf).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 

@@ -116,6 +116,7 @@ import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModList;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
@@ -147,6 +148,10 @@ public class CommonProxy {
     private static long tlMigrationLastSkippedStale = 0L;
     private static String tlMigrationLastMode = "none";
     private static boolean tlIntegrationRegistered = false;
+    private static final Map<UUID, PendingShadowHandsDebug> PENDING_SHADOW_HANDS_DEBUG = new HashMap<>();
+
+    private record PendingShadowHandsDebug(UUID ownerId, UUID attackerId, UUID targetId, long gameTime, String tameName, String targetName, float amount) {
+    }
 
     public void init() {
         registerTLIntegration();
@@ -462,8 +467,13 @@ public class CommonProxy {
                     int[] punchProgress = TameableUtils.getShadowPunchTimes(mob);
                     if (punching != null && punching.isAlive() && mob.hasLineOfSight(punching) && mob.distanceTo(punching) < 16) {
                         int[] striking = TameableUtils.getShadowPunchStriking(mob);
-                        if (punchProgress == null || punchProgress.length < shadowHandsLevel) {
+                        if (punchProgress == null || punchProgress.length < shadowHandsLevel || striking == null || striking.length < shadowHandsLevel) {
                             int[] clean = new int[shadowHandsLevel];
+                            debugShadowHandsState(mob, punching, "init arrays times="
+                                    + (punchProgress == null ? "null" : punchProgress.length)
+                                    + ", striking="
+                                    + (striking == null ? "null" : striking.length)
+                                    + ", need=" + shadowHandsLevel);
                             TameableUtils.setShadowPunchTimes(mob, clean);
                             TameableUtils.setShadowPunchStriking(mob, clean);
                         } else {
@@ -474,6 +484,7 @@ public class CommonProxy {
                                 for (int i = start; i < shadowHandsLevel; i++) {
                                     if (striking[i] == 0) {
                                         striking[i] = 1;
+                                        debugShadowHandsState(mob, punching, "start hand=" + i + ", cooldown=5, dist=" + fmt(mob.distanceTo(punching)));
                                         flag = true;
                                         break;
                                     }
@@ -489,8 +500,13 @@ public class CommonProxy {
                                     if (punchProgress[i] < 10) {
                                         punchProgress[i] = punchProgress[i] + 1;
                                     } else {
-                                        punching.hurt(punching.damageSources().mobAttack(mob), Mth.clamp(shadowHandsLevel, 2, 4));
-                                        debugDiAbilityUse(mob, "shadow_hands");
+                                        float shadowHandsDamage = Mth.clamp(shadowHandsLevel, 2, 4);
+                                        debugShadowHandsStrike(mob, punching, shadowHandsDamage);
+                                        boolean dealt = punching.hurt(punching.damageSources().mobAttack(mob), shadowHandsDamage);
+                                        debugShadowHandsHurtResult(mob, punching, shadowHandsDamage, dealt);
+                                        if (dealt) {
+                                            debugDiAbilityUse(mob, "shadow_hands");
+                                        }
                                         striking[i] = 0;
                                     }
                                 }
@@ -513,6 +529,7 @@ public class CommonProxy {
                             TameableUtils.setShadowPunchStriking(mob, new int[shadowHandsLevel]);
                             TameableUtils.setShadowPunchTimes(mob, punchProgress);
                             if (flag) {
+                                debugShadowHandsState(mob, punching, "clear target after punch wind-down");
                                 TameableUtils.setPetAttackTarget(mob, -1);
                             }
                         }
@@ -528,6 +545,7 @@ public class CommonProxy {
                             }
                         }
                         if (punchingTarget != null && punchingTarget.isAlive()) {
+                            debugShadowHandsState(mob, punchingTarget, "acquire target from " + (mob.getTarget() != null ? "mobTarget" : "ownerCombat"));
                             TameableUtils.setPetAttackTarget(mob, punchingTarget.getId());
                         }
                     }
@@ -746,6 +764,7 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onLivingHurt(LivingAttackEvent event) {
+        debugShadowHandsAttackEvent(event);
         if (TameableUtils.isTamed(event.getEntity()) && !event.getSource().is(DIDamageTypes.SIPHON)) {
             boolean flag = false;
             int thornsLevel = 0;
@@ -928,6 +947,7 @@ public class CommonProxy {
 
     @SubscribeEvent
     public void onLivingDamage(LivingDamageEvent event) {
+        debugShadowHandsDamageEvent(event);
         if (event.getSource().getEntity() instanceof LivingEntity && TameableUtils.isTamed(event.getSource().getEntity())) {
             LivingEntity pet = (LivingEntity) event.getSource().getEntity();
             if (TameableUtils.hasEnchant(pet, DIEnchantmentRegistry.IMMATURITY_CURSE)) {
@@ -2082,6 +2102,124 @@ public class CommonProxy {
         owner.sendSystemMessage(Component.literal(tameName + ": " + abilityId));
     }
 
+    private static void debugShadowHandsStrike(Mob mob, Entity target, float amount) {
+        PendingShadowHandsDebug debug = createShadowHandsDebug(mob, target, amount);
+        if (debug == null) {
+            return;
+        }
+        PENDING_SHADOW_HANDS_DEBUG.put(debug.targetId(), debug);
+        sendShadowHandsDebug(debug.ownerId(), debug.tameName() + " -> " + debug.targetName()
+                + " [strike] dmg=" + fmt(amount)
+                + ", direct=" + simpleEntityName(target)
+                + ", dist=" + fmt(mob.distanceTo(target)));
+    }
+
+    private static void debugShadowHandsHurtResult(Mob mob, Entity target, float amount, boolean dealt) {
+        PendingShadowHandsDebug debug = createShadowHandsDebug(mob, target, amount);
+        if (debug == null) {
+            return;
+        }
+        if (!dealt) {
+            sendShadowHandsDebug(debug.ownerId(), debug.tameName() + " -> " + debug.targetName()
+                    + " [hurt=false] invul=" + (target instanceof LivingEntity living ? living.invulnerableTime : -1)
+                    + ", alive=" + target.isAlive()
+                    + ", removed=" + target.isRemoved());
+            PENDING_SHADOW_HANDS_DEBUG.remove(debug.targetId());
+        }
+    }
+
+    private static void debugShadowHandsState(Mob mob, Entity target, String stage) {
+        PendingShadowHandsDebug debug = createShadowHandsDebug(mob, target, 0.0F);
+        if (debug == null) {
+            return;
+        }
+        sendShadowHandsDebug(debug.ownerId(), debug.tameName() + " -> " + debug.targetName() + " [" + stage + "]");
+    }
+
+    private static void debugShadowHandsAttackEvent(LivingAttackEvent event) {
+        PendingShadowHandsDebug debug = findShadowHandsDebug(event.getEntity(), event.getSource());
+        if (debug == null) {
+            return;
+        }
+        sendShadowHandsDebug(debug.ownerId(), debug.tameName() + " -> " + debug.targetName()
+                + " [attackEvent] canceled=" + event.isCanceled()
+                + ", amount=" + fmt(event.getAmount())
+                + ", source=" + shadowHandsDamageSource(event.getSource()));
+    }
+
+    private static void debugShadowHandsDamageEvent(LivingDamageEvent event) {
+        PendingShadowHandsDebug debug = findShadowHandsDebug(event.getEntity(), event.getSource());
+        if (debug == null) {
+            return;
+        }
+        sendShadowHandsDebug(debug.ownerId(), debug.tameName() + " -> " + debug.targetName()
+                + " [damageEvent] canceled=" + event.isCanceled()
+                + ", amount=" + fmt(event.getAmount()));
+        PENDING_SHADOW_HANDS_DEBUG.remove(debug.targetId());
+    }
+
+    private static PendingShadowHandsDebug findShadowHandsDebug(LivingEntity target, DamageSource source) {
+        if (target == null || source == null) {
+            return null;
+        }
+        PendingShadowHandsDebug debug = PENDING_SHADOW_HANDS_DEBUG.get(target.getUUID());
+        if (debug == null) {
+            return null;
+        }
+        if (!(target.level() instanceof ServerLevel level) || level.getGameTime() - debug.gameTime() > 2L) {
+            PENDING_SHADOW_HANDS_DEBUG.remove(target.getUUID());
+            return null;
+        }
+        Entity attacker = source.getEntity();
+        if (attacker == null || !debug.attackerId().equals(attacker.getUUID())) {
+            return null;
+        }
+        return debug;
+    }
+
+    private static PendingShadowHandsDebug createShadowHandsDebug(Mob mob, Entity target, float amount) {
+        if (!(mob.level() instanceof ServerLevel level)) {
+            return null;
+        }
+        UUID ownerId = TameableUtils.getOwnerUUIDOf(mob);
+        if (ownerId == null || !PlayerDebugSettings.shadowHands(ownerId)) {
+            return null;
+        }
+        String tameName = mob.hasCustomName() && mob.getCustomName() != null ? mob.getCustomName().getString() : mob.getName().getString();
+        String targetName = target.hasCustomName() && target.getCustomName() != null ? target.getCustomName().getString() : target.getName().getString();
+        return new PendingShadowHandsDebug(ownerId, mob.getUUID(), target.getUUID(), level.getGameTime(), tameName, targetName, amount);
+    }
+
+    private static void sendShadowHandsDebug(UUID ownerId, String message) {
+        if (ownerId == null || message == null || message.isBlank()) {
+            return;
+        }
+        ServerPlayer owner = ServerLifecycleHooks.getCurrentServer() == null ? null : ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(ownerId);
+        if (owner == null) {
+            return;
+        }
+        owner.sendSystemMessage(Component.literal("SHDBG " + message).withStyle(ChatFormatting.YELLOW));
+    }
+
+    private static String shadowHandsDamageSource(DamageSource source) {
+        if (source == null) {
+            return "null";
+        }
+        Entity direct = source.getDirectEntity();
+        Entity attacker = source.getEntity();
+        return source.getMsgId()
+                + ", attacker=" + simpleEntityName(attacker)
+                + ", direct=" + simpleEntityName(direct);
+    }
+
+    private static String simpleEntityName(Entity entity) {
+        if (entity == null) {
+            return "null";
+        }
+        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+        return key == null ? entity.getType().toString() : key.toString();
+    }
+
     public static int getAbilityOrEnchantLevelForCompat(LivingEntity entity, String abilityId) {
         return getAbilityOrEnchantLevel(entity, abilityId);
     }
@@ -2319,5 +2457,3 @@ public class CommonProxy {
         return Math.max(1, (int) Math.ceil(abilityLevel * 3.0D / 5.0D));
     }
 }
-
-
