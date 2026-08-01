@@ -29,6 +29,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
+    private final Map<UUID, Set<String>> removeFromAllExclusions = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
     private final Set<String> disabledTameTypeIds = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
@@ -178,6 +179,32 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 this.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+    }
+
+    public Map<UUID, Set<String>> getRemoveFromAllExclusions() {
+        return removeFromAllExclusions;
+    }
+
+    public void setRemoveFromAllExclusions(Map<UUID, Set<String>> removeFromAllExclusions) {
+        this.removeFromAllExclusions.clear();
+        if (removeFromAllExclusions == null) {
+            return;
+        }
+        for (Map.Entry<UUID, Set<String>> entry : removeFromAllExclusions.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            Set<String> rules = new LinkedHashSet<>();
+            for (String rule : entry.getValue()) {
+                if (rule == null || rule.isBlank()) {
+                    continue;
+                }
+                rules.add(rule.trim().toLowerCase(java.util.Locale.ROOT));
+            }
+            if (!rules.isEmpty()) {
+                this.removeFromAllExclusions.put(entry.getKey(), rules);
             }
         }
     }
@@ -397,6 +424,24 @@ public class TameRegistrySavedData extends SavedData {
             ownerGroupsTag.add(row);
         }
         tag.put("ownerGroups", ownerGroupsTag);
+        ListTag removeFromAllTag = new ListTag();
+        for (Map.Entry<UUID, Set<String>> entry : removeFromAllExclusions.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            ListTag rulesTag = new ListTag();
+            for (String rule : entry.getValue()) {
+                if (rule == null || rule.isBlank()) {
+                    continue;
+                }
+                rulesTag.add(net.minecraft.nbt.StringTag.valueOf(rule));
+            }
+            row.put("rules", rulesTag);
+            removeFromAllTag.add(row);
+        }
+        tag.put("removeFromAllExclusions", removeFromAllTag);
         ListTag invertedCallOrderTag = new ListTag();
         for (String id : invertedCallOrderTypeIds) {
             if (id == null || id.isBlank()) {
@@ -586,6 +631,27 @@ public class TameRegistrySavedData extends SavedData {
                 }
                 if (!groups.isEmpty()) {
                     data.ownerGroups.put(row.getUUID("ownerUUID"), groups);
+                }
+            }
+        }
+        if (tag.contains("removeFromAllExclusions", Tag.TAG_LIST)) {
+            ListTag removeFromAllList = tag.getList("removeFromAllExclusions", Tag.TAG_COMPOUND);
+            for (Tag entry : removeFromAllList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                Set<String> rules = new LinkedHashSet<>();
+                if (row.contains("rules", Tag.TAG_LIST)) {
+                    ListTag rulesTag = row.getList("rules", Tag.TAG_STRING);
+                    for (Tag ruleEntry : rulesTag) {
+                        String rule = ruleEntry.getAsString();
+                        if (rule != null && !rule.isBlank()) {
+                            rules.add(rule.trim().toLowerCase(java.util.Locale.ROOT));
+                        }
+                    }
+                }
+                if (!rules.isEmpty()) {
+                    data.removeFromAllExclusions.put(row.getUUID("ownerUUID"), rules);
                 }
             }
         }

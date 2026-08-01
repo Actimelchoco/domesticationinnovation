@@ -49,6 +49,7 @@ import java.util.*;
 import java.util.function.Predicate;
 
 public class TameableUtils {
+    private static final Map<UUID, ShadowHandRuntimeState> SHADOW_HAND_RUNTIME = new HashMap<>();
 
     private static final String ENCHANTMENT_TAG = "StoredPetEnchantments";
     private static final String FAKE_VISUAL_ENCHANT_TAG = "TLFakeVisualEnchant";
@@ -89,6 +90,30 @@ public class TameableUtils {
 
     private static final UUID SPEED_BOOST_AQUATIC_LAND_UUID = UUID.fromString("ff465ded-9040-4eb5-93a1-7bbe97c31745");
     private static final Map<String, Enchantment> VISUAL_FAKE_ENCHANTMENTS;
+
+    private static ShadowHandRuntimeState shadowHandState(LivingEntity enchanted) {
+        return SHADOW_HAND_RUNTIME.computeIfAbsent(enchanted.getUUID(), id -> new ShadowHandRuntimeState());
+    }
+
+    private static void pruneShadowHandState(LivingEntity enchanted) {
+        if (enchanted == null) {
+            return;
+        }
+        ShadowHandRuntimeState state = SHADOW_HAND_RUNTIME.get(enchanted.getUUID());
+        if (state == null) {
+            return;
+        }
+        if (state.attackTargetId == -1 && state.cooldown <= 0 && state.times.length == 0 && state.striking.length == 0) {
+            SHADOW_HAND_RUNTIME.remove(enchanted.getUUID());
+        }
+    }
+
+    private static final class ShadowHandRuntimeState {
+        int attackTargetId = -1;
+        int cooldown = 0;
+        int[] times = new int[0];
+        int[] striking = new int[0];
+    }
 
     static {
         Map<String, Enchantment> visualFakeEnchants = new LinkedHashMap<>();
@@ -772,8 +797,7 @@ public class TameableUtils {
     }
 
     public static int getPetAttackTargetID(LivingEntity enchanted) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        return !tag.contains(ATTACK_TARGET_ENTITY) ? -1 : tag.getInt(ATTACK_TARGET_ENTITY);
+        return shadowHandState(enchanted).attackTargetId;
     }
 
     @Nullable
@@ -783,52 +807,57 @@ public class TameableUtils {
     }
 
     public static void setPetAttackTarget(LivingEntity enchanted, int id) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        tag.putInt(ATTACK_TARGET_ENTITY, id);
-        sync(enchanted, tag);
+        ShadowHandRuntimeState state = shadowHandState(enchanted);
+        state.attackTargetId = id;
+        pruneShadowHandState(enchanted);
     }
 
     public static int getShadowPunchCooldown(LivingEntity enchanted) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        return tag.getInt(SHADOW_PUNCH_COOLDOWN);
+        return shadowHandState(enchanted).cooldown;
     }
 
     public static void setShadowPunchCooldown(LivingEntity enchanted, int time) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        tag.putInt(SHADOW_PUNCH_COOLDOWN, time);
-        sync(enchanted, tag);
+        ShadowHandRuntimeState state = shadowHandState(enchanted);
+        state.cooldown = Math.max(0, time);
+        pruneShadowHandState(enchanted);
     }
 
     public static int[] getShadowPunchTimes(LivingEntity enchanted) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        return tag.getIntArray(SHADOW_PUNCH_TIMES);
+        if (enchanted.level().isClientSide) {
+            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+            return tag.getIntArray(SHADOW_PUNCH_TIMES);
+        }
+        return shadowHandState(enchanted).times;
     }
 
     public static void setShadowPunchTimes(LivingEntity enchanted, int[] times) {
+        ShadowHandRuntimeState state = shadowHandState(enchanted);
+        int[] copy = times == null ? new int[0] : Arrays.copyOf(times, times.length);
+        state.times = copy;
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        tag.putIntArray(SHADOW_PUNCH_TIMES, times);
+        tag.putIntArray(SHADOW_PUNCH_TIMES, copy);
         sync(enchanted, tag);
+        pruneShadowHandState(enchanted);
     }
 
     public static void setShadowPunchStriking(LivingEntity enchanted, int[] times) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        tag.putIntArray(SHADOW_PUNCH_STRIKING, times);
-        sync(enchanted, tag);
+        ShadowHandRuntimeState state = shadowHandState(enchanted);
+        state.striking = times == null ? new int[0] : Arrays.copyOf(times, times.length);
+        pruneShadowHandState(enchanted);
     }
 
     public static int[] getShadowPunchStriking(LivingEntity enchanted) {
-        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
-        return tag.getIntArray(SHADOW_PUNCH_STRIKING);
+        return shadowHandState(enchanted).striking;
     }
 
     public static void clearShadowHandState(LivingEntity enchanted) {
         if (enchanted == null) {
             return;
         }
-        setShadowPunchCooldown(enchanted, 0);
-        setShadowPunchTimes(enchanted, new int[0]);
-        setShadowPunchStriking(enchanted, new int[0]);
-        setPetAttackTarget(enchanted, -1);
+        SHADOW_HAND_RUNTIME.remove(enchanted.getUUID());
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putIntArray(SHADOW_PUNCH_TIMES, new int[0]);
+        sync(enchanted, tag);
     }
 
     public static void setPetJukeboxUUID(LivingEntity enchanted, UUID id) {

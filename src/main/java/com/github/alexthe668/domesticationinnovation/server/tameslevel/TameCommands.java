@@ -1038,6 +1038,28 @@ public class TameCommands {
                                 .then(Commands.argument("mobtype", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                        .then(Commands.literal("removeFromAll")
+                                .executes(ctx -> removeFromAllInfo(ctx.getSource()))
+                                .then(Commands.literal("info")
+                                        .executes(ctx -> removeFromAllInfo(ctx.getSource())))
+                                .then(Commands.literal("add")
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> addRemoveFromAll(ctx.getSource(), "group", StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> addRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name"))))))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> removeRemoveFromAll(ctx.getSource(), "group", StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.string())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> removeRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name")))))))
                         .then(Commands.literal("approvedItems")
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                         .then(TameBedCommands.build())
@@ -2650,42 +2672,42 @@ public class TameCommands {
                                         .then(Commands.literal("info")
                                                 .executes(ctx -> adminCallOrderInfo(ctx.getSource())))
                                         .then(Commands.literal("add")
-                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                .then(Commands.argument("typeId", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                                         .executes(ctx -> adminAddCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
                                                         )))
                                                 .then(Commands.literal("id")
-                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
                                                                 .suggests((ctx, b) -> suggestEntityTypes(b))
                                                                 .executes(ctx -> adminAddCallOrderInvert(
                                                                         ctx.getSource(),
                                                                         StringArgumentType.getString(ctx, "typeId")
                                                                 )))))
                                         .then(Commands.literal("remove")
-                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                .then(Commands.argument("typeId", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestCurrentCallOrderInvertedTypes(b))
                                                         .executes(ctx -> adminRemoveCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
                                                         )))
                                                 .then(Commands.literal("id")
-                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
                                                                 .suggests((ctx, b) -> suggestCurrentCallOrderInvertedTypes(b))
                                                                 .executes(ctx -> adminRemoveCallOrderInvert(
                                                                         ctx.getSource(),
                                                                         StringArgumentType.getString(ctx, "typeId")
                                                                 )))))
                                         .then(Commands.literal("invert")
-                                                .then(Commands.argument("typeId", StringArgumentType.word())
+                                                .then(Commands.argument("typeId", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                                         .executes(ctx -> adminToggleCallOrderInvert(
                                                                 ctx.getSource(),
                                                                 StringArgumentType.getString(ctx, "typeId")
                                                         )))
                                                 .then(Commands.literal("id")
-                                                        .then(Commands.argument("typeId", StringArgumentType.word())
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
                                                                 .suggests((ctx, b) -> suggestEntityTypes(b))
                                                                 .executes(ctx -> adminToggleCallOrderInvert(
                                                                         ctx.getSource(),
@@ -5209,6 +5231,51 @@ public class TameCommands {
         return 1;
     }
 
+    private static int addRemoveFromAll(CommandSourceStack source, String kind, String value) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String rule = TameRegistry.normalizeRemoveFromAllRule(kind, value);
+        if (rule.isBlank()) {
+            return error(player, "Invalid removeFromAll rule. Use group <name> or type <type>.");
+        }
+        boolean added = TameRegistry.addRemoveFromAllExclusion(player.getUUID(), kind, value);
+        player.sendSystemMessage(Component.literal((added ? "Added" : "Already present") + " removeFromAll exclusion: " + rule + ".")
+                .withStyle(added ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int removeRemoveFromAll(CommandSourceStack source, String kind, String value) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        String rule = TameRegistry.normalizeRemoveFromAllRule(kind, value);
+        if (rule.isBlank()) {
+            return error(player, "Invalid removeFromAll rule. Use group <name> or type <type>.");
+        }
+        boolean removed = TameRegistry.removeRemoveFromAllExclusion(player.getUUID(), kind, value);
+        player.sendSystemMessage(Component.literal((removed ? "Removed" : "Not present") + " removeFromAll exclusion: " + rule + ".")
+                .withStyle(removed ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int removeFromAllInfo(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        List<String> rules = new ArrayList<>(TameRegistry.getRemoveFromAllExclusions(player.getUUID()));
+        rules.sort(String::compareToIgnoreCase);
+        if (rules.isEmpty()) {
+            player.sendSystemMessage(Component.literal("removeFromAll exclusions: <none>.").withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
+        player.sendSystemMessage(Component.literal("removeFromAll exclusions: " + String.join(", ", rules) + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     static int setSitOnChairs(CommandSourceStack source, boolean enabled) {
         TLAdminRuntimeSettings.setSitOnChairsEnabled(enabled);
         source.sendSuccess(() -> Component.literal(
@@ -5446,7 +5513,7 @@ public class TameCommands {
         if (player == null) {
             return 0;
         }
-        return removeOwnedBeds(source, player, ownedTames(player.getUUID()), "all your tames");
+        return removeOwnedBeds(source, player, ownedTamesForAllCommands(player.getUUID()), "all your tames");
     }
 
     static int removeOwnedBedsGroup(CommandSourceStack source, String group) {
@@ -5657,7 +5724,7 @@ public class TameCommands {
 
     private static int reincarnateBatchAll(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedTames(player.getUUID())), "all");
+        return reincarnateBatch(source, eligibleLoadedReincarnationTames(source, player.getUUID(), ownedTamesForAllCommands(player.getUUID())), "all");
     }
 
     private static int reincarnateBatchGroup(CommandSourceStack source, String group) {
@@ -8429,7 +8496,7 @@ public class TameCommands {
         TameMode mode = spec.mode();
         int count = 0;
         TameData sample = null;
-        for (TameData d : ownedTames(p.getUUID())) {
+        for (TameData d : ownedTamesForAllCommands(p.getUUID())) {
             Entity e = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (!(e instanceof TamableAnimal ta) || !ta.isAlive()) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
@@ -8515,7 +8582,7 @@ public class TameCommands {
         String profile = parseMovementProfile(profileName);
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
-        for (TameData data : ownedTames(player.getUUID())) {
+        for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
             applyMovementProfile(data, profile);
             count++;
         }
@@ -8814,7 +8881,7 @@ public class TameCommands {
 
     private static int guardianRemoveSetAll(CommandSourceStack source, String setName) {
         ServerPlayer player = source.getPlayer();
-        return guardianRemoveSet(source, setName, ownedTames(player.getUUID()), "all owned tames");
+        return guardianRemoveSet(source, setName, ownedTamesForAllCommands(player.getUUID()), "all owned tames");
     }
 
     private static int guardianRemoveSetGroup(CommandSourceStack source, String setName, String group) {
@@ -8890,7 +8957,7 @@ public class TameCommands {
 
     private static int guardianCaptureCurrentAll(CommandSourceStack source, String setName, boolean includeInactiveCurrent) {
         ServerPlayer player = source.getPlayer();
-        return guardianCaptureCurrent(source, setName, ownedTames(player.getUUID()), includeInactiveCurrent, "all");
+        return guardianCaptureCurrent(source, setName, ownedTamesForAllCommands(player.getUUID()), includeInactiveCurrent, "all");
     }
 
     private static int guardianCaptureCurrentGroup(CommandSourceStack source, String setName, String group, boolean includeInactiveCurrent) {
@@ -9007,7 +9074,7 @@ public class TameCommands {
 
     private static int guardianDeployCurrentAll(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        return guardianDeployCurrent(source, player, ownedTames(player.getUUID()), "all current guardian anchors");
+        return guardianDeployCurrent(source, player, ownedTamesForAllCommands(player.getUUID()), "all current guardian anchors");
     }
 
     private static int guardianDeployCurrentGroup(CommandSourceStack source, String group) {
@@ -9179,7 +9246,7 @@ public class TameCommands {
 
     private static int groupAssignAll(CommandSourceStack source, String group) {
         ServerPlayer player = source.getPlayer();
-        return groupAssignBatch(source, group, ownedTames(player.getUUID()), "all");
+        return groupAssignBatch(source, group, ownedTamesForAllCommands(player.getUUID()), "all");
     }
 
     private static int groupRemoveSelectionPet(CommandSourceStack source, String group, String pet) {
@@ -9206,7 +9273,7 @@ public class TameCommands {
 
     private static int groupRemoveSelectionAll(CommandSourceStack source, String group) {
         ServerPlayer player = source.getPlayer();
-        return groupRemoveBatch(source, group, ownedTames(player.getUUID()), "all");
+        return groupRemoveBatch(source, group, ownedTamesForAllCommands(player.getUUID()), "all");
     }
 
     private static int groupAssignBatch(CommandSourceStack source, String group, List<TameData> requested, String label) {
@@ -9694,7 +9761,7 @@ public class TameCommands {
 
     private static List<TameData> drumSelectedTameData(ServerPlayer player, DrumSelector selector) {
         return switch (selector.kind) {
-            case ALL -> ownedTames(player.getUUID());
+            case ALL -> ownedTamesForAllCommands(player.getUUID());
             case GROUP -> ownedGroup(player.getUUID(), selector.value);
             case TYPE -> ownedType(player.getUUID(), selector.value);
             case CLOSE -> loadedSelectionData(player, loadedOwnedCloseTames(player.createCommandSourceStack(), player.getUUID(), player));
@@ -10499,7 +10566,7 @@ public class TameCommands {
 
     private static int respawnAll(CommandSourceStack source, ReviveMode mode, boolean reincarnateAfter) {
         ServerPlayer p = source.getPlayer();
-        List<TameData> dead = ownedDeadTames(p.getUUID());
+        List<TameData> dead = ownedDeadTamesForAllCommands(p.getUUID());
         if (dead.isEmpty()) return error(p, "You have no dead tames to respawn.");
         return respawnDeadBatch(source, p, dead, mode, mode.label + " all dead tames", reincarnateAfter);
     }
@@ -11984,7 +12051,7 @@ public class TameCommands {
 
     private static int teleportAll(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
-        List<TameData> requested = ownedTames(p.getUUID());
+        List<TameData> requested = ownedTamesForAllCommands(p.getUUID());
         List<TamableAnimal> targets = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
         int queued = 0;
@@ -12026,7 +12093,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTames(p.getUUID()).size(), queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTamesForAllCommands(p.getUUID()).size(), queueFailed, payment.xpSpent, crossDimension);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -12057,16 +12124,16 @@ public class TameCommands {
 
     private static int teleportAllHome(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> requested = ownedTames(player.getUUID());
+        List<TameData> requested = ownedTamesForAllCommands(player.getUUID());
         if (requested.isEmpty()) return error(player, "You have no tames to teleport.");
-        return teleportHomeBatch(source, player, requested, "TPHome all", ownedDeadTames(player.getUUID()).size());
+        return teleportHomeBatch(source, player, requested, "TPHome all", ownedDeadTamesForAllCommands(player.getUUID()).size());
     }
 
     private static int teleportAllFromDimension(CommandSourceStack source, ServerLevel fromDimension) {
         ServerPlayer p = source.getPlayer();
         if (fromDimension == null) return error(p, "Invalid dimension.");
 
-        List<TameData> requested = ownedTames(p.getUUID());
+        List<TameData> requested = ownedTamesForAllCommands(p.getUUID());
         List<TamableAnimal> targets = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
         int queued = 0;
@@ -12118,7 +12185,7 @@ public class TameCommands {
             }
         }
         int deadSkipped = 0;
-        for (TameData d : ownedDeadTames(p.getUUID())) {
+        for (TameData d : ownedDeadTamesForAllCommands(p.getUUID())) {
             if (matchesDimensionFilter(d, null, dimensionId)) {
                 deadSkipped++;
             }
@@ -12133,7 +12200,7 @@ public class TameCommands {
 
     private static int teleportUnloaded(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
-        List<TameData> requested = ownedTames(p.getUUID());
+        List<TameData> requested = ownedTamesForAllCommands(p.getUUID());
         int queued = 0;
         int failed = 0;
         int skippedDuel = 0;
@@ -12159,7 +12226,7 @@ public class TameCommands {
             }
         }
 
-        sendTeleportSummary(p, "TP unloaded", 0, queued, ownedDeadTames(p.getUUID()).size(), failed, 0, 0);
+        sendTeleportSummary(p, "TP unloaded", 0, queued, ownedDeadTamesForAllCommands(p.getUUID()).size(), failed, 0, 0);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -12169,7 +12236,7 @@ public class TameCommands {
 
     private static int teleportUnloadedHome(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> requested = ownedTames(player.getUUID());
+        List<TameData> requested = ownedTamesForAllCommands(player.getUUID());
         int queued = 0;
         int failed = 0;
         int skippedDuel = 0;
@@ -12198,7 +12265,7 @@ public class TameCommands {
             queued++;
         }
 
-        sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTames(player.getUUID()).size(), failed, 0, 0);
+        sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTamesForAllCommands(player.getUUID()).size(), failed, 0, 0);
         sendDuelCommandSkipNotice(player, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Unloaded tphome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -13176,7 +13243,7 @@ public class TameCommands {
     }
 
     private static int duelTeleportAll(CommandSourceStack source) {
-        return duelTeleportBatch(source, ownedTames(source.getPlayer().getUUID()), "DuelTP all");
+        return duelTeleportBatch(source, ownedTamesForAllCommands(source.getPlayer().getUUID()), "DuelTP all");
     }
 
     private static int duelGroupTp(CommandSourceStack source, String group) {
@@ -14472,10 +14539,7 @@ public class TameCommands {
     private static int removeTargetAll(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         int count = 0;
-        for (TameData d : TameRegistry.TAMES.values()) {
-            if (!p.getUUID().equals(d.ownerUUID)) continue;
-            TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
-            if (ta == null) continue;
+        for (TamableAnimal ta : loadedOwnedAllTames(source, p.getUUID())) {
             ta.setTarget(null);
             count++;
         }
@@ -18540,9 +18604,6 @@ public class TameCommands {
 
     private static MovementOrder resolveMovementOrderFromLiveCommand(TamableAnimal tame, int command, boolean hasHome) {
         String typeId = entityTypeId(tame);
-        if (tame != null && tame.isOrderedToSit()) {
-            return MovementOrder.SIT;
-        }
         if (matchesSnapshotCommand(command, MovementOrder.FOLLOW, typeId)) {
             return MovementOrder.FOLLOW;
         }
@@ -19155,6 +19216,28 @@ public class TameCommands {
         return list;
     }
 
+    private static List<TameData> ownedTamesForAllCommands(UUID owner) {
+        List<TameData> list = new ArrayList<>();
+        for (TameData data : ownedTames(owner)) {
+            if (isRemovedFromAll(owner, data)) continue;
+            list.add(data);
+        }
+        return list;
+    }
+
+    private static List<TameData> ownedDeadTamesForAllCommands(UUID owner) {
+        List<TameData> list = new ArrayList<>();
+        for (TameData data : ownedDeadTames(owner)) {
+            if (isRemovedFromAll(owner, data)) continue;
+            list.add(data);
+        }
+        return list;
+    }
+
+    private static boolean isRemovedFromAll(UUID owner, TameData data) {
+        return TameRegistry.isRemovedFromAll(owner, data);
+    }
+
     private static List<TameData> ownedTamesForBedListing(UUID owner) {
         List<TameData> list = new ArrayList<>();
         Set<UUID> seenTlIds = new HashSet<>();
@@ -19750,7 +19833,7 @@ public class TameCommands {
 
     private static List<TamableAnimal> loadedOwnedAllTames(CommandSourceStack source, UUID owner) {
         List<TamableAnimal> list = new ArrayList<>();
-        for (TameData data : ownedTames(owner)) {
+        for (TameData data : ownedTamesForAllCommands(owner)) {
             if (isInactiveEntry(data.uuid)) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
             if (tame == null || !tame.isAlive()) continue;
@@ -19790,7 +19873,7 @@ public class TameCommands {
                 yield DuelSelectionResult.ok(List.of(tame));
             }
             case ALL -> {
-                List<TameData> owned = ownedTames(owner);
+                List<TameData> owned = ownedTamesForAllCommands(owner);
                 if (owned.isEmpty()) {
                     yield DuelSelectionResult.fail("You have no living tames to duel.");
                 }

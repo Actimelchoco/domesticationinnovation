@@ -465,7 +465,7 @@ public class CommonProxy {
                     spawnShadowHandsFallbackParticles((ServerLevel) mob.level(), mob, shadowHandsLevel);
                     Entity punching = TameableUtils.getPetAttackTarget(mob);
                     int[] punchProgress = TameableUtils.getShadowPunchTimes(mob);
-                    if (punching != null && punching.isAlive() && mob.hasLineOfSight(punching) && mob.distanceTo(punching) < 16) {
+                    if (punching != null && punching.isAlive() && mob.distanceTo(punching) < 16) {
                         int[] striking = TameableUtils.getShadowPunchStriking(mob);
                         if (punchProgress == null || punchProgress.length < shadowHandsLevel || striking == null || striking.length < shadowHandsLevel) {
                             int[] clean = new int[shadowHandsLevel];

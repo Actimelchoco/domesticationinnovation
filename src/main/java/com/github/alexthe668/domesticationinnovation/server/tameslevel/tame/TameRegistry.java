@@ -38,6 +38,7 @@ public class TameRegistry {
     private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
+    private static final Map<UUID, Set<String>> OWNER_REMOVE_FROM_ALL_EXCLUSIONS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static final Set<String> DISABLED_TAME_TYPE_IDS = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
@@ -107,6 +108,8 @@ public class TameRegistry {
         OWNER_ENTER_PORTALS_BY_THEMSELVES.putAll(savedData.getEnterPortalsByThemselves());
         OWNER_GROUPS.clear();
         OWNER_GROUPS.putAll(savedData.getOwnerGroups());
+        OWNER_REMOVE_FROM_ALL_EXCLUSIONS.clear();
+        OWNER_REMOVE_FROM_ALL_EXCLUSIONS.putAll(savedData.getRemoveFromAllExclusions());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
         DISABLED_TAME_TYPE_IDS.clear();
@@ -280,6 +283,7 @@ public class TameRegistry {
         savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
         savedData.setOwnerGroups(OWNER_GROUPS);
+        savedData.setRemoveFromAllExclusions(OWNER_REMOVE_FROM_ALL_EXCLUSIONS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setDisabledTameTypeIds(DISABLED_TAME_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
@@ -429,6 +433,108 @@ public class TameRegistry {
         markDirty();
     }
 
+    public static Set<String> getRemoveFromAllExclusions(UUID ownerUuid) {
+        Set<String> rules = OWNER_REMOVE_FROM_ALL_EXCLUSIONS.get(ownerUuid);
+        return rules == null ? Set.of() : Set.copyOf(rules);
+    }
+
+    public static boolean addRemoveFromAllExclusion(UUID ownerUuid, String kind, String value) {
+        String rule = normalizeRemoveFromAllRule(kind, value);
+        if (ownerUuid == null || rule.isBlank()) {
+            return false;
+        }
+        boolean added = OWNER_REMOVE_FROM_ALL_EXCLUSIONS
+                .computeIfAbsent(ownerUuid, ignored -> new LinkedHashSet<>())
+                .add(rule);
+        if (added) {
+            markDirty();
+        }
+        return added;
+    }
+
+    public static boolean removeRemoveFromAllExclusion(UUID ownerUuid, String kind, String value) {
+        String rule = normalizeRemoveFromAllRule(kind, value);
+        if (ownerUuid == null || rule.isBlank()) {
+            return false;
+        }
+        Set<String> rules = OWNER_REMOVE_FROM_ALL_EXCLUSIONS.get(ownerUuid);
+        if (rules == null) {
+            return false;
+        }
+        boolean removed = rules.remove(rule);
+        if (rules.isEmpty()) {
+            OWNER_REMOVE_FROM_ALL_EXCLUSIONS.remove(ownerUuid);
+        }
+        if (removed) {
+            markDirty();
+        }
+        return removed;
+    }
+
+    public static boolean isRemovedFromAll(UUID ownerUuid, TameData data) {
+        if (ownerUuid == null || data == null) {
+            return false;
+        }
+        Set<String> rules = OWNER_REMOVE_FROM_ALL_EXCLUSIONS.get(ownerUuid);
+        if (rules == null || rules.isEmpty()) {
+            return false;
+        }
+        String type = normalizeTameTypeId(data.type);
+        if (type == null) {
+            type = "";
+        }
+        String typePath = "";
+        int separator = type.indexOf(':');
+        if (separator >= 0 && separator + 1 < type.length()) {
+            typePath = type.substring(separator + 1);
+        }
+        for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+            if (rule.startsWith("type:")) {
+                String value = normalizeTypeId(rule.substring("type:".length()));
+                if (value != null && !value.isBlank() && (value.equals(type) || value.equals(typePath))) {
+                    return true;
+                }
+                continue;
+            }
+            if (rule.startsWith("group:") && isInGroup(data, rule.substring("group:".length()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static String normalizeRemoveFromAllRule(String kind, String value) {
+        if (kind == null || value == null || value.isBlank()) {
+            return "";
+        }
+        String normalizedKind = kind.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("type".equals(normalizedKind)) {
+            String normalizedType = normalizeTypeId(value);
+            return normalizedType == null || normalizedType.isBlank() ? "" : "type:" + normalizedType;
+        }
+        if ("group".equals(normalizedKind)) {
+            String normalizedGroup = value.trim().toLowerCase(java.util.Locale.ROOT);
+            return normalizedGroup.isBlank() ? "" : "group:" + normalizedGroup;
+        }
+        return "";
+    }
+
+    private static boolean isInGroup(TameData data, String group) {
+        if (data == null || data.group == null || data.group.isBlank() || group == null || group.isBlank()) {
+            return false;
+        }
+        String requested = group.trim();
+        for (String raw : data.group.split("\\|")) {
+            if (raw != null && raw.trim().equalsIgnoreCase(requested)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isCallOrderInvertedType(String typeId) {
         if (typeId == null || typeId.isBlank()) {
             return false;
@@ -450,7 +556,11 @@ public class TameRegistry {
         if (separator < 0) {
             return false;
         }
-        return !"minecraft".equals(normalized.substring(0, separator));
+        String namespace = normalized.substring(0, separator);
+        if ("minecraft".equals(namespace) || "alexscaves".equals(namespace)) {
+            return false;
+        }
+        return true;
     }
 
     public static boolean toggleCallOrderInvertedType(String typeId) {
