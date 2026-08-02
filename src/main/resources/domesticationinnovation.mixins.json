@@ -22,6 +22,7 @@
     "AxolotlMixin",
     "AlexsMobsFlutterMixin",
     "AlexsMobsFlutterPotMixin",
+    "AlexsMobsWarpedToadMixin",
     "BaseSpawnerMixin",
     "CatMixin",
     "EnderDragonMixin",

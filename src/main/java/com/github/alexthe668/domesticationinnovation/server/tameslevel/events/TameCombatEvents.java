@@ -35,6 +35,7 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -55,6 +56,8 @@ public class TameCombatEvents {
     private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
     private static final Map<UUID, PendingDeath> CAPTURED_DEATHS = new HashMap<>();
     private static final Map<UUID, PendingInstantRespawn> PENDING_INSTANT_RESPAWNS = new HashMap<>();
+    private static final Map<UUID, Integer> DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS = new HashMap<>();
+    private static final Set<UUID> DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE = new HashSet<>();
     private static boolean processingDeaths = false;
     private static long serverTick = 0L;
 
@@ -197,6 +200,7 @@ public class TameCombatEvents {
             return;
         }
         serverTick++;
+        processDuelVallumraptorInvisibility(event.getServer());
         if (PENDING_INSTANT_RESPAWNS.isEmpty()) {
             return;
         }
@@ -225,6 +229,54 @@ public class TameCombatEvents {
         for (UUID tameUuid : finished) {
             PENDING_INSTANT_RESPAWNS.remove(tameUuid);
         }
+    }
+
+    private static void processDuelVallumraptorInvisibility(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        Set<UUID> seenDuelRaptors = new HashSet<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof TamableAnimal tame)) {
+                    continue;
+                }
+                if (!isAlexsCavesVallumraptor(tame) || !tame.isAlive() || !TameDuelManager.isTameInDuel(tame.getUUID())) {
+                    continue;
+                }
+                UUID tameId = tame.getUUID();
+                seenDuelRaptors.add(tameId);
+                boolean invisible = tame.isInvisible();
+                boolean wasInvisible = DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.contains(tameId);
+                if (invisible && !wasInvisible) {
+                    int count = DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.getOrDefault(tameId, 0) + 1;
+                    DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.put(tameId, count);
+                    DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.add(tameId);
+                    if (count % 3 == 0) {
+                        killDuelVallumraptorForInvisibility(tame);
+                    }
+                } else if (!invisible && wasInvisible) {
+                    DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.remove(tameId);
+                }
+            }
+        }
+        DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.keySet().removeIf(id -> !seenDuelRaptors.contains(id) && !TameDuelManager.isTameInDuel(id));
+        DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.removeIf(id -> !seenDuelRaptors.contains(id) && !TameDuelManager.isTameInDuel(id));
+    }
+
+    private static void killDuelVallumraptorForInvisibility(TamableAnimal tame) {
+        if (tame == null || tame.level().isClientSide || !tame.isAlive()) {
+            return;
+        }
+        tame.hurt(tame.damageSources().magic(), Math.max(1000.0F, tame.getMaxHealth() * 10.0F));
+    }
+
+    private static boolean isAlexsCavesVallumraptor(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return id != null && "alexscaves".equals(id.getNamespace()) && "vallumraptor".equals(id.getPath());
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

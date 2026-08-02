@@ -61,6 +61,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
@@ -13498,7 +13499,7 @@ public class TameCommands {
         }
     }
 
-    private record PendingTeleportClientRefresh(UUID tameUuid, UUID tlId, String dimensionId, long dueTick) {
+    private record PendingTeleportClientRefresh(UUID tameUuid, UUID tlId, String dimensionId, long dueTick, boolean strongRefresh) {
     }
 
     public static boolean autoFollowTeleportLoadedToOwner(TamableAnimal tame, ServerPlayer player) {
@@ -13690,6 +13691,10 @@ public class TameCommands {
     }
 
     private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, TamableAnimal tame) {
+        queueDelayedTeleportClientRefresh(owner, tame, false);
+    }
+
+    private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, TamableAnimal tame, boolean strongRefresh) {
         if (tame == null || tame.level() == null || tame.level().getServer() == null) {
             return;
         }
@@ -13700,7 +13705,8 @@ public class TameCommands {
                 tame.getUUID(),
                 TameData.getTlId(tame),
                 tame.level().dimension().location().toString(),
-                now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS
+                now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS,
+                strongRefresh
         ));
     }
 
@@ -13719,7 +13725,7 @@ public class TameCommands {
         if (!moved.level().dimension().location().toString().equals(pending.dimensionId())) {
             return true;
         }
-        resendEntityToRelevantPlayers(moved);
+        resendEntityToRelevantPlayers(moved, pending.strongRefresh());
         return true;
     }
 
@@ -13743,12 +13749,19 @@ public class TameCommands {
     }
 
     private static void resendEntityToRelevantPlayers(TamableAnimal tame) {
+        resendEntityToRelevantPlayers(tame, false);
+    }
+
+    private static void resendEntityToRelevantPlayers(TamableAnimal tame, boolean strongRefresh) {
         if (tame == null || !(tame.level() instanceof ServerLevel level)) {
             return;
         }
         for (ServerPlayer viewer : level.players()) {
             if (viewer == null || viewer.connection == null || viewer.isRemoved()) {
                 continue;
+            }
+            if (strongRefresh) {
+                sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
             }
             sendClientPacket(viewer, tame.getAddEntityPacket());
             sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
@@ -14382,12 +14395,6 @@ public class TameCommands {
     }
 
     private static void logRebuildTrace(String stage, TameData data, String detail) {
-        String name = data == null || data.name == null || data.name.isBlank() ? "unknown" : data.name;
-        UUID ownerId = data == null ? null : data.ownerUUID;
-        UUID uuid = data == null ? null : data.uuid;
-        UUID tlId = data == null ? null : data.tlId;
-        DomesticationMod.LOGGER.warn("[TAME-REBUILD] stage={} tame={} owner={} uuid={} tlId={} detail={}",
-                stage, name, ownerId, uuid, tlId, detail == null ? "" : detail);
     }
 
     private static void logDeleteTrace(String stage, TameData registryData, TamableAnimal entity, String detail) {
@@ -21465,6 +21472,7 @@ public class TameCommands {
         spectators.remove(session.ownerA);
         spectators.remove(session.ownerB);
         TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, spectators, false);
+        queueDuelSessionRoundClientRefresh(server, round.teamA, round.teamB);
         session.currentRoundA = Set.copyOf(round.teamA);
         session.currentRoundB = Set.copyOf(round.teamB);
         session.roundStartedAtTick = server.overworld() == null ? 0L : server.overworld().getGameTime();
@@ -22079,6 +22087,25 @@ public class TameCommands {
                 player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
             } else if (living instanceof TamableAnimal tame) {
                 teleportTameToLocation(tame, target);
+            }
+        }
+    }
+
+    private static void queueDuelSessionRoundClientRefresh(MinecraftServer server, Set<UUID> teamA, Set<UUID> teamB) {
+        if (server == null) {
+            return;
+        }
+        LinkedHashSet<UUID> participants = new LinkedHashSet<>();
+        if (teamA != null) {
+            participants.addAll(teamA);
+        }
+        if (teamB != null) {
+            participants.addAll(teamB);
+        }
+        for (UUID participantId : participants) {
+            LivingEntity living = findLoadedLivingParticipant(server, participantId);
+            if (living instanceof TamableAnimal tame) {
+                queueDelayedTeleportClientRefresh(null, tame, true);
             }
         }
     }
