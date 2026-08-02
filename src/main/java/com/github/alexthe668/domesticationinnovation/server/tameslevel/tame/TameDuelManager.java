@@ -66,8 +66,9 @@ public final class TameDuelManager {
         private final Map<UUID, List<ServerBossEvent>> ownerBossBars = new HashMap<>();
         private final Set<UUID> spectatorIds = new HashSet<>();
         private final boolean broadcastToServer;
+        private final boolean ranked;
 
-        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer) {
+        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked) {
             this.battleId = battleId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
@@ -86,6 +87,7 @@ public final class TameDuelManager {
             this.spectatorIds.remove(ownerA);
             this.spectatorIds.remove(ownerB);
             this.broadcastToServer = broadcastToServer;
+            this.ranked = ranked;
         }
     }
 
@@ -142,6 +144,10 @@ public final class TameDuelManager {
     }
 
     public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer) {
+        startTeamDuel(server, ownerA, teamA, ownerB, teamB, spectatorIds, broadcastToServer, false);
+    }
+
+    public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked) {
         if (server == null || ownerA == null || ownerB == null) return;
         if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
@@ -164,7 +170,7 @@ public final class TameDuelManager {
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
 
         UUID battleId = UUID.randomUUID();
-        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer);
+        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer, ranked);
         BATTLE_BY_ID.put(battleId, battle);
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
@@ -903,20 +909,19 @@ public final class TameDuelManager {
         }
     }
 
-    private static void notifyOwner(MinecraftServer server, UUID ownerId, List<Component> resultSummary, List<Component> leaderboardSummary) {
-        if (server == null || ownerId == null) return;
+    private static void notifyOwner(MinecraftServer server, DuelBattle battle, UUID ownerId, List<Component> resultSummary, List<Component> leaderboardSummary) {
+        if (server == null || battle == null || ownerId == null) return;
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
         if (owner != null) {
-            if (!PlayerDebugSettings.duelMessages(ownerId)) {
-                return;
-            }
-            if (PlayerDebugSettings.duelSummaryMessages(ownerId)) {
+            if (PlayerDebugSettings.duelSummaryMessages(ownerId, battle.ranked)) {
                 for (Component line : resultSummary) {
                     owner.sendSystemMessage(line);
                 }
             }
-            for (Component line : leaderboardSummary) {
-                owner.sendSystemMessage(line);
+            if (PlayerDebugSettings.duelResultMessages(ownerId, battle.ranked)) {
+                for (Component line : leaderboardSummary) {
+                    owner.sendSystemMessage(line);
+                }
             }
         }
     }
@@ -939,7 +944,7 @@ public final class TameDuelManager {
             }
         }
         for (UUID recipientId : recipients) {
-            notifyOwner(server, recipientId, resultSummary, leaderboardSummary);
+            notifyOwner(server, battle, recipientId, resultSummary, leaderboardSummary);
         }
     }
 
@@ -1144,10 +1149,7 @@ public final class TameDuelManager {
         for (UUID recipientId : recipients) {
             ServerPlayer player = server.getPlayerList().getPlayer(recipientId);
             if (player != null) {
-                if (!PlayerDebugSettings.duelMessages(recipientId)) {
-                    continue;
-                }
-                if (!PlayerDebugSettings.duelKillNotifications(recipientId)) {
+                if (!PlayerDebugSettings.duelKillNotifications(recipientId, battle.ranked)) {
                     continue;
                 }
                 Component line = eliminationLine(server, elimination, positive, PlayerDebugSettings.duelAssistMessages(recipientId));

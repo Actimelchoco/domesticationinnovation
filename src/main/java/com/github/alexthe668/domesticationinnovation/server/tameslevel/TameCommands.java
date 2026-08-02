@@ -632,6 +632,9 @@ public class TameCommands {
         }
     }
 
+    private record ClassRerollPayment(ItemStack stack, boolean boosted) {
+    }
+
     private static final class PendingDuelSession {
         private final UUID sessionId;
         private final UUID initiatorUuid;
@@ -685,6 +688,7 @@ public class TameCommands {
         private final String arenaName;
         private final boolean freeForAll;
         private final boolean ranked;
+        private final boolean hideWaitingTames;
         private final LinkedHashSet<UUID> sessionPlayers;
         private final LinkedHashSet<UUID> poolA;
         private final LinkedHashSet<UUID> poolB;
@@ -702,13 +706,14 @@ public class TameCommands {
         private long nextRoundAtTick = -1L;
         private long nextIdleSitSyncTick = 0L;
 
-        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> sessionPlayers, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName, boolean freeForAll, boolean ranked) {
+        private ActiveDuelSession(UUID sessionId, UUID ownerA, UUID ownerB, Set<UUID> sessionPlayers, Set<UUID> poolA, Set<UUID> poolB, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, String arenaName, boolean freeForAll, boolean ranked, boolean hideWaitingTames) {
             this.sessionId = sessionId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
             this.arenaName = arenaName == null ? "" : arenaName;
             this.freeForAll = freeForAll;
             this.ranked = ranked;
+            this.hideWaitingTames = ranked || hideWaitingTames;
             this.sessionPlayers = new LinkedHashSet<>(sessionPlayers == null ? Set.of(ownerA, ownerB) : sessionPlayers);
             this.poolA = new LinkedHashSet<>(poolA);
             this.poolB = new LinkedHashSet<>(poolB);
@@ -1116,6 +1121,13 @@ public class TameCommands {
                                                 .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingA")))
                                         .then(Commands.literal("setWaitingB")
                                                 .executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingB")))
+                                        .then(Commands.literal("hidetames")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setArenaHideTames(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "arenaName"),
+                                                                BoolArgumentType.getBool(ctx, "enabled")
+                                                        ))))
                                         .then(Commands.literal("duel")
                                                 .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
@@ -2604,6 +2616,38 @@ public class TameCommands {
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                .then(Commands.literal("duel")
+                                        .then(Commands.literal("kill")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "kill", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("result")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "result", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("start")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "start", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("sum")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "sum", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("all")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "all", BoolArgumentType.getBool(ctx, "enabled"))))))
+                                .then(Commands.literal("duelRanked")
+                                        .then(Commands.literal("kill")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "kill", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("result")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "result", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("start")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "start", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("sum")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "sum", BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("all")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "all", BoolArgumentType.getBool(ctx, "enabled"))))))
                                 .then(Commands.literal("duelKill")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDuelKillNotifications(
@@ -2623,6 +2667,12 @@ public class TameCommands {
                                                         BoolArgumentType.getBool(ctx, "enabled")
                                                 ))))
                                 .then(Commands.literal("duelMessages")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setDuelMessages(
+                                                        ctx.getSource(),
+                                                        BoolArgumentType.getBool(ctx, "enabled")
+                                                ))))
+                                .then(Commands.literal("duelMesesages")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDuelMessages(
                                                         ctx.getSource(),
@@ -4459,8 +4509,9 @@ public class TameCommands {
                     "/tames arena",
                     "/tames arena create <arenaName>",
                     "/tames arena <arenaName> setA|setB|setWaitingA|setWaitingB",
+                    "/tames arena <arenaName> hidetames true|false",
                     "/tames arena <arenaName> duel|duelSession|duelSessionFFA <spec>",
-                    "Arenas store spawn and waiting points used by duel commands.",
+                    "Arenas store spawn and waiting points used by duel commands. hidetames makes idle duelSession tames disappear instead of waiting.",
                     "If an arena is reserved for ranked, /tames arena cannot use or edit it.",
                     "Use /tames admin ranked ... to edit a ranked-reserved arena."
             );
@@ -4566,7 +4617,9 @@ public class TameCommands {
         }
         else if (key.equals("debug")) {
             sendInfoPage(p, "Debug",
-                    "/tames debug enemyKilled|duelMessages|duelSumm|duelKill|duelAssists|duelSessionMessage <true|false>",
+                    "/tames debug duel kill|result|start|sum|all <true|false>",
+                    "/tames debug duelRanked kill|result|start|sum|all <true|false>",
+                    "/tames debug enemyKilled|duelAssists <true|false>",
                     "Toggles owner-local chat debug messages for combat and progression events."
             );
         }
@@ -4952,7 +5005,7 @@ public class TameCommands {
                 "Rerolling class will reset " + tameDisplayName(data) + " to level 1 with 0 XP and remove all abilities, attributes, bonus stats, saved progress, and level reward history."
         ).withStyle(ChatFormatting.RED));
         player.sendSystemMessage(Component.literal(
-                "Kills, assists, deaths, and survival-day stats are kept. Run /tames rerollClass confirm within 30 seconds to continue. Rerolls left after this: " + rerollsLeftAfterUse + "."
+                "Kills, assists, deaths, and survival-day stats are kept. Hold that tame's bound deed of ownership, or hold a nether star for a 90% epic / 10% legendary roll, then run /tames rerollClass confirm within 30 seconds. Rerolls left after this: " + rerollsLeftAfterUse + "."
         ).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
@@ -5002,16 +5055,57 @@ public class TameCommands {
             PENDING_CLASS_REROLLS.remove(player.getUUID());
             return error(player, tameDisplayName(data) + " has already used all " + MAX_CLASS_REROLLS + " class rerolls.");
         }
+        ClassRerollPayment payment = classRerollPayment(player, data);
+        if (payment == null) {
+            return error(player, "Hold this tame's bound deed of ownership, or hold a nether star for a boosted class reroll, then confirm again.");
+        }
 
         TameClass previousClass = data.tameClass;
-        TameClass rerolledClass = rerollToDifferentClass(previousClass);
+        TameClass rerolledClass = payment.boosted()
+                ? rerollToDifferentBoostedClass(previousClass)
+                : rerollToDifferentClass(previousClass);
         resetTameForClassReroll(tame, data, rerolledClass);
+        consumeClassRerollPayment(player, payment.stack());
         PENDING_CLASS_REROLLS.remove(player.getUUID());
         player.sendSystemMessage(Component.literal(
                 "Rerolled " + tameDisplayName(data) + " from " + (previousClass == null ? "unassigned" : previousClass.id()) + " to " + rerolledClass.id()
                         + ". It is now level 1 with 0 XP. Rerolls used: " + data.classRerollsUsed + "/" + MAX_CLASS_REROLLS + "."
         ).withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static ClassRerollPayment classRerollPayment(ServerPlayer player, TameData data) {
+        ClassRerollPayment main = classRerollPayment(player.getMainHandItem(), data);
+        if (main != null) {
+            return main;
+        }
+        return classRerollPayment(player.getOffhandItem(), data);
+    }
+
+    private static ClassRerollPayment classRerollPayment(ItemStack stack, TameData data) {
+        if (stack == null || stack.isEmpty() || data == null) {
+            return null;
+        }
+        if (stack.is(Items.NETHER_STAR)) {
+            return new ClassRerollPayment(stack, true);
+        }
+        if (!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get()) || stack.getTag() == null || !stack.getTag().getBoolean("HasBoundEntity")) {
+            return null;
+        }
+        UUID boundUuid;
+        try {
+            boundUuid = stack.getTag().getUUID("BoundEntity");
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+        return Objects.equals(boundUuid, data.uuid) ? new ClassRerollPayment(stack, false) : null;
+    }
+
+    private static void consumeClassRerollPayment(ServerPlayer player, ItemStack stack) {
+        if (player == null || stack == null || stack.isEmpty() || player.getAbilities().instabuild) {
+            return;
+        }
+        stack.shrink(1);
     }
 
     private static TameClass rerollToDifferentClass(TameClass previousClass) {
@@ -5031,6 +5125,43 @@ public class TameCommands {
             }
         }
         return rolled;
+    }
+
+    private static TameClass rerollToDifferentBoostedClass(TameClass previousClass) {
+        TameClass.Rarity rarity = ThreadLocalRandom.current().nextDouble() < 0.90D
+                ? TameClass.Rarity.EPIC
+                : TameClass.Rarity.LEGENDARY;
+        TameClass rolled = randomClassWithRarity(rarity, previousClass);
+        if (rolled != null) {
+            return rolled;
+        }
+        TameClass fallback = randomClassWithRarity(TameClass.Rarity.EPIC, previousClass);
+        if (fallback != null) {
+            return fallback;
+        }
+        fallback = randomClassWithRarity(TameClass.Rarity.LEGENDARY, previousClass);
+        return fallback == null ? rerollToDifferentClass(previousClass) : fallback;
+    }
+
+    private static TameClass randomClassWithRarity(TameClass.Rarity rarity, TameClass previousClass) {
+        List<TameClass> options = new ArrayList<>();
+        List<TameClass> includingPrevious = new ArrayList<>();
+        for (TameClass candidate : TameClass.values()) {
+            if (candidate == null || candidate.rarity() != rarity) {
+                continue;
+            }
+            includingPrevious.add(candidate);
+            if (!Objects.equals(candidate, previousClass)) {
+                options.add(candidate);
+            }
+        }
+        if (options.isEmpty()) {
+            options = includingPrevious;
+        }
+        if (options.isEmpty()) {
+            return null;
+        }
+        return options.get(ThreadLocalRandom.current().nextInt(options.size()));
     }
 
     private static void resetTameForClassReroll(TamableAnimal tame, TameData data, TameClass rerolledClass) {
@@ -6655,7 +6786,7 @@ public class TameCommands {
         }
         ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), arenaName, true);
         if (arenaName != null && !arenaName.isBlank() && arena == null) {
-            return error(owner, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
+            return error(owner, "Arena is missing required setA/setB positions, or waiting positions while hidetames is false.");
         }
         ActiveDuelSession session = new ActiveDuelSession(
                 UUID.randomUUID(),
@@ -6670,7 +6801,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingB,
                 normalizeArenaName(arenaName),
                 false,
-                false
+                false,
+                arena != null && arena.hideTames
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
@@ -6692,7 +6824,7 @@ public class TameCommands {
             return error(owner, "You already have a pending duel session invite.");
         }
         if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, true) == null) {
-            return error(owner, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
+            return error(owner, "Arena is missing required setA/setB positions, or waiting positions while hidetames is false.");
         }
 
         boolean leftIsInvite = left.targetPlayerNames.size() == 1 && !left.selection.includeSelf && left.selection.tameSelections.isEmpty();
@@ -6756,7 +6888,7 @@ public class TameCommands {
         ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), pending.arenaName, true);
         if (!pending.arenaName.isBlank() && arena == null) {
             removePendingDuelSession(pending.sessionId);
-            return error(player, "Arena is missing required setA/setB/setWaitingA/setWaitingB positions.");
+            return error(player, "Arena is missing required setA/setB positions, or waiting positions while hidetames is false.");
         }
 
         ActiveDuelSession session = new ActiveDuelSession(
@@ -6772,7 +6904,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingB,
                 pending.arenaName,
                 false,
-                false
+                false,
+                arena != null && arena.hideTames
         );
         removePendingDuelSession(pending.sessionId);
         if (!registerActiveDuelSession(source.getServer(), session)) {
@@ -6859,7 +6992,7 @@ public class TameCommands {
         }
         ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), arenaName, true);
         if (arenaName != null && !arenaName.isBlank() && arena == null) {
-            return error(owner, "Arena duel session FFA requires setA, setB, setWaitingA, and setWaitingB.");
+            return error(owner, "Arena duel session FFA requires setA/setB, plus waiting points while hidetames is false.");
         }
         ActiveDuelSession existingArenaFfa = findActiveArenaFfaSession(arenaName);
         if (existingArenaFfa != null) {
@@ -6883,7 +7016,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingB,
                 normalizeArenaName(arenaName),
                 true,
-                false
+                false,
+                arena != null && arena.hideTames
         );
         if (!registerActiveDuelSession(source.getServer(), session)) {
             return error(owner, "A duel or duel session is already active for one of those players.");
@@ -6905,7 +7039,7 @@ public class TameCommands {
             return error(owner, "You already have a pending duel session invite.");
         }
         if (arenaName != null && !arenaName.isBlank() && resolveArenaSpawns(source.getServer(), arenaName, true) == null) {
-            return error(owner, "Arena duel session FFA requires setA, setB, setWaitingA, and setWaitingB.");
+            return error(owner, "Arena duel session FFA requires setA/setB, plus waiting points while hidetames is false.");
         }
         PendingFfaDuelSession pending = new PendingFfaDuelSession(UUID.randomUUID(), owner.getUUID(), normalizeArenaName(arenaName));
         pending.participants.put(owner.getUUID(), new PendingFfaParticipant(owner.getUUID(), owner.getUUID(), parsed.selection, true));
@@ -7005,7 +7139,7 @@ public class TameCommands {
         ArenaSpawnSet arena = resolveArenaSpawns(source.getServer(), pending.arenaName, true);
         if (!pending.arenaName.isBlank() && arena == null) {
             removePendingFfaDuelSession(pending.sessionId);
-            return error(source.getPlayer(), "Arena duel session FFA is missing spawn or waiting points.");
+            return error(source.getPlayer(), "Arena duel session FFA is missing spawn points, or waiting points while hidetames is false.");
         }
         ActiveDuelSession existingArenaFfa = findActiveArenaFfaSession(pending.arenaName);
         if (existingArenaFfa != null) {
@@ -7030,7 +7164,8 @@ public class TameCommands {
                 arena == null ? null : arena.waitingB,
                 pending.arenaName,
                 true,
-                false
+                false,
+                arena != null && arena.hideTames
         );
         removePendingFfaDuelSession(pending.sessionId);
         if (!registerActiveDuelSession(source.getServer(), session)) {
@@ -11212,7 +11347,7 @@ public class TameCommands {
     }
 
     private record SpawnTarget(ServerLevel level, Vec3 pos, float yRot, float xRot) {}
-    private record ArenaSpawnSet(String arenaName, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB) {}
+    private record ArenaSpawnSet(String arenaName, SpawnTarget spawnA, SpawnTarget spawnB, SpawnTarget waitingA, SpawnTarget waitingB, boolean hideTames) {}
 
     private static SpawnTarget resolveRespawnTarget(CommandSourceStack source, ServerPlayer player, TameData data, boolean toMe) {
         if (toMe || data == null) {
@@ -14349,41 +14484,48 @@ public class TameCommands {
     }
 
     private static int setDuelKillNotifications(CommandSourceStack source, boolean enabled) {
-        ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setDuelKillNotifications(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Duel kill notifications set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
-        return 1;
+        return setDuelDebugCategory(source, false, "kill", enabled);
     }
 
     private static int setDuelSessionMessages(CommandSourceStack source, boolean enabled) {
-        ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setDuelSessionMessages(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Duel session messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
-        return 1;
+        return setDuelDebugCategory(source, false, "start", enabled);
     }
 
     private static int setDuelMessages(CommandSourceStack source, boolean enabled) {
-        ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setDuelMessages(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Duel messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
-        return 1;
+        return setDuelDebugCategory(source, false, "all", enabled);
     }
 
     private static int setDuelSummaryMessages(CommandSourceStack source, boolean enabled) {
+        return setDuelDebugCategory(source, false, "sum", enabled);
+    }
+
+    private static int setDuelDebugCategory(CommandSourceStack source, boolean ranked, String category, boolean enabled) {
         ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setDuelSummaryMessages(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Duel ended summary messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        UUID playerId = p.getUUID();
+        String normalized = category == null ? "" : category;
+        switch (normalized) {
+            case "kill" -> PlayerDebugSettings.setDuelKillNotifications(playerId, ranked, enabled);
+            case "result" -> PlayerDebugSettings.setDuelResultMessages(playerId, ranked, enabled);
+            case "start" -> PlayerDebugSettings.setDuelStartMessages(playerId, ranked, enabled);
+            case "sum" -> PlayerDebugSettings.setDuelSummaryMessages(playerId, ranked, enabled);
+            case "all" -> PlayerDebugSettings.setDuelAllMessages(playerId, ranked, enabled);
+            default -> {
+                return error(p, "Unknown duel debug category: " + normalized + ".");
+            }
+        }
+        p.sendSystemMessage(Component.literal((ranked ? "Ranked duel " : "Duel ") + normalized + " messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
     private static int duelToggleStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
-        boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
+        boolean duelStart = PlayerDebugSettings.duelStartMessages(p.getUUID(), false);
+        boolean duelResult = PlayerDebugSettings.duelResultMessages(p.getUUID(), false);
         boolean assistsMessages = PlayerDebugSettings.duelAssistMessages(p.getUUID());
         boolean killNotifications = PlayerDebugSettings.duelKillNotifications(p.getUUID());
-        boolean sessionMessages = PlayerDebugSettings.duelSessionMessages(p.getUUID());
         boolean duelSummaryMessages = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Duel toggle -> duelMessages: " + duelMessages + ", duelSumm: " + duelSummaryMessages + ", assistsMessages: " + assistsMessages + ", killNotification: " + killNotifications + ", sessionMessages: " + sessionMessages).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Duel toggle -> kill: " + killNotifications + ", result: " + duelResult + ", start: " + duelStart + ", sum: " + duelSummaryMessages + ", assists: " + assistsMessages).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Ranked duel toggle -> kill: " + PlayerDebugSettings.duelKillNotifications(p.getUUID(), true) + ", result: " + PlayerDebugSettings.duelResultMessages(p.getUUID(), true) + ", start: " + PlayerDebugSettings.duelStartMessages(p.getUUID(), true) + ", sum: " + PlayerDebugSettings.duelSummaryMessages(p.getUUID(), true)).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -14417,10 +14559,10 @@ public class TameCommands {
         boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
         boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
         boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
-        boolean duelMessages = PlayerDebugSettings.duelMessages(p.getUUID());
-        boolean duelSessionMessage = PlayerDebugSettings.duelSessionMessages(p.getUUID());
+        boolean duelStart = PlayerDebugSettings.duelStartMessages(p.getUUID(), false);
+        boolean duelResult = PlayerDebugSettings.duelResultMessages(p.getUUID(), false);
         boolean duelSumm = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelMessages: " + duelMessages + ", duelSumm: " + duelSumm + ", duelSessionMessage: " + duelSessionMessage).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelStart: " + duelStart + ", duelResult: " + duelResult + ", duelSumm: " + duelSumm).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -20857,6 +20999,7 @@ public class TameCommands {
         player.sendSystemMessage(Component.literal("B: " + arenaPointLabel(arena.spawnB())).withStyle(ChatFormatting.RED));
         player.sendSystemMessage(Component.literal("WaitingA: " + arenaPointLabel(arena.waitingA())).withStyle(ChatFormatting.YELLOW));
         player.sendSystemMessage(Component.literal("WaitingB: " + arenaPointLabel(arena.waitingB())).withStyle(ChatFormatting.YELLOW));
+        player.sendSystemMessage(Component.literal("HideTames: " + arena.hideTames()).withStyle(ChatFormatting.LIGHT_PURPLE));
         return 1;
     }
 
@@ -20920,6 +21063,25 @@ public class TameCommands {
             return error(player, "Failed to update arena " + normalized + ".");
         }
         player.sendSystemMessage(Component.literal("Set " + slot + " for arena " + normalized + " to " + arenaPointLabel(point) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int setArenaHideTames(CommandSourceStack source, String arenaName, boolean hideTames) {
+        initArenaRegistry(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        String normalized = normalizeArenaName(arenaName);
+        if (isRankedArenaReserved(normalized)) {
+            return error(player, "Arena " + normalized + " is reserved for ranked. Use /tames admin ranked commands.");
+        }
+        TameArenaRegistry.TameArena existing = TameArenaRegistry.getArena(normalized);
+        if (existing == null) {
+            return error(player, "Arena does not exist: " + normalized + ".");
+        }
+        TameArenaRegistry.TameArena updated = TameArenaRegistry.setHideTames(normalized, hideTames);
+        if (updated == null) {
+            return error(player, "Failed to update arena " + normalized + ".");
+        }
+        player.sendSystemMessage(Component.literal("Set hidetames for arena " + normalized + " to " + hideTames + ".").withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
@@ -21099,17 +21261,18 @@ public class TameCommands {
         if (arena == null || arena.spawnA() == null || arena.spawnB() == null) {
             return null;
         }
-        if (requireWaiting && (arena.waitingA() == null || arena.waitingB() == null)) {
+        boolean hideTames = arena.hideTames();
+        if (requireWaiting && !hideTames && (arena.waitingA() == null || arena.waitingB() == null)) {
             return null;
         }
         SpawnTarget spawnA = toSpawnTarget(server, arena.spawnA());
         SpawnTarget spawnB = toSpawnTarget(server, arena.spawnB());
         SpawnTarget waitingA = toSpawnTarget(server, arena.waitingA());
         SpawnTarget waitingB = toSpawnTarget(server, arena.waitingB());
-        if (spawnA == null || spawnB == null || (requireWaiting && (waitingA == null || waitingB == null))) {
+        if (spawnA == null || spawnB == null || (requireWaiting && !hideTames && (waitingA == null || waitingB == null))) {
             return null;
         }
-        return new ArenaSpawnSet(normalized, spawnA, spawnB, waitingA, waitingB);
+        return new ArenaSpawnSet(normalized, spawnA, spawnB, waitingA, waitingB, hideTames);
     }
 
     private static SpawnTarget toSpawnTarget(MinecraftServer server, TameArenaRegistry.ArenaPoint point) {
@@ -21183,6 +21346,7 @@ public class TameCommands {
                     arena.waitingA,
                     arena.waitingB,
                     arenaName,
+                    true,
                     true,
                     true
             );
@@ -21471,7 +21635,7 @@ public class TameCommands {
         LinkedHashSet<UUID> spectators = new LinkedHashSet<>(session.sessionPlayers);
         spectators.remove(session.ownerA);
         spectators.remove(session.ownerB);
-        TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, spectators, false);
+        TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, spectators, false, session.ranked);
         queueDuelSessionRoundClientRefresh(server, round.teamA, round.teamB);
         session.currentRoundA = Set.copyOf(round.teamA);
         session.currentRoundB = Set.copyOf(round.teamB);
@@ -22188,7 +22352,7 @@ public class TameCommands {
             if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                 continue;
             }
-            if (session.ranked) {
+            if (session.hideWaitingTames) {
                 unloadRankedParticipantTame(server, id);
                 continue;
             }
@@ -22212,7 +22376,7 @@ public class TameCommands {
         if (server == null || session == null || ownerId == null || pool == null || activeRound == null) {
             return;
         }
-        if (session.ranked) {
+        if (session.hideWaitingTames) {
             for (UUID id : pool) {
                 if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                     continue;
@@ -22572,9 +22736,7 @@ public class TameCommands {
         }
         for (UUID playerId : session.sessionPlayers) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-            if (player != null
-                    && PlayerDebugSettings.duelMessages(playerId)
-                    && PlayerDebugSettings.duelSessionMessages(playerId)) {
+            if (player != null && PlayerDebugSettings.duelStartMessages(playerId, session.ranked)) {
                 player.sendSystemMessage(line);
             }
         }

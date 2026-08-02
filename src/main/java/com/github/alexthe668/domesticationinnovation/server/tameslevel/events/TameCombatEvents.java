@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.lang.reflect.Method;
 
 public class TameCombatEvents {
     private record PendingInstantRespawn(UUID tameUuid, long dueTick, int retriesRemaining) {
@@ -246,7 +247,7 @@ public class TameCombatEvents {
                 }
                 UUID tameId = tame.getUUID();
                 seenDuelRaptors.add(tameId);
-                boolean invisible = tame.isInvisible();
+                boolean invisible = isVallumraptorHiding(tame);
                 boolean wasInvisible = DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.contains(tameId);
                 if (invisible && !wasInvisible) {
                     int count = DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.getOrDefault(tameId, 0) + 1;
@@ -277,6 +278,21 @@ public class TameCombatEvents {
         }
         ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
         return id != null && "alexscaves".equals(id.getNamespace()) && "vallumraptor".equals(id.getPath());
+    }
+
+    private static boolean isVallumraptorHiding(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        try {
+            Method method = tame.getClass().getMethod("getHideFor");
+            Object value = method.invoke(tame);
+            if (value instanceof Number number) {
+                return number.intValue() > 0;
+            }
+        } catch (Throwable ignored) {
+        }
+        return tame.isInvisible();
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

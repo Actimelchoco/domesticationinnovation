@@ -58,7 +58,7 @@ public final class TameArenaRegistry {
         if (normalized.isBlank() || ARENAS.containsKey(normalized)) {
             return false;
         }
-        ARENAS.put(normalized, new TameArena(normalized, null, null, null, null));
+        ARENAS.put(normalized, new TameArena(normalized, null, null, null, null, false));
         markDirty();
         return true;
     }
@@ -86,6 +86,10 @@ public final class TameArenaRegistry {
 
     public static TameArena setWaitingB(String name, ArenaPoint point) {
         return update(name, arena -> arena.withWaitingB(point));
+    }
+
+    public static TameArena setHideTames(String name, boolean hideTames) {
+        return update(name, arena -> arena.withHideTames(hideTames));
     }
 
     private static TameArena update(String name, java.util.function.UnaryOperator<TameArena> updater) {
@@ -136,32 +140,36 @@ public final class TameArenaRegistry {
         }
     }
 
-    public record TameArena(String name, ArenaPoint spawnA, ArenaPoint spawnB, ArenaPoint waitingA, ArenaPoint waitingB) {
+    public record TameArena(String name, ArenaPoint spawnA, ArenaPoint spawnB, ArenaPoint waitingA, ArenaPoint waitingB, boolean hideTames) {
         public TameArena copy() {
-            return new TameArena(name, spawnA, spawnB, waitingA, waitingB);
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames);
         }
 
         public TameArena withSpawnA(ArenaPoint point) {
-            return new TameArena(name, point, spawnB, waitingA, waitingB);
+            return new TameArena(name, point, spawnB, waitingA, waitingB, hideTames);
         }
 
         public TameArena withSpawnB(ArenaPoint point) {
-            return new TameArena(name, spawnA, point, waitingA, waitingB);
+            return new TameArena(name, spawnA, point, waitingA, waitingB, hideTames);
         }
 
         public TameArena withWaitingA(ArenaPoint point) {
-            return new TameArena(name, spawnA, spawnB, point, waitingB);
+            return new TameArena(name, spawnA, spawnB, point, waitingB, hideTames);
         }
 
         public TameArena withWaitingB(ArenaPoint point) {
-            return new TameArena(name, spawnA, spawnB, waitingA, point);
+            return new TameArena(name, spawnA, spawnB, waitingA, point, hideTames);
+        }
+
+        public TameArena withHideTames(boolean hideTames) {
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames);
         }
 
         public boolean isConfiguredForDuel() {
             return spawnA != null && spawnA.isValid()
                     && spawnB != null && spawnB.isValid()
-                    && waitingA != null && waitingA.isValid()
-                    && waitingB != null && waitingB.isValid();
+                    && (hideTames || (waitingA != null && waitingA.isValid()
+                    && waitingB != null && waitingB.isValid()));
         }
 
         public CompoundTag toTag() {
@@ -179,6 +187,7 @@ public final class TameArenaRegistry {
             if (waitingB != null && waitingB.isValid()) {
                 tag.put("waitingB", waitingB.toTag());
             }
+            tag.putBoolean("hideTames", hideTames);
             return tag;
         }
 
@@ -194,7 +203,7 @@ public final class TameArenaRegistry {
             ArenaPoint spawnB = tag.contains("spawnB", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("spawnB")) : null;
             ArenaPoint waitingA = tag.contains("waitingA", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("waitingA")) : null;
             ArenaPoint waitingB = tag.contains("waitingB", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("waitingB")) : null;
-            return new TameArena(name, spawnA, spawnB, waitingA, waitingB);
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, tag.getBoolean("hideTames"));
         }
     }
 }
