@@ -129,8 +129,15 @@ public class TameCombatEvents {
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
 
-        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID()) || TameDuelManager.consumeRecentDuelElimination(tame.getUUID());
+        UUID tlId = TameData.getTlId(tame);
+        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
+                || (tlId != null && TameDuelManager.isTameInDuel(tlId))
+                || TameDuelManager.consumeRecentDuelElimination(tame.getUUID())
+                || (tlId != null && TameDuelManager.consumeRecentDuelElimination(tlId));
         TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null && tlId != null) {
+            data = TameRegistry.getByTlId(tlId);
+        }
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
         }
@@ -384,7 +391,7 @@ public class TameCombatEvents {
             return player.getUUID();
         }
         TamableAnimal tame = resolveTameAttacker(source);
-        return tame != null && tame.isTame() ? tame.getUUID() : null;
+        return resolveDuelParticipantUuid(tame);
     }
 
     private static ServerPlayer resolvePlayerAttacker(DamageSource source) {
@@ -405,6 +412,10 @@ public class TameCombatEvents {
             return player.getUUID();
         }
         if (entity instanceof TamableAnimal tame && tame.isTame()) {
+            UUID tlId = TameData.getTlId(tame);
+            if (tlId != null && TameDuelManager.isEntityInDuel(tlId)) {
+                return tlId;
+            }
             return tame.getUUID();
         }
         return null;

@@ -199,6 +199,9 @@ public final class TameDuelManager {
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
         if (attackerId == null || targetId == null) return false;
+        attackerId = resolveActiveParticipantId(attackerId);
+        targetId = resolveActiveParticipantId(targetId);
+        if (attackerId == null || targetId == null) return false;
         UUID attackerBattleId = BATTLE_ID_BY_ENTITY.get(attackerId);
         UUID targetBattleId = BATTLE_ID_BY_ENTITY.get(targetId);
         if (attackerBattleId == null || !attackerBattleId.equals(targetBattleId)) return false;
@@ -225,7 +228,7 @@ public final class TameDuelManager {
     }
 
     public static synchronized boolean isEntityInDuel(UUID entityId) {
-        return entityId != null && BATTLE_ID_BY_ENTITY.containsKey(entityId);
+        return resolveActiveParticipantId(entityId) != null;
     }
 
     public static synchronized boolean isTameInDuel(UUID tameId) {
@@ -233,10 +236,20 @@ public final class TameDuelManager {
     }
 
     public static synchronized boolean consumeRecentDuelElimination(UUID entityId) {
-        return entityId != null && RECENT_DUEL_ELIMINATIONS.remove(entityId);
+        UUID resolved = resolveActiveParticipantId(entityId);
+        boolean consumed = entityId != null && RECENT_DUEL_ELIMINATIONS.remove(entityId);
+        if (resolved != null && !resolved.equals(entityId)) {
+            consumed |= RECENT_DUEL_ELIMINATIONS.remove(resolved);
+        }
+        return consumed;
     }
 
     public static synchronized boolean isSameDuelTeam(UUID firstId, UUID secondId) {
+        if (firstId == null || secondId == null) {
+            return false;
+        }
+        firstId = resolveActiveParticipantId(firstId);
+        secondId = resolveActiveParticipantId(secondId);
         if (firstId == null || secondId == null) {
             return false;
         }
@@ -254,6 +267,10 @@ public final class TameDuelManager {
         if (entityId == null) {
             return false;
         }
+        entityId = resolveActiveParticipantId(entityId);
+        if (entityId == null) {
+            return false;
+        }
         Boolean teamA = TEAM_A_BY_ENTITY.get(entityId);
         return teamA != null && teamA;
     }
@@ -265,6 +282,14 @@ public final class TameDuelManager {
         if (supporterId.equals(beneficiaryId)) {
             return true;
         }
+        UUID resolvedSupporterId = resolveActiveParticipantId(supporterId);
+        UUID resolvedBeneficiaryId = resolveActiveParticipantId(beneficiaryId);
+        if (resolvedSupporterId != null) {
+            supporterId = resolvedSupporterId;
+        }
+        if (resolvedBeneficiaryId != null) {
+            beneficiaryId = resolvedBeneficiaryId;
+        }
         boolean supporterInDuel = isEntityInDuel(supporterId);
         boolean beneficiaryInDuel = isEntityInDuel(beneficiaryId);
         if (!supporterInDuel && !beneficiaryInDuel) {
@@ -273,23 +298,54 @@ public final class TameDuelManager {
         return isSameDuelTeam(supporterId, beneficiaryId);
     }
 
+    private static UUID resolveActiveParticipantId(UUID entityId) {
+        if (entityId == null) {
+            return null;
+        }
+        if (BATTLE_ID_BY_ENTITY.containsKey(entityId)) {
+            return entityId;
+        }
+        TameData byEntityUuid = TameRegistry.get(entityId);
+        if (byEntityUuid != null) {
+            if (byEntityUuid.tlId != null && BATTLE_ID_BY_ENTITY.containsKey(byEntityUuid.tlId)) {
+                return byEntityUuid.tlId;
+            }
+            if (byEntityUuid.uuid != null && BATTLE_ID_BY_ENTITY.containsKey(byEntityUuid.uuid)) {
+                return byEntityUuid.uuid;
+            }
+        }
+        TameData byTlId = TameRegistry.getByTlId(entityId);
+        if (byTlId != null && byTlId.uuid != null && BATTLE_ID_BY_ENTITY.containsKey(byTlId.uuid)) {
+            return byTlId.uuid;
+        }
+        return null;
+    }
+
     public static synchronized boolean endDuelForTame(MinecraftServer server, UUID tameId) {
         return endDuelForEntity(server, tameId);
     }
 
     public static synchronized boolean endDuelForEntity(MinecraftServer server, UUID entityId) {
         if (server == null || entityId == null) return false;
-        UUID battleId = BATTLE_ID_BY_ENTITY.remove(entityId);
+        UUID resolvedId = resolveActiveParticipantId(entityId);
+        if (resolvedId == null) {
+            return false;
+        }
+        UUID battleId = BATTLE_ID_BY_ENTITY.remove(resolvedId);
         if (battleId == null) return false;
         DuelBattle battle = BATTLE_BY_ID.get(battleId);
-        TEAM_A_BY_ENTITY.remove(entityId);
+        TEAM_A_BY_ENTITY.remove(resolvedId);
         if (battle == null) return true;
 
-        battle.teamA.remove(entityId);
-        battle.teamB.remove(entityId);
-        battle.participants.remove(entityId);
-        setDuelMovementLock(entityId, false);
-        clearTargetForParticipant(server, entityId);
+        battle.teamA.remove(resolvedId);
+        battle.teamB.remove(resolvedId);
+        battle.participants.remove(resolvedId);
+        RECENT_DUEL_ELIMINATIONS.add(resolvedId);
+        if (!resolvedId.equals(entityId)) {
+            RECENT_DUEL_ELIMINATIONS.add(entityId);
+        }
+        setDuelMovementLock(resolvedId, false);
+        clearTargetForParticipant(server, resolvedId);
 
         if (battle.teamA.isEmpty() || battle.teamB.isEmpty()) {
             String reason = battle.teamA.isEmpty() ? "Team A eliminated." : "Team B eliminated.";
@@ -300,6 +356,10 @@ public final class TameDuelManager {
 
     public static synchronized void recordElimination(MinecraftServer server, UUID victimId, Set<UUID> contributors, UUID killerId) {
         if (server == null || victimId == null) return;
+        UUID originalVictimId = victimId;
+        victimId = resolveActiveParticipantId(victimId);
+        if (victimId == null) return;
+        killerId = resolveActiveParticipantId(killerId);
         UUID battleId = BATTLE_ID_BY_ENTITY.get(victimId);
         if (battleId == null) return;
         DuelBattle battle = BATTLE_BY_ID.get(battleId);
@@ -309,6 +369,7 @@ public final class TameDuelManager {
         List<UUID> assisters = new ArrayList<>();
         if (contributors != null && !contributors.isEmpty()) {
             for (UUID contributorId : contributors) {
+                contributorId = resolveActiveParticipantId(contributorId);
                 if (contributorId == null || contributorId.equals(victimId)) continue;
                 if (killerId != null && killerId.equals(contributorId)) continue;
                 if (!battle.roster.contains(contributorId)) continue;
@@ -320,6 +381,9 @@ public final class TameDuelManager {
         DuelElimination elimination = new DuelElimination(victimId, duelKiller, assisters);
         battle.eliminations.add(elimination);
         RECENT_DUEL_ELIMINATIONS.add(victimId);
+        if (!victimId.equals(originalVictimId)) {
+            RECENT_DUEL_ELIMINATIONS.add(originalVictimId);
+        }
         DuelStats victimStats = battle.duelStats.get(victimId);
         if (victimStats != null) {
             victimStats.deaths++;
@@ -397,7 +461,11 @@ public final class TameDuelManager {
         if (server == null || tame == null) {
             return null;
         }
-        UUID battleId = BATTLE_ID_BY_ENTITY.get(tame.getUUID());
+        UUID tameId = resolveActiveParticipantId(tame.getUUID());
+        if (tameId == null) {
+            tameId = resolveActiveParticipantId(TameData.getTlId(tame));
+        }
+        UUID battleId = tameId == null ? null : BATTLE_ID_BY_ENTITY.get(tameId);
         if (battleId == null) {
             return null;
         }
@@ -405,7 +473,7 @@ public final class TameDuelManager {
         if (battle == null) {
             return null;
         }
-        Boolean tameTeamA = TEAM_A_BY_ENTITY.get(tame.getUUID());
+        Boolean tameTeamA = TEAM_A_BY_ENTITY.get(tameId);
         if (tameTeamA == null) {
             return null;
         }
@@ -422,7 +490,11 @@ public final class TameDuelManager {
             return;
         }
         UUID tameId = tame.getUUID();
-        if (!isEntityInDuel(tameId)) {
+        UUID participantId = resolveActiveParticipantId(tameId);
+        if (participantId == null) {
+            participantId = resolveActiveParticipantId(TameData.getTlId(tame));
+        }
+        if (participantId == null) {
             restoreMossyGolemTargetGoalsIfNeeded(tame);
             removeDuelFollowRangeBoost(tame);
             return;
@@ -441,9 +513,9 @@ public final class TameDuelManager {
             setDuelCombatTarget(tame, current);
             return;
         }
-        UUID battleId = BATTLE_ID_BY_ENTITY.get(tameId);
+        UUID battleId = BATTLE_ID_BY_ENTITY.get(participantId);
         DuelBattle battle = battleId == null ? null : BATTLE_BY_ID.get(battleId);
-        Boolean teamA = TEAM_A_BY_ENTITY.get(tameId);
+        Boolean teamA = TEAM_A_BY_ENTITY.get(participantId);
         if (battle == null || teamA == null) {
             clearDuelCombatTarget(tame);
             return;
@@ -623,6 +695,9 @@ public final class TameDuelManager {
             return;
         }
         TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(participantId);
+        }
         if (data == null || data.cooldowns.isEmpty()) {
             return;
         }
@@ -1254,6 +1329,9 @@ public final class TameDuelManager {
             return battle.ownerB;
         }
         TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(participantId);
+        }
         if (data != null && data.ownerUUID != null) {
             return data.ownerUUID;
         }
@@ -1441,6 +1519,9 @@ public final class TameDuelManager {
             return new SummaryParticipant(player.getName().getString(), player.getUUID(), Math.max(1, player.experienceLevel), true);
         }
         TameData live = TameRegistry.get(participantId);
+        if (live == null) {
+            live = TameRegistry.getByTlId(participantId);
+        }
         if (live != null) {
             String displayName = live.name == null || live.name.isBlank() ? entityLabel(server, participantId) : live.name;
             return new SummaryParticipant(displayName, live.ownerUUID, Math.max(1, live.level), false);
@@ -1463,6 +1544,9 @@ public final class TameDuelManager {
 
     private static TameData tameDataForSummary(MinecraftServer server, DuelBattle battle, UUID participantId) {
         TameData live = TameRegistry.get(participantId);
+        if (live == null) {
+            live = TameRegistry.getByTlId(participantId);
+        }
         if (live != null) {
             return live;
         }
@@ -1486,6 +1570,9 @@ public final class TameDuelManager {
             return;
         }
         TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(participantId);
+        }
         if (data == null) {
             return;
         }
@@ -1937,10 +2024,14 @@ public final class TameDuelManager {
     }
 
     public static synchronized boolean hasDuelMovementLock(UUID entityId) {
-        if (entityId == null || !isEntityInDuel(entityId)) {
+        UUID participantId = resolveActiveParticipantId(entityId);
+        if (participantId == null) {
             return false;
         }
-        TameData data = TameRegistry.get(entityId);
+        TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(participantId);
+        }
         return data != null && data.cooldowns.containsKey(DUEL_MOVEMENT_LOCK_KEY);
     }
 
@@ -1949,6 +2040,9 @@ public final class TameDuelManager {
             return;
         }
         TameData data = TameRegistry.get(entityId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(entityId);
+        }
         if (data == null) {
             return;
         }
@@ -1970,6 +2064,15 @@ public final class TameDuelManager {
             Entity entity = level.getEntity(entityId);
             if (entity instanceof LivingEntity living) {
                 return living;
+            }
+        }
+        TameData byTlId = TameRegistry.getByTlId(entityId);
+        if (byTlId != null && byTlId.uuid != null) {
+            for (var level : server.getAllLevels()) {
+                Entity entity = level.getEntity(byTlId.uuid);
+                if (entity instanceof LivingEntity living) {
+                    return living;
+                }
             }
         }
         return null;

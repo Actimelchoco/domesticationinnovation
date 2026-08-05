@@ -1831,9 +1831,7 @@ public class TameCommands {
                                 .executes(ctx -> infoOverview(ctx.getSource()))
                                 .then(Commands.literal("tool")
                                         .then(Commands.literal("guardian")
-                                                .executes(ctx -> infoDetail(ctx.getSource(), "tool guardian")))
-                                        .then(Commands.literal("bone")
-                                                .executes(ctx -> infoDetail(ctx.getSource(), "tool bone"))))
+                                                .executes(ctx -> infoDetail(ctx.getSource(), "tool guardian"))))
                                 .then(Commands.literal("attribute")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "attribute"))
                                         .then(Commands.argument("name", StringArgumentType.word())
@@ -4223,7 +4221,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, call_stick, tool guardian, tool bone, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -4351,41 +4349,6 @@ public class TameCommands {
                             .append(Component.literal("right click add").withStyle(ChatFormatting.GREEN))
                             .append(Component.literal(", ").withStyle(ChatFormatting.GRAY))
                             .append(Component.literal("left click remove").withStyle(ChatFormatting.YELLOW))
-            );
-        }
-        else if (key.equals("call_stick") || key.equals("callstick")) {
-            sendInfoPage(p, "CallStick",
-                    "Rename a bone to a selector: all, exact tame name, 'group <group>', 'type <type>', close, nearby, follow, sit, or wander.",
-                    "Right click air/block: apply the current movement command to all selected tames.",
-                    "Left click air: cycle combat mode for the selected tames.",
-                    "Left click block: clear current combat targets for the selected tames.",
-                    "Left click block for 3s: set guardian there. Sneak left click block for 3s: move there and passive-sit.",
-                    "Hit a mob: all selected tames target it.",
-                    "Right click block for 5s: teleport selected tames there. Right click air for 5s: teleport them home.",
-                    "Right click tame: add it to the selected group if the bone targets 'group ...'. Left click tame: remove it from that group.",
-                    "The bone is consumed on use unless you are in creative, so renaming a stack lets you reuse the same selector many times."
-            );
-        }
-        else if (key.equals("tool bone") || key.equals("tool call_stick") || key.equals("tool callstick")) {
-            sendToolInfoPage(p, "Bone",
-                    Component.literal("Item: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("renamed bone").withStyle(ChatFormatting.GOLD)),
-                    Component.literal("Selectors: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("all, tame name, group <group>, type <type>, close, nearby, follow, sit, wander").withStyle(ChatFormatting.AQUA)),
-                    Component.literal("Movement command: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("right click air/block").withStyle(ChatFormatting.GREEN)),
-                    Component.literal("Cycle combat mode: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("left click air").withStyle(ChatFormatting.YELLOW)),
-                    Component.literal("Clear targets: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("left click block").withStyle(ChatFormatting.YELLOW)),
-                    Component.literal("Set guardian / passive sit: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("hold left click block 3s").withStyle(ChatFormatting.GREEN))
-                            .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
-                            .append(Component.literal("sneak hold left click block 3s").withStyle(ChatFormatting.GREEN)),
-                    Component.literal("Teleport selected tames: ").withStyle(ChatFormatting.GRAY)
-                            .append(Component.literal("hold right click block 5s").withStyle(ChatFormatting.GREEN))
-                            .append(Component.literal(" or ").withStyle(ChatFormatting.GRAY))
-                            .append(Component.literal("hold right click air 5s for home").withStyle(ChatFormatting.GREEN))
             );
         }
         else if (key.equals("movement")) {
@@ -11519,6 +11482,7 @@ public class TameCommands {
         respawned.setUUID(data.uuid);
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        respawned.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
         enforceTamedOwnerPreserveCollar(respawned, data.ownerUUID);
 
         if (!level.addFreshEntity(respawned)) {
@@ -11543,6 +11507,9 @@ public class TameCommands {
             return false;
         }
         TameData data = TameRegistry.get(tameUuid);
+        if (data == null) {
+            data = TameRegistry.getByTlId(tameUuid);
+        }
         if (data == null || !data.dead) {
             return false;
         }
@@ -11564,6 +11531,9 @@ public class TameCommands {
             return false;
         }
         TameData data = TameRegistry.get(tameUuid);
+        if (data == null) {
+            data = TameRegistry.getByTlId(tameUuid);
+        }
         if (data == null || !data.dead || data.ownerUUID == null) {
             return false;
         }
@@ -12167,6 +12137,7 @@ public class TameCommands {
         recovered.setUUID(data.uuid);
         recovered.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
+        recovered.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
         enforceTamedOwnerPreserveCollar(recovered, resolvedOwnerId);
 
         if (!target.level.addFreshEntity(recovered)) {
@@ -24161,7 +24132,6 @@ public class TameCommands {
         suggestCommandString(b, "wander");
         suggestCommandString(b, "guardian");
         suggestCommandString(b, "tool guardian");
-        suggestCommandString(b, "tool bone");
         suggestCommandString(b, "movement");
         suggestCommandString(b, "tp");
         suggestCommandString(b, "tphome");

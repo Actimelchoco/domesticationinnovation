@@ -379,6 +379,12 @@ public class LevelSystem {
     public static void onTameDeath(TamableAnimal tame, boolean applyPenaltyAndCountDeath) {
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) {
+            UUID tlId = TameData.getTlId(tame);
+            if (tlId != null) {
+                data = TameRegistry.getByTlId(tlId);
+            }
+        }
+        if (data == null) {
             return;
         }
 
