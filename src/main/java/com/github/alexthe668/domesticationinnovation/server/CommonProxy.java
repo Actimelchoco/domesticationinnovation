@@ -266,6 +266,7 @@ public class CommonProxy {
         if (event.getEntity() instanceof LivingEntity living) {
             if (living.getPersistentData().getBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG)) {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
+                return;
             }
             if (living instanceof TamableAnimal tame && tame.isTame()) {
                 TamePersistenceEvents.onTameEntityLeave(tame);

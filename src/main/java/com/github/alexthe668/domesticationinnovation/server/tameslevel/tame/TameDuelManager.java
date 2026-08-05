@@ -67,8 +67,9 @@ public final class TameDuelManager {
         private final Set<UUID> spectatorIds = new HashSet<>();
         private final boolean broadcastToServer;
         private final boolean ranked;
+        private final boolean teamColoredKillMessages;
 
-        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked) {
+        private DuelBattle(UUID battleId, UUID ownerA, UUID ownerB, Set<UUID> teamA, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked, boolean teamColoredKillMessages) {
             this.battleId = battleId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
@@ -88,6 +89,7 @@ public final class TameDuelManager {
             this.spectatorIds.remove(ownerB);
             this.broadcastToServer = broadcastToServer;
             this.ranked = ranked;
+            this.teamColoredKillMessages = teamColoredKillMessages;
         }
     }
 
@@ -148,6 +150,10 @@ public final class TameDuelManager {
     }
 
     public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked) {
+        startTeamDuel(server, ownerA, teamA, ownerB, teamB, spectatorIds, broadcastToServer, ranked, ranked);
+    }
+
+    public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked, boolean teamColoredKillMessages) {
         if (server == null || ownerA == null || ownerB == null) return;
         if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
@@ -170,7 +176,7 @@ public final class TameDuelManager {
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
 
         UUID battleId = UUID.randomUUID();
-        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer, ranked);
+        DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer, ranked, teamColoredKillMessages);
         BATTLE_BY_ID.put(battleId, battle);
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
@@ -299,17 +305,18 @@ public final class TameDuelManager {
         DuelBattle battle = BATTLE_BY_ID.get(battleId);
         if (battle == null) return;
 
+        UUID duelKiller = killerId != null && battle.roster.contains(killerId) ? killerId : null;
         List<UUID> assisters = new ArrayList<>();
         if (contributors != null && !contributors.isEmpty()) {
             for (UUID contributorId : contributors) {
                 if (contributorId == null || contributorId.equals(victimId)) continue;
                 if (killerId != null && killerId.equals(contributorId)) continue;
                 if (!battle.roster.contains(contributorId)) continue;
+                if (!canAssistElimination(battle, contributorId, victimId, duelKiller)) continue;
                 assisters.add(contributorId);
             }
             assisters.sort(Comparator.comparing(id -> entityLabel(server, id)));
         }
-        UUID duelKiller = killerId != null && battle.roster.contains(killerId) ? killerId : null;
         DuelElimination elimination = new DuelElimination(victimId, duelKiller, assisters);
         battle.eliminations.add(elimination);
         RECENT_DUEL_ELIMINATIONS.add(victimId);
@@ -327,6 +334,35 @@ public final class TameDuelManager {
         }
         awardDuelPoints(server, battle, elimination);
         notifyElimination(server, battle, elimination);
+    }
+
+    private static boolean canAssistElimination(DuelBattle battle, UUID assisterId, UUID victimId, UUID killerId) {
+        if (battle == null || assisterId == null || victimId == null) {
+            return false;
+        }
+        Boolean assisterTeam = participantTeamA(battle, assisterId);
+        Boolean victimTeam = participantTeamA(battle, victimId);
+        if (assisterTeam == null || victimTeam == null || assisterTeam.equals(victimTeam)) {
+            return false;
+        }
+        if (killerId == null) {
+            return true;
+        }
+        Boolean killerTeam = participantTeamA(battle, killerId);
+        return killerTeam != null && assisterTeam.equals(killerTeam);
+    }
+
+    private static Boolean participantTeamA(DuelBattle battle, UUID participantId) {
+        if (battle == null || participantId == null) {
+            return null;
+        }
+        if (battle.originalTeamA.contains(participantId) || battle.teamA.contains(participantId)) {
+            return true;
+        }
+        if (battle.originalTeamB.contains(participantId) || battle.teamB.contains(participantId)) {
+            return false;
+        }
+        return null;
     }
 
     public static synchronized int endDuelsForOwner(MinecraftServer server, UUID ownerId) {
@@ -836,6 +872,9 @@ public final class TameDuelManager {
             }
             TameData persisted = TameRegistry.get(participantId);
             if (persisted == null) {
+                persisted = TameRegistry.getByTlId(participantId);
+            }
+            if (persisted == null) {
                 continue;
             }
             TameData snapshot = TameData.fromTag(snapshotTag.copy());
@@ -1152,7 +1191,7 @@ public final class TameDuelManager {
                 if (!PlayerDebugSettings.duelKillNotifications(recipientId, battle.ranked)) {
                     continue;
                 }
-                Component line = eliminationLine(server, elimination, positive, PlayerDebugSettings.duelAssistMessages(recipientId));
+                Component line = eliminationLine(server, battle, elimination, positive, PlayerDebugSettings.duelAssistMessages(recipientId));
                 if (line == null) {
                     continue;
                 }
@@ -1161,28 +1200,47 @@ public final class TameDuelManager {
         }
     }
 
-    private static Component eliminationLine(MinecraftServer server, DuelElimination elimination, boolean positive, boolean includeAssists) {
+    private static Component eliminationLine(MinecraftServer server, DuelBattle battle, DuelElimination elimination, boolean positive, boolean includeAssists) {
         if (elimination == null || elimination.victimId == null) {
             return null;
         }
-        MutableComponent line = Component.literal("Duel: ").withStyle(positive ? ChatFormatting.BLUE : ChatFormatting.YELLOW);
+        ChatFormatting prefixColor = battle != null && battle.teamColoredKillMessages && elimination.killerId != null
+                ? participantDisplayColor(battle, elimination.killerId, positive ? ChatFormatting.BLUE : ChatFormatting.YELLOW)
+                : positive ? ChatFormatting.BLUE : ChatFormatting.YELLOW;
+        MutableComponent line = Component.literal("Duel: ").withStyle(prefixColor);
         if (elimination.killerId != null) {
-            line.append(Component.literal(entityLabel(server, elimination.killerId)).withStyle(ChatFormatting.GREEN))
+            line.append(Component.literal(entityLabel(server, elimination.killerId)).withStyle(participantNameColor(battle, elimination.killerId, ChatFormatting.GREEN)))
                     .append(Component.literal(" killed ").withStyle(ChatFormatting.WHITE));
         } else {
             line.append(Component.literal("A tame killed ").withStyle(ChatFormatting.WHITE));
         }
-        line.append(Component.literal(entityLabel(server, elimination.victimId)).withStyle(ChatFormatting.RED));
+        line.append(Component.literal(entityLabel(server, elimination.victimId)).withStyle(participantNameColor(battle, elimination.victimId, ChatFormatting.RED)));
         if (includeAssists && elimination.assisterIds != null && !elimination.assisterIds.isEmpty()) {
             line.append(Component.literal(" assists: ").withStyle(ChatFormatting.WHITE));
             for (int i = 0; i < elimination.assisterIds.size(); i++) {
                 if (i > 0) {
                     line.append(Component.literal(", ").withStyle(ChatFormatting.WHITE));
                 }
-                line.append(Component.literal(entityLabel(server, elimination.assisterIds.get(i))).withStyle(ChatFormatting.GRAY));
+                UUID assisterId = elimination.assisterIds.get(i);
+                line.append(Component.literal(entityLabel(server, assisterId)).withStyle(participantNameColor(battle, assisterId, ChatFormatting.GRAY)));
             }
         }
         return line;
+    }
+
+    private static ChatFormatting participantNameColor(DuelBattle battle, UUID participantId, ChatFormatting fallback) {
+        if (battle == null || !battle.teamColoredKillMessages) {
+            return fallback;
+        }
+        return participantDisplayColor(battle, participantId, fallback);
+    }
+
+    private static ChatFormatting participantDisplayColor(DuelBattle battle, UUID participantId, ChatFormatting fallback) {
+        Boolean teamA = participantTeamA(battle, participantId);
+        if (teamA == null) {
+            return fallback;
+        }
+        return teamA ? ChatFormatting.AQUA : ChatFormatting.RED;
     }
 
     private static UUID participantOwner(DuelBattle battle, UUID participantId) {

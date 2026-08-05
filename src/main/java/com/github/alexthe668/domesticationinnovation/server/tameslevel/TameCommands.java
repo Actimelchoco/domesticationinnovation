@@ -102,6 +102,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.common.world.ForgeChunkManager;
 import net.minecraftforge.common.util.LazyOptional;
@@ -2462,6 +2463,8 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> teleportPetHome(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("reload")
+                                .executes(ctx -> reloadVisibleTames(ctx.getSource())))
                         .then(Commands.literal("respawn")
                                 .then(Commands.literal("waitingList")
                                         .executes(ctx -> respawnWaitingList(ctx.getSource(), 10))
@@ -3410,6 +3413,15 @@ public class TameCommands {
         TamePerformanceProfiler.run("system.pending_morning_lantern_recalls", () -> processPendingMorningLanternRecalls(server));
         TamePerformanceProfiler.run("system.ranked_session_ensure", () -> ensureRankedSessionRunning(server));
         TamePerformanceProfiler.run("system.duel_sessions", () -> processDuelSessions(server));
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        MinecraftServer server = event.getServer();
+        if (server == null) {
+            return;
+        }
+        restoreRankedSessionBeforeShutdown(server);
     }
 
     private static void processPendingImmediateChunkTeleports(MinecraftServer server) {
@@ -4387,7 +4399,9 @@ public class TameCommands {
         else if (key.equals("tp")) {
             sendInfoPage(p, "TP",
                     "/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>",
+                    "/tames reload",
                     "Teleports tames to the player.",
+                    "Reload resends loaded tame entity data to clients without moving them.",
                     "Cost is level XP points, doubled for cross-dimension teleports.",
                     "Loaded tames move immediately; unloaded ones use the lantern/recovery path when possible.",
                     "Teleporting clears the current guardian anchor."
@@ -12407,6 +12421,52 @@ public class TameCommands {
             player.sendSystemMessage(Component.literal("Unloaded tphome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
         return queued > 0 ? 1 : 0;
+    }
+
+    private static int reloadVisibleTames(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null || source.getServer() == null) {
+            return 0;
+        }
+        List<TameData> requested = ownedTamesForAllCommands(player.getUUID());
+        if (requested.isEmpty()) {
+            return error(player, "You have no tames to reload.");
+        }
+        int queued = 0;
+        int skippedInactive = 0;
+        int skippedUnloaded = 0;
+        Set<UUID> queuedEntities = new HashSet<>();
+        for (TameData data : requested) {
+            if (data == null || data.uuid == null || data.dead || data.stored) {
+                skippedInactive++;
+                continue;
+            }
+            TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (tame == null || !tame.isAlive()) {
+                skippedUnloaded++;
+                continue;
+            }
+            if (!player.getUUID().equals(tame.getOwnerUUID())) {
+                skippedInactive++;
+                continue;
+            }
+            if (!queuedEntities.add(tame.getUUID())) {
+                continue;
+            }
+            queueDelayedTeleportClientRefresh(null, tame, true);
+            queued++;
+        }
+        if (queued <= 0) {
+            return error(player, "No loaded tames were available to reload. Skipped unloaded: " + skippedUnloaded + ", inactive: " + skippedInactive + ".");
+        }
+        int finalQueued = queued;
+        int finalSkippedUnloaded = skippedUnloaded;
+        int finalSkippedInactive = skippedInactive;
+        player.sendSystemMessage(Component.literal(
+                "Queued client reload for " + finalQueued + " tame(s). Skipped unloaded: "
+                        + finalSkippedUnloaded + ", inactive: " + finalSkippedInactive + "."
+        ).withStyle(ChatFormatting.GREEN));
+        return 1;
     }
 
     private static int teleportGuardianBatch(CommandSourceStack source, ServerPlayer player, List<TameData> requested, String label, int deadSkipped) {
@@ -21409,6 +21469,23 @@ public class TameCommands {
         RANKED_DUEL_SESSION = null;
     }
 
+    private static void restoreRankedSessionBeforeShutdown(MinecraftServer server) {
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        if (server == null || session == null) {
+            persistRankedPoolToRegistry();
+            return;
+        }
+        forceEndDuelSessionSide(server, session.currentRoundA);
+        forceEndDuelSessionSide(server, session.currentRoundB);
+        forceEndDuelSessionSide(server, session.poolA);
+        forceEndDuelSessionSide(server, session.poolB);
+        restoreRankedRoundPlayers(server, session);
+        setDuelSessionArenaChunksLoaded(server, session, false);
+        RANKED_DUEL_SESSION = null;
+        persistRankedPoolToRegistry();
+        TameRegistry.markDirty();
+    }
+
     private static void processDuelSessions(MinecraftServer server) {
         if (server == null) {
             return;
@@ -22702,7 +22779,19 @@ public class TameCommands {
         if (data != null) {
             return data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
         }
-        return TameRegistry.getPlayerDuelStats().containsKey(participantId);
+        if (TameRegistry.getPlayerDuelStats().containsKey(participantId)) {
+            return true;
+        }
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        if (session == null) {
+            return false;
+        }
+        return RANKED_POOL.contains(participantId)
+                || session.poolA.contains(participantId)
+                || session.poolB.contains(participantId)
+                || session.currentRoundA.contains(participantId)
+                || session.currentRoundB.contains(participantId)
+                || session.queuedPullAfterRound.contains(participantId);
     }
 
     private static TameData rankedTameDataForParticipant(UUID participantId) {
