@@ -1898,6 +1898,8 @@ public class TameCommands {
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryOpen(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("system")
+                                        .executes(ctx -> infoDetail(ctx.getSource(), "inventory system")))
                                 .then(Commands.literal("info")
                                         .executes(ctx -> hungerInventoryInfo(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -4332,14 +4334,27 @@ public class TameCommands {
         }
         else if (key.equals("inventory") || key.equals("hunger") || key.equals("food")) {
             sendInfoPage(p, "Inventory",
-                    "/tames inventory give <name>",
+                    "/tames inventory",
+                    "/tames inventory give [<all|group <group>|type <type>|follow|sit|wander|name>]",
                     "/tames inventory open <name>",
-                    "/tames inventory info <all|group <group>|type <type>|follow|sit|wander|name>",
-                    "/tames inventory distribute <selection>",
-                    "/tames inventory taste <type> <selection>",
+                    "/tames inventory info [<all|group <group>|type <type>|follow|sit|wander|unloaded|name>]",
+                    "/tames inventory distribute [<selection>]",
+                    "/tames inventory taste <type> [<selection>]",
+                    "/tames inventory system",
+                    "Bare /tames inventory lists tame names colored by food status. /tames inventory info shows saturation, stored food points, and stack count.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
-                    "Bread works as simple default food but counts for half points."
+                    "Bread works as simple default food but counts for half points. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
+            );
+        }
+        else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
+            sendInfoPage(p, "Inventory System",
+                    "Saturation is the tame's ready-to-use food buffer. One food point restores 100 saturation.",
+                    "Following drains 2 saturation per second. Wandering drains 1 per second. Fighting drains 3 per second.",
+                    "Command teleports and natural regeneration also consume saturation.",
+                    "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
+                    "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
+                    "Owners get low-food, last-food, and 10-minute no-food digest notifications."
             );
         }
         else if (key.equals("mode")) {
@@ -20037,10 +20052,45 @@ public class TameCommands {
             return false;
         }
         TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
         if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
             return false;
         }
         return openHungerInventory(player, data, tame);
+    }
+
+    public static boolean depositHeldHungerFood(ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        if (data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
+            return false;
+        }
+        ItemStack held = player.getMainHandItem();
+        int points = hungerFoodPoints(held, data, tame);
+        if (points <= 0) {
+            return false;
+        }
+        String itemName = held.getHoverName().getString();
+        ItemStack one = held.copy();
+        one.setCount(1);
+        if (!addHungerFoodStack(data, one)) {
+            hungerMessage(player, tameDisplayName(data) + "'s food inventory is full.");
+            return true;
+        }
+        if (!player.isCreative()) {
+            held.shrink(1);
+        }
+        resetHungerFoodNotifications(data);
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Gave " + itemName + " (" + points + " food points) to " + tameDisplayName(data) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        return true;
     }
 
     public static boolean openHungerInventory(ServerPlayer player, TameData data) {

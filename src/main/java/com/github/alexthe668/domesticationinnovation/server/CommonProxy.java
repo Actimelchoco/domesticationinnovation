@@ -1312,11 +1312,16 @@ public class CommonProxy {
         if (hand != InteractionHand.MAIN_HAND || player.level().isClientSide || !player.isShiftKeyDown()) {
             return false;
         }
-        if (!player.getMainHandItem().isEmpty()) {
-            return false;
-        }
         if (!(target instanceof TamableAnimal tame) || !(player instanceof ServerPlayer serverPlayer)) {
             return false;
+        }
+        if (!player.getMainHandItem().isEmpty()) {
+            if (!TameCommands.depositHeldHungerFood(serverPlayer, tame)) {
+                return false;
+            }
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return true;
         }
         if (!TameCommands.openHungerInventory(serverPlayer, tame)) {
             return false;
