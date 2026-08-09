@@ -27,7 +27,6 @@ public class TimedTameArrow extends Arrow {
 
     @Override
     protected void onHitBlock(BlockHitResult result) {
-        TimedTameImpactExplosion.explodeOnBlockImpact(this, (float) Math.max(1.0D, this.getBaseDamage()), 1.8D, 0.35D, 0.08D);
         this.discard();
     }
 }
