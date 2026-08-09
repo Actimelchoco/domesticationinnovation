@@ -12534,25 +12534,15 @@ public class TameCommands {
         if (player == null || source.getServer() == null) {
             return 0;
         }
-        List<TameData> requested = ownedTamesForAllCommands(player.getUUID());
-        if (requested.isEmpty()) {
-            return error(player, "You have no tames to reload.");
-        }
         int queued = 0;
         int skippedInactive = 0;
-        int skippedUnloaded = 0;
         Set<UUID> queuedEntities = new HashSet<>();
-        for (TameData data : requested) {
-            if (data == null || data.uuid == null || data.dead || data.stored) {
-                skippedInactive++;
-                continue;
-            }
-            TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        for (TamableAnimal tame : player.serverLevel().getEntitiesOfClass(
+                TamableAnimal.class,
+                player.getBoundingBox().inflate(128.0D),
+                tame -> tame != null && tame.isTame()
+        )) {
             if (tame == null || !tame.isAlive()) {
-                skippedUnloaded++;
-                continue;
-            }
-            if (!player.getUUID().equals(tame.getOwnerUUID())) {
                 skippedInactive++;
                 continue;
             }
@@ -12563,14 +12553,12 @@ public class TameCommands {
             queued++;
         }
         if (queued <= 0) {
-            return error(player, "No loaded tames were available to reload. Skipped unloaded: " + skippedUnloaded + ", inactive: " + skippedInactive + ".");
+            return error(player, "No nearby loaded tames were available to reload. Skipped inactive: " + skippedInactive + ".");
         }
         int finalQueued = queued;
-        int finalSkippedUnloaded = skippedUnloaded;
         int finalSkippedInactive = skippedInactive;
         player.sendSystemMessage(Component.literal(
-                "Queued client reload for " + finalQueued + " tame(s). Skipped unloaded: "
-                        + finalSkippedUnloaded + ", inactive: " + finalSkippedInactive + "."
+                "Queued client reload for " + finalQueued + " nearby tame(s). Skipped inactive: " + finalSkippedInactive + "."
         ).withStyle(ChatFormatting.GREEN));
         return 1;
     }
