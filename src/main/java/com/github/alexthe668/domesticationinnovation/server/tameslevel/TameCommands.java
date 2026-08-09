@@ -7592,7 +7592,7 @@ public class TameCommands {
             if (add) {
                 selectedIds.add(player.getUUID());
                 for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
-                    if (tame != null && tame.isAlive()) {
+                    if (tame != null && tame.isAlive() && hasFoodForDuel(tame)) {
                         selectedIds.add(tame.getUUID());
                     }
                 }
@@ -7613,6 +7613,10 @@ public class TameCommands {
                 selectedIds.addAll(collectLivingEntityIds(resolved.members));
                 selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
                         && !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+                selectedIds.removeIf(id -> {
+                    LivingEntity living = findLoadedLivingParticipant(source.getServer(), id);
+                    return living instanceof TamableAnimal tame && !hasFoodForDuel(tame);
+                });
             } else {
                 selectedIds.addAll(resolveOwnedRankedParticipantsFromSelection(source.getServer(), player, parsed.selection));
             }
@@ -19561,6 +19565,10 @@ public class TameCommands {
                 continue;
             }
             if (!ensureHungerSaturation(data, tame, drain)) {
+                if (handleDuelHungerFailure(server, data)) {
+                    changed = true;
+                    continue;
+                }
                 applyMovementOrderCode(tame, 1);
                 notifyOwnerHungerEmpty(server, data);
                 changed = true;
@@ -19603,6 +19611,63 @@ public class TameCommands {
 
     public static boolean isHungerBlockingAbilities(TameData data) {
         return data != null && data.hungerSaturation <= 0 && totalHungerFoodPoints(data) <= 0;
+    }
+
+    public static boolean hasFoodForDuel(TameData data) {
+        return data == null || !isHungerBlockingAbilities(data);
+    }
+
+    private static boolean handleDuelHungerFailure(MinecraftServer server, TameData data) {
+        if (server == null || data == null || data.uuid == null) {
+            return false;
+        }
+        UUID participantId = data.tlId != null && TameDuelManager.isEntityInDuel(data.tlId) ? data.tlId : data.uuid;
+        Set<UUID> identityIds = duelParticipantIdentityIds(participantId);
+        boolean sessionParticipant = identityIds.stream().anyMatch(TameCommands::isActiveDuelSessionParticipant);
+        if (!TameDuelManager.isEntityInDuel(participantId) && !sessionParticipant) {
+            return false;
+        }
+        TameDuelManager.eliminateParticipantForNoFood(server, participantId);
+        removeHungryParticipantFromDuelPools(server, participantId);
+        notifyOwnerDuelHungerEmpty(server, data);
+        data.hungerEmptyNotified = true;
+        TameRegistry.markDirty();
+        return true;
+    }
+
+    private static boolean hasFoodForDuel(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        return hasFoodForDuel(data);
+    }
+
+    private static DuelSelectionResult requireDuelFood(DuelSelectionResult result) {
+        if (result == null || !result.error.isBlank() || result.tames.isEmpty()) {
+            return result;
+        }
+        List<TamableAnimal> fed = new ArrayList<>();
+        List<String> hungry = new ArrayList<>();
+        for (TamableAnimal tame : result.tames) {
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            if (hasFoodForDuel(tame)) {
+                fed.add(tame);
+            } else {
+                hungry.add(tame.getName().getString());
+            }
+        }
+        if (fed.isEmpty()) {
+            return DuelSelectionResult.fail(hungry.isEmpty()
+                    ? "Selected duel tames have no food."
+                    : "Selected duel tames have no food: " + String.join(", ", hungry) + ".");
+        }
+        return DuelSelectionResult.ok(fed);
     }
 
     private static boolean consumeHungerForAction(TameData data, TamableAnimal tame, int saturationCost) {
@@ -20570,7 +20635,7 @@ public class TameCommands {
 
     private static DuelSelectionResult resolveLoadedDuelSelection(CommandSourceStack source, UUID owner, DuelSelection selection) {
         if (selection == null) return DuelSelectionResult.fail("Invalid duel selection.");
-        return switch (selection.kind) {
+        DuelSelectionResult resolved = switch (selection.kind) {
             case GROUP -> resolveGroupDuelSelection(source, owner, selection.value);
             case TYPE -> resolveTypeDuelSelection(source, owner, selection.value);
             case STATE -> {
@@ -20616,6 +20681,7 @@ public class TameCommands {
                 yield DuelSelectionResult.ok(loaded);
             }
         };
+        return requireDuelFood(resolved);
     }
 
     private static TeamSelectionResult resolveLoadedTeamSelection(CommandSourceStack source, ServerPlayer owner, TeamSelection selection) {
@@ -20719,6 +20785,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedAllTames(source, owner)) {
             if (tame == null || !tame.isAlive()) continue;
             if (excludedIds.contains(tame.getUUID())) continue;
+            if (!hasFoodForDuel(tame)) continue;
             remaining.add(tame);
         }
         return remaining;
@@ -22757,8 +22824,8 @@ public class TameCommands {
                     available.add(id);
                     continue;
                 }
-        TameData data = rankedTameDataForParticipant(id);
-                if (data != null && !data.dead) {
+                TameData data = rankedTameDataForParticipant(id);
+                if (data != null && !data.dead && hasFoodForDuel(data)) {
                     available.add(id);
                 }
             }
@@ -22766,6 +22833,9 @@ public class TameCommands {
         }
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
+            if (living instanceof TamableAnimal tame && !hasFoodForDuel(tame)) {
+                continue;
+            }
             if (living != null && living.isAlive()) {
                 available.add(id);
             }
@@ -23228,6 +23298,91 @@ public class TameCommands {
             changed |= TameDuelManager.endDuelForEntity(server, id);
         }
         return changed;
+    }
+
+    private static boolean removeHungryParticipantFromDuelPools(MinecraftServer server, UUID participantId) {
+        if (participantId == null) {
+            return false;
+        }
+        Set<UUID> ids = duelParticipantIdentityIds(participantId);
+        boolean changed = false;
+        boolean rankedChanged = false;
+        for (UUID id : ids) {
+            rankedChanged |= RANKED_POOL.remove(id);
+        }
+        ActiveDuelSession rankedSession = RANKED_DUEL_SESSION;
+        if (rankedSession != null) {
+            for (UUID id : ids) {
+                rankedChanged |= rankedSession.poolA.remove(id);
+                rankedChanged |= rankedSession.poolB.remove(id);
+                rankedChanged |= rankedSession.queuedPullAfterRound.remove(id);
+                int beforeRoundA = rankedSession.currentRoundA.size();
+                int beforeRoundB = rankedSession.currentRoundB.size();
+                rankedSession.currentRoundA = removeFromSet(rankedSession.currentRoundA, id);
+                rankedSession.currentRoundB = removeFromSet(rankedSession.currentRoundB, id);
+                rankedChanged |= beforeRoundA != rankedSession.currentRoundA.size();
+                rankedChanged |= beforeRoundB != rankedSession.currentRoundB.size();
+                rankedSession.idleSitHoldUntilTick.remove(id);
+                rankedSession.rankedPlayerReturnTargets.remove(id);
+            }
+        }
+        changed |= rankedChanged;
+        if (rankedChanged) {
+            persistRankedPoolToRegistry();
+        }
+
+        for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
+            if (session == null) {
+                continue;
+            }
+            boolean sessionChanged = false;
+            for (UUID id : ids) {
+                sessionChanged |= session.poolA.remove(id);
+                sessionChanged |= session.poolB.remove(id);
+                int beforeRoundA = session.currentRoundA.size();
+                int beforeRoundB = session.currentRoundB.size();
+                session.currentRoundA = removeFromSet(session.currentRoundA, id);
+                session.currentRoundB = removeFromSet(session.currentRoundB, id);
+                sessionChanged |= beforeRoundA != session.currentRoundA.size();
+                sessionChanged |= beforeRoundB != session.currentRoundB.size();
+                session.idleSitHoldUntilTick.remove(id);
+            }
+            if (sessionChanged) {
+                changed = true;
+                notifyDuelSessionOwners(server, session, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from the duel session.").withStyle(ChatFormatting.RED));
+            }
+        }
+        if (rankedChanged && rankedSession != null) {
+            notifyDuelSessionOwners(server, rankedSession, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from ranked.").withStyle(ChatFormatting.RED));
+        }
+        return changed;
+    }
+
+    private static Set<UUID> duelParticipantIdentityIds(UUID participantId) {
+        LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+        if (participantId != null) {
+            ids.add(participantId);
+        }
+        TameData data = rankedTameDataForParticipant(participantId);
+        if (data != null) {
+            if (data.uuid != null) {
+                ids.add(data.uuid);
+            }
+            if (data.tlId != null) {
+                ids.add(data.tlId);
+            }
+        }
+        return ids;
+    }
+
+    private static void notifyOwnerDuelHungerEmpty(MinecraftServer server, TameData data) {
+        if (server == null || data == null || data.ownerUUID == null) {
+            return;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+        if (owner != null) {
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ran out of food and lost the duel.").withStyle(ChatFormatting.RED));
+        }
     }
 
     private static boolean ownsAnyRoundParticipant(MinecraftServer server, UUID playerId, Set<UUID> participants) {

@@ -166,11 +166,13 @@ public final class TameDuelManager {
         Set<UUID> cleanB = new HashSet<>();
         for (UUID participantId : teamA) {
             if (participantId == null) continue;
+            if (!hasDuelFood(participantId)) continue;
             cleanA.add(participantId);
         }
         for (UUID participantId : teamB) {
             if (participantId == null) continue;
             if (cleanA.contains(participantId)) continue;
+            if (!hasDuelFood(participantId)) continue;
             cleanB.add(participantId);
         }
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
@@ -321,6 +323,17 @@ public final class TameDuelManager {
         return null;
     }
 
+    private static boolean hasDuelFood(UUID participantId) {
+        if (participantId == null) {
+            return false;
+        }
+        TameData data = TameRegistry.get(participantId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(participantId);
+        }
+        return data == null || TameCommands.hasFoodForDuel(data);
+    }
+
     public static synchronized boolean endDuelForTame(MinecraftServer server, UUID tameId) {
         return endDuelForEntity(server, tameId);
     }
@@ -352,6 +365,18 @@ public final class TameDuelManager {
             finishBattle(server, battle, reason);
         }
         return true;
+    }
+
+    public static synchronized boolean eliminateParticipantForNoFood(MinecraftServer server, UUID entityId) {
+        if (server == null || entityId == null) {
+            return false;
+        }
+        UUID resolvedId = resolveActiveParticipantId(entityId);
+        if (resolvedId == null) {
+            return false;
+        }
+        recordElimination(server, resolvedId, Set.of(), null);
+        return endDuelForEntity(server, resolvedId);
     }
 
     public static synchronized void recordElimination(MinecraftServer server, UUID victimId, Set<UUID> contributors, UUID killerId) {
