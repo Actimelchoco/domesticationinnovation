@@ -173,7 +173,7 @@ public class TameCommands {
     private static final Map<UUID, Long> NEXT_HUNGER_EMPTY_DIGEST_TICK = new HashMap<>();
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
-    private static final int MAX_CLASS_REROLLS = 3;
+    private static final int FREE_CLASS_REROLLS = 3;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
     private static final Map<UUID, PendingDuelMatch> PENDING_DUEL_MATCHES = new HashMap<>();
     private static final Map<UUID, UUID> PENDING_DUEL_MATCH_BY_PLAYER = new HashMap<>();
@@ -5059,10 +5059,6 @@ public class TameCommands {
         if (tame == null || !tame.isAlive()) {
             return error(player, "Class reroll requires the tame to be loaded and alive.");
         }
-        if (data.classRerollsUsed >= MAX_CLASS_REROLLS) {
-            return error(player, tameDisplayName(data) + " has already used all " + MAX_CLASS_REROLLS + " class rerolls.");
-        }
-
         long now = source.getServer() != null && source.getServer().overworld() != null
                 ? source.getServer().overworld().getGameTime()
                 : 0L;
@@ -5072,13 +5068,20 @@ public class TameCommands {
                 tameDisplayName(data),
                 now + CLASS_REROLL_CONFIRM_TICKS
         ));
-        int rerollsLeftAfterUse = Math.max(0, MAX_CLASS_REROLLS - (data.classRerollsUsed + 1));
+        boolean free = data.classRerollsUsed < FREE_CLASS_REROLLS;
+        int freeRerollsLeftAfterUse = Math.max(0, FREE_CLASS_REROLLS - (data.classRerollsUsed + 1));
         player.sendSystemMessage(Component.literal(
                 "Rerolling class will reset " + tameDisplayName(data) + " to level 1 with 0 XP and remove all abilities, attributes, bonus stats, saved progress, and level reward history."
         ).withStyle(ChatFormatting.RED));
-        player.sendSystemMessage(Component.literal(
-                "Kills, assists, deaths, and survival-day stats are kept. Hold that tame's bound deed of ownership, or hold a nether star for a 90% epic / 10% legendary roll, then run /tames rerollClass confirm within 30 seconds. Rerolls left after this: " + rerollsLeftAfterUse + "."
-        ).withStyle(ChatFormatting.YELLOW));
+        if (free) {
+            player.sendSystemMessage(Component.literal(
+                    "Kills, assists, deaths, and survival-day stats are kept. This reroll is free. Run /tames rerollClass confirm within 30 seconds. Free rerolls left after this: " + freeRerollsLeftAfterUse + "."
+            ).withStyle(ChatFormatting.YELLOW));
+        } else {
+            player.sendSystemMessage(Component.literal(
+                    "Kills, assists, deaths, and survival-day stats are kept. Hold that tame's bound deed of ownership, or hold a nether star for a 90% epic / 10% legendary roll, then run /tames rerollClass confirm within 30 seconds. Free rerolls used: " + data.classRerollsUsed + "/" + FREE_CLASS_REROLLS + "."
+            ).withStyle(ChatFormatting.YELLOW));
+        }
         return 1;
     }
 
@@ -5123,12 +5126,9 @@ public class TameCommands {
             PENDING_CLASS_REROLLS.remove(player.getUUID());
             return error(player, "Class reroll requires the tame to still be loaded and alive.");
         }
-        if (data.classRerollsUsed >= MAX_CLASS_REROLLS) {
-            PENDING_CLASS_REROLLS.remove(player.getUUID());
-            return error(player, tameDisplayName(data) + " has already used all " + MAX_CLASS_REROLLS + " class rerolls.");
-        }
-        ClassRerollPayment payment = classRerollPayment(player, data);
-        if (payment == null) {
+        boolean free = data.classRerollsUsed < FREE_CLASS_REROLLS;
+        ClassRerollPayment payment = free ? new ClassRerollPayment(ItemStack.EMPTY, false) : classRerollPayment(player, data);
+        if (!free && payment == null) {
             return error(player, "Hold this tame's bound deed of ownership, or hold a nether star for a boosted class reroll, then confirm again.");
         }
 
@@ -5141,7 +5141,7 @@ public class TameCommands {
         PENDING_CLASS_REROLLS.remove(player.getUUID());
         player.sendSystemMessage(Component.literal(
                 "Rerolled " + tameDisplayName(data) + " from " + (previousClass == null ? "unassigned" : previousClass.id()) + " to " + rerolledClass.id()
-                        + ". It is now level 1 with 0 XP. Rerolls used: " + data.classRerollsUsed + "/" + MAX_CLASS_REROLLS + "."
+                        + ". It is now level 1 with 0 XP. Free rerolls used: " + Math.min(data.classRerollsUsed, FREE_CLASS_REROLLS) + "/" + FREE_CLASS_REROLLS + "."
         ).withStyle(ChatFormatting.GREEN));
         return 1;
     }
