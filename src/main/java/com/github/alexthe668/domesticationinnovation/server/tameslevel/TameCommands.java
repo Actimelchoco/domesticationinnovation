@@ -20446,6 +20446,7 @@ public class TameCommands {
         private final TameData data;
         private final TamableAnimal tame;
         private boolean loading = true;
+        private Player lastViewer;
 
         private HungerFoodContainer(TameData data, TamableAnimal tame) {
             super(18);
@@ -20464,10 +20465,16 @@ public class TameCommands {
 
         @Override
         public void setItem(int slot, ItemStack stack) {
-            if (slot < 0 || slot >= TAME_HUNGER_MAX_STACKS || (!stack.isEmpty() && hungerFoodPoints(stack, data, tame) <= 0)) {
+            if (slot < 0 || slot >= getContainerSize()) {
                 return;
             }
             super.setItem(slot, stack);
+        }
+
+        @Override
+        public void startOpen(Player player) {
+            super.startOpen(player);
+            this.lastViewer = player;
         }
 
         @Override
@@ -20481,16 +20488,31 @@ public class TameCommands {
         @Override
         public void stopOpen(Player player) {
             super.stopOpen(player);
+            this.lastViewer = player;
             saveToData();
         }
 
         private void saveToData() {
-            data.hungerInventory.clear();
-            for (int i = 0; i < TAME_HUNGER_MAX_STACKS; i++) {
-                ItemStack stack = getItem(i);
-                if (!stack.isEmpty() && hungerFoodPoints(stack, data, tame) > 0) {
-                    data.hungerInventory.add(stack.copy());
+            if (loading) {
+                return;
+            }
+            loading = true;
+            try {
+                data.hungerInventory.clear();
+                for (int i = 0; i < getContainerSize(); i++) {
+                    ItemStack stack = getItem(i);
+                    if (stack.isEmpty()) {
+                        continue;
+                    }
+                    if (i < TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0) {
+                        data.hungerInventory.add(stack.copy());
+                    } else {
+                        dropRejectedHungerInventoryItem(stack.copy());
+                        super.setItem(i, ItemStack.EMPTY);
+                    }
                 }
+            } finally {
+                loading = false;
             }
             if (totalHungerFoodPoints(data) > 0) {
                 resetHungerFoodNotifications(data);
@@ -20498,6 +20520,17 @@ public class TameCommands {
                 data.hungerEmptyNotified = data.hungerSaturation <= 0 && data.hungerEmptyNotified;
             }
             TameRegistry.markDirty();
+        }
+
+        private void dropRejectedHungerInventoryItem(ItemStack stack) {
+            if (stack == null || stack.isEmpty()) {
+                return;
+            }
+            if (lastViewer != null) {
+                lastViewer.drop(stack, false);
+            } else if (tame != null) {
+                tame.spawnAtLocation(stack);
+            }
         }
     }
 
