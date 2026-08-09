@@ -7,6 +7,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SwordItem;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -28,18 +29,12 @@ public class TameRenameEvents {
 
     private static boolean handleStatShortcut(PlayerInteractEvent.EntityInteractSpecific event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return false;
-        if (!player.isShiftKeyDown()) return false;
         if (!(event.getTarget() instanceof TamableAnimal tame) || !tame.isTame()) return false;
         if (tame.getOwnerUUID() == null || !tame.getOwnerUUID().equals(player.getUUID())) return false;
 
         ItemStack stack = event.getItemStack();
-        // Server-safe inspect shortcut: shift + interact shows tame stats in chat.
-        // Keep name-tag/collar-tag interactions untouched so rename still works.
-        if (!stack.isEmpty()) {
-            String id = stack.getItem().builtInRegistryHolder().key().location().toString();
-            if ("minecraft:name_tag".equals(id) || "domesticationinnovation:collar_tag".equals(id)) {
-                return false;
-            }
+        if (stack.isEmpty() || !(stack.getItem() instanceof SwordItem)) {
+            return false;
         }
 
         TameData data = TameRegistry.get(tame.getUUID());

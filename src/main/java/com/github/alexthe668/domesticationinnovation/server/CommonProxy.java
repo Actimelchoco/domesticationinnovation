@@ -60,6 +60,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
@@ -1045,6 +1046,10 @@ public class CommonProxy {
         if (isDuelRestrictedPlayer(player) || isOwnerInteractingWithDuelTame(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.FAIL);
+            return;
+        }
+        if (handleHungerInventoryShortcut(player, event.getHand(), event.getTarget(), event)) {
+            return;
         }
     }
 
@@ -1063,13 +1068,7 @@ public class CommonProxy {
         }
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
-        if (!player.level().isClientSide
-                && player.isShiftKeyDown()
-                && entity instanceof TamableAnimal tame
-                && player instanceof ServerPlayer serverPlayer
-                && TameCommands.openHungerInventory(serverPlayer, tame)) {
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.SUCCESS);
+        if (handleHungerInventoryShortcut(player, event.getHand(), entity, event)) {
             return;
         }
         if (TameableUtils.isTamed(event.getTarget())) {
@@ -1270,6 +1269,27 @@ public class CommonProxy {
 
     private static boolean isDuelRestrictedPlayer(Player player) {
         return player != null && !player.level().isClientSide && TameDuelManager.isEntityInDuel(player.getUUID());
+    }
+
+    private boolean handleHungerInventoryShortcut(Player player, InteractionHand hand, Entity target, PlayerInteractEvent event) {
+        if (player == null || target == null || event == null) {
+            return false;
+        }
+        if (hand != InteractionHand.MAIN_HAND || player.level().isClientSide || !player.isShiftKeyDown()) {
+            return false;
+        }
+        if (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty()) {
+            return false;
+        }
+        if (!(target instanceof TamableAnimal tame) || !(player instanceof ServerPlayer serverPlayer)) {
+            return false;
+        }
+        if (!TameCommands.openHungerInventory(serverPlayer, tame)) {
+            return false;
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+        return true;
     }
 
     private static boolean isOwnerInteractingWithDuelTame(Player player, Entity target) {
