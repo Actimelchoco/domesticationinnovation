@@ -1997,17 +1997,15 @@ public final class TameDuelManager {
         }
         int level = Math.max(1, tame.level);
         if (level <= 10) {
-            return 1;
+            return Math.max(1, (int) Math.ceil(reward / 10.0D));
         }
-        int tenthReward = Math.max(1, (int) Math.ceil(reward / 10.0D));
         if (level <= 50) {
-            return tenthReward;
+            return Math.max(1, (int) Math.ceil(reward / 5.0D));
         }
-        if (level >= 100) {
-            return reward;
+        if (level <= 100) {
+            return Math.max(1, (int) Math.ceil(reward / 2.0D));
         }
-        double progress = (level - 50) / 50.0D;
-        return Math.max(1, (int) Math.ceil(tenthReward + ((reward - tenthReward) * progress)));
+        return reward;
     }
 
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
