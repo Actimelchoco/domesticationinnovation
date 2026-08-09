@@ -1886,22 +1886,28 @@ public class TameCommands {
 
                         .then(Commands.literal("inventory")
                                 .then(Commands.literal("give")
-                                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                                .executes(ctx -> hungerInventoryGive(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                        .executes(ctx -> hungerInventoryGive(ctx.getSource(), ""))
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> hungerInventoryGive(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("open")
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryOpen(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("info")
+                                        .executes(ctx -> hungerInventoryInfo(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryInfo(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("distribute")
+                                        .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("taste")
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                                .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), ""))
                                                 .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
@@ -19830,29 +19836,54 @@ public class TameCommands {
         return false;
     }
 
-    private static int hungerInventoryGive(CommandSourceStack source, String name) {
+    private static int hungerInventoryGive(CommandSourceStack source, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
-        TameData data = findOwnedTame(player.getUUID(), name);
-        if (data == null) {
-            return error(player, "You do not own a living tame named '" + name + "'.");
-        }
         ItemStack held = player.getMainHandItem();
-        int points = hungerFoodPoints(held, data, null);
-        if (points <= 0) {
+        if (held.isEmpty()) {
             return error(player, "Hold edible food. Bread is accepted as simple default food.");
         }
-        ItemStack one = held.copy();
-        one.setCount(1);
-        if (!addHungerFoodStack(data, one)) {
-            return error(player, tameDisplayName(data) + "'s food inventory is full.");
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return error(player, hungerSelectionEmptyMessage(selectionRaw));
         }
-        if (!player.isCreative()) {
-            held.shrink(1);
+        int moved = 0;
+        int skippedFood = 0;
+        int skippedFull = 0;
+        String itemName = held.getHoverName().getString();
+        for (TameData data : selected) {
+            if (held.isEmpty() && !player.isCreative()) {
+                break;
+            }
+            int points = hungerFoodPoints(held, data, null);
+            if (points <= 0) {
+                skippedFood++;
+                continue;
+            }
+            ItemStack one = held.copy();
+            one.setCount(1);
+            if (!addHungerFoodStack(data, one)) {
+                skippedFull++;
+                continue;
+            }
+            if (!player.isCreative()) {
+                held.shrink(1);
+            }
+            data.hungerEmptyNotified = false;
+            moved++;
         }
-        data.hungerEmptyNotified = false;
+        if (moved <= 0) {
+            if (skippedFull > 0) {
+                return error(player, "Selected tame food inventories are full.");
+            }
+            return error(player, "Selected tames cannot accept that food.");
+        }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Gave " + one.getHoverName().getString() + " (" + points + " food points) to " + tameDisplayName(data) + ".").withStyle(ChatFormatting.GREEN));
-        return 1;
+        String skipped = "";
+        if (skippedFood > 0 || skippedFull > 0) {
+            skipped = " Skipped " + (skippedFood + skippedFull) + ".";
+        }
+        player.sendSystemMessage(Component.literal("Gave " + itemName + " to " + moved + " selected tame(s)." + skipped).withStyle(ChatFormatting.GREEN));
+        return moved;
     }
 
     private static int hungerInventoryOpen(CommandSourceStack source, String name) {
@@ -19862,10 +19893,7 @@ public class TameCommands {
             return error(player, "You do not own a living tame named '" + name + "'.");
         }
         TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
-        if (tame == null || !tame.isAlive()) {
-            return error(player, tameDisplayName(data) + " is not loaded.");
-        }
-        return openHungerInventory(player, tame) ? 1 : 0;
+        return openHungerInventory(player, data, tame) ? 1 : 0;
     }
 
     public static boolean openHungerInventory(ServerPlayer player, TamableAnimal tame) {
@@ -19874,6 +19902,21 @@ public class TameCommands {
         }
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
+            return false;
+        }
+        return openHungerInventory(player, data, tame);
+    }
+
+    public static boolean openHungerInventory(ServerPlayer player, TameData data) {
+        if (player == null || data == null || data.uuid == null) {
+            return false;
+        }
+        TamableAnimal tame = findLoadedTameByIdentity(player.getServer(), data.uuid, data.tlId);
+        return openHungerInventory(player, data, tame);
+    }
+
+    private static boolean openHungerInventory(ServerPlayer player, TameData data, TamableAnimal tame) {
+        if (player == null || data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
             return false;
         }
         MenuProvider provider = new SimpleMenuProvider(
@@ -19886,9 +19929,9 @@ public class TameCommands {
 
     private static int hungerInventoryInfo(CommandSourceStack source, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> selected = resolveHungerSelection(player.getUUID(), selectionRaw);
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         if (selected.isEmpty()) {
-            return error(player, "No owned living tames matched '" + selectionRaw + "'.");
+            return error(player, hungerSelectionEmptyMessage(selectionRaw));
         }
         player.sendSystemMessage(Component.literal("--------Inventories----------").withStyle(ChatFormatting.GOLD));
         selected.stream()
@@ -19903,7 +19946,7 @@ public class TameCommands {
         if (held.isEmpty()) {
             return error(player, "Hold food to distribute.");
         }
-        List<TameData> selected = resolveHungerSelection(player.getUUID(), selectionRaw);
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> hungerFoodPoints(held, data, null) <= 0);
         if (selected.isEmpty()) {
             return error(player, "No selected tames can accept that food.");
@@ -19942,7 +19985,7 @@ public class TameCommands {
 
     private static int hungerInventoryTaste(CommandSourceStack source, String type, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> selected = resolveHungerSelection(player.getUUID(), selectionRaw);
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> data.type == null || !data.type.toLowerCase(Locale.ROOT).contains(type.toLowerCase(Locale.ROOT)));
         if (selected.isEmpty()) {
             return error(player, "No selected tames matched type '" + type + "'.");
@@ -20023,11 +20066,27 @@ public class TameCommands {
         }
     }
 
-    private static List<TameData> resolveHungerSelection(UUID owner, String raw) {
-        DuelSelection selection = parseCompactDuelSelector(raw);
-        List<TameData> selected = resolveOwnedTameDataSelection(owner, selection);
+    private static List<TameData> resolveHungerSelection(MinecraftServer server, UUID owner, String raw) {
+        String trimmed = raw == null ? "" : raw.trim();
+        List<TameData> selected;
+        if (trimmed.isBlank()) {
+            selected = ownedTames(owner);
+        } else if (trimmed.equalsIgnoreCase("unloaded")) {
+            selected = new ArrayList<>(ownedTames(owner));
+            selected.removeIf(data -> data == null || data.uuid == null || findLoadedTameByIdentity(server, data.uuid, data.tlId) != null);
+        } else {
+            DuelSelection selection = parseCompactDuelSelector(trimmed);
+            selected = resolveOwnedTameDataSelection(owner, selection);
+        }
         selected.removeIf(data -> data == null || data.dead || data.stored || isRemovedFromAll(owner, data));
         return selected;
+    }
+
+    private static String hungerSelectionEmptyMessage(String selectionRaw) {
+        if (selectionRaw == null || selectionRaw.trim().isBlank()) {
+            return "No owned living tames matched all.";
+        }
+        return "No owned living tames matched '" + selectionRaw + "'.";
     }
 
     private static List<TameData> ownedDeadTamesForAllCommands(UUID owner) {
