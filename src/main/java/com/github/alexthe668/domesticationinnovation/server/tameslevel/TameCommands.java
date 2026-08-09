@@ -4364,6 +4364,7 @@ public class TameCommands {
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
+                    "A container above a drum can refill nearby loaded hungry tames within 20 blocks once per minute, up to green food status.",
                     "Bread works as simple default food but counts for half points. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -4375,6 +4376,7 @@ public class TameCommands {
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames.",
+                    "Drum refill: place a food container directly above a drum. Loaded hungry tames within 20 blocks check it once per minute and pull valid food until they reach green food status.",
                     "Owners get low-food, last-food, and 10-minute no-food digest notifications."
             );
         }
