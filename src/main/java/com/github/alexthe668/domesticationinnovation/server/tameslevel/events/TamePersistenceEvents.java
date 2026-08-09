@@ -190,6 +190,9 @@ public class TamePersistenceEvents {
             if (TameBedRegistrySync.syncFromEntity(tame, data)) {
                 changed = true;
             }
+            if (clearStaleCloneTags(tame)) {
+                changed = true;
+            }
             if (tame.hasCustomName() && tame.getCustomName() != null) {
                 String currentName = tame.getCustomName().getString();
                 String normalized = stripLevelPrefix(currentName);
@@ -267,9 +270,23 @@ public class TamePersistenceEvents {
         if (tag.getBoolean(TameCommands.ADMIN_CLONE_TRANSIENT_TAG)) {
             matches.add(TameCommands.ADMIN_CLONE_TRANSIENT_TAG);
         }
-        if (tag.getBoolean(TameCommands.ADMIN_CLONE_SILENT_TAG)) {
-            matches.add(TameCommands.ADMIN_CLONE_SILENT_TAG);
-        }
         return matches;
+    }
+
+    private static boolean clearStaleCloneTags(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        net.minecraft.nbt.CompoundTag tag = tame.getPersistentData();
+        boolean changed = false;
+        if (tag.contains(TameCommands.ADMIN_CLONE_SILENT_TAG)) {
+            tag.remove(TameCommands.ADMIN_CLONE_SILENT_TAG);
+            changed = true;
+        }
+        if (tag.contains(TameCommands.ADMIN_CLONE_TRANSIENT_TAG)) {
+            tag.remove(TameCommands.ADMIN_CLONE_TRANSIENT_TAG);
+            changed = true;
+        }
+        return changed;
     }
 }

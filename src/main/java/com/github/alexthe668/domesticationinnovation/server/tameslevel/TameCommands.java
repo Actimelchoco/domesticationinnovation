@@ -11562,6 +11562,7 @@ public class TameCommands {
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
         }
+        clearAdminCloneTags(respawned);
 
         boolean normalized = applyTypeBasePlusBonus(respawned, data);
         if (!normalized) {
@@ -11853,6 +11854,7 @@ public class TameCommands {
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
         }
+        clearAdminCloneTags(respawned);
 
         refreshLoadedTameStatsAfterRebuild(respawned, data, true);
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
@@ -12147,6 +12149,7 @@ public class TameCommands {
         if (!level.addFreshEntity(recovered)) {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
+        clearAdminCloneTags(recovered);
 
         boolean normalized = applyTypeBasePlusBonus(recovered, data);
         if (!normalized) {
@@ -12230,6 +12233,7 @@ public class TameCommands {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
+        clearAdminCloneTags(recovered);
 
         boolean normalized = applyTypeBasePlusBonus(recovered, data);
         if (!normalized) {
@@ -15558,6 +15562,7 @@ public class TameCommands {
         clone.moveTo(spawnPos.x, spawnPos.y, spawnPos.z, player.getYRot(), player.getXRot());
         clone.setDeltaMovement(0.0D, 0.0D, 0.0D);
         clone.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
+        clone.getPersistentData().putBoolean(ADMIN_CLONE_TRANSIENT_TAG, true);
         enforceTamedOwnerPreserveCollar(clone, data.ownerUUID);
 
         if (!player.serverLevel().addFreshEntity(clone)) {
@@ -15590,6 +15595,14 @@ public class TameCommands {
         snapshot.remove("SleepingZ");
         snapshot.remove(ADMIN_CLONE_TRANSIENT_TAG);
         snapshot.remove(ADMIN_CLONE_SILENT_TAG);
+    }
+
+    private static void clearAdminCloneTags(TamableAnimal tame) {
+        if (tame == null) {
+            return;
+        }
+        tame.getPersistentData().remove(ADMIN_CLONE_TRANSIENT_TAG);
+        tame.getPersistentData().remove(ADMIN_CLONE_SILENT_TAG);
     }
 
     private static int adminTerminatePet(CommandSourceStack source, String petName) {
@@ -16492,6 +16505,7 @@ public class TameCommands {
             }
             return error(source.getPlayer(), "Failed to respawn tame (UUID conflict or invalid state).");
         }
+        clearAdminCloneTags(respawned);
 
         boolean normalized = applyTypeBasePlusBonus(respawned, data);
         if (!normalized) {
