@@ -739,7 +739,6 @@ public final class TameDuelManager {
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
             TEAM_A_BY_ENTITY.remove(participantId);
-            RECENT_DUEL_ELIMINATIONS.remove(participantId);
             setDuelMovementLock(participantId, false);
             clearViewerEnemyGlow(server, participantId);
             clearTargetForParticipant(server, participantId);

@@ -11613,6 +11613,10 @@ public class TameCommands {
             TameGoalInstaller.installIfMissing(loaded);
             return true;
         }
+        if (loaded != null) {
+            loaded.remove(Entity.RemovalReason.DISCARDED);
+            loaded.discard();
+        }
         RespawnResult result;
         beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
         try {
@@ -11650,6 +11654,10 @@ public class TameCommands {
             TameData.syncTlIdToEntity(loaded, snapshot.tlId);
             TameGoalInstaller.installIfMissing(loaded);
             return true;
+        }
+        if (loaded != null) {
+            loaded.remove(Entity.RemovalReason.DISCARDED);
+            loaded.discard();
         }
         SpawnTarget target = spawnTargetFromSnapshot(server, snapshot);
         if (target != null && target.level != null && target.pos != null) {

@@ -560,14 +560,15 @@ public class TameCombatEvents {
         ServerLevel serverLevel = dead.level() instanceof ServerLevel level ? level : null;
         TamableAnimal effectiveKillerTame = resolveEffectiveKillerTame(serverLevel, death);
         UUID effectiveKillerTameUuid = effectiveKillerTame != null ? effectiveKillerTame.getUUID() : death.killerTameUuid();
-        if (dead != null && TameDuelManager.isEntityInDuel(death.deadId())) {
+        UUID deadParticipantId = death.duelParticipantId();
+        if (dead != null && deadParticipantId != null && TameDuelManager.isEntityInDuel(deadParticipantId)) {
             TameDuelManager.recordElimination(
                     dead.level().getServer(),
-                    death.deadId(),
+                    deadParticipantId,
                     death.contributors(),
                     resolveDuelKillerParticipantUuid(dead.level().getServer(), death, effectiveKillerTameUuid)
             );
-            TameDuelManager.endDuelForEntity(dead.level().getServer(), death.deadId());
+            TameDuelManager.endDuelForEntity(dead.level().getServer(), deadParticipantId);
         }
         LivingEntity killerForXp = effectiveKillerTame != null ? effectiveKillerTame : death.killer();
         LevelSystem.distributeXP(dead, killerForXp);
@@ -626,7 +627,7 @@ public class TameCombatEvents {
         return best;
     }
 
-    private record PendingDeath(LivingEntity dead, UUID deadId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {
+    private record PendingDeath(LivingEntity dead, UUID deadId, UUID duelParticipantId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {
         private static PendingDeath capture(LivingDeathEvent event) {
             if (event == null || event.isCanceled()) {
                 return null;
@@ -658,6 +659,7 @@ public class TameCombatEvents {
             return new PendingDeath(
                     dead,
                     dead.getUUID(),
+                    resolveDuelParticipantUuid(dead),
                     killer,
                     killerTameUuid,
                     contributors

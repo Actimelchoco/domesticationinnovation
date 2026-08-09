@@ -61,9 +61,6 @@ public class TimedTameTrident extends ThrownTrident {
             this.discard();
             return;
         }
-        if (result instanceof BlockHitResult) {
-            TimedTameImpactExplosion.explodeOnBlockImpact(this, 2.5F, 2.0D, 0.45D, 0.10D);
-        }
         this.discard();
     }
 }
