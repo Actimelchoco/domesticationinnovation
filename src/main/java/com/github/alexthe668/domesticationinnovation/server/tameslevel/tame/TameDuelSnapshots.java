@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
 
 public final class TameDuelSnapshots {
     private TameDuelSnapshots() {
@@ -66,5 +67,13 @@ public final class TameDuelSnapshots {
         into.duelLosses = from.duelLosses;
         into.duelCount = from.duelCount;
         into.duelPoints = from.duelPoints;
+        into.hungerSaturation = from.hungerSaturation;
+        into.hungerEmptyNotified = from.hungerEmptyNotified;
+        into.hungerInventory.clear();
+        for (ItemStack stack : from.hungerInventory) {
+            if (stack != null && !stack.isEmpty()) {
+                into.hungerInventory.add(stack.copy());
+            }
+        }
     }
 }

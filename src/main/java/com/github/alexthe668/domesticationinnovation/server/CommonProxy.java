@@ -1278,7 +1278,7 @@ public class CommonProxy {
         if (hand != InteractionHand.MAIN_HAND || player.level().isClientSide || !player.isShiftKeyDown()) {
             return false;
         }
-        if (!player.getMainHandItem().isEmpty() || !player.getOffhandItem().isEmpty()) {
+        if (!player.getMainHandItem().isEmpty()) {
             return false;
         }
         if (!(target instanceof TamableAnimal tame) || !(player instanceof ServerPlayer serverPlayer)) {
