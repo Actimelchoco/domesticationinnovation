@@ -165,6 +165,8 @@ public class TameCommands {
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
+    private static final int TAME_HUNGER_DRUM_REFILL_RADIUS = 20;
+    private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
     private static final ChatFormatting TAME_HUNGER_MESSAGE_COLOR = ChatFormatting.GOLD;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
@@ -19705,7 +19707,7 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (now % 100L == 0L && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
+            if (now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                 changed |= refillHungerFromNearbyDrumChest(tame, data);
             }
             changed |= updateHungerWarningState(server, data);
@@ -20055,7 +20057,7 @@ public class TameCommands {
             return false;
         }
         BlockPos center = tame.blockPosition();
-        int radius = 4;
+        int radius = TAME_HUNGER_DRUM_REFILL_RADIUS;
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -1, -radius), center.offset(radius, 2, radius))) {
             if (!level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) {
                 continue;
