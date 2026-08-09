@@ -4,6 +4,7 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITagRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
@@ -12,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -54,7 +56,7 @@ public class PetBedBlock extends BaseEntityBlock {
     }
 
     public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
-        if(TameableUtils.isTamed(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
+        if(TameableUtils.isTamed(entity) && isIntentionalPetBedSit(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
            if((entity.tickCount + entity.getId()) % 10 == 0 && random.nextInt(6) == 0){
                String currentDimension = level.dimension().location().toString();
                TameData claimedBy = TameRegistry.getTameByPetBed(currentDimension, pos);
@@ -77,6 +79,17 @@ public class PetBedBlock extends BaseEntityBlock {
            }
         }
         super.entityInside(state, level, pos, entity);
+    }
+
+    private boolean isIntentionalPetBedSit(Entity entity) {
+        if (!(entity instanceof TamableAnimal tame) || !tame.isOrderedToSit()) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        return !TameCommands.isHungerBlockingAbilities(data);
     }
 
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {

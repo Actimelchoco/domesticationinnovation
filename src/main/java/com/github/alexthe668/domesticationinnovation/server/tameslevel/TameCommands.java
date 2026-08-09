@@ -20052,17 +20052,6 @@ public class TameCommands {
         data.hungerEmptyNotified = true;
     }
 
-    private static void notifyOwnerHungerLow(MinecraftServer server, TameData data, int foodPoints) {
-        if (server == null || data == null || data.hungerLowNotified || data.ownerUUID == null) {
-            return;
-        }
-        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-        if (owner != null && PlayerDebugSettings.inventoryLowOnFood(owner.getUUID())) {
-            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " is low on food (" + foodPoints + " food points left).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
-        }
-        data.hungerLowNotified = true;
-    }
-
     private static void notifyOwnerHungerLastFood(MinecraftServer server, TameData data) {
         if (server == null || data == null || data.hungerLastFoodNotified || data.ownerUUID == null) {
             return;
@@ -20094,7 +20083,7 @@ public class TameCommands {
                 changed = true;
             }
             if (!data.hungerLowNotified) {
-                notifyOwnerHungerLow(server, data, foodPoints);
+                data.hungerLowNotified = true;
                 changed = true;
             }
         } else if (foodPoints <= 0 && data.hungerLowNotified) {
@@ -20126,18 +20115,31 @@ public class TameCommands {
                 continue;
             }
             List<String> emptyNames = new ArrayList<>();
+            List<String> lowNames = new ArrayList<>();
             for (TameData data : ownedTamesForAllCommands(ownerId)) {
-                if (data != null && !data.dead && !data.stored && totalHungerFoodPoints(data) <= 0) {
+                if (data == null || data.dead || data.stored) {
+                    continue;
+                }
+                int foodPoints = totalHungerFoodPoints(data);
+                if (foodPoints <= 0) {
                     emptyNames.add(tameDisplayName(data));
+                } else if (foodPoints < TAME_HUNGER_LOW_FOOD_POINTS) {
+                    lowNames.add(tameDisplayName(data) + " (" + foodPoints + ")");
                 }
             }
             NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS);
-            if (emptyNames.isEmpty() || !PlayerDebugSettings.inventoryNoFood(ownerId)) {
-                continue;
+            boolean sentForPlayer = false;
+            if (!emptyNames.isEmpty() && PlayerDebugSettings.inventoryNoFood(ownerId)) {
+                emptyNames.sort(String::compareToIgnoreCase);
+                player.sendSystemMessage(Component.literal("Tames without food: " + String.join(", ", emptyNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+                sentForPlayer = true;
             }
-            emptyNames.sort(String::compareToIgnoreCase);
-            player.sendSystemMessage(Component.literal("Tames without food: " + String.join(", ", emptyNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
-            sent = true;
+            if (!lowNames.isEmpty() && PlayerDebugSettings.inventoryLowOnFood(ownerId)) {
+                lowNames.sort(String::compareToIgnoreCase);
+                player.sendSystemMessage(Component.literal("Tames low on food: " + String.join(", ", lowNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+                sentForPlayer = true;
+            }
+            sent |= sentForPlayer;
         }
         return sent;
     }
@@ -20420,7 +20422,7 @@ public class TameCommands {
             return hungerMessage(player, "No selected tame had free food inventory slots.");
         }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to " + selected.size() + " selected tame(s).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return moved;
     }
 
