@@ -1905,6 +1905,12 @@ public class TameCommands {
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryInfo(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                                .then(Commands.literal("autopickup")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), ""))
+                                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), StringArgumentType.getString(ctx, "selection"))))))
                                 .then(Commands.literal("distribute")
                                         .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -2739,6 +2745,14 @@ public class TameCommands {
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
                                 .then(Commands.literal("resetDuelLeaderboards")
                                         .executes(ctx -> adminResetDuelLeaderboards(ctx.getSource())))
+                                .then(Commands.literal("duelLeaderboard")
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("entry", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestDuelLeaderboardEntries(ctx.getSource(), b))
+                                                        .executes(ctx -> adminRemoveDuelLeaderboardEntry(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "entry")
+                                                        )))))
                                 .then(Commands.literal("reloadTames")
                                         .executes(ctx -> adminReloadTames(ctx.getSource())))
                                 .then(Commands.literal("repair")
@@ -4340,12 +4354,14 @@ public class TameCommands {
                     "/tames inventory give [<all|group <group>|type <type>|follow|sit|wander|name>]",
                     "/tames inventory open <name>",
                     "/tames inventory info [<all|group <group>|type <type>|follow|sit|wander|unloaded|name>]",
+                    "/tames inventory autopickup <true|false> [<selection>]",
                     "/tames inventory distribute [<selection>]",
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
-                    "Bare /tames inventory lists tame names colored by food status. /tames inventory info shows saturation, stored food points, and stack count.",
+                    "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
+                    "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
                     "Bread works as simple default food but counts for half points. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -4356,6 +4372,7 @@ public class TameCommands {
                     "Command teleports and natural regeneration also consume saturation.",
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
+                    "/tames inventory autopickup true enables kill-drop food pickup for selected tames.",
                     "Owners get low-food, last-food, and 10-minute no-food digest notifications."
             );
         }
@@ -15125,6 +15142,87 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminRemoveDuelLeaderboardEntry(CommandSourceStack source, String rawEntry) {
+        String entry = rawEntry == null ? "" : rawEntry.trim();
+        if (entry.isBlank()) {
+            return error(source.getPlayer(), "Use a tame/player name or UUID.");
+        }
+        String lookup = extractDuelLeaderboardLookup(entry);
+        UUID uuid = parseUuidOrNull(lookup);
+        List<TameData> tameMatches = new ArrayList<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !hasRecordedDuelStats(data)) {
+                continue;
+            }
+            if ((uuid != null && (uuid.equals(data.uuid) || uuid.equals(data.tlId)))
+                    || (data.name != null && data.name.equalsIgnoreCase(lookup))) {
+                tameMatches.add(data);
+            }
+        }
+        List<Map.Entry<UUID, PlayerDuelStats>> playerMatches = new ArrayList<>();
+        for (Map.Entry<UUID, PlayerDuelStats> playerEntry : TameRegistry.getPlayerDuelStats().entrySet()) {
+            UUID playerId = playerEntry.getKey();
+            PlayerDuelStats stats = playerEntry.getValue();
+            if (playerId == null || stats == null || !hasRecordedDuelStats(stats)) {
+                continue;
+            }
+            String playerName = resolveDuelPlayerName(source.getServer(), playerId, stats);
+            if ((uuid != null && uuid.equals(playerId)) || playerName.equalsIgnoreCase(lookup)) {
+                playerMatches.add(playerEntry);
+            }
+        }
+        int totalMatches = tameMatches.size() + playerMatches.size();
+        if (totalMatches <= 0) {
+            return error(source.getPlayer(), "No duel leaderboard entry matched '" + entry + "'.");
+        }
+        if (totalMatches > 1 && uuid == null) {
+            return error(source.getPlayer(), "Ambiguous duel leaderboard entry (" + totalMatches + " matches). Use the UUID from autocomplete.");
+        }
+        if (!tameMatches.isEmpty()) {
+            TameData data = tameMatches.get(0);
+            resetDuelStats(data);
+            TameRegistry.markDirty();
+            source.sendSuccess(() -> Component.literal("Removed duel leaderboard entry for tame " + tameDisplayName(data) + ".").withStyle(ChatFormatting.YELLOW), true);
+            return 1;
+        }
+        UUID playerId = playerMatches.get(0).getKey();
+        String playerName = resolveDuelPlayerName(source.getServer(), playerId, playerMatches.get(0).getValue());
+        TameRegistry.removePlayerDuelStats(playerId);
+        source.sendSuccess(() -> Component.literal("Removed duel leaderboard entry for player " + playerName + ".").withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static void resetDuelStats(TameData data) {
+        if (data == null) {
+            return;
+        }
+        data.duelMmr = PlayerDuelStats.DEFAULT_MMR;
+        data.duelKills = 0;
+        data.duelAssists = 0;
+        data.duelDeaths = 0;
+        data.duelWins = 0;
+        data.duelLosses = 0;
+        data.duelCount = 0;
+        data.duelPoints = 0.0D;
+    }
+
+    private static String extractDuelLeaderboardLookup(String rawEntry) {
+        String entry = rawEntry == null ? "" : rawEntry.trim();
+        int slash = entry.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < entry.length()) {
+            return entry.substring(slash + 1).trim();
+        }
+        return entry;
+    }
+
+    private static UUID parseUuidOrNull(String raw) {
+        try {
+            return raw == null || raw.isBlank() ? null : UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
     private static int adminSetClass(CommandSourceStack source, String petName, String className) {
         TameClass tameClass = TameClass.parse(className);
         if (tameClass == null) {
@@ -20127,9 +20225,32 @@ public class TameCommands {
             return hungerMessage(player, "No owned living tames matched all.");
         }
         player.sendSystemMessage(Component.literal("--------Inventories----------").withStyle(TAME_HUNGER_MESSAGE_COLOR));
-        selected.stream()
+        MutableComponent line = Component.literal("");
+        List<TameData> sorted = selected.stream()
                 .sorted(Comparator.comparing(data -> tameDisplayName(data).toLowerCase(Locale.ROOT)))
-                .forEach(data -> player.sendSystemMessage(Component.literal(tameDisplayName(data)).withStyle(hungerInventoryColor(data))));
+                .toList();
+        for (int i = 0; i < sorted.size(); i++) {
+            if (i > 0) {
+                line.append(Component.literal(", ").withStyle(ChatFormatting.DARK_GRAY));
+            }
+            TameData data = sorted.get(i);
+            line.append(Component.literal(tameDisplayName(data)).withStyle(hungerInventoryColor(data)));
+        }
+        player.sendSystemMessage(line);
+        return selected.size();
+    }
+
+    private static int hungerInventoryAutopickup(CommandSourceStack source, boolean enabled, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return hungerMessage(player, hungerSelectionEmptyMessage(selectionRaw));
+        }
+        for (TameData data : selected) {
+            data.hungerAutopickup = enabled;
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Set food autopickup " + (enabled ? "on" : "off") + " for " + selected.size() + " tame(s).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
     }
 
@@ -20204,12 +20325,33 @@ public class TameCommands {
     private static void sendHungerInventoryLine(ServerPlayer player, TameData data) {
         ChatFormatting color = hungerInventoryColor(data);
         int food = totalHungerFoodPoints(data);
-        player.sendSystemMessage(Component.literal(tameDisplayName(data) + ": sat=" + Math.max(0, data.hungerSaturation) + ", food=" + food + ", stacks=" + data.hungerInventory.size() + "/" + TAME_HUNGER_MAX_STACKS).withStyle(color));
+        player.sendSystemMessage(Component.literal(tameDisplayName(data) + ": sat=" + Math.max(0, data.hungerSaturation) + ", food=" + food + ", stacks=" + data.hungerInventory.size() + "/" + TAME_HUNGER_MAX_STACKS + ", autopickup=" + data.hungerAutopickup).withStyle(color));
     }
 
     private static ChatFormatting hungerInventoryColor(TameData data) {
         int food = totalHungerFoodPoints(data);
         return food <= 0 ? ChatFormatting.DARK_GRAY : food < TAME_HUNGER_LOW_FOOD_POINTS ? ChatFormatting.RED : food < TAME_HUNGER_GREEN_FOOD_POINTS ? TAME_HUNGER_MESSAGE_COLOR : ChatFormatting.GREEN;
+    }
+
+    public static int storeHungerFoodFromDrop(TamableAnimal tame, TameData data, ItemStack stack) {
+        if (tame == null || data == null || stack == null || stack.isEmpty()) {
+            return 0;
+        }
+        int moved = 0;
+        while (!stack.isEmpty()) {
+            ItemStack one = stack.copy();
+            one.setCount(1);
+            if (hungerFoodPoints(one, data, tame) <= 0 || !addHungerFoodStack(data, one)) {
+                break;
+            }
+            stack.shrink(1);
+            moved++;
+        }
+        if (moved > 0) {
+            resetHungerFoodNotifications(data);
+            TameRegistry.markDirty();
+        }
+        return moved;
     }
 
     private static boolean addHungerFoodStack(TameData data, ItemStack incoming) {
@@ -25259,6 +25401,36 @@ public class TameCommands {
         suggestCommandString(b, "losses");
         suggestCommandString(b, "duels");
         suggestCommandString(b, "points");
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestDuelLeaderboardEntries(CommandSourceStack source, SuggestionsBuilder b) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || !hasRecordedDuelStats(data)) {
+                continue;
+            }
+            String name = tameDisplayName(data);
+            if (seen.add(name)) {
+                suggestCommandString(b, name);
+            }
+            suggestCommandString(b, name + "/" + data.uuid);
+            if (data.tlId != null) {
+                suggestCommandString(b, name + "/" + data.tlId);
+            }
+        }
+        for (Map.Entry<UUID, PlayerDuelStats> entry : TameRegistry.getPlayerDuelStats().entrySet()) {
+            UUID playerId = entry.getKey();
+            PlayerDuelStats stats = entry.getValue();
+            if (playerId == null || stats == null || !hasRecordedDuelStats(stats)) {
+                continue;
+            }
+            String name = resolveDuelPlayerName(source.getServer(), playerId, stats);
+            if (seen.add(name)) {
+                suggestCommandString(b, name);
+            }
+            suggestCommandString(b, name + "/" + playerId);
+        }
         return b.buildFuture();
     }
 

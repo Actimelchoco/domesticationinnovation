@@ -124,6 +124,40 @@ public class TameCombatEvents {
         event.getDrops().removeIf(drop -> !shouldKeepDrop(drop, allowed));
     }
 
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onTameFoodAutopickupDrops(LivingDropsEvent event) {
+        if (event == null || event.isCanceled() || event.getDrops().isEmpty()) {
+            return;
+        }
+        TamableAnimal killerTame = resolveTameAttacker(event.getSource());
+        if (killerTame == null || !killerTame.isTame() || !killerTame.isAlive()) {
+            return;
+        }
+        TameData data = TameRegistry.get(killerTame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(killerTame));
+        }
+        if (data == null || data.dead || data.stored || !data.hungerAutopickup) {
+            return;
+        }
+        TameData finalData = data;
+        event.getDrops().removeIf(drop -> {
+            if (drop == null) {
+                return false;
+            }
+            ItemStack stack = drop.getItem();
+            int moved = TameCommands.storeHungerFoodFromDrop(killerTame, finalData, stack);
+            if (moved <= 0) {
+                return false;
+            }
+            if (!stack.isEmpty()) {
+                drop.setItem(stack);
+                return false;
+            }
+            return true;
+        });
+    }
+
     @SubscribeEvent
     public static void onTameDeath(LivingDeathEvent event) {
         if (event.isCanceled()) return;

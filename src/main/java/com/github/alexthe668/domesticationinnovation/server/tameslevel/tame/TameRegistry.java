@@ -402,6 +402,17 @@ public class TameRegistry {
         markDirty();
     }
 
+    public static boolean removePlayerDuelStats(UUID playerUuid) {
+        if (playerUuid == null) {
+            return false;
+        }
+        boolean removed = PLAYER_DUEL_STATS.remove(playerUuid) != null;
+        if (removed) {
+            markDirty();
+        }
+        return removed;
+    }
+
     public static Set<String> getOwnerGroups(UUID ownerUuid) {
         if (ownerUuid == null) {
             return Set.of();
