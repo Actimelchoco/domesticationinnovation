@@ -762,6 +762,39 @@ public class TameCommands {
         }
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildHungerInventoryAutopickupCommand() {
+        return Commands.literal("autopickup")
+                .then(Commands.literal("info")
+                        .executes(ctx -> hungerInventoryAutopickupInfo(ctx.getSource())))
+                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), ""))
+                        .then(Commands.literal("all")
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "all")))
+                        .then(Commands.literal("unloaded")
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "unloaded")))
+                        .then(Commands.literal("follow")
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "follow")))
+                        .then(Commands.literal("sit")
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "sit")))
+                        .then(Commands.literal("wander")
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "wander")))
+                        .then(Commands.literal("state")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestMovementStates(b))
+                                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "state " + StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("group")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "group " + StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("type")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), "type " + StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), StringArgumentType.getString(ctx, "name")))));
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildLegacyDuelCommand() {
         return Commands.literal("duelOld")
                 .then(Commands.literal("vs")
@@ -1907,12 +1940,7 @@ public class TameCommands {
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryInfo(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
-                                .then(Commands.literal("autopickup")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), ""))
-                                                .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                        .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), StringArgumentType.getString(ctx, "selection"))))))
+                                .then(buildHungerInventoryAutopickupCommand())
                                 .then(Commands.literal("distribute")
                                         .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -2671,6 +2699,14 @@ public class TameCommands {
                                 .then(Commands.literal("levelUp")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                .then(Commands.literal("inventory")
+                                        .executes(ctx -> inventoryDebugStatus(ctx.getSource()))
+                                        .then(Commands.literal("lowOnFood")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setInventoryLowOnFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                                        .then(Commands.literal("noFood")
+                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                        .executes(ctx -> setInventoryNoFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
                                 .then(Commands.literal("duel")
                                         .then(Commands.literal("kill")
                                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -4357,6 +4393,7 @@ public class TameCommands {
                     "/tames inventory open <name>",
                     "/tames inventory info [<all|group <group>|type <type>|follow|sit|wander|unloaded|name>]",
                     "/tames inventory autopickup <true|false> [<selection>]",
+                    "/tames inventory autopickup info",
                     "/tames inventory distribute [<selection>]",
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
@@ -4372,10 +4409,11 @@ public class TameCommands {
             sendInfoPage(p, "Inventory System",
                     "Saturation is the tame's ready-to-use food buffer. One food point restores 100 saturation.",
                     "Following drains 2 saturation per second. Wandering drains 1 per second. Fighting drains 3 per second.",
-                    "Command teleports and natural regeneration also consume saturation.",
+                    "Natural regeneration also consumes saturation. Command teleports do not consume saturation.",
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
-                    "/tames inventory autopickup true enables kill-drop food pickup for selected tames.",
+                    "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
+                    "/tames debug inventory lowOnFood true/false and /tames debug inventory noFood true/false control hunger warning messages.",
                     "Drum refill: place a food container directly above a drum. Loaded hungry tames within 20 blocks check it once per minute and pull valid food until they reach green food status.",
                     "Owners get low-food, last-food, and 10-minute no-food digest notifications."
             );
@@ -14661,6 +14699,26 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setInventoryLowOnFood(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setInventoryLowOnFood(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Inventory lowOnFood messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setInventoryNoFood(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setInventoryNoFood(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Inventory noFood messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int inventoryDebugStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        p.sendSystemMessage(Component.literal("Inventory debug -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(p.getUUID()) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(p.getUUID())).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int adminSetDebugDamage(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setDamage(p.getUUID(), enabled);
@@ -14775,7 +14833,7 @@ public class TameCommands {
         boolean duelStart = PlayerDebugSettings.duelStartMessages(p.getUUID(), false);
         boolean duelResult = PlayerDebugSettings.duelResultMessages(p.getUUID(), false);
         boolean duelSumm = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelStart: " + duelStart + ", duelResult: " + duelResult + ", duelSumm: " + duelSumm).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelStart: " + duelStart + ", duelResult: " + duelResult + ", duelSumm: " + duelSumm + ", inventoryLowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(p.getUUID()) + ", inventoryNoFood: " + PlayerDebugSettings.inventoryNoFood(p.getUUID())).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -19867,26 +19925,7 @@ public class TameCommands {
     }
 
     private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, TamableAnimal tame) {
-        if (data == null && tame != null) {
-            data = TameRegistry.get(tame.getUUID());
-            if (data == null) {
-                data = TameRegistry.getByTlId(TameData.getTlId(tame));
-            }
-        }
-        if (data == null) {
-            return true;
-        }
-        int beforeFood = totalHungerFoodPoints(data);
-        if (consumeHungerForAction(data, tame, 100)) {
-            if (beforeFood > 0 && totalHungerFoodPoints(data) <= 0) {
-                notifyOwnerHungerLastFood(player == null ? null : player.getServer(), data);
-            }
-            return true;
-        }
-        if (player != null) {
-            player.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food for command teleport.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
-        }
-        return false;
+        return true;
     }
 
     private static boolean consumeOneHungerFood(TameData data, TamableAnimal tame) {
@@ -19959,7 +19998,7 @@ public class TameCommands {
             return;
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-        if (owner != null) {
+        if (owner != null && PlayerDebugSettings.inventoryNoFood(owner.getUUID())) {
             owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food and sat down.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         data.hungerEmptyNotified = true;
@@ -19970,7 +20009,7 @@ public class TameCommands {
             return;
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-        if (owner != null) {
+        if (owner != null && PlayerDebugSettings.inventoryLowOnFood(owner.getUUID())) {
             owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " is low on food (" + foodPoints + " food points left).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         data.hungerLowNotified = true;
@@ -19981,7 +20020,7 @@ public class TameCommands {
             return;
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-        if (owner != null) {
+        if (owner != null && PlayerDebugSettings.inventoryNoFood(owner.getUUID())) {
             owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ate its last stored food.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         data.hungerLastFoodNotified = true;
@@ -20021,7 +20060,8 @@ public class TameCommands {
         if (data == null) {
             return;
         }
-        data.hungerLowNotified = false;
+        int foodPoints = totalHungerFoodPoints(data);
+        data.hungerLowNotified = foodPoints > 0 && foodPoints < TAME_HUNGER_LOW_FOOD_POINTS;
         data.hungerLastFoodNotified = false;
         data.hungerEmptyNotified = false;
     }
@@ -20044,7 +20084,7 @@ public class TameCommands {
                 }
             }
             NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS);
-            if (emptyNames.isEmpty()) {
+            if (emptyNames.isEmpty() || !PlayerDebugSettings.inventoryNoFood(ownerId)) {
                 continue;
             }
             emptyNames.sort(String::compareToIgnoreCase);
@@ -20256,6 +20296,27 @@ public class TameCommands {
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Set food autopickup " + (enabled ? "on" : "off") + " for " + selected.size() + " tame(s).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
+    }
+
+    private static int hungerInventoryAutopickupInfo(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> enabled = ownedTamesForAllCommands(player.getUUID()).stream()
+                .filter(data -> data != null && data.hungerAutopickup)
+                .sorted(Comparator.comparing(data -> tameDisplayName(data).toLowerCase(Locale.ROOT)))
+                .toList();
+        if (enabled.isEmpty()) {
+            return hungerMessage(player, "No owned living tames currently have food autopickup enabled.");
+        }
+        player.sendSystemMessage(Component.literal("--------Food Autopickup----------").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        MutableComponent line = Component.literal("");
+        for (int i = 0; i < enabled.size(); i++) {
+            if (i > 0) {
+                line.append(Component.literal(", ").withStyle(ChatFormatting.DARK_GRAY));
+            }
+            line.append(Component.literal(tameDisplayName(enabled.get(i))).withStyle(hungerInventoryColor(enabled.get(i))));
+        }
+        player.sendSystemMessage(line);
+        return enabled.size();
     }
 
     private static int hungerInventoryInfo(CommandSourceStack source, String selectionRaw) {

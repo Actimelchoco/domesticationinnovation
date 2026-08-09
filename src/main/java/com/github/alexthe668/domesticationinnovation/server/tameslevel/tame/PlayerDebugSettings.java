@@ -15,6 +15,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> DAMAGE = new HashMap<>();
     private static final Map<UUID, Boolean> TELEPORT = new HashMap<>();
     private static final Map<UUID, Boolean> SHADOW_HANDS = new HashMap<>();
+    private static final Map<UUID, Boolean> INVENTORY_LOW_ON_FOOD = new HashMap<>();
+    private static final Map<UUID, Boolean> INVENTORY_NO_FOOD = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -56,6 +58,14 @@ public final class PlayerDebugSettings {
 
     public static boolean shadowHands(UUID player) {
         return SHADOW_HANDS.getOrDefault(player, false);
+    }
+
+    public static boolean inventoryLowOnFood(UUID player) {
+        return INVENTORY_LOW_ON_FOOD.getOrDefault(player, true);
+    }
+
+    public static boolean inventoryNoFood(UUID player) {
+        return INVENTORY_NO_FOOD.getOrDefault(player, true);
     }
 
     public static boolean duelAssistMessages(UUID player) {
@@ -124,6 +134,14 @@ public final class PlayerDebugSettings {
 
     public static void setShadowHands(UUID player, boolean enabled) {
         SHADOW_HANDS.put(player, enabled);
+    }
+
+    public static void setInventoryLowOnFood(UUID player, boolean enabled) {
+        INVENTORY_LOW_ON_FOOD.put(player, enabled);
+    }
+
+    public static void setInventoryNoFood(UUID player, boolean enabled) {
+        INVENTORY_NO_FOOD.put(player, enabled);
     }
 
     public static void setDuelAssistMessages(UUID player, boolean enabled) {
