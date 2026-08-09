@@ -49,6 +49,8 @@ import java.util.UUID;
 import java.lang.reflect.Method;
 
 public class TameCombatEvents {
+    public static final String DEATH_REMOVAL_TAG = "TamesLevelDeathRemoval";
+
     private record PendingInstantRespawn(UUID tameUuid, long dueTick, int retriesRemaining) {
     }
 
@@ -190,6 +192,7 @@ public class TameCombatEvents {
         }
         tame.setTarget(null);
         tame.getNavigation().stop();
+        tame.getPersistentData().putBoolean(DEATH_REMOVAL_TAG, true);
         if (!tame.isRemoved()) {
             tame.remove(net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
         }

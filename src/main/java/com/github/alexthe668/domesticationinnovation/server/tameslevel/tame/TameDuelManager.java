@@ -1625,6 +1625,9 @@ public final class TameDuelManager {
             return player.getName().getString();
         }
         TameData data = TameRegistry.get(entityId);
+        if (data == null) {
+            data = TameRegistry.getByTlId(entityId);
+        }
         if (data != null && data.name != null && !data.name.isBlank()) {
             return data.name;
         }

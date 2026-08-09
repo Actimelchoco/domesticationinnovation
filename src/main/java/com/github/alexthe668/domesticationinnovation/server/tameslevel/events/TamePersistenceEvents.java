@@ -124,6 +124,10 @@ public class TamePersistenceEvents {
         if (tame == null || tame.level().isClientSide) {
             return;
         }
+        if (tame.getPersistentData().getBoolean(TameCombatEvents.DEATH_REMOVAL_TAG)) {
+            tame.getPersistentData().remove(TameCombatEvents.DEATH_REMOVAL_TAG);
+            return;
+        }
         if (!isTemporarySummonTame(tame)) {
             return;
         }
@@ -134,6 +138,9 @@ public class TamePersistenceEvents {
             byUuid = TameRegistry.getByTlId(tlId);
         }
         if (byUuid == null || byUuid.uuid == null) {
+            return;
+        }
+        if (byUuid.dead) {
             return;
         }
         net.minecraft.nbt.CompoundTag row = new net.minecraft.nbt.CompoundTag();
