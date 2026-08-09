@@ -7458,7 +7458,7 @@ public class TameCommands {
                     mmr
             );
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
             return new RankedParticipantEntry(
                     participantId,
@@ -7501,7 +7501,7 @@ public class TameCommands {
         if (storedPlayerStats != null) {
             return storedPlayerStats.duelMmr;
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
             return data.duelMmr;
         }
@@ -11599,7 +11599,11 @@ public class TameCommands {
         if (target == null || target.level == null || target.pos == null) {
             return false;
         }
-        copyPersistentDuelStats(TameRegistry.get(snapshot.uuid), snapshot);
+        TameData persisted = TameRegistry.get(snapshot.uuid);
+        if (persisted == null && snapshot.tlId != null) {
+            persisted = TameRegistry.getByTlId(snapshot.tlId);
+        }
+        copyPersistentDuelStats(persisted, snapshot);
         snapshot.dead = false;
         snapshot.stored = false;
         TameRegistry.register(snapshot);
@@ -21254,7 +21258,7 @@ public class TameCommands {
         if (player != null) {
             return player.getGameProfile().getName();
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data != null && data.name != null && !data.name.isBlank()) {
             return data.name;
         }
@@ -21578,7 +21582,7 @@ public class TameCommands {
         participants.addAll(session.currentRoundA);
         participants.addAll(session.currentRoundB);
         for (UUID participantId : participants) {
-            TameData data = TameRegistry.get(participantId);
+            TameData data = rankedTameDataForParticipant(participantId);
             if (data == null || data.dead || !data.stored) {
                 continue;
             }
@@ -22219,7 +22223,7 @@ public class TameCommands {
                     available.add(id);
                     continue;
                 }
-                TameData data = TameRegistry.get(id);
+        TameData data = rankedTameDataForParticipant(id);
                 if (data != null && !data.dead) {
                     available.add(id);
                 }
@@ -22266,7 +22270,14 @@ public class TameCommands {
             return player;
         }
         TamableAnimal tame = findLoadedTameByUuid(server, entityId);
-        return tame;
+        if (tame != null) {
+            return tame;
+        }
+        TameData data = rankedTameDataForParticipant(entityId);
+        if (data != null) {
+            return findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        }
+        return null;
     }
 
     private static double sessionParticipantPower(MinecraftServer server, UUID participantId) {
@@ -22282,7 +22293,7 @@ public class TameCommands {
         if (storedPlayerStats != null) {
             return Math.max(1, storedPlayerStats.duelMmr);
         }
-        TameData data = TameRegistry.get(participantId);
+        TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
             return Math.max(1, data.duelMmr);
         }
@@ -22445,7 +22456,7 @@ public class TameCommands {
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         Set<UUID> suppressedOwners = new LinkedHashSet<>();
         for (UUID id : pool) {
-            TameData data = TameRegistry.get(id);
+            TameData data = rankedTameDataForParticipant(id);
             UUID suppressOwnerId = data != null && data.ownerUUID != null ? data.ownerUUID : ownerId;
             if (suppressOwnerId != null) {
                 suppressedOwners.add(suppressOwnerId);
@@ -22459,7 +22470,7 @@ public class TameCommands {
                 if (activeRound.contains(id)) {
                     continue;
                 }
-                TameData data = TameRegistry.get(id);
+                TameData data = rankedTameDataForParticipant(id);
                 if (data == null || data.dead) {
                     continue;
                 }
@@ -22505,7 +22516,7 @@ public class TameCommands {
             if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
                 continue;
             }
-            TameData data = TameRegistry.get(participantId);
+            TameData data = rankedTameDataForParticipant(participantId);
             if (data == null || data.dead || hasPendingImmediateChunkTeleport(data)) {
                 continue;
             }
