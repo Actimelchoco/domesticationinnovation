@@ -227,6 +227,7 @@ public class TameBehaviorEvents {
             tame.teleportTo(owner.getX(), owner.getY(), owner.getZ());
             tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
             tame.getNavigation().stop();
+            TameCommands.queueClientReloadForTame(tame);
             return;
         }
         if (distanceSqr > 2.5D * 2.5D) {
@@ -336,6 +337,7 @@ public class TameBehaviorEvents {
         tame.teleportTo(data.homeX + 0.5D, data.homeY, data.homeZ + 0.5D);
         tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
         tame.getNavigation().stop();
+        TameCommands.queueClientReloadForTame(tame);
         data.guardianReturnTicks = 0;
     }
 

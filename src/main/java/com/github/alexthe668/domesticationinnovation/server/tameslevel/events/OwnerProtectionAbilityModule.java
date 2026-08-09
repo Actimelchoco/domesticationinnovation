@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -229,6 +230,7 @@ public final class OwnerProtectionAbilityModule {
         tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
         tame.setDeltaMovement(dir.x * 0.9D, 0.10D, dir.z * 0.9D);
         tame.hurtMarked = true;
+        TameCommands.queueClientReloadForTame(tame);
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), 6, 0.25D, 0.1D, 0.25D, 0.0D);
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.NEUTRAL, 0.8F, 1.2F);
     }

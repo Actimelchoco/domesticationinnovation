@@ -125,7 +125,7 @@ public final class WaystonesTeleportCompat {
                 }
                 TamableAnimal moved = teleportWaystoneStyle(owner, loaded, data, targetLevel, pending.targetBlock(), pending.yRot(), pending.xRot());
                 if (moved != null) {
-                    queueOwnerResync(owner, moved, targetLevel);
+                    TameCommands.queueClientReloadForTame(moved);
                 }
                 continue;
             }
@@ -149,6 +149,7 @@ public final class WaystonesTeleportCompat {
             tame.setYRot(yRot);
             tame.setXRot(xRot);
             refreshData(data, tame, targetLevel);
+            TameCommands.queueClientReloadForTame(tame);
             return tame;
         }
 

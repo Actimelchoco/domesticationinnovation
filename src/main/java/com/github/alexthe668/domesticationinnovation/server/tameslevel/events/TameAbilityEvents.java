@@ -661,6 +661,7 @@ public class TameAbilityEvents {
         tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
         tame.setDeltaMovement(dir.x * 0.9D, 0.15D, dir.z * 0.9D);
         tame.hurtMarked = true;
+        TameCommands.queueClientReloadForTame(tame);
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), capParticles(tame, 6), 0.25D, 0.1D, 0.25D, 0.0D);
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 0.8F, 1.2F);
         return true;
@@ -841,6 +842,7 @@ public class TameAbilityEvents {
         if (tame.level() instanceof ServerLevel level) {
             level.sendParticles(ParticleTypes.PORTAL, tame.getX(), tame.getY(0.5D), tame.getZ(), capParticles(tame, 20), 0.35D, 0.4D, 0.35D, 0.02D);
         }
+        TameCommands.queueClientReloadForTame(tame);
         tame.playSound(SoundEvents.ENDERMAN_TELEPORT, 1.0F, 1.0F);
         setAbilityCooldown(tame, data, "ender_pearl_jump", "pearl", now, 100);
         debugAbilityUse(tame, "ender_pearl_jump");

@@ -253,6 +253,7 @@ public class TameAutoFollowEvents {
             tame.setPortalCooldown();
             TameGoalInstaller.installIfMissing(tame);
             refreshData(data, tame, targetLevel);
+            TameCommands.queueClientReloadForTame(tame);
             return;
         }
 
@@ -283,6 +284,7 @@ public class TameAutoFollowEvents {
         tame.discard();
         TameCommands.refreshLoadedTameStatsAfterRebuild(moved, data, false);
         refreshData(data, moved, targetLevel);
+        TameCommands.queueClientReloadForTame(moved);
     }
 
     private static void refreshData(TameData data, TamableAnimal tame, ServerLevel level) {

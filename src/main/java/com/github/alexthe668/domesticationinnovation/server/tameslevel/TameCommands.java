@@ -4008,6 +4008,7 @@ public class TameCommands {
                 BlockPos putAt = findLanternPlacement(targetLevel, pending.lanternPos, tame);
                 tame.teleportTo(putAt.getX() + 0.5D, putAt.getY(), putAt.getZ() + 0.5D);
                 tame.setDeltaMovement(0.0D, 0.0D, 0.0D);
+                queueClientReloadForTame(tame);
                 TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(tame.getUUID());
                 if (data != null) {
                     if (!Objects.equals(data.uuid, tame.getUUID())) {
@@ -4096,6 +4097,7 @@ public class TameCommands {
                 tame.setTarget(null);
                 tame.getNavigation().stop();
                 tame.getNavigation().moveTo(owner, 1.0D);
+                queueClientReloadForTame(tame);
 
                 data = request.getTlId() != null ? TameRegistry.getByTlId(request.getTlId()) : TameRegistry.get(tame.getUUID());
                 if (data != null) {
@@ -14008,7 +14010,7 @@ public class TameCommands {
     }
 
     private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, TamableAnimal tame) {
-        queueDelayedTeleportClientRefresh(owner, tame, false);
+        queueDelayedTeleportClientRefresh(owner, tame, true);
     }
 
     private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, TamableAnimal tame, boolean strongRefresh) {
@@ -14025,6 +14027,14 @@ public class TameCommands {
                 now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS,
                 strongRefresh
         ));
+    }
+
+    public static void queueClientReloadForTame(TamableAnimal tame) {
+        queueClientReloadForTame(tame, true);
+    }
+
+    public static void queueClientReloadForTame(TamableAnimal tame, boolean strongRefresh) {
+        queueDelayedTeleportClientRefresh(null, tame, strongRefresh);
     }
 
     private static boolean processPendingTeleportClientRefresh(MinecraftServer server, UUID key, PendingTeleportClientRefresh pending) {
