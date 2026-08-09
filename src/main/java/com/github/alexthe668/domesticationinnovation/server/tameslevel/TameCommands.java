@@ -19647,12 +19647,20 @@ public class TameCommands {
         }
         LivingEntity target = tame.getTarget();
         if (target != null && target.isAlive()) {
-            return 3;
+            return scaleSaturationCost(data, 3);
         }
         if (data.movementOrder == 2) {
-            return 1;
+            return scaleSaturationCost(data, 1);
         }
-        return 2;
+        return scaleSaturationCost(data, 2);
+    }
+
+    private static int scaleSaturationCost(TameData data, int baseCost) {
+        if (baseCost <= 0) {
+            return 0;
+        }
+        int level = data == null ? 1 : Math.max(1, data.level);
+        return Math.max(1, (int) Math.round(baseCost * (1.0D + level * 0.01D)));
     }
 
     private static boolean ensureHungerSaturation(TameData data, TamableAnimal tame, int required) {
@@ -19743,10 +19751,11 @@ public class TameCommands {
         if (data == null || saturationCost <= 0) {
             return true;
         }
-        if (!ensureHungerSaturation(data, tame, saturationCost)) {
+        int scaledCost = scaleSaturationCost(data, saturationCost);
+        if (!ensureHungerSaturation(data, tame, scaledCost)) {
             return false;
         }
-        data.hungerSaturation = Math.max(0, data.hungerSaturation - saturationCost);
+        data.hungerSaturation = Math.max(0, data.hungerSaturation - scaledCost);
         data.hungerEmptyNotified = false;
         TameRegistry.markDirty();
         return true;
