@@ -7,6 +7,7 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 
@@ -120,6 +121,9 @@ public class TameData {
     public final Map<String, Integer> attributeLevels = new LinkedHashMap<>();
     public final Map<String, Long> cooldowns = new LinkedHashMap<>();
     public CompoundTag entitySnapshot = new CompoundTag();
+    public int hungerSaturation = 1000;
+    public final List<ItemStack> hungerInventory = new ArrayList<>();
+    public boolean hungerEmptyNotified = false;
 
     public boolean hasSavedProgress = false;
     public int savedProgressCost = 0;
@@ -305,6 +309,15 @@ public class TameData {
         cooldowns.forEach(cooldownsTag::putLong);
         tag.put("cooldowns", cooldownsTag);
         tag.put("entitySnapshot", entitySnapshot == null ? new CompoundTag() : entitySnapshot.copy());
+        tag.putInt("hungerSaturation", Math.max(0, hungerSaturation));
+        tag.putBoolean("hungerEmptyNotified", hungerEmptyNotified);
+        ListTag hungerInventoryTag = new ListTag();
+        for (ItemStack stack : hungerInventory) {
+            if (stack != null && !stack.isEmpty()) {
+                hungerInventoryTag.add(stack.save(new CompoundTag()));
+            }
+        }
+        tag.put("hungerInventory", hungerInventoryTag);
 
         tag.putBoolean("hasSavedProgress", hasSavedProgress);
         tag.putInt("savedProgressCost", savedProgressCost);
@@ -497,6 +510,18 @@ public class TameData {
             data.entitySnapshot = tag.getCompound("entitySnapshot").copy();
         } else {
             data.entitySnapshot = new CompoundTag();
+        }
+        data.hungerSaturation = tag.contains("hungerSaturation", Tag.TAG_INT) ? Math.max(0, tag.getInt("hungerSaturation")) : 1000;
+        data.hungerEmptyNotified = tag.getBoolean("hungerEmptyNotified");
+        data.hungerInventory.clear();
+        if (tag.contains("hungerInventory", Tag.TAG_LIST)) {
+            ListTag hungerInventoryTag = tag.getList("hungerInventory", Tag.TAG_COMPOUND);
+            for (int i = 0; i < hungerInventoryTag.size() && data.hungerInventory.size() < 10; i++) {
+                ItemStack stack = ItemStack.of(hungerInventoryTag.getCompound(i));
+                if (!stack.isEmpty()) {
+                    data.hungerInventory.add(stack);
+                }
+            }
         }
 
         data.hasSavedProgress = tag.getBoolean("hasSavedProgress");

@@ -1063,6 +1063,15 @@ public class CommonProxy {
         }
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
+        if (!player.level().isClientSide
+                && player.isShiftKeyDown()
+                && entity instanceof TamableAnimal tame
+                && player instanceof ServerPlayer serverPlayer
+                && TameCommands.openHungerInventory(serverPlayer, tame)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
         if (TameableUtils.isTamed(event.getTarget())) {
             if (event.getItemStack().is(DIItemRegistry.DEED_OF_OWNERSHIP.get())) {
                 CompoundTag tag = stack.getTag();

@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.entity.ChainLightningEntity;
 import com.github.alexthe668.domesticationinnovation.server.entity.DIEntityRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TamePerformanceProfiler;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.misc.DISoundRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
@@ -166,7 +167,7 @@ public class TameAbilityEvents {
                 boolean ownerProtectionPass = shouldRunPeriodicPass(tame, now, OWNER_PROTECTION_TICK_RATE);
                 boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, currentTarget);
-                boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0;
+                boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0 || TameCommands.isHungerBlockingAbilities(data);
                 TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, currentTarget, now));
 
                 if (namedEffectsPass) {
@@ -1058,10 +1059,14 @@ public class TameAbilityEvents {
         if (!isReady(data, "attr_regen", now)) return;
         if (tame.getHealth() >= tame.getMaxHealth()) return;
 
-        tame.heal(0.5F + 0.5F * regenLevel);
+        float healAmount = 0.5F + 0.5F * regenLevel;
+        if (!TameCommands.consumeHungerForNaturalHeal(data, tame, healAmount)) {
+            return;
+        }
+        tame.heal(healAmount);
         long cooldown = regenLevel >= 5 ? 60L : regenLevel >= 3 ? 70L : 80L;
         setAbilityCooldown(tame, data, "regeneration", "attr_regen", now, cooldown);
-        grantSupportXp(tame, data, tame, now, 0.5F + 0.5F * regenLevel, 0.5F);
+        grantSupportXp(tame, data, tame, now, healAmount, 0.5F);
         debugAbilityUse(tame, "regeneration");
     }
 
@@ -1079,6 +1084,9 @@ public class TameAbilityEvents {
                 if (supporterData == null || !LevelSystem.hasAbility(supporterData, "revitalizing_presence")) continue;
                 heal += Math.max(1, LevelSystem.getAbilityLevel(supporterData, "revitalizing_presence"));
             }
+        }
+        if (!TameCommands.consumeHungerForNaturalHeal(data, tame, heal)) {
+            return;
         }
         tame.heal(heal);
         setCooldown(data, "passive_heal_tick", now + 100L);
