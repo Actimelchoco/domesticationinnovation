@@ -69,6 +69,8 @@ public final class TameDuelSnapshots {
         into.duelPoints = from.duelPoints;
         into.hungerSaturation = from.hungerSaturation;
         into.hungerEmptyNotified = from.hungerEmptyNotified;
+        into.hungerLowNotified = from.hungerLowNotified;
+        into.hungerLastFoodNotified = from.hungerLastFoodNotified;
         into.hungerInventory.clear();
         for (ItemStack stack : from.hungerInventory) {
             if (stack != null && !stack.isEmpty()) {

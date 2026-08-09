@@ -114,6 +114,7 @@ import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -1038,6 +1039,39 @@ public class CommonProxy {
             return;
         }
         event.setCanceled(true);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onHungryTameEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (blockHungryTameCommandInteract(event.getEntity(), event.getHand(), event.getTarget(), event)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onHungryTameEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (blockHungryTameCommandInteract(event.getEntity(), event.getHand(), event.getTarget(), event)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+        }
+    }
+
+    private boolean blockHungryTameCommandInteract(Player player, InteractionHand hand, Entity target, PlayerInteractEvent event) {
+        if (player == null || target == null || event == null || player.level().isClientSide || hand != InteractionHand.MAIN_HAND) {
+            return false;
+        }
+        if (!(target instanceof TamableAnimal tame) || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) {
+            return false;
+        }
+        if (!TameCommands.isHungerBlockingMovement(tame)) {
+            return false;
+        }
+        if (player.isShiftKeyDown() && player.getMainHandItem().isEmpty()) {
+            return false;
+        }
+        ItemStack held = player.getMainHandItem();
+        return held.isEmpty() || !held.getItem().isEdible();
     }
 
     @SubscribeEvent

@@ -165,7 +165,10 @@ public class TameCommands {
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
+    private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
+    private static final ChatFormatting TAME_HUNGER_MESSAGE_COLOR = ChatFormatting.GOLD;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
+    private static final Map<UUID, Long> NEXT_HUNGER_EMPTY_DIGEST_TICK = new HashMap<>();
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
     private static final int MAX_CLASS_REROLLS = 3;
@@ -1885,6 +1888,7 @@ public class TameCommands {
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
                         .then(Commands.literal("inventory")
+                                .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("give")
                                         .executes(ctx -> hungerInventoryGive(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -10609,7 +10613,7 @@ public class TameCommands {
         if (!payment.success) return error(p, payment.error);
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
-            if (!consumeHungerForCommandTeleport(p, d, null)) return error(p, tameDisplayName(d) + " has no food for command teleport.");
+            if (!consumeHungerForCommandTeleport(p, d, null)) return 0;
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
             if (!unloaded.success) return error(p, "Failed to tp unloaded tame: " + unloaded.error);
             TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
@@ -10623,12 +10627,12 @@ public class TameCommands {
             if (orderOverride != null) {
                 applyMovementOverride(ta, orderOverride);
             }
-            if (!consumeHungerForCommandTeleport(p, d, ta)) return error(p, tameDisplayName(d) + " has no food for command teleport.");
+            if (!consumeHungerForCommandTeleport(p, d, ta)) return 0;
             UnloadedTpResult queued = queueImmediateChunkTeleport((ServerLevel) ta.level(), ta.blockPosition(), d, new SpawnTarget(p.serverLevel(), p.position(), p.getYRot(), p.getXRot()), true, false);
             if (!queued.success) return error(p, "Failed to queue cross-dimension tame teleport: " + queued.error);
             return 1;
         }
-        if (!consumeHungerForCommandTeleport(p, d, ta)) return error(p, tameDisplayName(d) + " has no food for command teleport.");
+        if (!consumeHungerForCommandTeleport(p, d, ta)) return 0;
         teleportTameToPlayer(ta, p);
         TamableAnimal loadedAfterTeleport = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (orderOverride != null && loadedAfterTeleport != null) {
@@ -16581,7 +16585,7 @@ public class TameCommands {
             String label = approvedItemDisplayLabel(id);
             player.sendSystemMessage(Component.literal("- " + label + " [" + id + "]").withStyle(ChatFormatting.GRAY));
         }
-        player.sendSystemMessage(Component.literal("Food can also pay: " + FOOD_POINTS_PER_APPROVED_ITEM + " food points = 1 approved item.").withStyle(ChatFormatting.DARK_GRAY));
+        player.sendSystemMessage(Component.literal("Food can also pay: " + FOOD_POINTS_PER_APPROVED_ITEM + " food points = 1 approved item.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return approved.size();
     }
 
@@ -19071,6 +19075,15 @@ public class TameCommands {
     private static void applyMovementOverride(TamableAnimal tame, MovementOrder order) {
         if (tame == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        if ((order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
+            if (currentLiveMovementOrder(tame, data) != MovementOrder.SIT) {
+                applyMovementOverride(tame, MovementOrder.SIT);
+            }
+            return;
+        }
         if (order != MovementOrder.GUARDIAN) {
             clearGuardianAnchor(data);
         }
@@ -19114,9 +19127,16 @@ public class TameCommands {
         }
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        if (data == null) {
             return false;
         }
         MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
+        if ((liveOrder == MovementOrder.FOLLOW || liveOrder == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
+            applyMovementOverride(tame, MovementOrder.SIT);
+            return true;
+        }
         int liveCode = switch (liveOrder) {
             case FOLLOW -> 0;
             case SIT -> 1;
@@ -19563,6 +19583,7 @@ public class TameCommands {
         if (server == null || server.overworld() == null || server.overworld().getGameTime() % 20L != 0L) {
             return;
         }
+        long now = server.overworld().getGameTime();
         boolean changed = false;
         Set<UUID> processed = new HashSet<>();
         for (TameData data : TameRegistry.TAMES.values()) {
@@ -19573,9 +19594,10 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (server.overworld().getGameTime() % 100L == 0L && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
+            if (now % 100L == 0L && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                 changed |= refillHungerFromNearbyDrumChest(tame, data);
             }
+            changed |= updateHungerWarningState(server, data);
             int drain = hungerDrainPerSecond(tame, data);
             if (drain <= 0) {
                 if (data.hungerEmptyNotified && totalHungerFoodPoints(data) > 0) {
@@ -19598,6 +19620,7 @@ public class TameCommands {
             data.hungerEmptyNotified = false;
             changed = true;
         }
+        changed |= sendHungerEmptyDigests(server, now);
         if (changed) {
             TameRegistry.markDirty();
         }
@@ -19666,6 +19689,17 @@ public class TameCommands {
         return hasFoodForDuel(data);
     }
 
+    public static boolean isHungerBlockingMovement(TamableAnimal tame) {
+        if (tame == null) {
+            return false;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        }
+        return isHungerBlockingAbilities(data);
+    }
+
     private static DuelSelectionResult requireDuelFood(DuelSelectionResult result) {
         if (result == null || !result.error.isBlank() || result.tames.isEmpty()) {
             return result;
@@ -19709,14 +19743,24 @@ public class TameCommands {
     }
 
     private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, TamableAnimal tame) {
+        if (data == null && tame != null) {
+            data = TameRegistry.get(tame.getUUID());
+            if (data == null) {
+                data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            }
+        }
         if (data == null) {
             return true;
         }
+        int beforeFood = totalHungerFoodPoints(data);
         if (consumeHungerForAction(data, tame, 100)) {
+            if (beforeFood > 0 && totalHungerFoodPoints(data) <= 0) {
+                notifyOwnerHungerLastFood(player == null ? null : player.getServer(), data);
+            }
             return true;
         }
         if (player != null) {
-            player.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food for command teleport.").withStyle(ChatFormatting.RED));
+            player.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food for command teleport.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         return false;
     }
@@ -19736,6 +19780,9 @@ public class TameCommands {
             data.hungerSaturation = Math.max(0, data.hungerSaturation + foodPoints * TAME_HUNGER_SATURATION_PER_FOOD_POINT);
             if (stack.isEmpty()) {
                 data.hungerInventory.remove(i);
+            }
+            if (totalHungerFoodPoints(data) <= 0) {
+                notifyOwnerHungerLastFood(tame == null ? null : tame.getServer(), data);
             }
             return true;
         }
@@ -19789,9 +19836,98 @@ public class TameCommands {
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
         if (owner != null) {
-            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food and sat down.").withStyle(ChatFormatting.RED));
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " has no food and sat down.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         data.hungerEmptyNotified = true;
+    }
+
+    private static void notifyOwnerHungerLow(MinecraftServer server, TameData data, int foodPoints) {
+        if (server == null || data == null || data.hungerLowNotified || data.ownerUUID == null) {
+            return;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+        if (owner != null) {
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " is low on food (" + foodPoints + " food points left).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        }
+        data.hungerLowNotified = true;
+    }
+
+    private static void notifyOwnerHungerLastFood(MinecraftServer server, TameData data) {
+        if (server == null || data == null || data.hungerLastFoodNotified || data.ownerUUID == null) {
+            return;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+        if (owner != null) {
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ate its last stored food.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        }
+        data.hungerLastFoodNotified = true;
+    }
+
+    private static boolean updateHungerWarningState(MinecraftServer server, TameData data) {
+        if (data == null) {
+            return false;
+        }
+        int foodPoints = totalHungerFoodPoints(data);
+        boolean changed = false;
+        if (foodPoints >= TAME_HUNGER_LOW_FOOD_POINTS) {
+            if (data.hungerLowNotified || data.hungerLastFoodNotified || data.hungerEmptyNotified) {
+                data.hungerLowNotified = false;
+                data.hungerLastFoodNotified = false;
+                data.hungerEmptyNotified = false;
+                changed = true;
+            }
+        } else if (foodPoints > 0) {
+            if (data.hungerLastFoodNotified || data.hungerEmptyNotified) {
+                data.hungerLastFoodNotified = false;
+                data.hungerEmptyNotified = false;
+                changed = true;
+            }
+            if (!data.hungerLowNotified) {
+                notifyOwnerHungerLow(server, data, foodPoints);
+                changed = true;
+            }
+        } else if (foodPoints <= 0 && data.hungerLowNotified) {
+            data.hungerLowNotified = false;
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static void resetHungerFoodNotifications(TameData data) {
+        if (data == null) {
+            return;
+        }
+        data.hungerLowNotified = false;
+        data.hungerLastFoodNotified = false;
+        data.hungerEmptyNotified = false;
+    }
+
+    private static boolean sendHungerEmptyDigests(MinecraftServer server, long now) {
+        if (server == null) {
+            return false;
+        }
+        boolean sent = false;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            UUID ownerId = player.getUUID();
+            long next = NEXT_HUNGER_EMPTY_DIGEST_TICK.getOrDefault(ownerId, 0L);
+            if (now < next) {
+                continue;
+            }
+            List<String> emptyNames = new ArrayList<>();
+            for (TameData data : ownedTamesForAllCommands(ownerId)) {
+                if (data != null && !data.dead && !data.stored && totalHungerFoodPoints(data) <= 0) {
+                    emptyNames.add(tameDisplayName(data));
+                }
+            }
+            NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS);
+            if (emptyNames.isEmpty()) {
+                continue;
+            }
+            emptyNames.sort(String::compareToIgnoreCase);
+            player.sendSystemMessage(Component.literal("Tames without food: " + String.join(", ", emptyNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+            sent = true;
+        }
+        return sent;
     }
 
     private static boolean refillHungerFromNearbyDrumChest(TamableAnimal tame, TameData data) {
@@ -19825,7 +19961,7 @@ public class TameCommands {
                     continue;
                 }
                 handler.extractItem(slot, 1, false);
-                data.hungerEmptyNotified = false;
+                resetHungerFoodNotifications(data);
                 changed = true;
             }
             if (changed) {
@@ -19840,11 +19976,11 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            return error(player, "Hold edible food. Bread is accepted as simple default food.");
+            return hungerMessage(player, "Hold edible food. Bread is accepted as simple default food.");
         }
         List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         if (selected.isEmpty()) {
-            return error(player, hungerSelectionEmptyMessage(selectionRaw));
+            return hungerMessage(player, hungerSelectionEmptyMessage(selectionRaw));
         }
         int moved = 0;
         int skippedFood = 0;
@@ -19868,21 +20004,21 @@ public class TameCommands {
             if (!player.isCreative()) {
                 held.shrink(1);
             }
-            data.hungerEmptyNotified = false;
+            resetHungerFoodNotifications(data);
             moved++;
         }
         if (moved <= 0) {
             if (skippedFull > 0) {
-                return error(player, "Selected tame food inventories are full.");
+                return hungerMessage(player, "Selected tame food inventories are full.");
             }
-            return error(player, "Selected tames cannot accept that food.");
+            return hungerMessage(player, "Selected tames cannot accept that food.");
         }
         TameRegistry.markDirty();
         String skipped = "";
         if (skippedFood > 0 || skippedFull > 0) {
             skipped = " Skipped " + (skippedFood + skippedFull) + ".";
         }
-        player.sendSystemMessage(Component.literal("Gave " + itemName + " to " + moved + " selected tame(s)." + skipped).withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Gave " + itemName + " to " + moved + " selected tame(s)." + skipped).withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return moved;
     }
 
@@ -19890,7 +20026,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), name);
         if (data == null) {
-            return error(player, "You do not own a living tame named '" + name + "'.");
+            return hungerMessage(player, "You do not own a living tame named '" + name + "'.");
         }
         TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
         return openHungerInventory(player, data, tame) ? 1 : 0;
@@ -19927,13 +20063,26 @@ public class TameCommands {
         return true;
     }
 
+    private static int hungerInventoryList(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), "");
+        if (selected.isEmpty()) {
+            return hungerMessage(player, "No owned living tames matched all.");
+        }
+        player.sendSystemMessage(Component.literal("--------Inventories----------").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        selected.stream()
+                .sorted(Comparator.comparing(data -> tameDisplayName(data).toLowerCase(Locale.ROOT)))
+                .forEach(data -> player.sendSystemMessage(Component.literal(tameDisplayName(data)).withStyle(hungerInventoryColor(data))));
+        return selected.size();
+    }
+
     private static int hungerInventoryInfo(CommandSourceStack source, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
         List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         if (selected.isEmpty()) {
-            return error(player, hungerSelectionEmptyMessage(selectionRaw));
+            return hungerMessage(player, hungerSelectionEmptyMessage(selectionRaw));
         }
-        player.sendSystemMessage(Component.literal("--------Inventories----------").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("--------Inventories----------").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         selected.stream()
                 .sorted(Comparator.comparing(data -> tameDisplayName(data).toLowerCase(Locale.ROOT)))
                 .forEach(data -> sendHungerInventoryLine(player, data));
@@ -19944,12 +20093,12 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            return error(player, "Hold food to distribute.");
+            return hungerMessage(player, "Hold food to distribute.");
         }
         List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> hungerFoodPoints(held, data, null) <= 0);
         if (selected.isEmpty()) {
-            return error(player, "No selected tames can accept that food.");
+            return hungerMessage(player, "No selected tames can accept that food.");
         }
         int available = player.isCreative() ? held.getCount() : held.getCount();
         int moved = 0;
@@ -19966,6 +20115,7 @@ public class TameCommands {
                 continue;
             }
             target.hungerEmptyNotified = false;
+            resetHungerFoodNotifications(target);
             moved++;
             available--;
             if (!player.isCreative()) {
@@ -19976,10 +20126,10 @@ public class TameCommands {
             }
         }
         if (moved <= 0) {
-            return error(player, "No selected tame had free food inventory slots.");
+            return hungerMessage(player, "No selected tame had free food inventory slots.");
         }
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to " + selected.size() + " selected tame(s).").withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to " + selected.size() + " selected tame(s).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return moved;
     }
 
@@ -19988,16 +20138,21 @@ public class TameCommands {
         List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> data.type == null || !data.type.toLowerCase(Locale.ROOT).contains(type.toLowerCase(Locale.ROOT)));
         if (selected.isEmpty()) {
-            return error(player, "No selected tames matched type '" + type + "'.");
+            return hungerMessage(player, "No selected tames matched type '" + type + "'.");
         }
-        player.sendSystemMessage(Component.literal("Food taste for " + type + ": edible foods are accepted; bread counts half. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(ChatFormatting.AQUA));
+        player.sendSystemMessage(Component.literal("Food taste for " + type + ": edible foods are accepted; bread counts half. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
     }
 
     private static void sendHungerInventoryLine(ServerPlayer player, TameData data) {
+        ChatFormatting color = hungerInventoryColor(data);
         int food = totalHungerFoodPoints(data);
-        ChatFormatting color = food <= 0 ? ChatFormatting.DARK_GRAY : food < TAME_HUNGER_LOW_FOOD_POINTS ? ChatFormatting.RED : food < TAME_HUNGER_GREEN_FOOD_POINTS ? ChatFormatting.GOLD : ChatFormatting.GREEN;
         player.sendSystemMessage(Component.literal(tameDisplayName(data) + ": sat=" + Math.max(0, data.hungerSaturation) + ", food=" + food + ", stacks=" + data.hungerInventory.size() + "/" + TAME_HUNGER_MAX_STACKS).withStyle(color));
+    }
+
+    private static ChatFormatting hungerInventoryColor(TameData data) {
+        int food = totalHungerFoodPoints(data);
+        return food <= 0 ? ChatFormatting.DARK_GRAY : food < TAME_HUNGER_LOW_FOOD_POINTS ? ChatFormatting.RED : food < TAME_HUNGER_GREEN_FOOD_POINTS ? TAME_HUNGER_MESSAGE_COLOR : ChatFormatting.GREEN;
     }
 
     private static boolean addHungerFoodStack(TameData data, ItemStack incoming) {
@@ -20026,6 +20181,7 @@ public class TameCommands {
     private static final class HungerFoodContainer extends SimpleContainer {
         private final TameData data;
         private final TamableAnimal tame;
+        private boolean loading = true;
 
         private HungerFoodContainer(TameData data, TamableAnimal tame) {
             super(18);
@@ -20034,6 +20190,7 @@ public class TameCommands {
             for (int i = 0; i < Math.min(TAME_HUNGER_MAX_STACKS, data.hungerInventory.size()); i++) {
                 setItem(i, data.hungerInventory.get(i).copy());
             }
+            this.loading = false;
         }
 
         @Override
@@ -20042,9 +20199,19 @@ public class TameCommands {
         }
 
         @Override
+        public void setItem(int slot, ItemStack stack) {
+            if (slot < 0 || slot >= TAME_HUNGER_MAX_STACKS || (!stack.isEmpty() && hungerFoodPoints(stack, data, tame) <= 0)) {
+                return;
+            }
+            super.setItem(slot, stack);
+        }
+
+        @Override
         public void setChanged() {
             super.setChanged();
-            saveToData();
+            if (!loading) {
+                saveToData();
+            }
         }
 
         @Override
@@ -20061,7 +20228,11 @@ public class TameCommands {
                     data.hungerInventory.add(stack.copy());
                 }
             }
-            data.hungerEmptyNotified = data.hungerSaturation <= 0 && totalHungerFoodPoints(data) <= 0 && data.hungerEmptyNotified;
+            if (totalHungerFoodPoints(data) > 0) {
+                resetHungerFoodNotifications(data);
+            } else {
+                data.hungerEmptyNotified = data.hungerSaturation <= 0 && data.hungerEmptyNotified;
+            }
             TameRegistry.markDirty();
         }
     }
@@ -20087,6 +20258,13 @@ public class TameCommands {
             return "No owned living tames matched all.";
         }
         return "No owned living tames matched '" + selectionRaw + "'.";
+    }
+
+    private static int hungerMessage(ServerPlayer player, String message) {
+        if (player != null) {
+            player.sendSystemMessage(Component.literal(message).withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        }
+        return 0;
     }
 
     private static List<TameData> ownedDeadTamesForAllCommands(UUID owner) {
@@ -23422,11 +23600,11 @@ public class TameCommands {
             }
             if (sessionChanged) {
                 changed = true;
-                notifyDuelSessionOwners(server, session, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from the duel session.").withStyle(ChatFormatting.RED));
+            notifyDuelSessionOwners(server, session, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from the duel session.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
             }
         }
         if (rankedChanged && rankedSession != null) {
-            notifyDuelSessionOwners(server, rankedSession, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from ranked.").withStyle(ChatFormatting.RED));
+            notifyDuelSessionOwners(server, rankedSession, Component.literal(duelParticipantName(server, participantId) + " ran out of food and was pulled from ranked.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
         return changed;
     }
@@ -23454,7 +23632,7 @@ public class TameCommands {
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
         if (owner != null) {
-            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ran out of food and lost the duel.").withStyle(ChatFormatting.RED));
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ran out of food and lost the duel.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         }
     }
 
