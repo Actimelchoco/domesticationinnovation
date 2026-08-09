@@ -15205,19 +15205,20 @@ public class TameCommands {
     }
 
     private static int adminRemoveDuelLeaderboardEntry(CommandSourceStack source, String rawEntry) {
-        String entry = rawEntry == null ? "" : rawEntry.trim();
+        String entry = normalizeDuelLeaderboardLookup(rawEntry);
         if (entry.isBlank()) {
             return error(source.getPlayer(), "Use a tame/player name or UUID.");
         }
         String lookup = extractDuelLeaderboardLookup(entry);
-        UUID uuid = parseUuidOrNull(lookup);
+        UUID uuid = extractUuidFromDuelLeaderboardLookup(entry);
         List<TameData> tameMatches = new ArrayList<>();
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || !hasRecordedDuelStats(data)) {
                 continue;
             }
             if ((uuid != null && (uuid.equals(data.uuid) || uuid.equals(data.tlId)))
-                    || (data.name != null && data.name.equalsIgnoreCase(lookup))) {
+                    || duelLeaderboardNameMatches(data.name, lookup)
+                    || duelLeaderboardNameMatches(tameDisplayName(data), lookup)) {
                 tameMatches.add(data);
             }
         }
@@ -15229,7 +15230,7 @@ public class TameCommands {
                 continue;
             }
             String playerName = resolveDuelPlayerName(source.getServer(), playerId, stats);
-            if ((uuid != null && uuid.equals(playerId)) || playerName.equalsIgnoreCase(lookup)) {
+            if ((uuid != null && uuid.equals(playerId)) || duelLeaderboardNameMatches(playerName, lookup)) {
                 playerMatches.add(playerEntry);
             }
         }
@@ -15269,12 +15270,57 @@ public class TameCommands {
     }
 
     private static String extractDuelLeaderboardLookup(String rawEntry) {
-        String entry = rawEntry == null ? "" : rawEntry.trim();
+        String entry = normalizeDuelLeaderboardLookup(rawEntry);
         int slash = entry.lastIndexOf('/');
         if (slash >= 0 && slash + 1 < entry.length()) {
-            return entry.substring(slash + 1).trim();
+            String tail = entry.substring(slash + 1).trim();
+            if (parseUuidOrNull(tail) != null) {
+                String head = entry.substring(0, slash).trim();
+                return head.isBlank() ? tail : head;
+            }
         }
         return entry;
+    }
+
+    private static String normalizeDuelLeaderboardLookup(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))) {
+            value = value.substring(1, value.length() - 1).trim();
+        }
+        return value;
+    }
+
+    private static UUID extractUuidFromDuelLeaderboardLookup(String rawEntry) {
+        String entry = normalizeDuelLeaderboardLookup(rawEntry);
+        UUID direct = parseUuidOrNull(entry);
+        if (direct != null) {
+            return direct;
+        }
+        int slash = entry.lastIndexOf('/');
+        if (slash >= 0 && slash + 1 < entry.length()) {
+            UUID tail = parseUuidOrNull(entry.substring(slash + 1).trim());
+            if (tail != null) {
+                return tail;
+            }
+        }
+        for (String token : entry.split("\\s+")) {
+            UUID tokenUuid = parseUuidOrNull(token);
+            if (tokenUuid != null) {
+                return tokenUuid;
+            }
+        }
+        return null;
+    }
+
+    private static boolean duelLeaderboardNameMatches(String candidate, String lookup) {
+        String left = normalizeDuelLeaderboardName(candidate);
+        String right = normalizeDuelLeaderboardName(lookup);
+        return !left.isBlank() && left.equalsIgnoreCase(right);
+    }
+
+    private static String normalizeDuelLeaderboardName(String name) {
+        String cleaned = stripLevelPrefixes(normalizeDuelLeaderboardLookup(name));
+        return cleaned.replaceAll("\\s+", " ").trim();
     }
 
     private static UUID parseUuidOrNull(String raw) {
@@ -19688,6 +19734,7 @@ public class TameCommands {
         }
         rememberCurrentGuardianAnchor(data);
         applyGuardianAnchor(target.level.dimension().location().toString(), Mth.floor(target.pos.x), Mth.floor(target.pos.y), Mth.floor(target.pos.z), moved, data);
+        queueClientReloadForTame(moved);
         return true;
     }
 
@@ -19726,6 +19773,7 @@ public class TameCommands {
         data.guardianTargetStuckTicks = 0;
         data.guardianTargetBestDistanceSq = 0.0D;
         TameRegistry.markDirty();
+        queueClientReloadForTame(moved);
         return true;
     }
 
@@ -25509,10 +25557,10 @@ public class TameCommands {
                 continue;
             }
             String name = tameDisplayName(data);
+            suggestCommandString(b, name + "/" + data.uuid);
             if (seen.add(name)) {
                 suggestCommandString(b, name);
             }
-            suggestCommandString(b, name + "/" + data.uuid);
             if (data.tlId != null) {
                 suggestCommandString(b, name + "/" + data.tlId);
             }
@@ -25524,10 +25572,10 @@ public class TameCommands {
                 continue;
             }
             String name = resolveDuelPlayerName(source.getServer(), playerId, stats);
+            suggestCommandString(b, name + "/" + playerId);
             if (seen.add(name)) {
                 suggestCommandString(b, name);
             }
-            suggestCommandString(b, name + "/" + playerId);
         }
         return b.buildFuture();
     }
