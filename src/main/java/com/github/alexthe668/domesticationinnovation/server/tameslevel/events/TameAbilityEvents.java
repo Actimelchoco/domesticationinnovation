@@ -1620,15 +1620,17 @@ public class TameAbilityEvents {
 
         if (!tame.isOrderedToSit() && LevelSystem.hasAbility(data, "bloodlust") && wasKiller) {
             int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "bloodlust"));
-            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 200, Math.max(0, levelValue - 1)));
-            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 200, defensiveAuraAmplifier(levelValue)));
+            MobEffectInstance activeStrength = tame.getEffect(MobEffects.DAMAGE_BOOST);
+            int baseAmplifier = Math.max(0, levelValue / 5);
+            int nextAmplifier = activeStrength == null ? baseAmplifier : Math.max(baseAmplifier, activeStrength.getAmplifier() + 1);
+            int duration = 200 + levelValue * 20;
+            tame.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, duration, nextAmplifier));
             grantSupportUtilityXp(tame, data, tame, now, 1, 2.0F + levelValue, 0.5F);
             applySupportActivationVisual(tame, "bloodlust");
             if (tame.level() instanceof ServerLevel level) {
                 DustParticleOptions red = new DustParticleOptions(new Vector3f(1.0F, 0.1F, 0.1F), 1.2F);
                 level.sendParticles(red, tame.getX(), tame.getY(0.7D), tame.getZ(), capParticles(tame, 24), 0.35D, 0.45D, 0.35D, 0.02D);
             }
-            setAbilityCooldown(tame, data, "bloodlust", "bloodlust_tick", now, 400);
             debugAbilityUse(tame, "bloodlust");
         }
 
