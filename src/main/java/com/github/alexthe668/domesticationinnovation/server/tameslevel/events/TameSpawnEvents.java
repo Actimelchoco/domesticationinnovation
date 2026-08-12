@@ -263,7 +263,7 @@ public class TameSpawnEvents {
         if (data.ownerUUID == null && tame.getOwnerUUID() != null) {
             data.ownerUUID = tame.getOwnerUUID();
         }
-        String randomName = pickRandomUnusedTameName(usedLoadedNamesForOwner(tame));
+        String randomName = pickRandomUnusedTameName(usedServerTameNames(tame));
         data.name = uniqueLoadedNameFor(tame, randomName.isBlank() ? data.name : randomName);
         TameBedRegistrySync.syncFromEntity(tame, data);
         TameRegistry.register(data);
@@ -709,7 +709,7 @@ public class TameSpawnEvents {
 
     public static String uniqueLoadedNameFor(TamableAnimal self, String requestedName) {
         String base = stripLevelPrefixes(requestedName);
-        java.util.Set<String> used = usedLoadedNamesForOwner(self);
+        java.util.Set<String> used = usedServerTameNames(self);
 
         if (base.isBlank()) {
             String randomBlank = pickRandomUnusedTameName(used);
@@ -738,27 +738,25 @@ public class TameSpawnEvents {
         return base + " " + self.getUUID().toString().substring(0, 8);
     }
 
-    private static java.util.Set<String> usedLoadedNamesForOwner(TamableAnimal self) {
+    public static boolean hasServerNameConflict(TamableAnimal self, String requestedName) {
+        String cleaned = stripLevelPrefixes(requestedName).trim();
+        return !cleaned.isBlank() && usedServerTameNames(self).contains(cleaned.toLowerCase(Locale.ROOT));
+    }
+
+    private static java.util.Set<String> usedServerTameNames(TamableAnimal self) {
         java.util.Set<String> used = new java.util.HashSet<>();
-        UUID ownerId = self.getOwnerUUID();
         UUID selfTlId = TameData.getTlId(self);
-        if (ownerId != null) {
-            for (TameData data : TameRegistry.TAMES.values()) {
-                if (data == null || data.uuid == null || data.name == null || data.name.isBlank()) continue;
-                if (!ownerId.equals(data.ownerUUID)) continue;
-                if (data.uuid.equals(self.getUUID())) continue;
-                if (data.dead) continue;
-                if (selfTlId != null && selfTlId.equals(data.tlId)) continue;
-                if (!isUuidLoaded(self, data.uuid)) continue;
-                used.add(stripLevelPrefixes(data.name).toLowerCase(java.util.Locale.ROOT));
-            }
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || data.uuid == null || data.name == null || data.name.isBlank()) continue;
+            if (data.uuid.equals(self.getUUID())) continue;
+            if (selfTlId != null && selfTlId.equals(data.tlId)) continue;
+            used.add(stripLevelPrefixes(data.name).toLowerCase(java.util.Locale.ROOT));
         }
         if (self.level() != null && self.level().getServer() != null) {
             for (var level : self.level().getServer().getAllLevels()) {
                 for (var entity : level.getAllEntities()) {
                     if (!(entity instanceof TamableAnimal other) || !other.isTame()) continue;
                     if (other.getUUID().equals(self.getUUID())) continue;
-                    if (ownerId != null && !ownerId.equals(other.getOwnerUUID())) continue;
                     String otherName;
                     TameData reg = TameRegistry.get(other.getUUID());
                     if (reg != null && reg.name != null && !reg.name.isBlank()) {

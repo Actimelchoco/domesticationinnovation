@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SwordItem;
@@ -16,17 +17,18 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 public class TameRenameEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
             java.util.regex.Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final String DUPLICATE_RENAME_REJECT_TICK_TAG = "TLLastDuplicateRenameRejectTick";
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (handleStatShortcut(event, event.getTarget())) return;
-        handleRename(event.getTarget(), event.getItemStack());
+        handleRename(event, event.getTarget(), event.getItemStack());
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
         if (handleStatShortcut(event, event.getTarget())) return;
-        handleRename(event.getTarget(), event.getItemStack());
+        handleRename(event, event.getTarget(), event.getItemStack());
     }
 
     private static boolean handleStatShortcut(PlayerInteractEvent event, net.minecraft.world.entity.Entity target) {
@@ -50,7 +52,7 @@ public class TameRenameEvents {
         return true;
     }
 
-    private static void handleRename(net.minecraft.world.entity.Entity target, ItemStack stack) {
+    private static void handleRename(PlayerInteractEvent event, net.minecraft.world.entity.Entity target, ItemStack stack) {
         if (!(target instanceof TamableAnimal tame)) return;
         if (!tame.isTame()) return;
         if (stack.isEmpty()) return;
@@ -63,9 +65,23 @@ public class TameRenameEvents {
 
         String renamed = stripLevelPrefixes(stack.getHoverName().getString());
         if (!renamed.isBlank()) {
-            String unique = TameSpawnEvents.uniqueLoadedNameFor(tame, renamed);
-            if (unique.equals(data.name)) return;
-            data.name = unique;
+            if (TameSpawnEvents.hasServerNameConflict(tame, renamed)) {
+                LevelSystem.updateTameName(tame, data);
+                if (event.getEntity() instanceof ServerPlayer player) {
+                    long now = player.serverLevel().getGameTime();
+                    long last = tame.getPersistentData().getLong(DUPLICATE_RENAME_REJECT_TICK_TAG);
+                    if (last != now) {
+                        player.sendSystemMessage(Component.literal("That tame name is already used on this server. " + data.name + " kept its previous name."));
+                        tame.getPersistentData().putLong(DUPLICATE_RENAME_REJECT_TICK_TAG, now);
+                    }
+                }
+                event.setCanceled(true);
+                event.setCancellationResult(net.minecraft.world.InteractionResult.FAIL);
+                event.setResult(Event.Result.DENY);
+                return;
+            }
+            if (renamed.equals(data.name)) return;
+            data.name = renamed;
             LevelSystem.updateTameName(tame, data);
             TameRegistry.markDirty();
         }
