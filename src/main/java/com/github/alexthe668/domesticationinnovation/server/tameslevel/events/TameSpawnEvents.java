@@ -1,5 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
+import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
@@ -262,7 +263,8 @@ public class TameSpawnEvents {
         if (data.ownerUUID == null && tame.getOwnerUUID() != null) {
             data.ownerUUID = tame.getOwnerUUID();
         }
-        data.name = uniqueLoadedNameFor(tame, data.name);
+        String randomName = pickRandomUnusedTameName(usedLoadedNamesForOwner(tame));
+        data.name = uniqueLoadedNameFor(tame, randomName.isBlank() ? data.name : randomName);
         TameBedRegistrySync.syncFromEntity(tame, data);
         TameRegistry.register(data);
         TameRegistry.bindEntityToData(tame, data);
@@ -707,6 +709,36 @@ public class TameSpawnEvents {
 
     public static String uniqueLoadedNameFor(TamableAnimal self, String requestedName) {
         String base = stripLevelPrefixes(requestedName);
+        java.util.Set<String> used = usedLoadedNamesForOwner(self);
+
+        if (base.isBlank()) {
+            String randomBlank = pickRandomUnusedTameName(used);
+            if (!randomBlank.isBlank()) {
+                return randomBlank;
+            }
+            base = "Tame";
+        }
+
+        String lower = base.toLowerCase(java.util.Locale.ROOT);
+        if (!used.contains(lower)) {
+            return base;
+        }
+        String randomReplacement = pickRandomUnusedTameName(used);
+        if (!randomReplacement.isBlank()) {
+            return randomReplacement;
+        }
+        int i = 2;
+        while (i < 10000) {
+            String candidate = base + " " + i;
+            if (!used.contains(candidate.toLowerCase(java.util.Locale.ROOT))) {
+                return candidate;
+            }
+            i++;
+        }
+        return base + " " + self.getUUID().toString().substring(0, 8);
+    }
+
+    private static java.util.Set<String> usedLoadedNamesForOwner(TamableAnimal self) {
         java.util.Set<String> used = new java.util.HashSet<>();
         UUID ownerId = self.getOwnerUUID();
         UUID selfTlId = TameData.getTlId(self);
@@ -743,32 +775,7 @@ public class TameSpawnEvents {
                 }
             }
         }
-
-        if (base.isBlank()) {
-            String randomBlank = pickRandomUnusedTameName(used);
-            if (!randomBlank.isBlank()) {
-                return randomBlank;
-            }
-            base = "Tame";
-        }
-
-        String lower = base.toLowerCase(java.util.Locale.ROOT);
-        if (!used.contains(lower)) {
-            return base;
-        }
-        String randomReplacement = pickRandomUnusedTameName(used);
-        if (!randomReplacement.isBlank()) {
-            return randomReplacement;
-        }
-        int i = 2;
-        while (i < 10000) {
-            String candidate = base + " " + i;
-            if (!used.contains(candidate.toLowerCase(java.util.Locale.ROOT))) {
-                return candidate;
-            }
-            i++;
-        }
-        return base + " " + self.getUUID().toString().substring(0, 8);
+        return used;
     }
 
     private static String pickRandomUnusedTameName(java.util.Set<String> used) {
@@ -791,6 +798,22 @@ public class TameSpawnEvents {
     }
 
     private static List<String> loadRandomTameNames() {
+        LinkedHashSet<String> configNames = new LinkedHashSet<>();
+        try {
+            for (String raw : DomesticationMod.CONFIG.randomTameNames.get()) {
+                if (raw == null) {
+                    continue;
+                }
+                String cleaned = stripLevelPrefixes(raw).trim();
+                if (!cleaned.isBlank() && !cleaned.startsWith("#")) {
+                    configNames.add(cleaned);
+                }
+            }
+        } catch (RuntimeException ignored) {
+        }
+        if (!configNames.isEmpty()) {
+            return new ArrayList<>(configNames);
+        }
         try {
             ensureRandomTameNameFileExists();
             LinkedHashSet<String> names = new LinkedHashSet<>();
