@@ -2598,6 +2598,20 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedDeadPetNames(ctx.getSource(), b))
                                         .executes(ctx -> respawnPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.ARISE))))
+                        .then(Commands.literal("ariseReincarnated")
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> respawnAll(ctx.getSource(), ReviveMode.ARISE, true)))
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> respawnGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.ARISE, true))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> respawnType(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.ARISE, true))))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedDeadPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> respawnPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), ReviveMode.ARISE, true))))
                         .then(Commands.literal("group")
                                 .executes(ctx -> groupOverview(ctx.getSource()))
                                 .then(Commands.literal("create")
@@ -4322,7 +4336,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, inventory, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, inventory, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -4544,6 +4558,13 @@ public class TameCommands {
                     "/tames arise <name|all|group <name>|type <name>>",
                     "Arise respawns the tame at your current position.",
                     "Payment options: double invested XP, or ceil(level/10) approved items, or 1 totem in main hand."
+            );
+        }
+        else if (key.equals("arisereincarnated")) {
+            sendInfoPage(p, "Arise Reincarnated",
+                    "/tames ariseReincarnated <name|all|group <name>|type <name>>",
+                    "Arise respawns the tame at your current position, then restores saved highest progress when available.",
+                    "Payment includes the normal arise cost plus the reincarnation cost for restored levels."
             );
         }
         else if (key.equals("graveyard")) {
@@ -19851,14 +19872,22 @@ public class TameCommands {
         if (tame == null || data == null || tame.isOrderedToSit() || data.movementOrder == 1) {
             return 0;
         }
+        MinecraftServer server = tame.getServer();
+        if (server == null || data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null) {
+            return 0;
+        }
         LivingEntity target = tame.getTarget();
         if (target != null && target.isAlive()) {
-            return scaleSaturationCost(data, 3);
+            return scalePassiveSaturationCost(data, 3);
         }
         if (data.movementOrder == 2) {
-            return scaleSaturationCost(data, 1);
+            return scalePassiveSaturationCost(data, 1);
         }
-        return scaleSaturationCost(data, 2);
+        return scalePassiveSaturationCost(data, 2);
+    }
+
+    private static int scalePassiveSaturationCost(TameData data, int baseCost) {
+        return Math.max(1, (int) Math.ceil(scaleSaturationCost(data, baseCost) / 4.0D));
     }
 
     private static int scaleSaturationCost(TameData data, int baseCost) {
@@ -25457,6 +25486,7 @@ public class TameCommands {
         suggestCommandString(b, "tphome");
         suggestCommandString(b, "respawn");
         suggestCommandString(b, "arise");
+        suggestCommandString(b, "ariseReincarnated");
         suggestCommandString(b, "graveyard");
         suggestCommandString(b, "reincarnate");
         suggestCommandString(b, "sitOnChairs");

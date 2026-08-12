@@ -9,6 +9,7 @@ import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SwordItem;
 import net.minecraftforge.eventbus.api.Event;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -16,20 +17,22 @@ public class TameRenameEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
             java.util.regex.Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (handleStatShortcut(event, event.getTarget())) return;
         handleRename(event.getTarget(), event.getItemStack());
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
-        if (handleStatShortcut(event)) return;
+        if (handleStatShortcut(event, event.getTarget())) return;
         handleRename(event.getTarget(), event.getItemStack());
     }
 
-    private static boolean handleStatShortcut(PlayerInteractEvent.EntityInteractSpecific event) {
+    private static boolean handleStatShortcut(PlayerInteractEvent event, net.minecraft.world.entity.Entity target) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return false;
-        if (!(event.getTarget() instanceof TamableAnimal tame) || !tame.isTame()) return false;
+        if (!player.isShiftKeyDown()) return false;
+        if (!(target instanceof TamableAnimal tame) || !tame.isTame()) return false;
         if (tame.getOwnerUUID() == null || !tame.getOwnerUUID().equals(player.getUUID())) return false;
 
         ItemStack stack = event.getItemStack();
