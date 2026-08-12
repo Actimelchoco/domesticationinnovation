@@ -513,6 +513,9 @@ public class TameCombatEvents {
         if (owner == null) {
             return;
         }
+        if (!PlayerDebugSettings.combatDeath(owner.getUUID())) {
+            return;
+        }
         String tameName = data.name == null || data.name.isBlank() ? "Your tame" : data.name;
         String line = (deathMessage != null && !deathMessage.isBlank()) ? deathMessage : (tameName + " died.");
         owner.sendSystemMessage(
@@ -725,7 +728,9 @@ public class TameCombatEvents {
 
         String mobType = dead.getType().toShortString();
         for (UUID ownerId : owners) {
-            if (!PlayerDebugSettings.enemyKilled(ownerId)) continue;
+            boolean showKills = PlayerDebugSettings.combatKills(ownerId);
+            boolean showAssists = PlayerDebugSettings.combatAssists(ownerId);
+            if (!showKills && !showAssists) continue;
             ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerId);
             if (owner == null) continue;
 
@@ -736,10 +741,23 @@ public class TameCombatEvents {
                     .append(mobType)
                     .append("[")
                     .append(xpReward)
-                    .append("]: K: ")
-                    .append(killerName);
-            for (String assister : assisters) {
-                line.append(", A: ").append(assister);
+                    .append("]: ");
+            boolean wrotePart = false;
+            if (showKills) {
+                line.append("K: ").append(killerName);
+                wrotePart = true;
+            }
+            if (showAssists) {
+                for (String assister : assisters) {
+                    if (wrotePart) {
+                        line.append(", ");
+                    }
+                    line.append("A: ").append(assister);
+                    wrotePart = true;
+                }
+            }
+            if (!wrotePart) {
+                continue;
             }
             owner.sendSystemMessage(Component.literal(line.toString()).withStyle(ChatFormatting.GRAY));
         }

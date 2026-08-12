@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.misc.RespawnRequest;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
@@ -82,7 +83,7 @@ public class PetBedBlockEntity extends BlockEntity {
         }
         Entity spawned = tameData != null && tameData.uuid != null ? serverLevel.getEntity(tameData.uuid) : null;
         Entity owner = spawned == null ? null : TameableUtils.getOwnerOf(spawned);
-        if (owner instanceof Player player && spawned != null) {
+        if (owner instanceof Player player && spawned != null && PlayerDebugSettings.autoRespawnMessages(player.getUUID())) {
             player.displayClientMessage(Component.translatable("message.domesticationinnovation.respawn", spawned.getName()), false);
         }
         return true;

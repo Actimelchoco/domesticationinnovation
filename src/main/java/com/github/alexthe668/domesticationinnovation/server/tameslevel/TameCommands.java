@@ -2705,90 +2705,7 @@ public class TameCommands {
                                                                 StringArgumentType.getString(ctx, "name"),
                                                                 StringArgumentType.getString(ctx, "mode")))))))
 
-                        .then(Commands.literal("debug")
-                                .executes(ctx -> debugStatus(ctx.getSource()))
-                                .then(Commands.literal("enemyKilled")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                .then(Commands.literal("levelUp")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                .then(Commands.literal("inventory")
-                                        .executes(ctx -> inventoryDebugStatus(ctx.getSource()))
-                                        .then(Commands.literal("lowOnFood")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setInventoryLowOnFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("noFood")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setInventoryNoFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"))))))
-                                .then(Commands.literal("duel")
-                                        .then(Commands.literal("kill")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "kill", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("result")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "result", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("start")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "start", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("sum")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "sum", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("all")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), false, "all", BoolArgumentType.getBool(ctx, "enabled"))))))
-                                .then(Commands.literal("duelRanked")
-                                        .then(Commands.literal("kill")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "kill", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("result")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "result", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("start")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "start", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("sum")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "sum", BoolArgumentType.getBool(ctx, "enabled")))))
-                                        .then(Commands.literal("all")
-                                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                        .executes(ctx -> setDuelDebugCategory(ctx.getSource(), true, "all", BoolArgumentType.getBool(ctx, "enabled"))))))
-                                .then(Commands.literal("duelKill")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelKillNotifications(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("duelAssists")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelAssistMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("duelSessionMessage")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelSessionMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("duelMessages")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("duelMesesages")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                ))))
-                                .then(Commands.literal("duelSumm")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(ctx -> setDuelSummaryMessages(
-                                                        ctx.getSource(),
-                                                        BoolArgumentType.getBool(ctx, "enabled")
-                                                )))))
+                        .then(debugCommand())
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -3735,7 +3652,7 @@ public class TameCommands {
                 clearMatchingDiBedRespawnRequests(server, data);
                 ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
                 TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
-                if (owner != null && respawned != null) {
+                if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
                     owner.displayClientMessage(
                             Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
                                     .append(Component.literal(" " + respawnProgressSuffix(data))),
@@ -3755,7 +3672,7 @@ public class TameCommands {
                 clearMatchingDiBedRespawnRequests(server, data);
                 ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
                 TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
-                if (owner != null && respawned != null) {
+                if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
                     owner.displayClientMessage(
                             Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
                                     .append(Component.literal(" " + respawnProgressSuffix(data))),
@@ -4427,9 +4344,9 @@ public class TameCommands {
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "/tames debug inventory lowOnFood true/false and /tames debug inventory noFood true/false control immediate stored-food eating warnings. The 10-minute summary is always on.",
+                    "/tames debug inventory lowOnFood|noFood|sum <true|false> and /tames debug inventory sumMin <minutes> control hunger notifications.",
                     "Drum refill: place a food container directly above a drum. Loaded hungry tames within 20 blocks check it once per minute and pull valid food until they reach green food status.",
-                    "Owners get low-food, last-food, and 10-minute no-food digest notifications."
+                    "Owners get low-food, last-food, and configurable low/no-food digest notifications."
             );
         }
         else if (key.equals("mode")) {
@@ -4748,10 +4665,12 @@ public class TameCommands {
         }
         else if (key.equals("debug")) {
             sendInfoPage(p, "Debug",
-                    "/tames debug duel kill|result|start|sum|all <true|false>",
-                    "/tames debug duelRanked kill|result|start|sum|all <true|false>",
-                    "/tames debug enemyKilled|duelAssists <true|false>",
-                    "Toggles owner-local chat debug messages for combat and progression events."
+                    "/tames debug duel generall|duelAssists|duelKill|duelRanked|duelSumm <true|false>",
+                    "/tames debug inventory lowOnFood|noFood|sum <true|false>",
+                    "/tames debug inventory sumMin <minutes>",
+                    "/tames debug combat assists|kills|death <true|false>",
+                    "/tames debug other NewTame|respawnedAutomatically|generall <true|false>",
+                    "Toggles owner-local tame, duel, combat, and hunger notifications. Settings are saved per player."
             );
         }
         else if (key.equals("attribute")) {
@@ -14679,6 +14598,116 @@ public class TameCommands {
         return Math.max(0, base + Math.max(0, inLevel));
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> debugCommand() {
+        return Commands.literal("debug")
+                .executes(ctx -> debugStatus(ctx.getSource()))
+                .then(Commands.literal("duel")
+                        .executes(ctx -> duelToggleStatus(ctx.getSource()))
+                        .then(debugDuelBoolean("generall", false, "general"))
+                        .then(debugDuelBoolean("general", false, "general"))
+                        .then(debugDuelBoolean("duelAssists", false, "assists"))
+                        .then(debugDuelBoolean("duelKill", false, "kill"))
+                        .then(debugDuelBoolean("duelRanked", true, "general"))
+                        .then(debugDuelBoolean("duelSumm", false, "sum"))
+                        .then(debugDuelBoolean("kill", false, "kill"))
+                        .then(debugDuelBoolean("result", false, "result"))
+                        .then(debugDuelBoolean("start", false, "start"))
+                        .then(debugDuelBoolean("sum", false, "sum"))
+                        .then(debugDuelBoolean("all", false, "all")))
+                .then(Commands.literal("inventory")
+                        .executes(ctx -> inventoryDebugStatus(ctx.getSource()))
+                        .then(Commands.literal("lowOnFood")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setInventoryLowOnFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("noFood")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setInventoryNoFood(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("sum")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setInventorySummary(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("sumMin")
+                                .then(Commands.argument("minutes", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> setInventorySummaryMinutes(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "minutes"))))))
+                .then(Commands.literal("combat")
+                        .executes(ctx -> combatDebugStatus(ctx.getSource()))
+                        .then(Commands.literal("assists")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "assists", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("kills")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "kills", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("death")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "death", BoolArgumentType.getBool(ctx, "enabled"))))))
+                .then(Commands.literal("other")
+                        .executes(ctx -> otherDebugStatus(ctx.getSource()))
+                        .then(Commands.literal("NewTame")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "newTame", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("newTame")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "newTame", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("respawnedAutomatically")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "autoRespawn", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("Respawned")
+                                .then(Commands.literal("automatically")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(ctx -> setOtherDebug(ctx.getSource(), "autoRespawn", BoolArgumentType.getBool(ctx, "enabled"))))))
+                        .then(Commands.literal("generall")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "general", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("general")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "general", BoolArgumentType.getBool(ctx, "enabled"))))))
+                .then(Commands.literal("enemyKilled")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("levelUp")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelRanked")
+                        .executes(ctx -> duelToggleStatus(ctx.getSource()))
+                        .then(debugDuelBoolean("kill", true, "kill"))
+                        .then(debugDuelBoolean("result", true, "result"))
+                        .then(debugDuelBoolean("start", true, "start"))
+                        .then(debugDuelBoolean("sum", true, "sum"))
+                        .then(debugDuelBoolean("all", true, "all")))
+                .then(Commands.literal("duelKill")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelKillNotifications(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelAssists")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelAssistMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelSessionMessage")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelSessionMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelMessages")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelMesesages")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("duelSumm")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelSummaryMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> debugDuelBoolean(String literal, boolean ranked, String category) {
+        return Commands.literal(literal)
+                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                        .executes(ctx -> {
+                            boolean enabled = BoolArgumentType.getBool(ctx, "enabled");
+                            if ("general".equals(category)) {
+                                return ranked ? setRankedDuelGeneral(ctx.getSource(), enabled) : setDuelGeneral(ctx.getSource(), enabled);
+                            }
+                            if ("assists".equals(category)) {
+                                return setDuelAssistMessages(ctx.getSource(), enabled);
+                            }
+                            return setDuelDebugCategory(ctx.getSource(), ranked, category, enabled);
+                        }));
+    }
+
     private static int xpPointsAtLevelStart(int level) {
         if (level <= 16) return level * level + 6 * level;
         if (level <= 31) return (int) (2.5D * level * level - 40.5D * level + 360.0D);
@@ -14688,6 +14717,8 @@ public class TameCommands {
     private static int setDebugEnemyKilled(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setEnemyKilled(p.getUUID(), enabled);
+        PlayerDebugSettings.setCombatKills(p.getUUID(), enabled);
+        PlayerDebugSettings.setCombatAssists(p.getUUID(), enabled);
         p.sendSystemMessage(Component.literal("Debug enemyKilled set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
@@ -14734,9 +14765,25 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setInventorySummary(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setInventorySummary(p.getUUID(), enabled);
+        NEXT_HUNGER_EMPTY_DIGEST_TICK.remove(p.getUUID());
+        p.sendSystemMessage(Component.literal("Inventory low/no-food summary set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setInventorySummaryMinutes(CommandSourceStack source, int minutes) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setInventorySummaryMinutes(p.getUUID(), minutes);
+        NEXT_HUNGER_EMPTY_DIGEST_TICK.remove(p.getUUID());
+        p.sendSystemMessage(Component.literal("Inventory low/no-food summary interval set to " + PlayerDebugSettings.inventorySummaryMinutes(p.getUUID()) + " minute(s).").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static int inventoryDebugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
-        p.sendSystemMessage(Component.literal("Inventory debug -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(p.getUUID()) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(p.getUUID())).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Inventory debug -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(p.getUUID()) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(p.getUUID()) + ", sum: " + PlayerDebugSettings.inventorySummary(p.getUUID()) + ", sumMin: " + PlayerDebugSettings.inventorySummaryMinutes(p.getUUID())).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -14789,6 +14836,20 @@ public class TameCommands {
 
     private static int setDuelSummaryMessages(CommandSourceStack source, boolean enabled) {
         return setDuelDebugCategory(source, false, "sum", enabled);
+    }
+
+    private static int setDuelGeneral(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setDuelGeneral(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Duel general messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setRankedDuelGeneral(CommandSourceStack source, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        PlayerDebugSettings.setRankedDuelGeneral(p.getUUID(), enabled);
+        p.sendSystemMessage(Component.literal("Ranked duel messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
     }
 
     private static int setDuelDebugCategory(CommandSourceStack source, boolean ranked, String category, boolean enabled) {
@@ -14848,13 +14909,56 @@ public class TameCommands {
 
     private static int debugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
-        boolean enemy = PlayerDebugSettings.enemyKilled(p.getUUID());
-        boolean attribute = PlayerDebugSettings.attributeUsed(p.getUUID());
-        boolean levelUp = PlayerDebugSettings.levelUp(p.getUUID());
-        boolean duelStart = PlayerDebugSettings.duelStartMessages(p.getUUID(), false);
-        boolean duelResult = PlayerDebugSettings.duelResultMessages(p.getUUID(), false);
-        boolean duelSumm = PlayerDebugSettings.duelSummaryMessages(p.getUUID());
-        p.sendSystemMessage(Component.literal("Debug -> enemyKilled: " + enemy + ", attributeUsed: " + attribute + ", levelUp: " + levelUp + ", duelStart: " + duelStart + ", duelResult: " + duelResult + ", duelSumm: " + duelSumm + ", inventoryLowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(p.getUUID()) + ", inventoryNoFood: " + PlayerDebugSettings.inventoryNoFood(p.getUUID())).withStyle(ChatFormatting.YELLOW));
+        UUID playerId = p.getUUID();
+        p.sendSystemMessage(Component.literal("Debug groups: /tames debug duel|inventory|combat|other").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("Duel -> kill: " + PlayerDebugSettings.duelKillNotifications(playerId, false) + ", result: " + PlayerDebugSettings.duelResultMessages(playerId, false) + ", start: " + PlayerDebugSettings.duelStartMessages(playerId, false) + ", sum: " + PlayerDebugSettings.duelSummaryMessages(playerId, false) + ", assists: " + PlayerDebugSettings.duelAssistMessages(playerId)).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Inventory -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(playerId) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(playerId) + ", sum: " + PlayerDebugSettings.inventorySummary(playerId) + ", sumMin: " + PlayerDebugSettings.inventorySummaryMinutes(playerId)).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Combat -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId)).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Other -> NewTame: " + PlayerDebugSettings.newTameMessages(playerId) + ", respawnedAutomatically: " + PlayerDebugSettings.autoRespawnMessages(playerId) + ", levelUp: " + PlayerDebugSettings.levelUp(playerId)).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setCombatDebug(CommandSourceStack source, String category, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        UUID playerId = p.getUUID();
+        switch (category) {
+            case "assists" -> PlayerDebugSettings.setCombatAssists(playerId, enabled);
+            case "kills" -> PlayerDebugSettings.setCombatKills(playerId, enabled);
+            case "death" -> PlayerDebugSettings.setCombatDeath(playerId, enabled);
+            default -> {
+                return error(p, "Unknown combat debug category: " + category + ".");
+            }
+        }
+        p.sendSystemMessage(Component.literal("Combat " + category + " messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int combatDebugStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        UUID playerId = p.getUUID();
+        p.sendSystemMessage(Component.literal("Combat debug -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId)).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setOtherDebug(CommandSourceStack source, String category, boolean enabled) {
+        ServerPlayer p = source.getPlayer();
+        UUID playerId = p.getUUID();
+        switch (category) {
+            case "newTame" -> PlayerDebugSettings.setNewTameMessages(playerId, enabled);
+            case "autoRespawn" -> PlayerDebugSettings.setAutoRespawnMessages(playerId, enabled);
+            case "general" -> PlayerDebugSettings.setOtherGeneral(playerId, enabled);
+            default -> {
+                return error(p, "Unknown other debug category: " + category + ".");
+            }
+        }
+        p.sendSystemMessage(Component.literal("Other " + category + " messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int otherDebugStatus(CommandSourceStack source) {
+        ServerPlayer p = source.getPlayer();
+        UUID playerId = p.getUUID();
+        p.sendSystemMessage(Component.literal("Other debug -> NewTame: " + PlayerDebugSettings.newTameMessages(playerId) + ", respawnedAutomatically: " + PlayerDebugSettings.autoRespawnMessages(playerId) + ", levelUp: " + PlayerDebugSettings.levelUp(playerId)).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -20152,6 +20256,10 @@ public class TameCommands {
         boolean sent = false;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             UUID ownerId = player.getUUID();
+            if (!PlayerDebugSettings.inventorySummary(ownerId)) {
+                NEXT_HUNGER_EMPTY_DIGEST_TICK.remove(ownerId);
+                continue;
+            }
             long next = NEXT_HUNGER_EMPTY_DIGEST_TICK.getOrDefault(ownerId, 0L);
             if (now < next) {
                 continue;
@@ -20169,7 +20277,7 @@ public class TameCommands {
                     lowNames.add(tameDisplayName(data) + " (" + foodPoints + ")");
                 }
             }
-            NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS);
+            NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + PlayerDebugSettings.inventorySummaryIntervalTicks(ownerId));
             boolean sentForPlayer = false;
             if (!emptyNames.isEmpty()) {
                 emptyNames.sort(String::compareToIgnoreCase);

@@ -118,6 +118,7 @@ public class TameRegistry {
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         OWNER_TELEPORT_APPROVED_CREDITS.clear();
         OWNER_TELEPORT_APPROVED_CREDITS.putAll(savedData.getOwnerTeleportApprovedCredits());
+        PlayerDebugSettings.loadAll(savedData.getPlayerDebugSettings());
         RANKED_ARENA_NAME = savedData.getRankedArenaName();
         RANKED_PARTICIPANTS.clear();
         RANKED_PARTICIPANTS.addAll(savedData.getRankedParticipants());
@@ -288,6 +289,7 @@ public class TameRegistry {
         savedData.setDisabledTameTypeIds(DISABLED_TAME_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
+        savedData.setPlayerDebugSettings(PlayerDebugSettings.saveAll());
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
         savedData.setRankedParticipants(RANKED_PARTICIPANTS);
         savedData.setTemporaryTames(TEMPORARY_TAMES);

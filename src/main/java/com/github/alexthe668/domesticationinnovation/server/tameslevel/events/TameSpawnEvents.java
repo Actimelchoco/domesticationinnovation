@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -355,6 +356,9 @@ public class TameSpawnEvents {
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(pending.ownerUuid());
         if (owner == null) {
+            return true;
+        }
+        if (!PlayerDebugSettings.newTameMessages(owner.getUUID())) {
             return true;
         }
         TameData data = TameRegistry.get(tameUuid);

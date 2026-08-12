@@ -34,6 +34,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Set<String> disabledTameTypeIds = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
+    private final Map<UUID, CompoundTag> playerDebugSettings = new HashMap<>();
     private String rankedArenaName = "";
     private final Set<UUID> rankedParticipants = new LinkedHashSet<>();
     private final List<CompoundTag> temporaryTames = new ArrayList<>();
@@ -264,6 +265,29 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public Map<UUID, CompoundTag> getPlayerDebugSettings() {
+        Map<UUID, CompoundTag> copy = new HashMap<>();
+        for (Map.Entry<UUID, CompoundTag> entry : playerDebugSettings.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                copy.put(entry.getKey(), entry.getValue().copy());
+            }
+        }
+        return copy;
+    }
+
+    public void setPlayerDebugSettings(Map<UUID, CompoundTag> playerDebugSettings) {
+        this.playerDebugSettings.clear();
+        if (playerDebugSettings == null) {
+            return;
+        }
+        for (Map.Entry<UUID, CompoundTag> entry : playerDebugSettings.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            this.playerDebugSettings.put(entry.getKey(), entry.getValue().copy());
+        }
+    }
+
     public String getRankedArenaName() {
         return rankedArenaName == null ? "" : rankedArenaName;
     }
@@ -481,6 +505,17 @@ public class TameRegistrySavedData extends SavedData {
             teleportCreditsTag.add(row);
         }
         tag.put("ownerTeleportApprovedCredits", teleportCreditsTag);
+        ListTag playerDebugSettingsTag = new ListTag();
+        for (Map.Entry<UUID, CompoundTag> entry : playerDebugSettings.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("playerUUID", entry.getKey());
+            row.put("settings", entry.getValue().copy());
+            playerDebugSettingsTag.add(row);
+        }
+        tag.put("playerDebugSettings", playerDebugSettingsTag);
         if (rankedArenaName != null && !rankedArenaName.isBlank()) {
             tag.putString("rankedArenaName", rankedArenaName);
         }
@@ -700,6 +735,18 @@ public class TameRegistrySavedData extends SavedData {
                 int credits = Math.max(0, row.getInt("credits"));
                 if (credits > 0) {
                     data.ownerTeleportApprovedCredits.put(row.getUUID("ownerUUID"), credits);
+                }
+            }
+        }
+        if (tag.contains("playerDebugSettings", Tag.TAG_LIST)) {
+            ListTag playerDebugSettingsList = tag.getList("playerDebugSettings", Tag.TAG_COMPOUND);
+            for (Tag entry : playerDebugSettingsList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("playerUUID") || !row.contains("settings", Tag.TAG_COMPOUND)) {
+                    continue;
+                }
+                CompoundTag settings = row.getCompound("settings");
+                if (!settings.isEmpty()) {
+                    data.playerDebugSettings.put(row.getUUID("playerUUID"), settings.copy());
                 }
             }
         }

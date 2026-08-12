@@ -1,14 +1,23 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public final class PlayerDebugSettings {
+    public static final int DEFAULT_INVENTORY_SUMMARY_MINUTES = 10;
+
     private PlayerDebugSettings() {
     }
 
     private static final Map<UUID, Boolean> ENEMY_KILLED = new HashMap<>();
+    private static final Map<UUID, Boolean> COMBAT_ASSISTS = new HashMap<>();
+    private static final Map<UUID, Boolean> COMBAT_KILLS = new HashMap<>();
+    private static final Map<UUID, Boolean> COMBAT_DEATH = new HashMap<>();
     private static final Map<UUID, Boolean> ABILITY_USED = new HashMap<>();
     private static final Map<UUID, Boolean> ATTRIBUTE_USED = new HashMap<>();
     private static final Map<UUID, Boolean> LEVEL_UP = new HashMap<>();
@@ -17,6 +26,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> SHADOW_HANDS = new HashMap<>();
     private static final Map<UUID, Boolean> INVENTORY_LOW_ON_FOOD = new HashMap<>();
     private static final Map<UUID, Boolean> INVENTORY_NO_FOOD = new HashMap<>();
+    private static final Map<UUID, Boolean> INVENTORY_SUMMARY = new HashMap<>();
+    private static final Map<UUID, Integer> INVENTORY_SUMMARY_MINUTES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -27,61 +38,114 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> RANKED_DUEL_START_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> RANKED_DUEL_RESULT_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> RANKED_DUEL_SUMMARY_MESSAGES = new HashMap<>();
+    private static final Map<UUID, Boolean> NEW_TAME_MESSAGES = new HashMap<>();
+    private static final Map<UUID, Boolean> AUTO_RESPAWN_MESSAGES = new HashMap<>();
 
-    public static boolean enemyKilled(UUID player) {
-        return ENEMY_KILLED.getOrDefault(player, false);
+    private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
 
-    public static void setEnemyKilled(UUID player, boolean enabled) {
-        ENEMY_KILLED.put(player, enabled);
+    private static final List<BooleanSetting> BOOLEAN_SETTINGS = List.of(
+            new BooleanSetting("enemyKilled", ENEMY_KILLED, false),
+            new BooleanSetting("combatAssists", COMBAT_ASSISTS, false),
+            new BooleanSetting("combatKills", COMBAT_KILLS, false),
+            new BooleanSetting("combatDeath", COMBAT_DEATH, true),
+            new BooleanSetting("abilityUsed", ABILITY_USED, false),
+            new BooleanSetting("attributeUsed", ATTRIBUTE_USED, false),
+            new BooleanSetting("levelUp", LEVEL_UP, true),
+            new BooleanSetting("damage", DAMAGE, false),
+            new BooleanSetting("teleport", TELEPORT, false),
+            new BooleanSetting("shadowHands", SHADOW_HANDS, false),
+            new BooleanSetting("inventoryLowOnFood", INVENTORY_LOW_ON_FOOD, false),
+            new BooleanSetting("inventoryNoFood", INVENTORY_NO_FOOD, false),
+            new BooleanSetting("inventorySummary", INVENTORY_SUMMARY, true),
+            new BooleanSetting("duelAssistMessages", DUEL_ASSIST_MESSAGES, true),
+            new BooleanSetting("duelKillNotifications", DUEL_KILL_NOTIFICATIONS, true),
+            new BooleanSetting("duelSessionMessages", DUEL_SESSION_MESSAGES, true),
+            new BooleanSetting("duelMessages", DUEL_MESSAGES, true),
+            new BooleanSetting("duelResultMessages", DUEL_RESULT_MESSAGES, true),
+            new BooleanSetting("duelSummaryMessages", DUEL_SUMMARY_MESSAGES, false),
+            new BooleanSetting("rankedDuelKillNotifications", RANKED_DUEL_KILL_NOTIFICATIONS, true),
+            new BooleanSetting("rankedDuelStartMessages", RANKED_DUEL_START_MESSAGES, true),
+            new BooleanSetting("rankedDuelResultMessages", RANKED_DUEL_RESULT_MESSAGES, true),
+            new BooleanSetting("rankedDuelSummaryMessages", RANKED_DUEL_SUMMARY_MESSAGES, false),
+            new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
+            new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true)
+    );
+
+    public static boolean enemyKilled(UUID player) {
+        return getBoolean(ENEMY_KILLED, player, false);
+    }
+
+    public static boolean combatAssists(UUID player) {
+        return getBoolean(COMBAT_ASSISTS, player, false);
+    }
+
+    public static boolean combatKills(UUID player) {
+        return getBoolean(COMBAT_KILLS, player, false);
+    }
+
+    public static boolean combatDeath(UUID player) {
+        return getBoolean(COMBAT_DEATH, player, true);
     }
 
     public static boolean abilityUsed(UUID player) {
-        return ABILITY_USED.getOrDefault(player, false);
+        return getBoolean(ABILITY_USED, player, false);
     }
 
     public static boolean attributeUsed(UUID player) {
-        return ATTRIBUTE_USED.getOrDefault(player, false);
+        return getBoolean(ATTRIBUTE_USED, player, false);
     }
 
     public static boolean levelUp(UUID player) {
-        return LEVEL_UP.getOrDefault(player, true);
+        return getBoolean(LEVEL_UP, player, true);
     }
 
     public static boolean damage(UUID player) {
-        return DAMAGE.getOrDefault(player, false);
+        return getBoolean(DAMAGE, player, false);
     }
 
     public static boolean teleport(UUID player) {
-        return TELEPORT.getOrDefault(player, false);
+        return getBoolean(TELEPORT, player, false);
     }
 
     public static boolean shadowHands(UUID player) {
-        return SHADOW_HANDS.getOrDefault(player, false);
+        return getBoolean(SHADOW_HANDS, player, false);
     }
 
     public static boolean inventoryLowOnFood(UUID player) {
-        return INVENTORY_LOW_ON_FOOD.getOrDefault(player, false);
+        return getBoolean(INVENTORY_LOW_ON_FOOD, player, false);
     }
 
     public static boolean inventoryNoFood(UUID player) {
-        return INVENTORY_NO_FOOD.getOrDefault(player, false);
+        return getBoolean(INVENTORY_NO_FOOD, player, false);
+    }
+
+    public static boolean inventorySummary(UUID player) {
+        return getBoolean(INVENTORY_SUMMARY, player, true);
+    }
+
+    public static int inventorySummaryMinutes(UUID player) {
+        return Math.max(1, INVENTORY_SUMMARY_MINUTES.getOrDefault(player, DEFAULT_INVENTORY_SUMMARY_MINUTES));
+    }
+
+    public static long inventorySummaryIntervalTicks(UUID player) {
+        return 20L * 60L * inventorySummaryMinutes(player);
     }
 
     public static boolean duelAssistMessages(UUID player) {
-        return DUEL_ASSIST_MESSAGES.getOrDefault(player, true);
+        return getBoolean(DUEL_ASSIST_MESSAGES, player, true);
     }
 
     public static boolean duelKillNotifications(UUID player) {
-        return DUEL_KILL_NOTIFICATIONS.getOrDefault(player, true);
+        return getBoolean(DUEL_KILL_NOTIFICATIONS, player, true);
     }
 
     public static boolean duelKillNotifications(UUID player, boolean ranked) {
-        return ranked ? RANKED_DUEL_KILL_NOTIFICATIONS.getOrDefault(player, true) : duelKillNotifications(player);
+        return ranked ? getBoolean(RANKED_DUEL_KILL_NOTIFICATIONS, player, true) : duelKillNotifications(player);
     }
 
     public static boolean duelSessionMessages(UUID player) {
-        return DUEL_SESSION_MESSAGES.getOrDefault(player, true);
+        return getBoolean(DUEL_SESSION_MESSAGES, player, true);
     }
 
     public static boolean duelStartMessages(UUID player) {
@@ -89,109 +153,150 @@ public final class PlayerDebugSettings {
     }
 
     public static boolean duelStartMessages(UUID player, boolean ranked) {
-        return ranked ? RANKED_DUEL_START_MESSAGES.getOrDefault(player, true) : duelStartMessages(player);
+        return ranked ? getBoolean(RANKED_DUEL_START_MESSAGES, player, true) : duelStartMessages(player);
     }
 
     public static boolean duelMessages(UUID player) {
-        return DUEL_MESSAGES.getOrDefault(player, true);
+        return getBoolean(DUEL_MESSAGES, player, true);
     }
 
     public static boolean duelResultMessages(UUID player) {
-        return DUEL_RESULT_MESSAGES.getOrDefault(player, true);
+        return getBoolean(DUEL_RESULT_MESSAGES, player, true);
     }
 
     public static boolean duelResultMessages(UUID player, boolean ranked) {
-        return ranked ? RANKED_DUEL_RESULT_MESSAGES.getOrDefault(player, true) : duelResultMessages(player);
+        return ranked ? getBoolean(RANKED_DUEL_RESULT_MESSAGES, player, true) : duelResultMessages(player);
     }
 
     public static boolean duelSummaryMessages(UUID player) {
-        return DUEL_SUMMARY_MESSAGES.getOrDefault(player, false);
+        return getBoolean(DUEL_SUMMARY_MESSAGES, player, false);
     }
 
     public static boolean duelSummaryMessages(UUID player, boolean ranked) {
-        return ranked ? RANKED_DUEL_SUMMARY_MESSAGES.getOrDefault(player, false) : duelSummaryMessages(player);
+        return ranked ? getBoolean(RANKED_DUEL_SUMMARY_MESSAGES, player, false) : duelSummaryMessages(player);
+    }
+
+    public static boolean newTameMessages(UUID player) {
+        return getBoolean(NEW_TAME_MESSAGES, player, true);
+    }
+
+    public static boolean autoRespawnMessages(UUID player) {
+        return getBoolean(AUTO_RESPAWN_MESSAGES, player, true);
+    }
+
+    public static void setEnemyKilled(UUID player, boolean enabled) {
+        setBoolean(ENEMY_KILLED, player, enabled, false);
+    }
+
+    public static void setCombatAssists(UUID player, boolean enabled) {
+        setBoolean(COMBAT_ASSISTS, player, enabled, false);
+    }
+
+    public static void setCombatKills(UUID player, boolean enabled) {
+        setBoolean(COMBAT_KILLS, player, enabled, false);
+    }
+
+    public static void setCombatDeath(UUID player, boolean enabled) {
+        setBoolean(COMBAT_DEATH, player, enabled, true);
     }
 
     public static void setAbilityUsed(UUID player, boolean enabled) {
-        ABILITY_USED.put(player, enabled);
+        setBoolean(ABILITY_USED, player, enabled, false);
     }
 
     public static void setAttributeUsed(UUID player, boolean enabled) {
-        ATTRIBUTE_USED.put(player, enabled);
+        setBoolean(ATTRIBUTE_USED, player, enabled, false);
     }
 
     public static void setLevelUp(UUID player, boolean enabled) {
-        LEVEL_UP.put(player, enabled);
+        setBoolean(LEVEL_UP, player, enabled, true);
     }
 
     public static void setDamage(UUID player, boolean enabled) {
-        DAMAGE.put(player, enabled);
+        setBoolean(DAMAGE, player, enabled, false);
     }
 
     public static void setTeleport(UUID player, boolean enabled) {
-        TELEPORT.put(player, enabled);
+        setBoolean(TELEPORT, player, enabled, false);
     }
 
     public static void setShadowHands(UUID player, boolean enabled) {
-        SHADOW_HANDS.put(player, enabled);
+        setBoolean(SHADOW_HANDS, player, enabled, false);
     }
 
     public static void setInventoryLowOnFood(UUID player, boolean enabled) {
-        INVENTORY_LOW_ON_FOOD.put(player, enabled);
+        setBoolean(INVENTORY_LOW_ON_FOOD, player, enabled, false);
     }
 
     public static void setInventoryNoFood(UUID player, boolean enabled) {
-        INVENTORY_NO_FOOD.put(player, enabled);
+        setBoolean(INVENTORY_NO_FOOD, player, enabled, false);
+    }
+
+    public static void setInventorySummary(UUID player, boolean enabled) {
+        setBoolean(INVENTORY_SUMMARY, player, enabled, true);
+    }
+
+    public static void setInventorySummaryMinutes(UUID player, int minutes) {
+        if (player == null) {
+            return;
+        }
+        int normalized = Math.max(1, minutes);
+        if (normalized == DEFAULT_INVENTORY_SUMMARY_MINUTES) {
+            INVENTORY_SUMMARY_MINUTES.remove(player);
+        } else {
+            INVENTORY_SUMMARY_MINUTES.put(player, normalized);
+        }
+        markDirty();
     }
 
     public static void setDuelAssistMessages(UUID player, boolean enabled) {
-        DUEL_ASSIST_MESSAGES.put(player, enabled);
+        setBoolean(DUEL_ASSIST_MESSAGES, player, enabled, true);
     }
 
     public static void setDuelKillNotifications(UUID player, boolean enabled) {
-        DUEL_KILL_NOTIFICATIONS.put(player, enabled);
+        setBoolean(DUEL_KILL_NOTIFICATIONS, player, enabled, true);
     }
 
     public static void setDuelKillNotifications(UUID player, boolean ranked, boolean enabled) {
         if (ranked) {
-            RANKED_DUEL_KILL_NOTIFICATIONS.put(player, enabled);
+            setBoolean(RANKED_DUEL_KILL_NOTIFICATIONS, player, enabled, true);
         } else {
             setDuelKillNotifications(player, enabled);
         }
     }
 
     public static void setDuelSessionMessages(UUID player, boolean enabled) {
-        DUEL_SESSION_MESSAGES.put(player, enabled);
+        setBoolean(DUEL_SESSION_MESSAGES, player, enabled, true);
     }
 
     public static void setDuelStartMessages(UUID player, boolean ranked, boolean enabled) {
         if (ranked) {
-            RANKED_DUEL_START_MESSAGES.put(player, enabled);
+            setBoolean(RANKED_DUEL_START_MESSAGES, player, enabled, true);
         } else {
             setDuelSessionMessages(player, enabled);
         }
     }
 
     public static void setDuelMessages(UUID player, boolean enabled) {
-        DUEL_MESSAGES.put(player, enabled);
+        setBoolean(DUEL_MESSAGES, player, enabled, true);
         setDuelAllMessages(player, false, enabled);
     }
 
     public static void setDuelResultMessages(UUID player, boolean ranked, boolean enabled) {
         if (ranked) {
-            RANKED_DUEL_RESULT_MESSAGES.put(player, enabled);
+            setBoolean(RANKED_DUEL_RESULT_MESSAGES, player, enabled, true);
         } else {
-            DUEL_RESULT_MESSAGES.put(player, enabled);
+            setBoolean(DUEL_RESULT_MESSAGES, player, enabled, true);
         }
     }
 
     public static void setDuelSummaryMessages(UUID player, boolean enabled) {
-        DUEL_SUMMARY_MESSAGES.put(player, enabled);
+        setBoolean(DUEL_SUMMARY_MESSAGES, player, enabled, false);
     }
 
     public static void setDuelSummaryMessages(UUID player, boolean ranked, boolean enabled) {
         if (ranked) {
-            RANKED_DUEL_SUMMARY_MESSAGES.put(player, enabled);
+            setBoolean(RANKED_DUEL_SUMMARY_MESSAGES, player, enabled, false);
         } else {
             setDuelSummaryMessages(player, enabled);
         }
@@ -202,5 +307,101 @@ public final class PlayerDebugSettings {
         setDuelStartMessages(player, ranked, enabled);
         setDuelResultMessages(player, ranked, enabled);
         setDuelSummaryMessages(player, ranked, enabled);
+    }
+
+    public static void setDuelGeneral(UUID player, boolean enabled) {
+        setDuelAllMessages(player, false, enabled);
+        setDuelAssistMessages(player, enabled);
+        setDuelMessages(player, enabled);
+    }
+
+    public static void setRankedDuelGeneral(UUID player, boolean enabled) {
+        setDuelAllMessages(player, true, enabled);
+    }
+
+    public static void setNewTameMessages(UUID player, boolean enabled) {
+        setBoolean(NEW_TAME_MESSAGES, player, enabled, true);
+    }
+
+    public static void setAutoRespawnMessages(UUID player, boolean enabled) {
+        setBoolean(AUTO_RESPAWN_MESSAGES, player, enabled, true);
+    }
+
+    public static void setOtherGeneral(UUID player, boolean enabled) {
+        setNewTameMessages(player, enabled);
+        setAutoRespawnMessages(player, enabled);
+        setLevelUp(player, enabled);
+    }
+
+    public static Map<UUID, CompoundTag> saveAll() {
+        Map<UUID, CompoundTag> out = new HashMap<>();
+        for (BooleanSetting setting : BOOLEAN_SETTINGS) {
+            for (Map.Entry<UUID, Boolean> entry : setting.values().entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                CompoundTag row = out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag());
+                row.putBoolean(setting.key(), entry.getValue());
+            }
+        }
+        for (Map.Entry<UUID, Integer> entry : INVENTORY_SUMMARY_MINUTES.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            CompoundTag row = out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag());
+            row.putInt("inventorySummaryMinutes", Math.max(1, entry.getValue()));
+        }
+        return out;
+    }
+
+    public static void loadAll(Map<UUID, CompoundTag> rows) {
+        clearAll();
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, CompoundTag> entry : rows.entrySet()) {
+            UUID player = entry.getKey();
+            CompoundTag tag = entry.getValue();
+            if (player == null || tag == null) {
+                continue;
+            }
+            for (BooleanSetting setting : BOOLEAN_SETTINGS) {
+                if (tag.contains(setting.key(), Tag.TAG_BYTE)) {
+                    setting.values().put(player, tag.getBoolean(setting.key()));
+                }
+            }
+            if (tag.contains("inventorySummaryMinutes", Tag.TAG_INT)) {
+                INVENTORY_SUMMARY_MINUTES.put(player, Math.max(1, tag.getInt("inventorySummaryMinutes")));
+            }
+        }
+    }
+
+    private static boolean getBoolean(Map<UUID, Boolean> map, UUID player, boolean defaultValue) {
+        return player == null ? defaultValue : map.getOrDefault(player, defaultValue);
+    }
+
+    private static void setBoolean(Map<UUID, Boolean> map, UUID player, boolean enabled, boolean defaultValue) {
+        if (player == null) {
+            return;
+        }
+        if (enabled == defaultValue) {
+            map.remove(player);
+        } else {
+            map.put(player, enabled);
+        }
+        markDirty();
+    }
+
+    private static void clearAll() {
+        for (BooleanSetting setting : BOOLEAN_SETTINGS) {
+            setting.values().clear();
+        }
+        INVENTORY_SUMMARY_MINUTES.clear();
+    }
+
+    private static void markDirty() {
+        if (TameRegistry.isInitialized()) {
+            TameRegistry.markDirty();
+        }
     }
 }
