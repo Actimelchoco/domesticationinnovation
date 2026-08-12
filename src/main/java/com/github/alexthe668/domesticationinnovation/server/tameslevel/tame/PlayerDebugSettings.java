@@ -61,11 +61,11 @@ public final class PlayerDebugSettings {
     }
 
     public static boolean inventoryLowOnFood(UUID player) {
-        return INVENTORY_LOW_ON_FOOD.getOrDefault(player, true);
+        return INVENTORY_LOW_ON_FOOD.getOrDefault(player, false);
     }
 
     public static boolean inventoryNoFood(UUID player) {
-        return INVENTORY_NO_FOOD.getOrDefault(player, true);
+        return INVENTORY_NO_FOOD.getOrDefault(player, false);
     }
 
     public static boolean duelAssistMessages(UUID player) {

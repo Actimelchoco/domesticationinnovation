@@ -4413,7 +4413,7 @@ public class TameCommands {
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "/tames debug inventory lowOnFood true/false and /tames debug inventory noFood true/false control hunger warning messages.",
+                    "/tames debug inventory lowOnFood true/false and /tames debug inventory noFood true/false control immediate stored-food eating warnings. The 10-minute summary is always on.",
                     "Drum refill: place a food container directly above a drum. Loaded hungry tames within 20 blocks check it once per minute and pull valid food until they reach green food status.",
                     "Owners get low-food, last-food, and 10-minute no-food digest notifications."
             );
@@ -19992,8 +19992,11 @@ public class TameCommands {
             if (stack.isEmpty()) {
                 data.hungerInventory.remove(i);
             }
-            if (totalHungerFoodPoints(data) <= 0) {
+            int remainingFoodPoints = totalHungerFoodPoints(data);
+            if (remainingFoodPoints <= 0) {
                 notifyOwnerHungerLastFood(tame == null ? null : tame.getServer(), data);
+            } else if (remainingFoodPoints < TAME_HUNGER_LOW_FOOD_POINTS) {
+                notifyOwnerHungerLowAfterEating(tame == null ? null : tame.getServer(), data, remainingFoodPoints);
             }
             return true;
         }
@@ -20063,6 +20066,16 @@ public class TameCommands {
         data.hungerLastFoodNotified = true;
     }
 
+    private static void notifyOwnerHungerLowAfterEating(MinecraftServer server, TameData data, int foodPoints) {
+        if (server == null || data == null || data.ownerUUID == null) {
+            return;
+        }
+        ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
+        if (owner != null && PlayerDebugSettings.inventoryLowOnFood(owner.getUUID())) {
+            owner.sendSystemMessage(Component.literal(tameDisplayName(data) + " ate stored food and is low on food (" + foodPoints + " food points left).").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        }
+    }
+
     private static boolean updateHungerWarningState(MinecraftServer server, TameData data) {
         if (data == null) {
             return false;
@@ -20129,12 +20142,12 @@ public class TameCommands {
             }
             NEXT_HUNGER_EMPTY_DIGEST_TICK.put(ownerId, now + TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS);
             boolean sentForPlayer = false;
-            if (!emptyNames.isEmpty() && PlayerDebugSettings.inventoryNoFood(ownerId)) {
+            if (!emptyNames.isEmpty()) {
                 emptyNames.sort(String::compareToIgnoreCase);
                 player.sendSystemMessage(Component.literal("Tames without food: " + String.join(", ", emptyNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
                 sentForPlayer = true;
             }
-            if (!lowNames.isEmpty() && PlayerDebugSettings.inventoryLowOnFood(ownerId)) {
+            if (!lowNames.isEmpty()) {
                 lowNames.sort(String::compareToIgnoreCase);
                 player.sendSystemMessage(Component.literal("Tames low on food: " + String.join(", ", lowNames) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
                 sentForPlayer = true;
