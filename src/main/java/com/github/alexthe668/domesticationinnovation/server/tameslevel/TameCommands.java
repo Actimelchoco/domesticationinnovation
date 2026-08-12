@@ -19266,6 +19266,14 @@ public class TameCommands {
     }
 
     private static boolean matchesSnapshotCommand(int command, MovementOrder order, String typeId) {
+        if (isLegendaryMonstersType(typeId)) {
+            int expected = switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER, GUARDIAN -> 2;
+            };
+            return command == expected;
+        }
         int expected = switch (order) {
             case WANDER, GUARDIAN -> 0;
             case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 1 : 2;
@@ -19577,6 +19585,13 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {
+        if (isLegendaryMonstersType(entityTypeId(tame))) {
+            return switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER, GUARDIAN -> 2;
+            };
+        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> 0;
@@ -19665,6 +19680,13 @@ public class TameCommands {
     }
 
     private static int[] commandCandidates(TamableAnimal tame, MovementOrder order) {
+        if (isLegendaryMonstersType(entityTypeId(tame))) {
+            return switch (order) {
+                case FOLLOW -> new int[]{0, 3, 2, 1};
+                case SIT -> new int[]{1, 0, 2, 3};
+                case WANDER, GUARDIAN -> new int[]{2, 0, 3, 1};
+            };
+        }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
                 case WANDER -> new int[]{0, 1, 2, 3};
@@ -19679,6 +19701,17 @@ public class TameCommands {
             case FOLLOW -> new int[]{2, 1, 0, 3};
             case GUARDIAN -> new int[]{0, 2, 1, 3};
         };
+    }
+
+    private static boolean isLegendaryMonstersType(String typeId) {
+        if (typeId == null || typeId.isBlank()) {
+            return false;
+        }
+        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("entity.")) {
+            normalized = normalized.substring("entity.".length());
+        }
+        return normalized.startsWith("legendary_monsters:");
     }
 
     private static void setGuardianAnchor(ServerPlayer player, TamableAnimal tame, TameData data) {

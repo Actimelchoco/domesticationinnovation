@@ -525,12 +525,10 @@ public final class TameDuelManager {
             return;
         }
         ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
-        if (!isLegendaryMonstersMossyGolem(tame)) {
-            TameCommands.applyMovementOrderCode(tame, 2);
-            tame.setOrderedToSit(false);
-            if (tame instanceof IComandableMob commandableMob) {
-                commandableMob.setCommand(0);
-            }
+        TameCommands.applyMovementOrderCode(tame, 2);
+        tame.setOrderedToSit(false);
+        if (tame instanceof IComandableMob commandableMob) {
+            commandableMob.setCommand(0);
         }
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = tame.getTarget();
@@ -628,13 +626,11 @@ public final class TameDuelManager {
         }
         tame.setHealth(tame.getMaxHealth());
         ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
-        if (!isLegendaryMonstersMossyGolem(tame)) {
-            // Set follow once at duel start so participant AI stays combat-active.
-            TameCommands.applyMovementOrderCode(tame, 2);
-            tame.setOrderedToSit(false);
-        }
+        // Keep participant AI combat-active and not sitting.
+        TameCommands.applyMovementOrderCode(tame, 2);
+        tame.setOrderedToSit(false);
         applyDuelFollowRangeBoost(tame);
-        if (tame instanceof IComandableMob commandableMob && !isLegendaryMonstersMossyGolem(tame)) {
+        if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
     }
