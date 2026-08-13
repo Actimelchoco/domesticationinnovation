@@ -166,6 +166,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
     private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 10;
+    private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
     private static final int TAME_HUNGER_DRUM_REFILL_RADIUS = 20;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
@@ -23175,13 +23176,13 @@ public class TameCommands {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<UUID> all = new ArrayList<>(available);
         double roll = random.nextDouble();
-        if (roll < 0.69D) {
+        if (roll < 0.6999D) {
             return createFfaOneVOneRound(server, all, random);
         }
-        if (roll < 0.99D) {
+        if (roll < 0.9999D) {
             return createFfaTeamDeathmatchRound(server, all, random);
         }
-        // 1%: all tames involved, split by highest MMR alternating.
+        // 0.01%: all tames involved, split by highest MMR alternating.
         return createAlternatingMmrRound(server, all);
     }
 
@@ -23301,12 +23302,62 @@ public class TameCommands {
             teamB.add(available.get(1));
             return new DuelSessionRound(teamA, teamB);
         }
-        int strategy = rollTeamDeathmatchStrategy(random);
-        DuelSessionRound built = buildFfaTeamDeathmatchByStrategy(server, available, random, strategy);
-        if (built != null && !built.teamA().isEmpty() && !built.teamB().isEmpty()) {
-            return built;
+        int[] sizes = pickRankedTeamDeathmatchSizes(available.size(), random);
+        DuelSessionRound built = buildMmrBalancedFfaTeams(server, available, sizes[0], sizes[1], random);
+        return built != null ? built : createAlternatingMmrRound(server, available);
+    }
+
+    private static int[] pickRankedTeamDeathmatchSizes(int participantCount, ThreadLocalRandom random) {
+        int maxSide = participantCount >= 6 && random.nextDouble() < 0.35D ? 3 : 2;
+        if (participantCount >= 8 && random.nextDouble() < 0.025D) {
+            maxSide = 4;
         }
-        return createAlternatingMmrRound(server, available);
+        if (participantCount >= 10 && random.nextDouble() < 0.005D) {
+            maxSide = 5;
+        }
+        int otherSide = 1 + random.nextInt(maxSide);
+        int firstSide = maxSide;
+        int secondSide = otherSide;
+        if (firstSide + secondSide > participantCount) {
+            secondSide = Math.max(1, participantCount - firstSide);
+        }
+        if (random.nextBoolean()) {
+            int swap = firstSide;
+            firstSide = secondSide;
+            secondSide = swap;
+        }
+        return new int[]{firstSide, secondSide};
+    }
+
+    private static DuelSessionRound buildMmrBalancedFfaTeams(MinecraftServer server, List<UUID> available, int sizeA, int sizeB, ThreadLocalRandom random) {
+        if (available == null || sizeA <= 0 || sizeB <= 0 || sizeA + sizeB > available.size()) {
+            return null;
+        }
+        List<UUID> bestA = null;
+        List<UUID> bestB = null;
+        double bestDifference = Double.MAX_VALUE;
+        List<UUID> shuffled = new ArrayList<>(available);
+        int attempts = Math.max(100, Math.min(RANKED_TEAM_BALANCE_ATTEMPTS, available.size() * available.size() * 4));
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            java.util.Collections.shuffle(shuffled, random);
+            List<UUID> candidateA = new ArrayList<>(shuffled.subList(0, sizeA));
+            List<UUID> candidateB = new ArrayList<>(shuffled.subList(sizeA, sizeA + sizeB));
+            double powerA = candidateA.stream().mapToDouble(id -> sessionParticipantPower(server, id)).sum();
+            double powerB = candidateB.stream().mapToDouble(id -> sessionParticipantPower(server, id)).sum();
+            double difference = Math.abs(powerA - powerB) / Math.max(1.0D, powerA + powerB);
+            if (difference < bestDifference) {
+                bestDifference = difference;
+                bestA = candidateA;
+                bestB = candidateB;
+                if (difference <= 0.01D) {
+                    break;
+                }
+            }
+        }
+        if (bestA == null || bestB == null) {
+            return null;
+        }
+        return new DuelSessionRound(new LinkedHashSet<>(bestA), new LinkedHashSet<>(bestB));
     }
 
     private static int pickSmallBiasedTeamSize(int minSize, int maxSize, ThreadLocalRandom random) {
