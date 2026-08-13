@@ -9392,7 +9392,7 @@ public class TameCommands {
             }
         }
 
-        sendTeleportSummary(player, "Guardian deploy " + label, loadedTargets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(player, loadedTargets, unloadedTargets);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Guardian deploy failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -9866,7 +9866,7 @@ public class TameCommands {
                 failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, 0, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(player, loadedTargets, unloadedTargets);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Drum tp failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -10441,7 +10441,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP group " + group, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -10506,7 +10506,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP type " + typeFilter, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -11345,13 +11345,8 @@ public class TameCommands {
             }
             return adminError(source, message.toString());
         }
-        final int respawnedCount = success;
-        final int reincarnatedCount = reincarnated;
         final String respawnedList = respawnedNames.isEmpty() ? "none" : String.join(", ", respawnedNames);
-        source.sendSuccess(() -> Component.literal(
-                label + ": " + respawnedCount + " tame(s) for " + ownerName + " -> " + respawnedList
-                        + (reincarnateAfter ? " (" + reincarnatedCount + " restored to saved progress)" : "")
-        ).withStyle(ChatFormatting.GREEN), true);
+        source.sendSuccess(() -> Component.literal("Respawned: " + respawnedList + ".").withStyle(ChatFormatting.WHITE), true);
         if (failed > 0 && !failReasons.isEmpty()) {
             source.sendFailure(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
         }
@@ -11438,7 +11433,7 @@ public class TameCommands {
             return error(player, message.toString());
         }
         String respawnedList = respawnedNames.isEmpty() ? "none" : String.join(", ", respawnedNames);
-        player.sendSystemMessage(Component.literal(label + ": " + success + " tame(s) -> " + respawnedList + (reincarnateAfter ? " (" + reincarnated + " restored to saved progress)" : "") + ".").withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Respawned: " + respawnedList + ".").withStyle(ChatFormatting.WHITE));
         sendAffordabilityFailures(player, reincarnateAfter ? "Could not afford respawn reincarnation for" : "Could not afford respawn for", unaffordable);
         if (failed > 0 && !failReasons.isEmpty()) {
             player.sendSystemMessage(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
@@ -12365,7 +12360,7 @@ public class TameCommands {
                 failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP all", targets.size(), queued, ownedDeadTamesForAllCommands(p.getUUID()).size(), queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -12472,7 +12467,7 @@ public class TameCommands {
                 deadSkipped++;
             }
         }
-        sendTeleportSummary(p, "TP dim " + dimensionId, targets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -12487,6 +12482,7 @@ public class TameCommands {
         int failed = 0;
         int skippedDuel = 0;
         List<String> failedQueueNames = new ArrayList<>();
+        List<TameData> teleportedData = new ArrayList<>();
 
         for (TameData d : requested) {
             if (d == null || d.dead) {
@@ -12502,13 +12498,14 @@ public class TameCommands {
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
             if (unloaded.success) {
                 queued++;
+                teleportedData.add(d);
             } else {
                 failed++;
                 failedQueueNames.add((d.name == null ? "unknown" : d.name) + " (" + unloaded.error + ")");
             }
         }
 
-        sendTeleportSummary(p, "TP unloaded", 0, queued, ownedDeadTamesForAllCommands(p.getUUID()).size(), failed, 0, 0);
+        sendTeleportNames(p, List.of(), teleportedData);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
@@ -12523,6 +12520,7 @@ public class TameCommands {
         int failed = 0;
         int skippedDuel = 0;
         List<String> failedNames = new ArrayList<>();
+        List<TameData> teleportedData = new ArrayList<>();
 
         for (TameData data : requested) {
             if (data == null || data.dead || isEffectivelyLoaded(source, player, data)) {
@@ -12545,9 +12543,10 @@ public class TameCommands {
                 continue;
             }
             queued++;
+            teleportedData.add(data);
         }
 
-        sendTeleportSummary(player, "TPHome unloaded", 0, queued, ownedDeadTamesForAllCommands(player.getUUID()).size(), failed, 0, 0);
+        sendTeleportNames(player, List.of(), teleportedData);
         sendDuelCommandSkipNotice(player, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("Unloaded tphome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -12664,7 +12663,7 @@ public class TameCommands {
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, payment.xpSpent, crossDimension);
+        sendTeleportNames(player, loadedTargets, unloadedTargets);
         sendAffordabilityFailures(player, "Could not afford tpguardian for", unaffordable);
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("TPGuardian failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -13457,7 +13456,7 @@ public class TameCommands {
         if (movementChanged) {
             TameRegistry.markDirty();
         }
-        sendTeleportSummary(player, label, loadedTargets.size(), queued, deadSkipped, queueFailed, 0, 0);
+        sendTeleportNames(player, loadedTargets, unloadedTargets);
         sendDuelCommandSkipNotice(player, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             player.sendSystemMessage(Component.literal("TPHome failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -13531,7 +13530,7 @@ public class TameCommands {
                 failedNames.add(tameDisplayName(data) + " (" + unloaded.error + ")");
             }
         }
-        sendTeleportSummary(p, "TP " + movementLabel(order), loadedTargets.size(), queued, 0, failed, payment.xpSpent, crossDimension);
+        sendTeleportNames(p, loadedTargets, unloadedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("TP " + movementLabel(order) + " failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
@@ -14628,6 +14627,24 @@ public class TameCommands {
         return Math.max(0, base + Math.max(0, inLevel));
     }
 
+    private static void sendTeleportNames(ServerPlayer player, Collection<TamableAnimal> loaded, Collection<TameData> unloaded) {
+        if (player == null) return;
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        if (loaded != null) {
+            for (TamableAnimal tame : loaded) {
+                if (tame != null) names.add(tame.getName().getString());
+            }
+        }
+        if (unloaded != null) {
+            for (TameData data : unloaded) {
+                if (data != null) names.add(tameDisplayName(data));
+            }
+        }
+        if (!names.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Teleport: " + String.join(", ", names) + ".").withStyle(ChatFormatting.WHITE));
+        }
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> debugCommand() {
         return Commands.literal("debug")
                 .executes(ctx -> debugStatus(ctx.getSource()))
@@ -14689,38 +14706,7 @@ public class TameCommands {
                                         .executes(ctx -> setOtherDebug(ctx.getSource(), "general", BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("general")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "general", BoolArgumentType.getBool(ctx, "enabled"))))))
-                .then(Commands.literal("enemyKilled")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDebugEnemyKilled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("levelUp")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDebugLevelUp(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelRanked")
-                        .executes(ctx -> duelToggleStatus(ctx.getSource()))
-                        .then(debugDuelBoolean("kill", true, "kill"))
-                        .then(debugDuelBoolean("result", true, "result"))
-                        .then(debugDuelBoolean("start", true, "start"))
-                        .then(debugDuelBoolean("sum", true, "sum"))
-                        .then(debugDuelBoolean("all", true, "all")))
-                .then(Commands.literal("duelKill")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelKillNotifications(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelAssists")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelAssistMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelSessionMessage")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelSessionMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelMessages")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelMesesages")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelSumm")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelSummaryMessages(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))));
+                                        .executes(ctx -> setOtherDebug(ctx.getSource(), "general", BoolArgumentType.getBool(ctx, "enabled"))))));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> debugDuelBoolean(String literal, boolean ranked, String category) {
@@ -14744,15 +14730,6 @@ public class TameCommands {
         return (int) (4.5D * level * level - 162.5D * level + 2220.0D);
     }
 
-    private static int setDebugEnemyKilled(CommandSourceStack source, boolean enabled) {
-        ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setEnemyKilled(p.getUUID(), enabled);
-        PlayerDebugSettings.setCombatKills(p.getUUID(), enabled);
-        PlayerDebugSettings.setCombatAssists(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Debug enemyKilled set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
-        return 1;
-    }
-
     private static int setDebugAbilityUsed(CommandSourceStack source, boolean enabled) {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setAbilityUsed(p.getUUID(), enabled);
@@ -14771,13 +14748,6 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         PlayerDebugSettings.setAttributeUsed(p.getUUID(), enabled);
         p.sendSystemMessage(Component.literal("Debug attributeUsed set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    private static int setDebugLevelUp(CommandSourceStack source, boolean enabled) {
-        ServerPlayer p = source.getPlayer();
-        PlayerDebugSettings.setLevelUp(p.getUUID(), enabled);
-        p.sendSystemMessage(Component.literal("Debug levelUp set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -14850,22 +14820,6 @@ public class TameCommands {
         PlayerDebugSettings.setDuelAssistMessages(p.getUUID(), enabled);
         p.sendSystemMessage(Component.literal("Duel assist messages set to " + enabled + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
-    }
-
-    private static int setDuelKillNotifications(CommandSourceStack source, boolean enabled) {
-        return setDuelDebugCategory(source, false, "kill", enabled);
-    }
-
-    private static int setDuelSessionMessages(CommandSourceStack source, boolean enabled) {
-        return setDuelDebugCategory(source, false, "start", enabled);
-    }
-
-    private static int setDuelMessages(CommandSourceStack source, boolean enabled) {
-        return setDuelDebugCategory(source, false, "all", enabled);
-    }
-
-    private static int setDuelSummaryMessages(CommandSourceStack source, boolean enabled) {
-        return setDuelDebugCategory(source, false, "sum", enabled);
     }
 
     private static int setDuelGeneral(CommandSourceStack source, boolean enabled) {

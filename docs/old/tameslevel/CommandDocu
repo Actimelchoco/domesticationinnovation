@@ -129,15 +129,11 @@ When an owner changes dimension, loaded owned tames that are following (not sitt
 are teleported to the owner after ~1 second automatically.
 
 ----Debug----
-/tames debug enemyKilled <true|false>
-Shows kill debug:
-enemyKilled true/false: Killed: MobType[xp give]: K: Killer Name, A: Assister Name...
-
-/tames debug abilityUsed <true|false>
-Enables/disables ability usage chat messages.
-
-/tames debug attributeUsed <true|false>
-Enables/disables attribute usage chat messages.
+/tames debug duel ...
+/tames debug inventory ...
+/tames debug combat ...
+/tames debug other ...
+Debug settings are organized under these four groups. Run a group without arguments to view its settings.
 
 ----Admin----
 /tames admin normalizeBonuses all
