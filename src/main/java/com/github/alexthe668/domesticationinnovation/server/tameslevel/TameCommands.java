@@ -165,6 +165,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
+    private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 10;
     private static final int TAME_HUNGER_DRUM_REFILL_RADIUS = 20;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
@@ -19977,7 +19978,7 @@ public class TameCommands {
                 changed |= refillHungerFromNearbyDrumChest(tame, data);
             }
             changed |= updateHungerWarningState(server, data);
-            int drain = hungerDrainPerSecond(tame, data);
+            int drain = hungerDrainPerSecond(tame, data, now);
             if (drain <= 0) {
                 if (data.hungerEmptyNotified && totalHungerFoodPoints(data) > 0) {
                     data.hungerEmptyNotified = false;
@@ -20005,13 +20006,20 @@ public class TameCommands {
         }
     }
 
-    private static int hungerDrainPerSecond(TamableAnimal tame, TameData data) {
+    private static int hungerDrainPerSecond(TamableAnimal tame, TameData data, long now) {
         if (tame == null || data == null || tame.isOrderedToSit() || data.movementOrder == 1) {
             return 0;
         }
         MinecraftServer server = tame.getServer();
         if (server == null || data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null) {
             return 0;
+        }
+        if (TameDuelManager.isEntityInDuel(tame.getUUID())) {
+            long elapsedSeconds = now / 20L;
+            int stagger = Math.floorMod(tame.getUUID().hashCode(), DUEL_HUNGER_DRAIN_INTERVAL_SECONDS);
+            if (Math.floorMod(elapsedSeconds + stagger, DUEL_HUNGER_DRAIN_INTERVAL_SECONDS) != 0L) {
+                return 0;
+            }
         }
         LivingEntity target = tame.getTarget();
         if (target != null && target.isAlive()) {
