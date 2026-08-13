@@ -11458,7 +11458,9 @@ public class TameCommands {
             if (bedId != null) {
                 ServerLevel bedLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, bedId));
                 if (bedLevel != null) {
-                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY, data.petBedZ + 0.5D), 0.0F, 0.0F);
+                    // Pet beds are 7/16 of a block tall. Target their top surface so the
+                    // tame keeps the bed's X/Z coordinate instead of being moved beside it.
+                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY + 7.0D / 16.0D, data.petBedZ + 0.5D), 0.0F, 0.0F);
                 }
             }
         }
@@ -13899,6 +13901,11 @@ public class TameCommands {
 
     private static SpawnTarget findSafeTameTeleportTarget(TamableAnimal tame, SpawnTarget target) {
         if (tame == null || target == null || target.level == null || target.pos == null) {
+            return target;
+        }
+        AABB exactBox = tame.getDimensions(tame.getPose()).makeBoundingBox(target.pos.x, target.pos.y, target.pos.z);
+        if (target.level.noCollision(tame, exactBox)
+                && target.level.getEntities(tame, exactBox.inflate(0.05D), entity -> entity instanceof LivingEntity && entity.isAlive()).isEmpty()) {
             return target;
         }
         int baseX = Mth.floor(target.pos.x);
