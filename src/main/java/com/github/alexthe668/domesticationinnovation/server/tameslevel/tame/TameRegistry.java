@@ -45,6 +45,7 @@ public class TameRegistry {
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
     private static final Set<UUID> RANKED_PARTICIPANTS = new LinkedHashSet<>();
+    private static final Set<String> RANKED_FORBIDDEN_TAME_TYPE_IDS = new LinkedHashSet<>();
     private static final List<CompoundTag> TEMPORARY_TAMES = new ArrayList<>();
     private static TameRegistrySavedData savedData;
 
@@ -122,6 +123,8 @@ public class TameRegistry {
         RANKED_ARENA_NAME = savedData.getRankedArenaName();
         RANKED_PARTICIPANTS.clear();
         RANKED_PARTICIPANTS.addAll(savedData.getRankedParticipants());
+        RANKED_FORBIDDEN_TAME_TYPE_IDS.clear();
+        RANKED_FORBIDDEN_TAME_TYPE_IDS.addAll(savedData.getRankedForbiddenTameTypeIds());
         TEMPORARY_TAMES.clear();
         TEMPORARY_TAMES.addAll(savedData.getTemporaryTames());
         if (!invalidIds.isEmpty() || !invalidTlIds.isEmpty()) {
@@ -292,6 +295,7 @@ public class TameRegistry {
         savedData.setPlayerDebugSettings(PlayerDebugSettings.saveAll());
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
         savedData.setRankedParticipants(RANKED_PARTICIPANTS);
+        savedData.setRankedForbiddenTameTypeIds(RANKED_FORBIDDEN_TAME_TYPE_IDS);
         savedData.setTemporaryTames(TEMPORARY_TAMES);
         savedData.setDirty();
     }
@@ -402,6 +406,29 @@ public class TameRegistry {
         }
         PLAYER_DUEL_STATS.clear();
         markDirty();
+    }
+
+    public static Set<String> getRankedForbiddenTameTypes() {
+        return Set.copyOf(RANKED_FORBIDDEN_TAME_TYPE_IDS);
+    }
+
+    public static boolean addRankedForbiddenTameType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || !RANKED_FORBIDDEN_TAME_TYPE_IDS.add(normalized)) return false;
+        markDirty();
+        return true;
+    }
+
+    public static boolean removeRankedForbiddenTameType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || !RANKED_FORBIDDEN_TAME_TYPE_IDS.remove(normalized)) return false;
+        markDirty();
+        return true;
+    }
+
+    public static boolean isRankedTameTypeForbidden(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        return normalized != null && RANKED_FORBIDDEN_TAME_TYPE_IDS.contains(normalized);
     }
 
     public static boolean removePlayerDuelStats(UUID playerUuid) {

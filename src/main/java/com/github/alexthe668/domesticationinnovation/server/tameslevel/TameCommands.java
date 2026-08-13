@@ -3163,6 +3163,18 @@ public class TameCommands {
                                         .executes(ctx -> adminRankedStatus(ctx.getSource()))
                                         .then(Commands.literal("duelff")
                                                 .executes(ctx -> adminRankedDuelFf(ctx.getSource())))
+                                        .then(Commands.literal("vorbidType")
+                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                                                        .executes(ctx -> adminRankedForbidType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
+                                        .then(Commands.literal("forbidType")
+                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                                                        .executes(ctx -> adminRankedForbidType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
+                                        .then(Commands.literal("allowType")
+                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameRegistry.getRankedForbiddenTameTypes(), b))
+                                                        .executes(ctx -> adminRankedAllowType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("setArena")
                                                 .then(Commands.argument("arenaName", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestArenaNamesIncludingRanked(ctx.getSource(), b))
@@ -7661,6 +7673,7 @@ public class TameCommands {
         ActiveDuelSession session = RANKED_DUEL_SESSION;
         int changed = 0;
         int blockedActive = 0;
+        int forbiddenType = 0;
         int skipped = 0;
 
         for (UUID participantId : selectedIds) {
@@ -7668,6 +7681,11 @@ public class TameCommands {
                 continue;
             }
             if (add) {
+                TameData participantData = rankedTameDataForParticipant(participantId);
+                if (participantData != null && TameRegistry.isRankedTameTypeForbidden(tameTypeId(participantData))) {
+                    forbiddenType++;
+                    continue;
+                }
                 if (!RANKED_POOL.add(participantId)) {
                     skipped++;
                     continue;
@@ -7723,6 +7741,9 @@ public class TameCommands {
         StringBuilder message = new StringBuilder(action).append(" ").append(changed).append(" participant(s) in ranked.");
         if (blockedActive > 0) {
             message.append(" ").append(blockedActive).append(" queued for pull right after the current duel round.");
+        }
+        if (forbiddenType > 0) {
+            message.append(" ").append(forbiddenType).append(" blocked by ranked type restrictions.");
         }
         if (skipped > 0) {
             message.append(" ").append(skipped).append(" unchanged.");
@@ -19705,6 +19726,62 @@ public class TameCommands {
         };
     }
 
+    private static int adminRankedForbidType(CommandSourceStack source, String rawType) {
+        String normalized = normalizeTypeFilter(rawType);
+        if (!normalized.contains(":")) normalized = "minecraft:" + normalized;
+        ResourceLocation typeId = ResourceLocation.tryParse(normalized);
+        if (typeId == null || !ForgeRegistries.ENTITY_TYPES.containsKey(typeId)) {
+            return error(source.getPlayer(), "Unknown entity type: " + rawType + ".");
+        }
+        normalized = typeId.toString();
+        if (!TameRegistry.addRankedForbiddenTameType(normalized)) {
+            return error(source.getPlayer(), normalized + " is already forbidden from ranked.");
+        }
+        int removed = removeForbiddenTypeFromRanked(source.getServer(), normalized);
+        String finalType = normalized;
+        source.sendSuccess(() -> Component.literal("Forbade " + finalType + " from ranked; removed " + removed + " participant(s).").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminRankedAllowType(CommandSourceStack source, String rawType) {
+        String normalized = normalizeTypeFilter(rawType);
+        if (!normalized.contains(":")) normalized = "minecraft:" + normalized;
+        if (!TameRegistry.removeRankedForbiddenTameType(normalized)) {
+            return error(source.getPlayer(), normalized + " is not forbidden from ranked.");
+        }
+        String finalType = normalized;
+        source.sendSuccess(() -> Component.literal("Allowed " + finalType + " in ranked again.").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int removeForbiddenTypeFromRanked(MinecraftServer server, String typeId) {
+        LinkedHashSet<UUID> matching = new LinkedHashSet<>();
+        for (UUID id : collectRankedParticipantIds()) {
+            TameData data = rankedTameDataForParticipant(id);
+            if (data != null && typeId.equals(tameTypeId(data))) matching.add(id);
+        }
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        for (UUID participantId : matching) {
+            for (UUID id : duelParticipantIdentityIds(participantId)) {
+                RANKED_POOL.remove(id);
+                if (session != null) {
+                    session.poolA.remove(id);
+                    session.poolB.remove(id);
+                    session.queuedPullAfterRound.remove(id);
+                    session.currentRoundA = removeFromSet(session.currentRoundA, id);
+                    session.currentRoundB = removeFromSet(session.currentRoundB, id);
+                    session.idleSitHoldUntilTick.remove(id);
+                    session.rankedPlayerReturnTargets.remove(id);
+                }
+                if (server != null && TameDuelManager.isEntityInDuel(id)) {
+                    TameDuelManager.endDuelForEntity(server, id);
+                }
+            }
+        }
+        persistRankedPoolToRegistry();
+        return matching.size();
+    }
+
     private static boolean isLegendaryMonstersType(String typeId) {
         if (typeId == null || typeId.isBlank()) {
             return false;
@@ -23665,7 +23742,7 @@ public class TameCommands {
                     continue;
                 }
                 TameData data = rankedTameDataForParticipant(id);
-                if (data != null && !data.dead && hasFoodForDuel(data)) {
+                if (data != null && !data.dead && hasFoodForDuel(data) && !TameRegistry.isRankedTameTypeForbidden(tameTypeId(data))) {
                     available.add(id);
                 }
             }

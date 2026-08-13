@@ -37,6 +37,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, CompoundTag> playerDebugSettings = new HashMap<>();
     private String rankedArenaName = "";
     private final Set<UUID> rankedParticipants = new LinkedHashSet<>();
+    private final Set<String> rankedForbiddenTameTypeIds = new LinkedHashSet<>();
     private final List<CompoundTag> temporaryTames = new ArrayList<>();
 
     public Map<UUID, TameData> getTames() {
@@ -311,6 +312,21 @@ public class TameRegistrySavedData extends SavedData {
         }
     }
 
+    public Set<String> getRankedForbiddenTameTypeIds() {
+        return rankedForbiddenTameTypeIds;
+    }
+
+    public void setRankedForbiddenTameTypeIds(Set<String> typeIds) {
+        rankedForbiddenTameTypeIds.clear();
+        if (typeIds != null) {
+            for (String id : typeIds) {
+                if (id != null && !id.isBlank()) {
+                    rankedForbiddenTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        }
+    }
+
     public List<CompoundTag> getTemporaryTames() {
         return temporaryTames;
     }
@@ -529,6 +545,11 @@ public class TameRegistrySavedData extends SavedData {
             rankedParticipantsTag.add(row);
         }
         tag.put("rankedParticipants", rankedParticipantsTag);
+        ListTag rankedForbiddenTypesTag = new ListTag();
+        for (String id : rankedForbiddenTameTypeIds) {
+            rankedForbiddenTypesTag.add(net.minecraft.nbt.StringTag.valueOf(id));
+        }
+        tag.put("rankedForbiddenTameTypeIds", rankedForbiddenTypesTag);
         ListTag temporaryTamesTag = new ListTag();
         for (CompoundTag row : temporaryTames) {
             if (row != null && !row.isEmpty()) {
@@ -760,6 +781,15 @@ public class TameRegistrySavedData extends SavedData {
                     continue;
                 }
                 data.rankedParticipants.add(row.getUUID("participantUUID"));
+            }
+        }
+        if (tag.contains("rankedForbiddenTameTypeIds", Tag.TAG_LIST)) {
+            ListTag forbiddenTypes = tag.getList("rankedForbiddenTameTypeIds", Tag.TAG_STRING);
+            for (Tag entry : forbiddenTypes) {
+                String id = entry.getAsString();
+                if (id != null && !id.isBlank()) {
+                    data.rankedForbiddenTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
+                }
             }
         }
         if (tag.contains("temporaryTames", Tag.TAG_LIST)) {
