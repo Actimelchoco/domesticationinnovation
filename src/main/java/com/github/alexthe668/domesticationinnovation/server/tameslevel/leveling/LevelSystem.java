@@ -51,6 +51,7 @@ public class LevelSystem {
     public static final double RECOVERY_XP_MULTIPLIER = 2.0D;
     public static final double ATTRIBUTE_UPGRADE_EXISTING_CHANCE = 0.50D;
     private static final double DPS_DAMAGE_REWARD_AMOUNT = 0.80D;
+    private static final double STRIKER_DAMAGE_REWARD_AMOUNT = 0.50D;
     private static volatile ClassWeightConfig CLASS_WEIGHT_CONFIG = ClassWeightConfig.loadOrThrow();
 
     private static final Random RANDOM = new Random();
@@ -1076,6 +1077,9 @@ public class LevelSystem {
         }
         if (data.tameClass == TameClass.DPS && reward == BaseStatReward.DAMAGE) {
             return DPS_DAMAGE_REWARD_AMOUNT;
+        }
+        if (data.tameClass == TameClass.STRIKER && reward == BaseStatReward.DAMAGE) {
+            return STRIKER_DAMAGE_REWARD_AMOUNT;
         }
         return reward.amount;
     }

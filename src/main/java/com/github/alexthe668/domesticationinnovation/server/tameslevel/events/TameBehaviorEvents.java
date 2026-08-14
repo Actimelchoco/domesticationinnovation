@@ -17,6 +17,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
@@ -63,6 +65,10 @@ public class TameBehaviorEvents {
         int scanInterval = getBehaviorScanInterval(tame);
         if (tame.tickCount % scanInterval != 0) return;
         if (TameEntityAdapter.isStayingStill(tame)) return;
+
+        if (!(tame instanceof TamableAnimal)) {
+            TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
+        }
 
         if (data.skeletonMovement && tame.getTarget() != null && tame.getTarget().isAlive() && tame.tickCount % 100 == 0) {
             TamePerformanceProfiler.run("behavior.skeleton_spacing", () -> handleSkeletonSpacing(tame));
@@ -263,6 +269,33 @@ public class TameBehaviorEvents {
             return false;
         }
         return !isValidCombatTarget(tame, target);
+    }
+
+    private static void handleInterfaceModeTargeting(PathfinderMob tame, TameData data) {
+        if (tame == null || data == null || tame.getTarget() != null) return;
+        TameMode mode = TameMode.byId(data.mode);
+        if (mode == TameMode.DEFAULT || mode == TameMode.DEFAULT_PLUS || mode == TameMode.PASSIVE) return;
+        LivingEntity owner = TameEntityAdapter.owner(tame);
+        LivingEntity priority = owner == null ? null : owner.getLastHurtByMob();
+        if (priority == null && owner != null) priority = owner.getLastHurtMob();
+        if (priority != null && priority.isAlive() && isValidCombatTarget(tame, priority)) {
+            tame.setTarget(priority);
+            return;
+        }
+        double radius = mode == TameMode.BODYGUARD ? Math.max(4, data.bodyguardRange) : 24.0D;
+        LivingEntity best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (LivingEntity candidate : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
+            if (!isValidCombatTarget(tame, candidate)) continue;
+            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BODYGUARD || mode == TameMode.BOSS)
+                    && !(candidate instanceof Monster)) continue;
+            double distance = tame.distanceToSqr(candidate);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        if (best != null) tame.setTarget(best);
     }
 
     private static boolean hasValidCurrentTarget(PathfinderMob tame) {

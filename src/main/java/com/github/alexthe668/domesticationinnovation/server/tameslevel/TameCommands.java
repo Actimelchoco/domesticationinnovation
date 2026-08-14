@@ -8910,8 +8910,8 @@ public class TameCommands {
         if (spec == null) return error(p, "Invalid mode.");
         TameMode mode = spec.mode();
         applyModeSpec(d, mode, spec.bodyguardRange());
-        Entity e = p.serverLevel().getEntity(d.uuid);
-        if (e instanceof TamableAnimal ta && mode != TameMode.PASSIVE) ta.setOrderedToSit(false);
+        LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+        if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Mode set to " + modeLabel(mode, d) + " for " + d.name + "."));
         return 1;
@@ -8926,8 +8926,8 @@ public class TameCommands {
         TameData sample = null;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
             applyModeSpec(d, mode, spec.bodyguardRange());
-            Entity e = p.serverLevel().getEntity(d.uuid);
-            if (e instanceof TamableAnimal ta && mode != TameMode.PASSIVE) ta.setOrderedToSit(false);
+            LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
@@ -8947,10 +8947,8 @@ public class TameCommands {
         TameData sample = null;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
             applyModeSpec(d, mode, spec.bodyguardRange());
-            Entity e = p.serverLevel().getEntity(d.uuid);
-            if (e instanceof TamableAnimal ta && mode != TameMode.PASSIVE) {
-                applySitFollowOverride(ta, false);
-            }
+            LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
@@ -8969,9 +8967,10 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedTamesForAllCommands(p.getUUID())) {
-            Entity e = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
-            if (!(e instanceof TamableAnimal ta) || !ta.isAlive()) continue;
+            LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (e == null || !e.isAlive()) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
+            if (mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
