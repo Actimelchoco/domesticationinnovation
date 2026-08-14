@@ -2156,7 +2156,7 @@ public class LevelSystem {
         }
     }
 
-    public static void resetProgress(TamableAnimal tame, TameData data) {
+    public static void resetProgress(LivingEntity tame, TameData data) {
         normalizeFixedHealthBonuses(data);
         storeProgressSnapshot(data);
         applyBonusDelta(tame, -data.bonusHealth, -data.bonusDamage, -data.bonusSpeed, -data.bonusArmor,
@@ -2184,7 +2184,7 @@ public class LevelSystem {
         TameRegistry.markDirty();
     }
 
-    public static boolean restoreProgress(TamableAnimal tame, TameData data) {
+    public static boolean restoreProgress(LivingEntity tame, TameData data) {
         normalizeFixedHealthBonuses(data);
         if (!data.hasSavedProgress) {
             return false;
@@ -2233,7 +2233,7 @@ public class LevelSystem {
         return true;
     }
 
-    public static boolean restoreHighestProgressWithoutXpCost(TamableAnimal tame, TameData data) {
+    public static boolean restoreHighestProgressWithoutXpCost(LivingEntity tame, TameData data) {
         normalizeFixedHealthBonuses(data);
         if (tame == null || data == null || !data.hasSavedProgress) {
             return false;
@@ -2298,7 +2298,7 @@ public class LevelSystem {
     }
 
     private static void applyBonusDelta(
-            TamableAnimal tame,
+            LivingEntity tame,
             double hp,
             double dmg,
             double speed,

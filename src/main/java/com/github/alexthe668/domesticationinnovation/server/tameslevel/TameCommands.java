@@ -3729,6 +3729,7 @@ public class TameCommands {
         ServerLevel overworld = server.getLevel(Level.OVERWORLD);
         long now = overworld == null ? 0L : overworld.getGameTime();
         List<UUID> finished = new ArrayList<>();
+        Map<UUID, LinkedHashSet<String>> recoverNamesByOwner = new LinkedHashMap<>();
         for (Map.Entry<UUID, PendingImmediateChunkTeleport> entry : PENDING_IMMEDIATE_CHUNK_TELEPORTS.entrySet()) {
             PendingImmediateChunkTeleport pending = entry.getValue();
             if (pending == null) {
@@ -3753,20 +3754,14 @@ public class TameCommands {
             if (!chunksReady) {
                 if ((now - pending.createdTick) >= IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS) {
                     releaseImmediateChunkTeleport(sourceLevel, pending);
-                    TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                    TameData data = pendingTeleportData(pending);
                     if (pending.autoFollow && data != null) {
                         noteAutoFollowImmediateTeleportFailure(server, data);
                     }
                     if (data != null) {
                         markRecoverRequired(data);
                     }
-                    if (!pending.silent && (data == null || !data.horseType)) {
-                        String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
-                        String message = pending.liveEntityOnly
-                                ? "Failed, " + recoverHint
-                                : "Failed, " + recoverHint + autoFollowRetryMessage(data);
-                        notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
-                    }
+                    queueRecoverFailureName(recoverNamesByOwner, pending, data);
                     finished.add(entry.getKey());
                 } else {
                     pending.nextAttemptTick = now + 5L;
@@ -3780,7 +3775,7 @@ public class TameCommands {
             if (tame != null && tame.isAlive()) {
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + tame.level().dimension().location());
-                TameData liveData = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                TameData liveData = pendingTeleportData(pending);
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportTameToLocation(tame, pending.target);
@@ -3789,26 +3784,20 @@ public class TameCommands {
                     applyMovementOrderCode(tame, 1);
                 }
                 releaseImmediateChunkTeleport(sourceLevel, pending);
-                if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleported unloaded " + pending.tameName + ".", ChatFormatting.GREEN);
+                if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleport: " + pending.tameName + ".", ChatFormatting.WHITE);
                 finished.add(entry.getKey());
                 continue;
             }
             if (pending.chunksReadyTick >= 0L && (now - pending.chunksReadyTick) >= 10L) {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
-                TameData data = pending.tlId != null ? TameRegistry.getByTlId(pending.tlId) : TameRegistry.get(pending.tameUuid);
+                TameData data = pendingTeleportData(pending);
                 if (pending.autoFollow && data != null) {
                     noteAutoFollowImmediateTeleportFailure(server, data);
                 }
                 if (data != null) {
                     markRecoverRequired(data);
                 }
-                if (!pending.silent && (data == null || !data.horseType)) {
-                    String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
-                    String message = pending.liveEntityOnly
-                            ? "Failed, " + recoverHint
-                            : "Failed, " + recoverHint + autoFollowRetryMessage(data);
-                    notifyImmediateChunkTeleport(server, pending.ownerUuid, message, ChatFormatting.RED);
-                }
+                queueRecoverFailureName(recoverNamesByOwner, pending, data);
                 finished.add(entry.getKey());
                 continue;
             }
@@ -3817,6 +3806,23 @@ public class TameCommands {
         for (UUID id : finished) {
             PENDING_IMMEDIATE_CHUNK_TELEPORTS.remove(id);
         }
+        for (Map.Entry<UUID, LinkedHashSet<String>> entry : recoverNamesByOwner.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                notifyImmediateChunkTeleport(server, entry.getKey(), "do /tames recover ... for: " + String.join(", ", entry.getValue()), ChatFormatting.RED);
+            }
+        }
+    }
+
+    private static TameData pendingTeleportData(PendingImmediateChunkTeleport pending) {
+        if (pending == null) return null;
+        TameData data = pending.tlId == null ? null : TameRegistry.getByTlId(pending.tlId);
+        return data != null ? data : TameRegistry.get(pending.tameUuid);
+    }
+
+    private static void queueRecoverFailureName(Map<UUID, LinkedHashSet<String>> namesByOwner, PendingImmediateChunkTeleport pending, TameData data) {
+        if (namesByOwner == null || pending == null || pending.silent || data != null && data.horseType || pending.ownerUuid == null) return;
+        String name = data != null && data.name != null && !data.name.isBlank() ? tameDisplayName(data) : pending.tameName;
+        if (name != null && !name.isBlank()) namesByOwner.computeIfAbsent(pending.ownerUuid, ignored -> new LinkedHashSet<>()).add(stripLevelPrefixes(name));
     }
 
     private static void releaseImmediateChunkTeleport(ServerLevel sourceLevel, PendingImmediateChunkTeleport pending) {
@@ -3921,7 +3927,7 @@ public class TameCommands {
                 }
                 clearMatchingDiBedRespawnRequests(server, data);
                 ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
-                TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
+                LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
                 if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
                     owner.displayClientMessage(
                             Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
@@ -3941,7 +3947,7 @@ public class TameCommands {
                 }
                 clearMatchingDiBedRespawnRequests(server, data);
                 ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
-                TamableAnimal respawned = findLoadedTameByUuid(server, data.uuid);
+                LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
                 if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
                     owner.displayClientMessage(
                             Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
@@ -4368,7 +4374,7 @@ public class TameCommands {
                     data.entitySnapshot = refreshedSnapshot;
                     TameRegistry.markDirty();
                 }
-                owner.sendSystemMessage(Component.literal(successMessageForLanternRequest(request)).withStyle(ChatFormatting.GREEN));
+                owner.sendSystemMessage(Component.literal(successMessageForLanternRequest(request)).withStyle(ChatFormatting.WHITE));
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
                 continue;
@@ -4379,7 +4385,7 @@ public class TameCommands {
                     markRecoverRequired(data);
                 }
                 if (data == null || !data.horseType) {
-                    owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use " + recoverCommandForName(request.getNametag()) + ".").withStyle(ChatFormatting.RED));
+                    owner.sendSystemMessage(Component.literal("do /tames recover ... for: " + stripLevelPrefixes(request.getNametag())).withStyle(ChatFormatting.RED));
                 }
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
@@ -5254,7 +5260,7 @@ public class TameCommands {
         if (data.dead) {
             return error(player, "That tame is dead. Respawn it first.");
         }
-        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null || !tame.isAlive()) {
             return error(player, "Reincarnation requires the tame to be loaded and alive.");
         }
@@ -5294,7 +5300,7 @@ public class TameCommands {
         if (data.dead) {
             return error(player, tameDisplayName(data) + " is dead. Respawn it first.");
         }
-        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null || !tame.isAlive()) {
             return error(player, "Class reroll requires the tame to be loaded and alive.");
         }
@@ -5360,7 +5366,7 @@ public class TameCommands {
             PENDING_CLASS_REROLLS.remove(player.getUUID());
             return error(player, tameDisplayName(data) + " is dead. Respawn it first.");
         }
-        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null || !tame.isAlive()) {
             PENDING_CLASS_REROLLS.remove(player.getUUID());
             return error(player, "Class reroll requires the tame to still be loaded and alive.");
@@ -5475,7 +5481,7 @@ public class TameCommands {
         return options.get(ThreadLocalRandom.current().nextInt(options.size()));
     }
 
-    private static void resetTameForClassReroll(TamableAnimal tame, TameData data, TameClass rerolledClass) {
+    private static void resetTameForClassReroll(LivingEntity tame, TameData data, TameClass rerolledClass) {
         if (tame == null || data == null) {
             return;
         }
@@ -5500,13 +5506,17 @@ public class TameCommands {
         data.cooldowns.clear();
         data.classRerollsUsed++;
 
-        if (!applyTypeBasePlusBonus(tame, data)) {
+        if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
             LevelSystem.updateTameName(tame, data);
         }
-        tame.setTarget(null);
-        tame.getNavigation().stop();
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
         tame.setHealth(tame.getMaxHealth());
-        refreshRegistrySnapshotFor(tame);
+        CompoundTag snapshot = new CompoundTag();
+        tame.save(snapshot);
+        data.entitySnapshot = snapshot;
         TameRegistry.markDirty();
     }
 
@@ -10678,13 +10688,13 @@ public class TameCommands {
                 queued++;
             } else {
                 queueFailed++;
-                failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
+                if (!d.horseType) failedQueueNames.add(tameDisplayName(d));
             }
         }
         sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
-            p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+            p.sendSystemMessage(Component.literal("do /tames recover ... for: " + compactRecoverNames(failedQueueNames)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -10744,13 +10754,13 @@ public class TameCommands {
                 queued++;
             } else {
                 queueFailed++;
-                failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
+                if (!d.horseType) failedQueueNames.add(tameDisplayName(d));
             }
         }
         sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
-            p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+            p.sendSystemMessage(Component.literal("do /tames recover ... for: " + compactRecoverNames(failedQueueNames)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -10915,7 +10925,7 @@ public class TameCommands {
             if (orderOverride != null && loadedAfterTeleport != null) {
                 applyMovementOverride(loadedAfterTeleport, orderOverride);
             }
-            p.sendSystemMessage(Component.literal("Teleported unloaded " + d.name + (payment.xpSpent > 0 ? " (-" + payment.xpSpent + " XP points)." : ".")).withStyle(ChatFormatting.GREEN));
+            p.sendSystemMessage(Component.literal("Teleport: " + d.name + ".").withStyle(ChatFormatting.WHITE));
             return 1;
         }
         if (crossDimension) {
@@ -11581,7 +11591,7 @@ public class TameCommands {
                 continue;
             }
             if (reincarnateAfter) {
-                TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
+                LivingEntity respawned = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
                 if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
                         && LevelSystem.restoreHighestProgressWithoutXpCost(respawned, data)) {
                     reincarnated++;
@@ -11668,7 +11678,7 @@ public class TameCommands {
                 continue;
             }
             if (reincarnateAfter) {
-                TamableAnimal respawned = findLoadedTameByUuid(source, data.uuid);
+                LivingEntity respawned = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
                 if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
                         && LevelSystem.restoreHighestProgressWithoutXpCost(respawned, data)) {
                     reincarnated++;
@@ -11849,7 +11859,8 @@ public class TameCommands {
         if (entityType == null) return RespawnResult.fail("unknown entity type '" + typeId + "'");
 
         Entity spawned = entityType.create(level);
-        if (!(spawned instanceof TamableAnimal respawned)) {
+        if (!(spawned instanceof LivingEntity respawned)
+                || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
             return RespawnResult.fail("stored type is not tamable");
         }
 
@@ -11862,20 +11873,21 @@ public class TameCommands {
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
         respawned.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceTamedOwnerPreserveCollar(respawned, data.ownerUUID);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
         }
         clearAdminCloneTags(respawned);
 
-        boolean normalized = applyTypeBasePlusBonus(respawned, data);
+        boolean normalized = LevelSystem.reapplyTypeBasePlusBonuses(respawned, data);
         if (!normalized) {
             LevelSystem.updateTameName(respawned, data);
             respawned.setHealth(respawned.getMaxHealth());
         }
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
-        finalizeRespawnState(respawned, data);
+        finalizeRecoveredLivingState(respawned, data);
+        TameRegistry.bindEntityToData(respawned, data);
         clearMatchingDiBedRespawnRequests(source, data);
         TameRegistry.register(data);
         TameRegistry.markDirty();
@@ -12130,6 +12142,7 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAtServer(TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
 
         String typeId = recoverEntityTypeId(data);
@@ -12142,7 +12155,8 @@ public class TameCommands {
         if (entityType == null) return RespawnResult.fail("unknown entity type '" + typeId + "'");
 
         Entity spawned = entityType.create(level);
-        if (!(spawned instanceof TamableAnimal respawned)) {
+        if (!(spawned instanceof LivingEntity respawned)
+                || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
             return RespawnResult.fail("stored type is not tamable");
         }
 
@@ -12154,16 +12168,18 @@ public class TameCommands {
         respawned.setUUID(data.uuid);
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceTamedOwnerPreserveCollar(respawned, data.ownerUUID);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
         }
         clearAdminCloneTags(respawned);
 
-        refreshLoadedTameStatsAfterRebuild(respawned, data, true);
+        LevelSystem.reapplyTypeBasePlusBonuses(respawned, data);
+        respawned.setHealth(respawned.getMaxHealth());
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
-        finalizeRespawnState(respawned, data);
+        finalizeRecoveredLivingState(respawned, data);
+        TameRegistry.bindEntityToData(respawned, data);
         TameRegistry.register(data);
         return RespawnResult.ok();
     }
@@ -12619,13 +12635,13 @@ public class TameCommands {
                 queued++;
             } else {
                 queueFailed++;
-                failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
+                if (!d.horseType) failedQueueNames.add(tameDisplayName(d));
             }
         }
         sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
-            p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+            p.sendSystemMessage(Component.literal("do /tames recover ... for: " + compactRecoverNames(failedQueueNames)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -12740,7 +12756,7 @@ public class TameCommands {
                 queued++;
             } else {
                 queueFailed++;
-                failedQueueNames.add(tameDisplayName(d) + " (" + unloaded.error + ")");
+                if (!d.horseType) failedQueueNames.add(tameDisplayName(d));
             }
         }
         int deadSkipped = 0;
@@ -12752,7 +12768,7 @@ public class TameCommands {
         sendTeleportNames(p, targets, queuedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
-            p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+            p.sendSystemMessage(Component.literal("do /tames recover ... for: " + compactRecoverNames(failedQueueNames)).withStyle(ChatFormatting.RED));
         }
         return 1;
     }
@@ -12790,7 +12806,7 @@ public class TameCommands {
         sendTeleportNames(p, List.of(), teleportedData);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
         if (!failedQueueNames.isEmpty()) {
-            p.sendSystemMessage(Component.literal("Unloaded tp failures: " + String.join("; ", failedQueueNames)).withStyle(ChatFormatting.RED));
+            p.sendSystemMessage(Component.literal("do /tames recover ... for: " + compactRecoverNames(failedQueueNames)).withStyle(ChatFormatting.RED));
         }
         return queued > 0 ? 1 : 0;
     }
@@ -14012,7 +14028,7 @@ public class TameCommands {
                 String itemLabel = approvedItemsNeeded <= 0
                         ? "used stored approved TP credits"
                         : "spent " + formatApprovedItemRequirement(approvedItemsNeeded);
-                player.sendSystemMessage(Component.literal("Teleport payment: " + itemLabel + " (" + remainingCredits + " TP credit" + (remainingCredits == 1 ? "" : "s") + " left).").withStyle(ChatFormatting.GREEN));
+                player.sendSystemMessage(Component.literal("Teleport payment: " + itemLabel + " (" + remainingCredits + " TP credit" + (remainingCredits == 1 ? "" : "s") + " left).").withStyle(ChatFormatting.WHITE));
                 return TeleportPaymentResult.ok(0);
             }
         }
@@ -14948,6 +14964,19 @@ public class TameCommands {
                     : "Teleport: " + names.iterator().next() + ".";
             player.sendSystemMessage(Component.literal(teleportMessage).withStyle(ChatFormatting.WHITE));
         }
+    }
+
+    private static String compactRecoverNames(Collection<String> rawNames) {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        if (rawNames != null) {
+            for (String raw : rawNames) {
+                if (raw == null || raw.isBlank()) continue;
+                int detail = raw.indexOf(" (");
+                String name = stripLevelPrefixes(detail >= 0 ? raw.substring(0, detail) : raw).trim();
+                if (!name.isBlank()) names.add(name);
+            }
+        }
+        return String.join(", ", names);
     }
 
     private static void teleportLivingTameToPlayer(LivingEntity tame, ServerPlayer player) {
