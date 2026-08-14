@@ -70,8 +70,18 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
         LivingEntity living = event.getEntity();
+        if (!living.level().isClientSide && living instanceof TamableAnimal tame) {
+            // Bred offspring can receive their owner after EntityJoinLevelEvent and do not
+            // necessarily fire AnimalTameEvent. Pick them up once ownership is established.
+            if (tame.tickCount % 20 == 0
+                    && tame.isTame()
+                    && tame.getOwnerUUID() != null
+                    && TameRegistry.get(tame.getUUID()) == null) {
+                registerOrRestoreTame(tame, true, true);
+            }
+            return;
+        }
         if (living.level().isClientSide
-                || living instanceof TamableAnimal
                 || !(living instanceof ModifedToBeTameable modified)
                 || !modified.isTame()
                 || modified.getTameOwnerUUID() == null) {
@@ -922,22 +932,6 @@ public class TameSpawnEvents {
     }
 
     private static List<String> loadRandomTameNames() {
-        LinkedHashSet<String> configNames = new LinkedHashSet<>();
-        try {
-            for (String raw : DomesticationMod.CONFIG.randomTameNames.get()) {
-                if (raw == null) {
-                    continue;
-                }
-                String cleaned = stripLevelPrefixes(raw).trim();
-                if (!cleaned.isBlank() && !cleaned.startsWith("#")) {
-                    configNames.add(cleaned);
-                }
-            }
-        } catch (RuntimeException ignored) {
-        }
-        if (!configNames.isEmpty()) {
-            return new ArrayList<>(configNames);
-        }
         try {
             ensureRandomTameNameFileExists();
             LinkedHashSet<String> names = new LinkedHashSet<>();
@@ -955,6 +949,22 @@ public class TameSpawnEvents {
                 return new ArrayList<>(names);
             }
         } catch (IOException ignored) {
+        }
+        LinkedHashSet<String> configNames = new LinkedHashSet<>();
+        try {
+            for (String raw : DomesticationMod.CONFIG.randomTameNames.get()) {
+                if (raw == null) {
+                    continue;
+                }
+                String cleaned = stripLevelPrefixes(raw).trim();
+                if (!cleaned.isBlank() && !cleaned.startsWith("#")) {
+                    configNames.add(cleaned);
+                }
+            }
+        } catch (RuntimeException ignored) {
+        }
+        if (!configNames.isEmpty()) {
+            return new ArrayList<>(configNames);
         }
         return new ArrayList<>(DEFAULT_RANDOM_TAME_NAMES);
     }

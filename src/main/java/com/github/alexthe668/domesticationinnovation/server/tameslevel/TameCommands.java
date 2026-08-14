@@ -10833,8 +10833,8 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
-        Entity e = p.serverLevel().getEntity(d.uuid);
-        if (!(e instanceof TamableAnimal ta) || !ta.isTame()) return error(p, "Pet is not loaded.");
+        TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+        if (ta == null) return error(p, "Pet is not loaded.");
         if (isDuelLocked(ta)) return error(p, "That tame is in a duel. Use /tames dueltp for emergency duel teleports.");
         applyMovementOverride(ta, order);
         p.sendSystemMessage(Component.literal("Set " + d.name + " to " + movementLabel(order) + "."));
@@ -25518,10 +25518,18 @@ public class TameCommands {
     }
 
     private static TamableAnimal findLoadedOwnedTameByUuid(CommandSourceStack source, UUID owner, UUID tameUuid) {
+        if (source == null || source.getServer() == null || owner == null || tameUuid == null) return null;
         for (var level : source.getServer().getAllLevels()) {
             Entity entity = level.getEntity(tameUuid);
             if (!(entity instanceof TamableAnimal ta) || !ta.isTame()) continue;
-            if (!owner.equals(ta.getOwnerUUID())) continue;
+            TameData registered = TameRegistry.get(tameUuid);
+            if (!owner.equals(ta.getOwnerUUID())) {
+                if (registered == null || !owner.equals(registered.ownerUUID)) continue;
+                ta.setOwnerUUID(owner);
+            }
+            if (registered != null && registered.tlId != null) {
+                TameData.syncTlIdToEntity(ta, registered.tlId);
+            }
             return ta;
         }
         return null;
