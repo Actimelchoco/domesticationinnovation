@@ -147,6 +147,8 @@ public class TameData {
     public final Map<String, Integer> savedAbilityLevels = new LinkedHashMap<>();
     public final Map<String, Integer> savedAttributeLevels = new LinkedHashMap<>();
     public boolean liveOnly = false;
+    public boolean horseType = false;
+    public double riddenDistanceProgress = 0.0D;
 
     public TameData(TamableAnimal tame) {
 
@@ -159,6 +161,7 @@ public class TameData {
         this.tlId = readOrCreateTlId(tame);
         this.ownerUUID = ownerUUID;
         this.liveOnly = liveOnly;
+        this.horseType = tame instanceof net.minecraft.world.entity.animal.horse.AbstractHorse;
 
         this.type = tame.getType().toString();
         this.name = TameRegistry.stripLevelPrefixes(tame.hasCustomName() ? tame.getCustomName().getString() : tame.getName().getString());
@@ -189,6 +192,8 @@ public class TameData {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("uuid", uuid);
         tag.putBoolean("liveOnly", liveOnly);
+        tag.putBoolean("horseType", horseType);
+        tag.putDouble("riddenDistanceProgress", riddenDistanceProgress);
         if (tlId != null) {
             tag.putUUID(TL_ID_TAG, tlId);
         }
@@ -369,6 +374,8 @@ public class TameData {
     public static TameData fromTag(CompoundTag tag) {
         TameData data = new TameData();
         data.liveOnly = tag.getBoolean("liveOnly");
+        data.horseType = tag.getBoolean("horseType");
+        data.riddenDistanceProgress = Math.max(0.0D, tag.getDouble("riddenDistanceProgress"));
         data.uuid = tag.hasUUID("uuid") ? tag.getUUID("uuid") : UUID.randomUUID();
         data.tlId = tag.hasUUID(TL_ID_TAG) ? tag.getUUID(TL_ID_TAG) : UUID.randomUUID();
         if (tag.hasUUID("ownerUUID")) {

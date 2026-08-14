@@ -122,6 +122,8 @@ public abstract class AbstractHorseMixin extends Animal implements ModifedToBeTa
     }
 
     public boolean isValidAttackTarget(LivingEntity target) {
-        return false;
+        if (!(this.getControllingPassenger() instanceof Player) || target == null) return false;
+        UUID owner = this.getTameOwnerUUID();
+        return owner == null || !owner.equals(target.getUUID());
     }
 }

@@ -166,11 +166,17 @@ public final class TameDuelManager {
         Set<UUID> cleanB = new HashSet<>();
         for (UUID participantId : teamA) {
             if (participantId == null) continue;
+            TameData participantData = TameRegistry.get(participantId);
+            if (participantData == null) participantData = TameRegistry.getByTlId(participantId);
+            if (participantData != null && participantData.horseType) continue;
             if (!hasDuelFood(participantId)) continue;
             cleanA.add(participantId);
         }
         for (UUID participantId : teamB) {
             if (participantId == null) continue;
+            TameData participantData = TameRegistry.get(participantId);
+            if (participantData == null) participantData = TameRegistry.getByTlId(participantId);
+            if (participantData != null && participantData.horseType) continue;
             if (cleanA.contains(participantId)) continue;
             if (!hasDuelFood(participantId)) continue;
             cleanB.add(participantId);

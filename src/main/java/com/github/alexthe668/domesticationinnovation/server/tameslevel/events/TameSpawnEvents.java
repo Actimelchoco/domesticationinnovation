@@ -70,8 +70,6 @@ public class TameSpawnEvents {
     public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
         LivingEntity living = event.getEntity();
         if (living.level().isClientSide
-                || living.tickCount % 20 != 0
-                || living instanceof AbstractHorse
                 || living instanceof TamableAnimal
                 || !(living instanceof ModifedToBeTameable modified)
                 || !modified.isTame()
@@ -85,12 +83,29 @@ public class TameSpawnEvents {
             return;
         }
 
+        if (living instanceof AbstractHorse horse) {
+            data.horseType = true;
+            if (horse.getControllingPassenger() instanceof net.minecraft.world.entity.player.Player) {
+                double moved = Math.sqrt(horse.distanceToSqr(horse.xo, horse.yo, horse.zo));
+                if (Double.isFinite(moved) && moved > 0.0D && moved < 20.0D) {
+                    data.riddenDistanceProgress += moved;
+                    int xp = (int) (data.riddenDistanceProgress / 100.0D);
+                    if (xp > 0) {
+                        data.riddenDistanceProgress -= xp * 100.0D;
+                        LevelSystem.grantXP(horse, data, xp);
+                    }
+                }
+            } else {
+                horse.setTarget(null);
+            }
+        }
+
         String dimension = living.level().dimension().location().toString();
         int x = living.blockPosition().getX();
         int y = living.blockPosition().getY();
         int z = living.blockPosition().getZ();
-        if (!dimension.equals(data.lastKnownDimension)
-                || x != data.lastKnownX || y != data.lastKnownY || z != data.lastKnownZ) {
+        if (living.tickCount % 20 == 0 && (!dimension.equals(data.lastKnownDimension)
+                || x != data.lastKnownX || y != data.lastKnownY || z != data.lastKnownZ)) {
             data.lastKnownDimension = dimension;
             data.lastKnownX = x;
             data.lastKnownY = y;
@@ -105,7 +120,6 @@ public class TameSpawnEvents {
         if (event.getEntity() instanceof LivingEntity living
                 && living instanceof ModifedToBeTameable modified
                 && !(living instanceof TamableAnimal)
-                && !(living instanceof AbstractHorse)
                 && modified.isTame()) {
             registerLiveOnlyModifiedTame(living, modified);
             return;
@@ -798,6 +812,7 @@ public class TameSpawnEvents {
             }
         }
         data.liveOnly = true;
+        data.horseType = living instanceof AbstractHorse;
         data.ownerUUID = modified.getTameOwnerUUID();
         data.dead = false;
         data.stored = false;

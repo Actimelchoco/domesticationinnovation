@@ -96,8 +96,9 @@ public class TameCombatEvents {
         }
         if (tame == null && event.getSource().getEntity() instanceof LivingEntity modifiedAttacker
                 && modifiedAttacker instanceof ModifedToBeTameable modified
-                && !(modifiedAttacker instanceof AbstractHorse)
                 && modified.isTame()
+                && (!(modifiedAttacker instanceof AbstractHorse horse)
+                    || horse.getControllingPassenger() instanceof net.minecraft.world.entity.player.Player)
                 && TameRegistry.get(modifiedAttacker.getUUID()) != null) {
             LevelSystem.trackDamage(mob, modifiedAttacker);
         }

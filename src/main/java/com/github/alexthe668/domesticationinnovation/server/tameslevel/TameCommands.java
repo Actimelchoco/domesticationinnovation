@@ -8826,6 +8826,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         Entity entity = player.serverLevel().getEntity(data.uuid);
         if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
             return error(player, "Pet is not loaded.");
@@ -8839,6 +8840,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         Entity entity = player.serverLevel().getEntity(data.uuid);
         if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
             return error(player, "Pet is not loaded.");
@@ -8852,6 +8854,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         Entity entity = player.serverLevel().getEntity(data.uuid);
         if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
             return error(player, "Pet is not loaded.");
@@ -9067,6 +9070,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         String normalizedSet = normalizeGuardianSetName(setName);
         if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
         putGuardianSetAnchor(data, normalizedSet, player.serverLevel().dimension().location().toString(), player.blockPosition().getX(), player.blockPosition().getY(), player.blockPosition().getZ());
@@ -10646,6 +10650,20 @@ public class TameCommands {
         if (isDuelLocked(d)) return error(p, tameDisplayName(d) + " is in a duel. Use /tames dueltp.");
         if (d.stored) return error(p, tameDisplayName(d) + " is stored and can only be recovered with admin respawn.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
+        if (d.horseType) {
+            LivingEntity loadedHorse = findLoadedLivingEntity(source.getServer(), d.uuid);
+            if (!(loadedHorse instanceof net.minecraft.world.entity.animal.horse.AbstractHorse)) {
+                return error(p, "Horse is not currently loaded and cannot be teleported.");
+            }
+            boolean horseCrossDimension = loadedHorse.level() != p.level();
+            TeleportPaymentResult horsePayment = payTeleportXp(p, teleportCostFor(d, horseCrossDimension), 1);
+            if (!horsePayment.success) return error(p, horsePayment.error);
+            if (!consumeHungerForCommandTeleport(p, d, null)) return 0;
+            loadedHorse.teleportTo(p.serverLevel(), p.getX(), p.getY(), p.getZ(),
+                    java.util.Set.of(), p.getYRot(), p.getXRot());
+            p.sendSystemMessage(Component.literal("Teleport: " + d.name).withStyle(ChatFormatting.WHITE));
+            return 1;
+        }
         boolean crossDimension = isCrossDimension(d, p);
         int cost = teleportCostFor(d, crossDimension);
         TeleportPaymentResult payment = payTeleportXp(p, cost, 1);
@@ -23761,6 +23779,15 @@ public class TameCommands {
         TameData data = rankedTameDataForParticipant(entityId);
         if (data != null) {
             return findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        }
+        return null;
+    }
+
+    private static LivingEntity findLoadedLivingEntity(MinecraftServer server, UUID entityId) {
+        if (server == null || entityId == null) return null;
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(entityId);
+            if (entity instanceof LivingEntity living && living.isAlive()) return living;
         }
         return null;
     }
