@@ -1292,7 +1292,7 @@ public class TameCommands {
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("stats")
+                        .then(Commands.literal("stat")
                                 .then(Commands.literal("strongest")
                                         .executes(ctx -> strongest(ctx.getSource())))
                                 .then(Commands.argument("name", StringArgumentType.string())
@@ -2718,13 +2718,6 @@ public class TameCommands {
                                         .executes(ctx -> teleportByMovementState(ctx.getSource(), MovementOrder.SIT)))
                                 .then(Commands.literal("wander")
                                         .executes(ctx -> teleportByMovementState(ctx.getSource(), MovementOrder.WANDER)))
-                                .then(Commands.literal("state")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestMovementStates(b))
-                                                .executes(ctx -> teleportByState(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "name")
-                                                ))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -2772,7 +2765,19 @@ public class TameCommands {
                                         .executes(ctx -> duelTeleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("tphome")
                                 .then(Commands.literal("all")
-                                        .executes(ctx -> teleportAllHome(ctx.getSource())))
+                                        .executes(ctx -> teleportAllHome(ctx.getSource()))
+                                        .then(Commands.literal("dim")
+                                                .then(Commands.argument("dimension", DimensionArgument.dimension())
+                                                        .executes(ctx -> teleportAllHomeFromDimension(
+                                                                ctx.getSource(),
+                                                                DimensionArgument.getDimension(ctx, "dimension")
+                                                        )))))
+                                .then(Commands.literal("dim")
+                                        .then(Commands.argument("dimension", DimensionArgument.dimension())
+                                                .executes(ctx -> teleportAllHomeFromDimension(
+                                                        ctx.getSource(),
+                                                        DimensionArgument.getDimension(ctx, "dimension")
+                                                ))))
                                 .then(Commands.literal("unloaded")
                                         .executes(ctx -> teleportUnloadedHome(ctx.getSource())))
                                 .then(Commands.literal("follow")
@@ -2781,13 +2786,6 @@ public class TameCommands {
                                         .executes(ctx -> teleportByMovementStateHome(ctx.getSource(), MovementOrder.SIT)))
                                 .then(Commands.literal("wander")
                                         .executes(ctx -> teleportByMovementStateHome(ctx.getSource(), MovementOrder.WANDER)))
-                                .then(Commands.literal("state")
-                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestMovementStates(b))
-                                                .executes(ctx -> teleportByStateHome(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "name")
-                                                ))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -2797,7 +2795,6 @@ public class TameCommands {
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> typeTpHome(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.argument("name", StringArgumentType.string())
-                                        .requires(source -> false)
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> teleportPetHome(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("reload")
@@ -4576,9 +4573,8 @@ public class TameCommands {
         }
         else if (key.equals("stat") || key.equals("stats")) {
             sendInfoPage(p, "Stat",
-                    "/tames stats <pet>",
-                    "/tames stats strongest",
-                    "/tames stats <pet>",
+                    "/tames stat <pet>",
+                    "/tames stat strongest",
                     "Shows the tame sheet: level, class, record, days, active survival days, bonuses, abilities, and attributes.",
                     "Bed info is shown as: BedType Dimension [x, y, z]."
             );
@@ -12660,6 +12656,26 @@ public class TameCommands {
         List<TameData> requested = ownedTamesForAllCommands(player.getUUID());
         if (requested.isEmpty()) return error(player, "You have no tames to teleport.");
         return teleportHomeBatch(source, player, requested, "TPHome all", ownedDeadTamesForAllCommands(player.getUUID()).size());
+    }
+
+    private static int teleportAllHomeFromDimension(CommandSourceStack source, ServerLevel fromDimension) {
+        ServerPlayer player = source.getPlayer();
+        if (fromDimension == null) return error(player, "Invalid dimension.");
+        ResourceLocation dimensionId = fromDimension.dimension().location();
+        List<TameData> selected = new ArrayList<>();
+        int deadSelected = 0;
+        for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
+            if (data == null) continue;
+            LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            boolean matches = loaded != null
+                    ? loaded.level().dimension().location().equals(dimensionId)
+                    : data.lastKnownDimension != null && data.lastKnownDimension.equalsIgnoreCase(dimensionId.toString());
+            if (!matches) continue;
+            if (data.dead) deadSelected++;
+            else selected.add(data);
+        }
+        if (selected.isEmpty()) return error(player, "No living tames found in dimension '" + dimensionId + "'.");
+        return teleportHomeBatch(source, player, selected, "TPHome dim " + dimensionId, deadSelected);
     }
 
     private static int teleportAllFromDimension(CommandSourceStack source, ServerLevel fromDimension) {
