@@ -852,6 +852,7 @@ public class TameCommands {
                 .then(Commands.literal("leaderboard")
                         .requires(TameCommands::isIdleDuelSource)
                         .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false)))
+                .then(buildArenaCommand().requires(TameCommands::isIdleDuelSource))
                 .then(Commands.literal("session")
                         .requires(TameCommands::isIdleDuelSource)
                         .then(Commands.literal("accept")
@@ -914,6 +915,98 @@ public class TameCommands {
                         .requires(TameCommands::isPreparingDuelSource)
                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                         .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "selection"))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand() {
+        return Commands.literal("settings")
+                .then(Commands.literal("doNotAttack")
+                        .executes(ctx -> listDoNotAttack(ctx.getSource()))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("mobtype", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestCurrentPlayerDoNotAttackTypes(ctx.getSource(), b))
+                                        .executes(ctx -> removeDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                        .then(Commands.argument("mobtype", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
+                .then(Commands.literal("doNotAttackAnimals")
+                        .executes(ctx -> listDoNotAttack(ctx.getSource()))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("enterPortalsByThemselves")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("healthSiphon")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("herding")
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setHerdingAffectsTames(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("orescenting")
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestOwnedOreScentingPetNames(ctx.getSource(), b))
+                                .then(Commands.argument("oreId", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestOreScentingOreIds(ctx.getSource(), b))
+                                        .executes(ctx -> setOreScentingTarget(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "oreId"))))))
+                .then(Commands.literal("removeFromAll")
+                        .executes(ctx -> removeFromAllInfo(ctx.getSource()))
+                        .then(Commands.literal("info").executes(ctx -> removeFromAllInfo(ctx.getSource())))
+                        .then(Commands.literal("add")
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> addRemoveFromAll(ctx.getSource(), "group", StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> addRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name"))))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.literal("group")
+                                        .then(Commands.argument("name", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                .executes(ctx -> removeRemoveFromAll(ctx.getSource(), "group", StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("type")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> removeRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name")))))))
+                .then(Commands.literal("sitOnChairs")
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildArenaCommand() {
+        return Commands.literal("arena")
+                .executes(ctx -> listArenas(ctx.getSource()))
+                .then(Commands.literal("create")
+                        .then(Commands.argument("arenaName", StringArgumentType.word())
+                                .executes(ctx -> createArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))))
+                .then(Commands.literal("delete")
+                        .then(Commands.argument("arenaName", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestArenaNames(ctx.getSource(), b))
+                                .executes(ctx -> deleteArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))))
+                .then(Commands.argument("arenaName", StringArgumentType.word())
+                        .suggests((ctx, b) -> suggestArenaNames(ctx.getSource(), b))
+                        .executes(ctx -> showArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName")))
+                        .then(Commands.literal("setA").executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "A")))
+                        .then(Commands.literal("setB").executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "B")))
+                        .then(Commands.literal("setWaitingA").executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingA")))
+                        .then(Commands.literal("setWaitingB").executes(ctx -> setArenaSpawn(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), "waitingB")))
+                        .then(Commands.literal("hidetames")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setArenaHideTames(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("duel")
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                        .executes(ctx -> duelCompactAtArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), StringArgumentType.getString(ctx, "spec")))))
+                        .then(Commands.literal("duelSession")
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionCompactAtArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), StringArgumentType.getString(ctx, "spec")))))
+                        .then(Commands.literal("duelSessionFFA")
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionFfaCompactAtArena(ctx.getSource(), StringArgumentType.getString(ctx, "arenaName"), StringArgumentType.getString(ctx, "spec"))))));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildLegacyDuelCommand() {
@@ -1142,7 +1235,8 @@ public class TameCommands {
                         .then(Commands.literal("loaded")
                                 .executes(ctx -> loadedStatus(ctx.getSource())))
 
-                        .then(Commands.literal("strongest")
+                        .then(Commands.literal("_strongestOld")
+                                .requires(source -> false)
                                 .executes(ctx -> strongest(ctx.getSource())))
                         .then(Commands.literal("recover")
                                 .then(Commands.literal("all")
@@ -1151,11 +1245,14 @@ public class TameCommands {
                                         .suggests((ctx, b) -> suggestRecoverablePetNames(ctx.getSource(), b))
                                         .executes(ctx -> recoverPet(ctx.getSource(), StringArgumentType.getString(ctx, "pet")))))
 
-                        .then(Commands.literal("stat")
+                        .then(Commands.literal("_statOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("stats")
+                                .then(Commands.literal("strongest")
+                                        .executes(ctx -> strongest(ctx.getSource())))
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
@@ -1165,7 +1262,8 @@ public class TameCommands {
                                         .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true))
                                         .then(Commands.literal("long")
                                                 .executes(ctx -> inspectPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true)))))
-                        .then(Commands.literal("orescenting")
+                        .then(Commands.literal("_orescentingOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedOreScentingPetNames(ctx.getSource(), b))
                                         .then(Commands.argument("oreId", StringArgumentType.word())
@@ -1189,7 +1287,8 @@ public class TameCommands {
                                         .executes(ctx -> requestRerollClass(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("reincarnation")
                                 .executes(ctx -> reincarnationOverview(ctx.getSource()))
-                                .then(Commands.literal("approvedItems")
+                                .then(Commands.literal("_approvedItemsOld")
+                                        .requires(source -> false)
                                         .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                                 .then(Commands.literal("auto")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -1207,7 +1306,8 @@ public class TameCommands {
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> reincarnateBatchType(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
-                        .then(Commands.literal("doNotAttack")
+                        .then(Commands.literal("_doNotAttackOld")
+                                .requires(source -> false)
                                 .executes(ctx -> listDoNotAttack(ctx.getSource()))
                                 .then(Commands.literal("remove")
                                         .then(Commands.argument("mobtype", StringArgumentType.word())
@@ -1216,7 +1316,8 @@ public class TameCommands {
                                 .then(Commands.argument("mobtype", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestEntityTypes(b))
                                         .executes(ctx -> toggleDoNotAttackType(ctx.getSource(), StringArgumentType.getString(ctx, "mobtype")))))
-                        .then(Commands.literal("removeFromAll")
+                        .then(Commands.literal("_removeFromAllOld")
+                                .requires(source -> false)
                                 .executes(ctx -> removeFromAllInfo(ctx.getSource()))
                                 .then(Commands.literal("info")
                                         .executes(ctx -> removeFromAllInfo(ctx.getSource())))
@@ -1238,31 +1339,36 @@ public class TameCommands {
                                                 .then(Commands.argument("name", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                         .executes(ctx -> removeRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name")))))))
-                        .then(Commands.literal("approvedItems")
+                        .then(Commands.literal("_approvedItemsOld")
+                                .requires(source -> false)
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
+                        .then(buildSettingsCommand())
                         .then(TameBedCommands.build())
-                        .then(Commands.literal("doNotAttackAnimals")
+                        .then(Commands.literal("_doNotAttackAnimalsOld")
+                                .requires(source -> false)
                                 .executes(ctx -> listDoNotAttack(ctx.getSource()))
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("healthSiphon")
+                        .then(Commands.literal("_healthSiphonOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("herding")
-                                .requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("_herdingOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setHerdingAffectsTames(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("enterPortalsByThemselves")
+                        .then(Commands.literal("_enterPortalsByThemselvesOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                        .then(Commands.literal("sitOnChairs")
-                                .requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("_sitOnChairsOld")
+                                .requires(source -> false)
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(TameCollarCommands.build())
                         .then(TameHistoryCommands.graveyard())
                         .then(TameSearchCommands.build())
-                        .then(TameHistoryCommands.deaths())
+                        .then(Commands.literal("_deathsOld").requires(source -> false))
                         .then(Commands.literal("show")
                                 .then(Commands.argument("player", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
@@ -1273,7 +1379,8 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "player"),
                                                         StringArgumentType.getString(ctx, "name")
                                                 )))))
-                        .then(Commands.literal("arena")
+                        .then(Commands.literal("_arenaOld")
+                                .requires(source -> false)
                                 .executes(ctx -> listArenas(ctx.getSource()))
                                 .then(Commands.literal("create")
                                         .then(Commands.argument("arenaName", StringArgumentType.word())
@@ -1977,6 +2084,8 @@ public class TameCommands {
                         .then(buildOrganizedDuelCommand())
                         .then(Commands.literal("info")
                                 .executes(ctx -> infoOverview(ctx.getSource()))
+                                .then(Commands.literal("approvedItems")
+                                        .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                                 .then(Commands.literal("tool")
                                         .then(Commands.literal("guardian")
                                                 .executes(ctx -> infoDetail(ctx.getSource(), "tool guardian"))))
@@ -4405,7 +4514,7 @@ public class TameCommands {
         }
         else if (key.equals("deaths")) {
             sendInfoPage(p, "Deaths",
-                    "/tames deaths <number>",
+                    "/tames graveyard deaths <number>",
                     "Shows recent recorded death entries from the registry."
             );
         }
@@ -4417,7 +4526,8 @@ public class TameCommands {
         }
         else if (key.equals("stat") || key.equals("stats")) {
             sendInfoPage(p, "Stat",
-                    "/tames stat <pet>",
+                    "/tames stats <pet>",
+                    "/tames stats strongest",
                     "/tames stats <pet>",
                     "Shows the tame sheet: level, class, record, days, active survival days, bonuses, abilities, and attributes.",
                     "Bed info is shown as: BedType Dimension [x, y, z]."
@@ -4612,7 +4722,7 @@ public class TameCommands {
                     "/tames reincarnate <pet>",
                     "/tames reincarnation",
                     "/tames reincarnation <all|group <name>|type <name>>",
-                    "/tames reincarnation approvedItems",
+                    "/tames info approvedItems",
                     "/tames reincarnation auto <true|false>",
                     "Reincarnation is command-only. The tame must already be alive and loaded.",
                     "It restores the saved highest progress snapshot for that tame.",
@@ -4622,14 +4732,14 @@ public class TameCommands {
         }
         else if (key.equals("healthsiphon") || key.equals("health_siphon")) {
             sendInfoPage(p, "HealthSiphon",
-                    "/tames healthSiphon <true|false>",
+                    "/tames settings healthSiphon <true|false>",
                     "Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.",
                     "This is owner-local and persists for your tame registry."
             );
         }
         else if (key.equals("enterportalsbythemselves") || key.equals("enter_portals_by_themselves")) {
             sendInfoPage(p, "EnterPortalsByThemselves",
-                    "/tames enterPortalsByThemselves <true|false>",
+                    "/tames settings enterPortalsByThemselves <true|false>",
                     "Default is false.",
                     "False: your tames cannot enter portals on their own.",
                     "They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport."
@@ -4637,7 +4747,7 @@ public class TameCommands {
         }
         else if (key.equals("sitonchairs") || key.equals("sit_on_chairs")) {
             sendInfoPage(p, "SitOnChairs",
-                    "/tames sitOnChairs <true|false>",
+                    "/tames settings sitOnChairs <true|false>",
                     "Admin runtime toggle (default false).",
                     "false: tames are blocked from mounting seat/chair entities (including Create seats/chairs).",
                     "true: that seat/chair mount block is disabled."
@@ -4668,13 +4778,13 @@ public class TameCommands {
         }
         else if (key.equals("arena")) {
             sendInfoPage(p, "Arena",
-                    "/tames arena",
-                    "/tames arena create <arenaName>",
-                    "/tames arena <arenaName> setA|setB|setWaitingA|setWaitingB",
-                    "/tames arena <arenaName> hidetames true|false",
-                    "/tames arena <arenaName> duel|duelSession|duelSessionFFA <spec>",
+                    "/tames duel arena",
+                    "/tames duel arena create <arenaName>",
+                    "/tames duel arena <arenaName> setA|setB|setWaitingA|setWaitingB",
+                    "/tames duel arena <arenaName> hidetames true|false",
+                    "/tames duel arena <arenaName> duel|duelSession|duelSessionFFA <spec>",
                     "Arenas store spawn and waiting points used by duel commands. hidetames makes idle duelSession tames disappear instead of waiting.",
-                    "If an arena is reserved for ranked, /tames arena cannot use or edit it.",
+                    "If an arena is reserved for ranked, /tames duel arena cannot use or edit it.",
                     "Use /tames admin ranked ... to edit a ranked-reserved arena."
             );
         }
@@ -4720,7 +4830,7 @@ public class TameCommands {
                     "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
                     "Only tames whose owners are online are selected into rounds.",
                     "Offline-owner tames stay idle at waiting until their owner is online again.",
-                    "The ranked arena is reserved and cannot be used through /tames arena."
+                    "The ranked arena is reserved and cannot be used through /tames duel arena."
             );
         }
         else if (key.equals("duel duel")) {
@@ -8457,7 +8567,7 @@ public class TameCommands {
             case "poison_resistance" -> id + " L" + level + ": immediately clears Poison when applied; binary protection";
             case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "wall_climber" -> id + ": spider-style wall climbing while pressing into vertical surfaces";
-            case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
+            case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames settings healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
             case "bubbling" -> id + " L" + level + ": vs enemies under the HP cap, " + fmt(Math.min(0.60D, 0.15D * level) * 100.0D) + "% proc to trap them in a giant bubble";
             case "herding" -> id + " L" + level + ": utility herding aura; range scales by level (roughly 8 at L1, 12 at L3, 16 at L5)";
             case "amphibious" -> id + " L" + level + ": cancels drown/dry-out damage and grants extra land speed while aquatic";

@@ -12,6 +12,13 @@ final class TameHistoryCommands {
     static LiteralArgumentBuilder<CommandSourceStack> graveyard() {
         return Commands.literal("graveyard")
                 .executes(ctx -> TameCommands.graveyard(ctx.getSource(), 10))
+                .then(Commands.literal("deaths")
+                        .executes(ctx -> TameCommands.recentDeaths(ctx.getSource(), 10))
+                        .then(Commands.argument("number", IntegerArgumentType.integer(1, 200))
+                                .executes(ctx -> TameCommands.recentDeaths(
+                                        ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "number")
+                                ))))
                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
                         .executes(ctx -> TameCommands.graveyard(
                                 ctx.getSource(),
