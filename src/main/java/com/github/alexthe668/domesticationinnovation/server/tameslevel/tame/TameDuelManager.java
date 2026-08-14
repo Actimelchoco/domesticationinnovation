@@ -544,6 +544,7 @@ public final class TameDuelManager {
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
+        forceMossyGolemCombatCommand(tame);
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = tame.getTarget();
         if (isUsableCurrentDuelTarget(tame, current)) {
@@ -647,6 +648,7 @@ public final class TameDuelManager {
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
+        forceMossyGolemCombatCommand(tame);
     }
 
     private static boolean isLegendaryMonstersMossyGolem(TamableAnimal tame) {
@@ -661,6 +663,17 @@ public final class TameDuelManager {
         }
         String className = tame.getClass().getName();
         return className != null && className.toLowerCase(java.util.Locale.ROOT).contains("mossygolem");
+    }
+
+    private static void forceMossyGolemCombatCommand(TamableAnimal tame) {
+        if (!isLegendaryMonstersMossyGolem(tame)) return;
+        try {
+            // Legendary Monsters' attack goal refuses to start for command 1 or 2,
+            // but MossyGolemEntity does not expose that command through IComandableMob.
+            tame.getClass().getMethod("setCommand", int.class).invoke(tame, 0);
+        } catch (ReflectiveOperationException exception) {
+            System.err.println("[TamesLevel] Could not enable Mossy Golem duel attacks: " + exception.getMessage());
+        }
     }
 
     public static synchronized void restorePostDuelTargetGoalsIfNeeded(TamableAnimal tame) {
