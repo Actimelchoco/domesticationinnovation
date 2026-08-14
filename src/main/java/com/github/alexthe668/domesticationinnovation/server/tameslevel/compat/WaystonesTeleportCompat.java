@@ -6,6 +6,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.mojang.datafixers.util.Pair;
 import net.blay09.mods.balm.api.Balm;
 import net.blay09.mods.waystones.api.TeleportDestination;
@@ -21,7 +22,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
@@ -117,13 +118,13 @@ public final class WaystonesTeleportCompat {
         UUID ownerId = owner.getUUID();
         Vec3 targetPos = centeredTargetPos(pending.targetBlock());
         for (TameData data : TameRegistry.getOwned(ownerId)) {
-            TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
+            LivingEntity loaded = findLoadedOwnedTame(owner, data.uuid);
             if (loaded != null && loaded.isAlive()) {
-                TameCommands.syncLiveMovementStateFor(loaded);
+                if (loaded instanceof net.minecraft.world.entity.TamableAnimal tamable) TameCommands.syncLiveMovementStateFor(tamable);
                 if (!isWaystoneTeleportEligibleLoaded(loaded, data, ownerId)) {
                     continue;
                 }
-                TamableAnimal moved = teleportWaystoneStyle(owner, loaded, data, targetLevel, pending.targetBlock(), pending.yRot(), pending.xRot());
+                LivingEntity moved = teleportWaystoneStyle(owner, loaded, data, targetLevel, pending.targetBlock(), pending.yRot(), pending.xRot());
                 if (moved != null) {
                     TameCommands.queueClientReloadForTame(moved);
                 }
@@ -137,7 +138,7 @@ public final class WaystonesTeleportCompat {
         return true;
     }
 
-    private static TamableAnimal teleportWaystoneStyle(ServerPlayer owner, TamableAnimal tame, TameData data, ServerLevel targetLevel, BlockPos targetBlock, float yRot, float xRot) {
+    private static LivingEntity teleportWaystoneStyle(ServerPlayer owner, LivingEntity tame, TameData data, ServerLevel targetLevel, BlockPos targetBlock, float yRot, float xRot) {
         if (owner == null || tame == null || data == null || targetLevel == null || targetBlock == null) {
             return null;
         }
@@ -175,13 +176,13 @@ public final class WaystonesTeleportCompat {
             return true;
         }
         Entity entity = level.getEntity(pending.tameUuid());
-        if (entity instanceof TamableAnimal tame) {
+        if (entity instanceof LivingEntity tame) {
             resendEntityToOwner(owner, tame);
         }
         return true;
     }
 
-    private static void queueOwnerResync(ServerPlayer owner, TamableAnimal tame, ServerLevel level) {
+    private static void queueOwnerResync(ServerPlayer owner, LivingEntity tame, ServerLevel level) {
         if (owner == null || tame == null || level == null) {
             return;
         }
@@ -193,7 +194,7 @@ public final class WaystonesTeleportCompat {
         ));
     }
 
-    private static void resendEntityToOwner(ServerPlayer owner, TamableAnimal tame) {
+    private static void resendEntityToOwner(ServerPlayer owner, LivingEntity tame) {
         if (owner == null || tame == null || owner.connection == null) {
             return;
         }
@@ -242,7 +243,7 @@ public final class WaystonesTeleportCompat {
         return TameAutoFollowEvents.isFollowing(data);
     }
 
-    private static boolean isWaystoneTeleportEligibleLoaded(TamableAnimal tame, TameData data, UUID ownerId) {
+    private static boolean isWaystoneTeleportEligibleLoaded(LivingEntity tame, TameData data, UUID ownerId) {
         if (tame == null || data == null || data.isInactive() || data.uuid == null) {
             return false;
         }
@@ -255,23 +256,23 @@ public final class WaystonesTeleportCompat {
         if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
             return false;
         }
-        return TameAutoFollowEvents.isFollowingForTeleportCompat(tame);
+        return TameEntityAdapter.isFollowingOwner(tame);
     }
 
-    private static TamableAnimal findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {
+    private static LivingEntity findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {
         if (owner == null || owner.server == null || tameUuid == null) {
             return null;
         }
         for (ServerLevel level : owner.server.getAllLevels()) {
             Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
-            if (!owner.getUUID().equals(tame.getOwnerUUID())) continue;
+            if (!(entity instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) continue;
+            if (!owner.getUUID().equals(TameEntityAdapter.ownerUuid(tame))) continue;
             return tame;
         }
         return null;
     }
 
-    private static void refreshData(TameData data, TamableAnimal tame, ServerLevel level) {
+    private static void refreshData(TameData data, LivingEntity tame, ServerLevel level) {
         if (data == null || tame == null || level == null) {
             return;
         }

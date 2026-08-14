@@ -4,9 +4,10 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SwordItem;
 import net.minecraftforge.eventbus.api.Event;
@@ -34,8 +35,8 @@ public class TameRenameEvents {
     private static boolean handleStatShortcut(PlayerInteractEvent event, net.minecraft.world.entity.Entity target) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return false;
         if (!player.isShiftKeyDown()) return false;
-        if (!(target instanceof TamableAnimal tame) || !tame.isTame()) return false;
-        if (tame.getOwnerUUID() == null || !tame.getOwnerUUID().equals(player.getUUID())) return false;
+        if (!(target instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) return false;
+        if (!player.getUUID().equals(TameEntityAdapter.ownerUuid(tame))) return false;
 
         ItemStack stack = event.getItemStack();
         if (stack.isEmpty() || !(stack.getItem() instanceof SwordItem)) {
@@ -53,8 +54,7 @@ public class TameRenameEvents {
     }
 
     private static void handleRename(PlayerInteractEvent event, net.minecraft.world.entity.Entity target, ItemStack stack) {
-        if (!(target instanceof TamableAnimal tame)) return;
-        if (!tame.isTame()) return;
+        if (!(target instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) return;
         if (stack.isEmpty()) return;
         String id = stack.getItem().builtInRegistryHolder().key().location().toString();
         if (!"minecraft:name_tag".equals(id) && !"domesticationinnovation:collar_tag".equals(id)) return;

@@ -871,7 +871,7 @@ public class TameSpawnEvents {
         TameRegistry.markDirty();
     }
 
-    public static boolean hasServerNameConflict(TamableAnimal self, String requestedName) {
+    public static boolean hasServerNameConflict(LivingEntity self, String requestedName) {
         String cleaned = stripLevelPrefixes(requestedName).trim();
         return !cleaned.isBlank() && usedServerTameNames(self).contains(cleaned.toLowerCase(Locale.ROOT));
     }

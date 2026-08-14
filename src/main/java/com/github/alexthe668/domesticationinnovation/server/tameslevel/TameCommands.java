@@ -5240,7 +5240,7 @@ public class TameCommands {
         return 1;
     }
 
-    public static void showSneakInteractStats(ServerPlayer player, TamableAnimal tame) {
+    public static void showSneakInteractStats(ServerPlayer player, LivingEntity tame) {
         if (player == null || tame == null) {
             return;
         }
@@ -5248,7 +5248,7 @@ public class TameCommands {
         if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
             return;
         }
-        syncCollarStateFromLoadedTame(tame, data);
+        if (tame instanceof TamableAnimal tamable) syncCollarStateFromLoadedTame(tamable, data);
         sendTameStats(player.createCommandSourceStack(), player, data, true, false, true);
     }
 
