@@ -25,6 +25,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -91,6 +93,13 @@ public class TameCombatEvents {
             BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount(), duelPink);
         } else if (mob instanceof TamableAnimal targetTame && targetTame.isTame()) {
             BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
+        }
+        if (tame == null && event.getSource().getEntity() instanceof LivingEntity modifiedAttacker
+                && modifiedAttacker instanceof ModifedToBeTameable modified
+                && !(modifiedAttacker instanceof AbstractHorse)
+                && modified.isTame()
+                && TameRegistry.get(modifiedAttacker.getUUID()) != null) {
+            LevelSystem.trackDamage(mob, modifiedAttacker);
         }
 
         if (event.getSource().getEntity() instanceof ServerPlayer player) {

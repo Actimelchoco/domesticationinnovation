@@ -18,8 +18,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -63,7 +67,49 @@ public class TameSpawnEvents {
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
 
     @SubscribeEvent
+    public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
+        LivingEntity living = event.getEntity();
+        if (living.level().isClientSide
+                || living.tickCount % 20 != 0
+                || living instanceof AbstractHorse
+                || living instanceof TamableAnimal
+                || !(living instanceof ModifedToBeTameable modified)
+                || !modified.isTame()
+                || modified.getTameOwnerUUID() == null) {
+            return;
+        }
+
+        TameData data = TameRegistry.get(living.getUUID());
+        if (data == null) {
+            registerLiveOnlyModifiedTame(living, modified);
+            return;
+        }
+
+        String dimension = living.level().dimension().location().toString();
+        int x = living.blockPosition().getX();
+        int y = living.blockPosition().getY();
+        int z = living.blockPosition().getZ();
+        if (!dimension.equals(data.lastKnownDimension)
+                || x != data.lastKnownX || y != data.lastKnownY || z != data.lastKnownZ) {
+            data.lastKnownDimension = dimension;
+            data.lastKnownX = x;
+            data.lastKnownY = y;
+            data.lastKnownZ = z;
+            TameRegistry.markDirty();
+        }
+    }
+
+    @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
+
+        if (event.getEntity() instanceof LivingEntity living
+                && living instanceof ModifedToBeTameable modified
+                && !(living instanceof TamableAnimal)
+                && !(living instanceof AbstractHorse)
+                && modified.isTame()) {
+            registerLiveOnlyModifiedTame(living, modified);
+            return;
+        }
 
         if (!(event.getEntity() instanceof TamableAnimal tame)) return;
 
@@ -736,6 +782,34 @@ public class TameSpawnEvents {
             i++;
         }
         return base + " " + self.getUUID().toString().substring(0, 8);
+    }
+
+    private static void registerLiveOnlyModifiedTame(LivingEntity living, ModifedToBeTameable modified) {
+        if (living == null || modified == null || living.level().isClientSide || modified.getTameOwnerUUID() == null) return;
+        TameData data = TameRegistry.get(living.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.readOrCreateTlId(living);
+            data = TameRegistry.getByTlId(tlId);
+            if (data != null) {
+                TameRegistry.rebindEntityUuid(data, living.getUUID());
+            } else {
+                data = new TameData(living, modified.getTameOwnerUUID(), true);
+                TameRegistry.register(data);
+            }
+        }
+        data.liveOnly = true;
+        data.ownerUUID = modified.getTameOwnerUUID();
+        data.dead = false;
+        data.stored = false;
+        data.lastKnownDimension = living.level().dimension().location().toString();
+        data.lastKnownX = living.blockPosition().getX();
+        data.lastKnownY = living.blockPosition().getY();
+        data.lastKnownZ = living.blockPosition().getZ();
+        TameRegistry.bindEntityToData(living, data);
+        LevelSystem.ensureClassAssigned(living, data, true);
+        LevelSystem.reapplyTypeBasePlusBonuses(living, data);
+        LevelSystem.updateTameName(living, data);
+        TameRegistry.markDirty();
     }
 
     public static boolean hasServerNameConflict(TamableAnimal self, String requestedName) {

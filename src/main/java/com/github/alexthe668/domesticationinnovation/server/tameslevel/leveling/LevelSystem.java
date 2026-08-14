@@ -1,5 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling;
 
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -261,7 +263,7 @@ public class LevelSystem {
     // DAMAGE TRACKING
     // ===============================
 
-    public static void trackDamage(LivingEntity mob, TamableAnimal tame) {
+    public static void trackDamage(LivingEntity mob, LivingEntity tame) {
         mobDamageTracker.computeIfAbsent(mob.getUUID(), k -> new HashSet<>()).add(tame.getUUID());
     }
 
@@ -362,7 +364,7 @@ public class LevelSystem {
             }
 
             Entity entity = dead.level() instanceof ServerLevel serverLevel ? serverLevel.getEntity(tameId) : null;
-            if (entity instanceof TamableAnimal tame) {
+            if (entity instanceof LivingEntity tame) {
                 checkLevelUp(tame, data);
             }
         }
@@ -540,7 +542,7 @@ public class LevelSystem {
         return true;
     }
 
-    public static void grantXP(TamableAnimal tame, TameData data, int amount) {
+    public static void grantXP(LivingEntity tame, TameData data, int amount) {
         if (amount == 0) {
             return;
         }
@@ -697,7 +699,7 @@ public class LevelSystem {
         return TameClassRoller.roll(CLASS_WEIGHT_CONFIG);
     }
 
-    public static void ensureClassAssigned(TamableAnimal tame, TameData data, boolean notifyOwner) {
+    public static void ensureClassAssigned(LivingEntity tame, TameData data, boolean notifyOwner) {
         if (data.tameClass != null) {
             return;
         }
@@ -710,7 +712,7 @@ public class LevelSystem {
         if (tame.getPersistentData().getBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG)) {
             return;
         }
-        if (tame.getOwner() instanceof Player owner) {
+        if (TameableUtils.getOwnerOf(tame) instanceof Player owner) {
             owner.sendSystemMessage(Component.literal(
                     "§b" + data.name + " class assigned: §e" + data.tameClass.id()
             ));
@@ -721,7 +723,7 @@ public class LevelSystem {
     // LEVEL UP CHECK
     // ===============================
 
-    public static void checkLevelUp(TamableAnimal tame, TameData data) {
+    public static void checkLevelUp(LivingEntity tame, TameData data) {
         ensureClassAssigned(tame, data, false);
         data.xpToNext = xpRequiredForLevel(data.level);
         boolean leveled = false;
@@ -745,7 +747,7 @@ public class LevelSystem {
             }
             updateTameName(tame, data);
 
-            if (!regainingLevels && tame.getOwner() instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
+            if (!regainingLevels && TameableUtils.getOwnerOf(tame) instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
                 owner.sendSystemMessage(Component.literal(
                         "§6Your pet §e" + data.name + " §6leveled up to §eLevel " + data.level + "§6."
                 ));
@@ -815,7 +817,7 @@ public class LevelSystem {
     // REWARD ROLLING
     // ===============================
 
-    public static LevelRewardResult applyLevelReward(TamableAnimal tame, TameData data) {
+    public static LevelRewardResult applyLevelReward(LivingEntity tame, TameData data) {
         RewardCategory category = rollCategory(data);
         return switch (category) {
             case BASE_STAT -> applyBaseStatReward(tame, data);
@@ -845,7 +847,7 @@ public class LevelSystem {
         return RewardCategory.ABILITY;
     }
 
-    private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data) {
+    private static LevelRewardResult applyBaseStatReward(LivingEntity tame, TameData data) {
         List<WeightedOption<BaseStatReward>> options = new ArrayList<>();
         for (BaseStatReward reward : BaseStatReward.values()) {
             options.add(new WeightedOption<>(reward, modifiedBaseStatWeight(data.tameClass, reward)));
@@ -855,7 +857,7 @@ public class LevelSystem {
         return applyBaseStatReward(tame, data, reward, effectiveBaseStatAmount(data, reward));
     }
 
-    private static LevelRewardResult applyAttributeReward(TamableAnimal tame, TameData data, boolean allowAbilityFallback) {
+    private static LevelRewardResult applyAttributeReward(LivingEntity tame, TameData data, boolean allowAbilityFallback) {
         AttributeReward upgraded = tryUpgradeExistingAttribute(data);
         if (upgraded != null) {
             int newLevel = data.attributeLevels.get(upgraded.id);
@@ -885,7 +887,7 @@ public class LevelSystem {
         return new LevelRewardResult(RewardCategory.ATTRIBUTE, rolled.id, 1.0D, rolled.id + " " + roman(current + 1));
     }
 
-    private static LevelRewardResult applyAbilityReward(TamableAnimal tame, TameData data, boolean allowAttributeFallback) {
+    private static LevelRewardResult applyAbilityReward(LivingEntity tame, TameData data, boolean allowAttributeFallback) {
         AbilityReward unlocked = null;
         AbilityReward upgraded = null;
 
@@ -930,7 +932,7 @@ public class LevelSystem {
         return new LevelRewardResult(RewardCategory.ABILITY, rolled.id, 1.0D, "Unlocked " + rolled.id + " I");
     }
 
-    private static LevelRewardResult applyBaseStatReward(TamableAnimal tame, TameData data, BaseStatReward reward, double amount) {
+    private static LevelRewardResult applyBaseStatReward(LivingEntity tame, TameData data, BaseStatReward reward, double amount) {
         if (data != null && reward == BaseStatReward.HP && usesFixedHealthClass(data.tameClass)) {
             convertFixedHealthBonus(data, amount, false);
             boolean reapplied = reapplyTypeBasePlusBonuses(tame, data);
@@ -1482,27 +1484,19 @@ public class LevelSystem {
         instance.setBaseValue(instance.getBaseValue() + amount);
     }
 
-    public static boolean reapplyTypeBasePlusBonuses(TamableAnimal tame, TameData data) {
+    public static boolean reapplyTypeBasePlusBonuses(LivingEntity tame, TameData data) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
             return false;
         }
         normalizeFixedHealthBonuses(data);
         normalizeLiveTypeId(tame, data);
         Entity spawned = tame.getType().create(serverLevel);
-        TamableAnimal template;
-        if (spawned instanceof TamableAnimal createdTemplate) {
+        LivingEntity template;
+        if (spawned instanceof LivingEntity createdTemplate) {
             template = createdTemplate;
         } else {
             // Some tames do not expose a separate "tamed template"; their default entity is already the tamed form.
             template = tame;
-        }
-        if (template != tame) {
-            template.setTame(true);
-            if (tame.getOwnerUUID() != null) {
-                template.setOwnerUUID(tame.getOwnerUUID());
-            } else if (data.ownerUUID != null) {
-                template.setOwnerUUID(data.ownerUUID);
-            }
         }
 
         scrubLegacyManagedModifiers(tame);
@@ -1532,7 +1526,7 @@ public class LevelSystem {
         return true;
     }
 
-    public static boolean needsDeferredStatRefresh(TamableAnimal tame, TameData data) {
+    public static boolean needsDeferredStatRefresh(LivingEntity tame, TameData data) {
         ResourceLocation liveType = tame == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
         if (liveType != null && "crittersandcompanions".equals(liveType.getNamespace()) && "dragonfly".equals(liveType.getPath())) {
             return true;
@@ -1540,14 +1534,14 @@ public class LevelSystem {
         return isDragonflyType(data == null ? null : data.type);
     }
 
-    private static double readBaseOrDefault(TamableAnimal tame, Attribute attribute) {
+    private static double readBaseOrDefault(LivingEntity tame, Attribute attribute) {
         if (tame == null || attribute == null) return 0.0D;
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return attribute.getDefaultValue();
         return instance.getBaseValue();
     }
 
-    private static double resolveBaseValue(TameData data, TamableAnimal template, Attribute attribute, double trackedBonus) {
+    private static double resolveBaseValue(TameData data, LivingEntity template, Attribute attribute, double trackedBonus) {
         Double forcedBase = resolveForcedTypeBaseValue(data, attribute);
         if (forcedBase != null) {
             return forcedBase;
@@ -1586,7 +1580,7 @@ public class LevelSystem {
                 || normalized.startsWith("legendary_monsters.");
     }
 
-    private static void normalizeLiveTypeId(TamableAnimal tame, TameData data) {
+    private static void normalizeLiveTypeId(LivingEntity tame, TameData data) {
         if (tame == null || data == null) {
             return;
         }
@@ -1680,13 +1674,13 @@ public class LevelSystem {
         return null;
     }
 
-    private static void setAttributeBaseValue(TamableAnimal tame, Attribute attribute, double value) {
+    private static void setAttributeBaseValue(LivingEntity tame, Attribute attribute, double value) {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return;
         instance.setBaseValue(clampAttributeBaseValue(attribute, value));
     }
 
-    private static void scrubLegacyManagedModifiers(TamableAnimal tame) {
+    private static void scrubLegacyManagedModifiers(LivingEntity tame) {
         scrubUnknownModifiers(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID);
         scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE, LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID);
         scrubUnknownModifiers(tame, Attributes.MOVEMENT_SPEED);
@@ -1696,7 +1690,7 @@ public class LevelSystem {
         scrubUnknownModifiers(tame, Attributes.KNOCKBACK_RESISTANCE);
     }
 
-    private static void scrubUnknownModifiers(TamableAnimal tame, Attribute attribute, UUID... preservedModifierIds) {
+    private static void scrubUnknownModifiers(LivingEntity tame, Attribute attribute, UUID... preservedModifierIds) {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) {
             return;
@@ -1718,7 +1712,7 @@ public class LevelSystem {
         return value;
     }
 
-    private static void applyManagedAdditionModifier(TamableAnimal tame, Attribute attribute, UUID id, double amount, String name) {
+    private static void applyManagedAdditionModifier(LivingEntity tame, Attribute attribute, UUID id, double amount, String name) {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) {
             return;
@@ -1795,7 +1789,7 @@ public class LevelSystem {
         data.xpToNext = xpToNext;
     }
 
-    private static void rollbackLostLevelRewards(TamableAnimal tame, TameData data, int previousLevel, int resultingLevel) {
+    private static void rollbackLostLevelRewards(LivingEntity tame, TameData data, int previousLevel, int resultingLevel) {
         for (int level = previousLevel; level > resultingLevel; level--) {
             CompoundTag row = findLatestLevelRewardRow(data, level, true);
             LevelRewardResult reward = LevelRewardResult.fromHistoryRow(row);
@@ -1807,7 +1801,7 @@ public class LevelSystem {
         }
     }
 
-    private static LevelRewardResult restoreStoredLevelReward(TamableAnimal tame, TameData data, int level) {
+    private static LevelRewardResult restoreStoredLevelReward(LivingEntity tame, TameData data, int level) {
         CompoundTag row = findLatestLevelRewardRow(data, level, false);
         LevelRewardResult reward = LevelRewardResult.fromHistoryRow(row);
         if (reward == null) {
@@ -1832,7 +1826,7 @@ public class LevelSystem {
         return null;
     }
 
-    private static void applyStoredLevelReward(TamableAnimal tame, TameData data, LevelRewardResult reward) {
+    private static void applyStoredLevelReward(LivingEntity tame, TameData data, LevelRewardResult reward) {
         switch (reward.category()) {
             case BASE_STAT -> {
                 BaseStatReward baseReward = byBaseStatId(reward.rewardId());
@@ -1845,7 +1839,7 @@ public class LevelSystem {
         }
     }
 
-    private static void removeStoredLevelReward(TamableAnimal tame, TameData data, LevelRewardResult reward) {
+    private static void removeStoredLevelReward(LivingEntity tame, TameData data, LevelRewardResult reward) {
         switch (reward.category()) {
             case BASE_STAT -> {
                 BaseStatReward baseReward = byBaseStatId(reward.rewardId());

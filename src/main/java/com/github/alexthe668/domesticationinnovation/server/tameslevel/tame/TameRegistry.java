@@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -648,7 +649,7 @@ public class TameRegistry {
         return Set.copyOf(DISABLED_TAME_TYPE_IDS);
     }
 
-    public static boolean isTameTypeDisabled(TamableAnimal tame) {
+    public static boolean isTameTypeDisabled(LivingEntity tame) {
         if (tame == null) {
             return false;
         }
@@ -918,7 +919,7 @@ public class TameRegistry {
         return cleaned.trim();
     }
 
-    public static void bindEntityToData(TamableAnimal tame, TameData data) {
+    public static void bindEntityToData(LivingEntity tame, TameData data) {
         if (tame == null || data == null) {
             return;
         }

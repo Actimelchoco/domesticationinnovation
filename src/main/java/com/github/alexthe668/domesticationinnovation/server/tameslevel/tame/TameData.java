@@ -6,6 +6,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -145,12 +146,19 @@ public class TameData {
     public final Set<String> savedAbilities = new LinkedHashSet<>();
     public final Map<String, Integer> savedAbilityLevels = new LinkedHashMap<>();
     public final Map<String, Integer> savedAttributeLevels = new LinkedHashMap<>();
+    public boolean liveOnly = false;
 
     public TameData(TamableAnimal tame) {
 
+        this((LivingEntity) tame, tame.getOwnerUUID(), false);
+    }
+
+    public TameData(LivingEntity tame, UUID ownerUUID, boolean liveOnly) {
+
         this.uuid = tame.getUUID();
         this.tlId = readOrCreateTlId(tame);
-        this.ownerUUID = tame.getOwnerUUID();
+        this.ownerUUID = ownerUUID;
+        this.liveOnly = liveOnly;
 
         this.type = tame.getType().toString();
         this.name = TameRegistry.stripLevelPrefixes(tame.hasCustomName() ? tame.getCustomName().getString() : tame.getName().getString());
@@ -180,6 +188,7 @@ public class TameData {
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("uuid", uuid);
+        tag.putBoolean("liveOnly", liveOnly);
         if (tlId != null) {
             tag.putUUID(TL_ID_TAG, tlId);
         }
@@ -359,6 +368,7 @@ public class TameData {
 
     public static TameData fromTag(CompoundTag tag) {
         TameData data = new TameData();
+        data.liveOnly = tag.getBoolean("liveOnly");
         data.uuid = tag.hasUUID("uuid") ? tag.getUUID("uuid") : UUID.randomUUID();
         data.tlId = tag.hasUUID(TL_ID_TAG) ? tag.getUUID(TL_ID_TAG) : UUID.randomUUID();
         if (tag.hasUUID("ownerUUID")) {
@@ -588,7 +598,7 @@ public class TameData {
         return dead;
     }
 
-    public static UUID getTlId(TamableAnimal tame) {
+    public static UUID getTlId(LivingEntity tame) {
         if (tame == null) {
             return null;
         }
@@ -596,7 +606,7 @@ public class TameData {
         return data.hasUUID(TL_ID_TAG) ? data.getUUID(TL_ID_TAG) : null;
     }
 
-    public static UUID readOrCreateTlId(TamableAnimal tame) {
+    public static UUID readOrCreateTlId(LivingEntity tame) {
         if (tame == null) {
             return UUID.randomUUID();
         }
@@ -609,7 +619,7 @@ public class TameData {
         return created;
     }
 
-    public static void syncTlIdToEntity(TamableAnimal tame, UUID tlId) {
+    public static void syncTlIdToEntity(LivingEntity tame, UUID tlId) {
         if (tame == null || tlId == null) {
             return;
         }

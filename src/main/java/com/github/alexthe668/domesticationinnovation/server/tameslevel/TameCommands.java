@@ -11578,6 +11578,7 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (data != null && data.liveOnly) return RespawnResult.fail("live-only modified tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
 
         String typeId = recoverEntityTypeId(data);
@@ -12153,6 +12154,7 @@ public class TameCommands {
     }
 
     private static RecoverResult recoverPetEntity(CommandSourceStack source, ServerPlayer p, TameData data) {
+        if (data != null && data.liveOnly) return RecoverResult.fail("live-only modified tames cannot be recovered");
         if (p == null || data == null) return RecoverResult.fail("invalid context");
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
         clearGuardianAnchor(data);
@@ -12791,6 +12793,7 @@ public class TameCommands {
     }
 
     private static String validateUnloadedHomeTeleport(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target) {
+        if (data != null && data.liveOnly) return "live-only modified tames cannot use unloaded teleport or rebuild paths";
         if (source == null || owner == null || data == null || target == null || target.level == null || target.pos == null) {
             return "invalid context";
         }
