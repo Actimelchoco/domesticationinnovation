@@ -169,7 +169,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
-    private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 10;
+    private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 4;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
     private static final int TAME_HUNGER_DRUM_REFILL_RADIUS = 20;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
@@ -2487,6 +2487,7 @@ public class TameCommands {
                                                 )))))
                         .then(Commands.literal("guardian")
                                 .then(Commands.literal("tool")
+                                        .requires(source -> false)
                                         .then(Commands.literal("confirm")
                                                 .executes(ctx -> guardianToolConfirm(ctx.getSource())))
                                         .then(Commands.literal("changeOrder")
@@ -2494,6 +2495,7 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(List.of("lvl", "name", "points", "type"), b))
                                                         .executes(ctx -> guardianToolChangeOrder(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                                 .then(Commands.literal("list")
+                                        .requires(source -> false)
                                         .executes(ctx -> guardianList(ctx.getSource())))
                                 .then(Commands.literal("deployGroup")
                                         .then(Commands.argument("setName", StringArgumentType.word())
@@ -2515,6 +2517,7 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> suggestMovementStates(b))
                                                         .executes(ctx -> guardianDeployCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                                 .then(Commands.literal("capture")
+                                        .requires(source -> false)
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .then(Commands.literal("all")
@@ -2540,10 +2543,11 @@ public class TameCommands {
                                                                 .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
                                                                         .executes(ctx -> guardianCaptureCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))))
                                 .then(Commands.literal("info")
+                                        .requires(source -> false)
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .executes(ctx -> guardianSetInfo(ctx.getSource(), StringArgumentType.getString(ctx, "setName")))))
-                                .then(Commands.literal("deploymentGroup")
+                                .then(Commands.literal("manageGroup")
                                         .then(Commands.literal("delete")
                                                 .then(Commands.argument("setName", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
@@ -2601,6 +2605,7 @@ public class TameCommands {
                                                         )))))
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("setName", StringArgumentType.word())
+                                                .requires(source -> false)
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
                                                 .then(Commands.argument("pet", StringArgumentType.string())
                                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
@@ -2792,6 +2797,7 @@ public class TameCommands {
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> typeTpHome(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.argument("name", StringArgumentType.string())
+                                        .requires(source -> false)
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> teleportPetHome(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("reload")
@@ -4637,18 +4643,17 @@ public class TameCommands {
         }
         else if (key.equals("guardian")) {
             sendInfoPage(p, "Guardian",
-                    "/tames guardian <name>",
-                    "/tames guardian set <all|group <group>|type <type>|state <follow|wander|sit>|name>",
-                    "/tames guardian deploymentGroup <name> <pet>",
-                    "/tames guardian deployGroup <name>",
+                    "/tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>",
                     "/tames guardian deploy <all|group <group>|type <type>|state <follow|wander|sit>>",
-                    "/tames guardian info <setName>",
-                    "/tames guardian list",
+                    "/tames guardian manageGroup <name> <pet>",
+                    "/tames guardian manageGroup remove <name> <pet|all|group <group>|type <type>|state <state>>",
+                    "/tames guardian manageGroup delete <name>",
+                    "/tames guardian deployGroup <name>",
                     "A guardian anchor is a return point. After combat, the tame paths back there.",
                     "If it still has not returned after about 60 seconds, it is teleported back.",
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
                     "'deploy' activates the current guardian locations for the selected tames.",
-                    "Deployment groups store per-tame guardian positions under a shared name and later redeploy those members with deployGroup."
+                    "Managed groups store per-tame guardian positions under a shared name and later redeploy those members with deployGroup."
             );
         }
         else if (key.equals("guardian_arrow") || key.equals("guardianarrow")) {
@@ -23756,14 +23761,17 @@ public class TameCommands {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         List<UUID> all = new ArrayList<>(available);
         double roll = random.nextDouble();
-        if (roll < 0.6999D) {
+        if (roll < 0.69D) {
             return createFfaOneVOneRound(server, all, random);
         }
-        if (roll < 0.9999D) {
+        if (roll < 0.9699D) {
             return createFfaTeamDeathmatchRound(server, all, random);
         }
+        if (roll < 0.9999D) {
+            return createFfaLargeTeamDeathmatchRound(server, all, random);
+        }
         // 0.01%: all tames involved, split by highest MMR alternating.
-        return createAlternatingMmrRound(server, all);
+        return createMmrBalancedAllParticipantsRound(server, all);
     }
 
     private static DuelSessionRound createFfaOneVOneRound(MinecraftServer server, List<UUID> available, ThreadLocalRandom random) {
@@ -23775,14 +23783,14 @@ public class TameCommands {
         if (duelA == null || pool.isEmpty()) {
             return null;
         }
-        LinkedHashSet<UUID> opponents = pickSessionOneVOneOpponents(server, duelA, pool, random);
-        if (opponents.isEmpty()) {
+        UUID duelB = closestPowerParticipant(server, pool, sessionParticipantPower(server, duelA));
+        if (duelB == null) {
             return null;
         }
         LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
         LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
         teamA.add(duelA);
-        teamB.addAll(opponents);
+        teamB.add(duelB);
         return new DuelSessionRound(teamA, teamB);
     }
 
@@ -23887,13 +23895,23 @@ public class TameCommands {
         return built != null ? built : createAlternatingMmrRound(server, available);
     }
 
+    private static DuelSessionRound createFfaLargeTeamDeathmatchRound(MinecraftServer server, List<UUID> available, ThreadLocalRandom random) {
+        if (available == null || available.size() < 6) {
+            return createFfaTeamDeathmatchRound(server, available, random);
+        }
+        int participantCount = available.size();
+        int largeSide = 5 + random.nextInt(participantCount - 5);
+        int otherSide = 1 + random.nextInt(participantCount - largeSide);
+        int sizeA = random.nextBoolean() ? largeSide : otherSide;
+        int sizeB = sizeA == largeSide ? otherSide : largeSide;
+        DuelSessionRound built = buildMmrBalancedFfaTeams(server, available, sizeA, sizeB, random);
+        return built != null ? built : createAlternatingMmrRound(server, available);
+    }
+
     private static int[] pickRankedTeamDeathmatchSizes(int participantCount, ThreadLocalRandom random) {
         int maxSide = participantCount >= 6 && random.nextDouble() < 0.35D ? 3 : 2;
         if (participantCount >= 8 && random.nextDouble() < 0.025D) {
             maxSide = 4;
-        }
-        if (participantCount >= 10 && random.nextDouble() < 0.005D) {
-            maxSide = 5;
         }
         int otherSide = 1 + random.nextInt(maxSide);
         int firstSide = maxSide;
@@ -23922,8 +23940,8 @@ public class TameCommands {
             java.util.Collections.shuffle(shuffled, random);
             List<UUID> candidateA = new ArrayList<>(shuffled.subList(0, sizeA));
             List<UUID> candidateB = new ArrayList<>(shuffled.subList(sizeA, sizeA + sizeB));
-            double powerA = candidateA.stream().mapToDouble(id -> sessionParticipantPower(server, id)).sum();
-            double powerB = candidateB.stream().mapToDouble(id -> sessionParticipantPower(server, id)).sum();
+            double powerA = candidateA.stream().mapToDouble(id -> rankedTeamBalancePower(server, id)).sum();
+            double powerB = candidateB.stream().mapToDouble(id -> rankedTeamBalancePower(server, id)).sum();
             double difference = Math.abs(powerA - powerB) / Math.max(1.0D, powerA + powerB);
             if (difference < bestDifference) {
                 bestDifference = difference;
@@ -23991,6 +24009,29 @@ public class TameCommands {
             return null;
         }
         return new DuelSessionRound(teamA, teamB);
+    }
+
+    private static DuelSessionRound createMmrBalancedAllParticipantsRound(MinecraftServer server, List<UUID> participants) {
+        if (participants == null || participants.size() < 2) {
+            return null;
+        }
+        List<UUID> sorted = new ArrayList<>(participants);
+        sorted.sort((a, b) -> Double.compare(rankedTeamBalancePower(server, b), rankedTeamBalancePower(server, a)));
+        LinkedHashSet<UUID> teamA = new LinkedHashSet<>();
+        LinkedHashSet<UUID> teamB = new LinkedHashSet<>();
+        double powerA = 0.0D;
+        double powerB = 0.0D;
+        for (UUID id : sorted) {
+            double power = rankedTeamBalancePower(server, id);
+            if (teamA.isEmpty() || (!teamB.isEmpty() && powerA <= powerB)) {
+                teamA.add(id);
+                powerA += power;
+            } else {
+                teamB.add(id);
+                powerB += power;
+            }
+        }
+        return teamA.isEmpty() || teamB.isEmpty() ? null : new DuelSessionRound(teamA, teamB);
     }
 
     private static UUID closestPowerParticipant(MinecraftServer server, List<UUID> candidates, double targetPower) {
@@ -24331,6 +24372,12 @@ public class TameCommands {
             return Math.max(1, data.duelMmr);
         }
         return 0.0D;
+    }
+
+    private static double rankedTeamBalancePower(MinecraftServer server, UUID participantId) {
+        double mmr = Math.max(1.0D, sessionParticipantPower(server, participantId));
+        double normalizedMmr = mmr / PlayerDuelStats.DEFAULT_MMR;
+        return normalizedMmr * normalizedMmr * normalizedMmr;
     }
 
     private static double sessionPowerTotal(MinecraftServer server, Set<UUID> participants) {
