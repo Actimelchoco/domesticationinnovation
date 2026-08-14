@@ -13581,7 +13581,7 @@ public class TameCommands {
 
     private static boolean isEffectivelyLoaded(CommandSourceStack source, ServerPlayer owner, TameData data) {
         if (source == null || owner == null || data == null) return false;
-        if (findLoadedOwnedTameByUuid(source, owner.getUUID(), data.uuid) != null) {
+        if (findLoadedOwnedLivingTameByUuid(source, owner.getUUID(), data.uuid) != null) {
             return true;
         }
         return hasPortableTypeInInventory(owner, data);
@@ -13617,9 +13617,9 @@ public class TameCommands {
         if (server == null || tameUuid == null) return false;
         for (ServerLevel level : server.getAllLevels()) {
             Entity entity = level.getEntity(tameUuid);
-            if (entity instanceof TamableAnimal tame && tame.isTame() && tame.isAlive()) {
-                return true;
-            }
+            if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
+            if (living instanceof TamableAnimal tame && tame.isTame()) return true;
+            if (living instanceof ModifedToBeTameable modified && modified.isTame()) return true;
         }
         return false;
     }
@@ -13641,8 +13641,11 @@ public class TameCommands {
         if (server == null || data == null || logicalKey == null || logicalKey.isBlank()) return false;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || !tame.isAlive()) continue;
-                TameData loadedData = TameRegistry.get(tame.getUUID());
+                if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
+                boolean tamed = (living instanceof TamableAnimal tame && tame.isTame())
+                        || (living instanceof ModifedToBeTameable modified && modified.isTame());
+                if (!tamed) continue;
+                TameData loadedData = TameRegistry.get(living.getUUID());
                 if (loadedData == null || loadedData.uuid == null) continue;
                 if (loadedData.uuid.equals(data.uuid)) continue;
                 if (!logicalKey.equals(logicalTameKey(loadedData))) continue;
@@ -25473,6 +25476,24 @@ public class TameCommands {
             if (!(entity instanceof TamableAnimal ta) || !ta.isTame()) continue;
             if (!owner.equals(ta.getOwnerUUID())) continue;
             return ta;
+        }
+        return null;
+    }
+
+    private static LivingEntity findLoadedOwnedLivingTameByUuid(CommandSourceStack source, UUID owner, UUID tameUuid) {
+        if (source == null || source.getServer() == null || owner == null || tameUuid == null) return null;
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            Entity entity = level.getEntity(tameUuid);
+            if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
+            if (living instanceof TamableAnimal tamable) {
+                if (tamable.isTame() && owner.equals(tamable.getOwnerUUID())) return tamable;
+                continue;
+            }
+            if (living instanceof ModifedToBeTameable modified
+                    && modified.isTame()
+                    && owner.equals(modified.getTameOwnerUUID())) {
+                return living;
+            }
         }
         return null;
     }
