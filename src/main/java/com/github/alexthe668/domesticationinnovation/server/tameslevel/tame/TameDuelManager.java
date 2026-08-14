@@ -1960,7 +1960,7 @@ public final class TameDuelManager {
             tame.duelLosses += won ? 0 : 1;
             tame.duelCount += 1;
             tame.duelPoints += creditedPoints;
-            grantDuelXp(server, participantId, tame, mmrDelta, poolMagnitude, won);
+            grantDuelXp(server, participantId, tame, mmrDelta, poolMagnitude, won, battle != null && battle.ranked);
             return;
         }
         String resolvedName = entityLabel(server, participantId);
@@ -1978,11 +1978,15 @@ public final class TameDuelManager {
         playerStats.duelPoints += Math.max(0.0D, stats.points);
     }
 
-    private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, int poolMagnitude, boolean won) {
+    private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, int poolMagnitude, boolean won, boolean ranked) {
         if (participantId == null || tame == null || !won) {
             return;
         }
-        int xpReward = scaleDuelXpReward(tame, duelXpReward(mmrDelta, poolMagnitude));
+        int xpReward = duelXpReward(mmrDelta, poolMagnitude);
+        if (ranked) {
+            int rankedTameCount = TameRegistry.getRankedParticipants().size();
+            xpReward = Math.min(xpReward, Math.min(rankedTameCount, Math.max(1, tame.level)));
+        }
         if (xpReward <= 0) {
             return;
         }
@@ -1999,23 +2003,6 @@ public final class TameDuelManager {
     private static int duelXpReward(int mmrDelta, int poolMagnitude) {
         int poolBonus = Math.max(0, poolMagnitude) / 10;
         return Math.max(0, mmrDelta) + poolBonus + 3;
-    }
-
-    private static int scaleDuelXpReward(TameData tame, int reward) {
-        if (tame == null || reward <= 0) {
-            return 0;
-        }
-        int level = Math.max(1, tame.level);
-        if (level <= 10) {
-            return Math.max(1, (int) Math.ceil(reward / 10.0D));
-        }
-        if (level <= 50) {
-            return Math.max(1, (int) Math.ceil(reward / 5.0D));
-        }
-        if (level <= 100) {
-            return Math.max(1, (int) Math.ceil(reward / 2.0D));
-        }
-        return reward;
     }
 
     private static void awardDuelPoints(MinecraftServer server, DuelBattle battle, DuelElimination elimination) {
