@@ -773,14 +773,10 @@ public class TameAbilityEvents {
         Direction.Axis axis = Math.abs(target.getX() - tame.getX()) > Math.abs(target.getZ() - tame.getZ())
                 ? Direction.Axis.X
                 : Direction.Axis.Z;
-        ShulkerBullet bullet = new TimedTameShulkerBullet(level, tame, target, axis);
+        ShulkerBullet bullet = new TimedTameShulkerBullet(level, tame, target, axis, levelValue);
         bullet.setPos(tame.getX(), tame.getEyeY(), tame.getZ());
         TameProjectileTimeoutEvents.track(bullet, LONG_PROJECTILE_TICKS);
         level.addFreshEntity(bullet);
-        // Only levitate targets up to 50 max HP.
-        if (target.getMaxHealth() <= 50.0F) {
-            target.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 60 + levelValue * 20, Math.max(0, levelValue / 3)));
-        }
         level.sendParticles(ParticleTypes.END_ROD, target.getX(), target.getY(0.5D), target.getZ(), capParticles(tame, 16), 0.4D, 0.5D, 0.4D, 0.01D);
         setAbilityCooldown(tame, data, "shulker_bullet", "shulker_bullet_tick", now, 200L);
         debugAbilityUse(tame, "shulker_bullet");
