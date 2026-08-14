@@ -33,6 +33,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelSnapshots;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
@@ -8206,7 +8207,7 @@ public class TameCommands {
             return;
         }
 
-        TamableAnimal loaded = findLoadedTameByUuid(source, d.uuid);
+        LivingEntity loaded = TameEntityAdapter.findLoaded(source.getServer(), d.uuid, d.tlId);
         double actualHp = getBaseAttributeValue(loaded, Attributes.MAX_HEALTH);
         double actualDmg = getBaseAttributeValue(loaded, Attributes.ATTACK_DAMAGE);
         double actualSpd = getBaseAttributeValue(loaded, Attributes.MOVEMENT_SPEED);
@@ -8809,7 +8810,7 @@ public class TameCommands {
         return String.join(" ", words);
     }
 
-    private static double getBaseAttributeValue(TamableAnimal tame, Attribute attribute) {
+    private static double getBaseAttributeValue(LivingEntity tame, Attribute attribute) {
         if (tame == null || attribute == null) {
             return Double.NaN;
         }
@@ -11888,6 +11889,11 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
         TameRegistry.bindEntityToData(respawned, data);
+        LivingEntity attached = TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId);
+        if (attached != respawned) {
+            respawned.discard();
+            return RespawnResult.fail("spawned tame did not attach to its registry identity");
+        }
         clearMatchingDiBedRespawnRequests(source, data);
         TameRegistry.register(data);
         TameRegistry.markDirty();
@@ -12180,6 +12186,11 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
         TameRegistry.bindEntityToData(respawned, data);
+        LivingEntity attached = TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId);
+        if (attached != respawned) {
+            respawned.discard();
+            return RespawnResult.fail("spawned tame did not attach to its registry identity");
+        }
         TameRegistry.register(data);
         return RespawnResult.ok();
     }
@@ -13649,13 +13660,8 @@ public class TameCommands {
 
     private static boolean isLoadedAnywhere(MinecraftServer server, UUID tameUuid) {
         if (server == null || tameUuid == null) return false;
-        for (ServerLevel level : server.getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
-            if (living instanceof TamableAnimal tame && tame.isTame()) return true;
-            if (living instanceof ModifedToBeTameable modified && modified.isTame()) return true;
-        }
-        return false;
+        TameData data = TameRegistry.get(tameUuid);
+        return TameEntityAdapter.findLoaded(server, tameUuid, data == null ? null : data.tlId) != null;
     }
 
     private static String logicalTameKey(TameData data) {
@@ -24465,18 +24471,7 @@ public class TameCommands {
     }
 
     private static LivingEntity findLoadedLivingTameByIdentity(MinecraftServer server, UUID tameUuid, UUID tlId) {
-        if (server == null) return null;
-        for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
-                boolean identityMatch = (tameUuid != null && tameUuid.equals(living.getUUID()))
-                        || (tlId != null && tlId.equals(TameData.getTlId(living)));
-                if (!identityMatch) continue;
-                if (living instanceof TamableAnimal tamable && tamable.isTame()) return living;
-                if (living instanceof ModifedToBeTameable modified && modified.isTame()) return living;
-            }
-        }
-        return null;
+        return TameEntityAdapter.findLoaded(server, tameUuid, tlId);
     }
 
     private static LivingEntity findLoadedLivingEntity(MinecraftServer server, UUID entityId) {
@@ -25690,19 +25685,8 @@ public class TameCommands {
     }
 
     private static LivingEntity findLoadedOwnedLivingTameByIdentity(CommandSourceStack source, UUID owner, TameData data) {
-        if (source == null || source.getServer() == null || owner == null || data == null) return null;
-        LivingEntity living = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
-        if (living == null) return null;
-        UUID liveOwner = living instanceof TamableAnimal tamable
-                ? tamable.getOwnerUUID()
-                : living instanceof ModifedToBeTameable modified ? modified.getTameOwnerUUID() : null;
-        if (!owner.equals(liveOwner)) {
-            if (!owner.equals(data.ownerUUID)) return null;
-            if (living instanceof TamableAnimal tamable) tamable.setOwnerUUID(owner);
-            if (living instanceof ModifedToBeTameable modified) modified.setTameOwnerUUID(owner);
-        }
-        if (data.tlId != null) TameData.syncTlIdToEntity(living, data.tlId);
-        return living;
+        if (source == null) return null;
+        return TameEntityAdapter.findLoadedOwned(source.getServer(), data, owner, true);
     }
 
     private static TamableAnimal findLoadedTameByUuid(CommandSourceStack source, UUID tameUuid) {
