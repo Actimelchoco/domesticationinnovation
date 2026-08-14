@@ -61,6 +61,8 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
@@ -177,6 +179,10 @@ public class TameCommands {
     private static final int CLASS_REROLL_CONFIRM_TICKS = 20 * 30;
     private static final int FREE_CLASS_REROLLS = 3;
     private static final Map<UUID, Map<UUID, DuelInvite>> DUEL_INVITES = new HashMap<>();
+    private static final long SIMPLE_DUEL_WINDOW_MS = 5L * 60L * 1000L;
+    private static final Map<UUID, SimpleDuelInvite> SIMPLE_DUEL_INVITES = new HashMap<>();
+    private static final Map<UUID, SimpleDuelPreparation> SIMPLE_DUEL_PREPARATION_BY_PLAYER = new HashMap<>();
+    private static final Map<UUID, Integer> LAST_DUEL_COMMAND_STATE = new HashMap<>();
     private static final Map<UUID, PendingDuelMatch> PENDING_DUEL_MATCHES = new HashMap<>();
     private static final Map<UUID, UUID> PENDING_DUEL_MATCH_BY_PLAYER = new HashMap<>();
     private static final Map<UUID, PendingDuelSession> PENDING_DUEL_SESSIONS = new HashMap<>();
@@ -764,6 +770,40 @@ public class TameCommands {
         }
     }
 
+    private record SimpleDuelInvite(UUID id, UUID challenger, UUID opponent, long expiresAtMs) {
+    }
+
+    private static final class SimpleDuelPreparation {
+        private final UUID first;
+        private final UUID second;
+        private final long expiresAtMs;
+        private TeamSelection firstSelection;
+        private TeamSelection secondSelection;
+
+        private SimpleDuelPreparation(UUID first, UUID second, long expiresAtMs) {
+            this.first = first;
+            this.second = second;
+            this.expiresAtMs = expiresAtMs;
+        }
+
+        private UUID opponent(UUID player) {
+            return first.equals(player) ? second : first;
+        }
+
+        private void setSelection(UUID player, TeamSelection selection) {
+            if (first.equals(player)) firstSelection = selection;
+            else if (second.equals(player)) secondSelection = selection;
+        }
+
+        private TeamSelection selection(UUID player) {
+            return first.equals(player) ? firstSelection : secondSelection;
+        }
+
+        private boolean ready() {
+            return firstSelection != null && secondSelection != null;
+        }
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildHungerInventoryAutopickupCommand() {
         return Commands.literal("autopickup")
                 .then(Commands.literal("info")
@@ -795,6 +835,85 @@ public class TameCommands {
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                 .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), StringArgumentType.getString(ctx, "name")))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildOrganizedDuelCommand() {
+        return Commands.literal("duel")
+                .then(Commands.literal("selection")
+                        .requires(TameCommands::isIdleDuelSource)
+                        .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                .executes(ctx -> duelCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
+                .then(Commands.literal("invite")
+                        .requires(TameCommands::isIdleDuelSource)
+                        .then(Commands.argument("player", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
+                                .executes(ctx -> simpleDuelInvite(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+                .then(Commands.literal("leaderboard")
+                        .requires(TameCommands::isIdleDuelSource)
+                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false)))
+                .then(Commands.literal("session")
+                        .requires(TameCommands::isIdleDuelSource)
+                        .then(Commands.literal("accept")
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSessionAcceptSpec(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionAcceptCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
+                        .then(Commands.literal("decline")
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestIncomingDuelSessionChallengers(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionDecline(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+                        .then(Commands.literal("inbox").executes(ctx -> duelSessionInbox(ctx.getSource())))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionAddSelection(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                        .then(Commands.literal("pull")
+                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionPullSelection(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                        .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
+                                .executes(ctx -> duelSessionCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
+                .then(Commands.literal("sessionffa")
+                        .requires(TameCommands::isIdleDuelSource)
+                        .then(Commands.literal("accept")
+                                .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                        .suggests((ctx, b) -> suggestCompactDuelSessionFfaAcceptSpec(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionFfaAcceptCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
+                        .then(Commands.literal("decline")
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestIncomingDuelSessionFfaChallengers(ctx.getSource(), b))
+                                        .executes(ctx -> duelSessionFfaDecline(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
+                        .then(Commands.literal("inbox").executes(ctx -> duelSessionFfaInbox(ctx.getSource())))
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                .executes(ctx -> duelSessionFfaCompact(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                .then(Commands.literal("nearby")
+                        .requires(TameCommands::isPreparingDuelSource)
+                        .executes(ctx -> simpleDuelNearby(ctx.getSource(), 3))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 20))
+                                .executes(ctx -> simpleDuelNearby(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "radius")))))
+                .then(Commands.literal("stop")
+                        .requires(TameCommands::isPreparingDuelSource)
+                        .executes(ctx -> simpleDuelStop(ctx.getSource(), "Duel selection stopped.")))
+                .then(Commands.literal("ff")
+                        .requires(TameCommands::isActiveDuelSource)
+                        .executes(ctx -> duelForfeit(ctx.getSource())))
+                .then(Commands.literal("tp")
+                        .requires(TameCommands::isActiveDuelSource)
+                        .executes(ctx -> duelTeleportAll(ctx.getSource())))
+                .then(Commands.literal("accept")
+                        .requires(TameCommands::hasSimpleDuelInviteSource)
+                        .then(Commands.argument("inviteId", StringArgumentType.word())
+                                .executes(ctx -> simpleDuelAccept(ctx.getSource(), StringArgumentType.getString(ctx, "inviteId")))))
+                .then(Commands.literal("decline")
+                        .requires(TameCommands::hasSimpleDuelInviteSource)
+                        .then(Commands.argument("inviteId", StringArgumentType.word())
+                                .executes(ctx -> simpleDuelDecline(ctx.getSource(), StringArgumentType.getString(ctx, "inviteId")))))
+                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                        .requires(TameCommands::isPreparingDuelSource)
+                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                        .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "selection"))));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildLegacyDuelCommand() {
@@ -1659,7 +1778,8 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
-                        .then(Commands.literal("duelSession")
+                        .then(Commands.literal("_duelSessionOld")
+                                .requires(source -> false)
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestCompactDuelSessionAcceptSpec(ctx.getSource(), b))
@@ -1707,7 +1827,8 @@ public class TameCommands {
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "spec")
                                         ))))
-                        .then(Commands.literal("duelSessionFFA")
+                        .then(Commands.literal("_duelSessionFFAOld")
+                                .requires(source -> false)
                                 .then(Commands.literal("accept")
                                         .then(Commands.argument("spec", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestCompactDuelSessionFfaAcceptSpec(ctx.getSource(), b))
@@ -1853,32 +1974,7 @@ public class TameCommands {
                                 .then(Commands.literal("inbox")
                                         .executes(ctx -> duelInbox(ctx.getSource()))))
 
-                        .then(buildLegacyDuelCommand())
-                        .then(Commands.literal("duel")
-                                .then(Commands.literal("accept")
-                                        .then(Commands.argument("spec", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestCompactDuelAcceptSpec(ctx.getSource(), b))
-                                                .executes(ctx -> duelAcceptCompact(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "spec")
-                                                ))))
-                                .then(Commands.literal("decline")
-                                        .then(Commands.argument("player", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
-                                                .executes(ctx -> duelDecline(
-                                                        ctx.getSource(),
-                                                        StringArgumentType.getString(ctx, "player")
-                                                ))))
-                                .then(Commands.literal("ff")
-                                        .executes(ctx -> duelForfeit(ctx.getSource())))
-                                .then(Commands.literal("inbox")
-                                        .executes(ctx -> duelInbox(ctx.getSource())))
-                                .then(Commands.argument("spec", StringArgumentType.greedyString())
-                                        .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
-                                        .executes(ctx -> duelCompact(
-                                                ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "spec")
-                                        ))))
+                        .then(buildOrganizedDuelCommand())
                         .then(Commands.literal("info")
                                 .executes(ctx -> infoOverview(ctx.getSource()))
                                 .then(Commands.literal("tool")
@@ -2037,7 +2133,8 @@ public class TameCommands {
                                                         .then(Commands.literal("everytame")
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
 
-                        .then(Commands.literal("duelleaderboard")
+                        .then(Commands.literal("_duelleaderboardOld")
+                                .requires(source -> false)
                                 .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
                                         .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"), false)))
@@ -2489,7 +2586,8 @@ public class TameCommands {
                                                 .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.SIT)))
                                         .then(Commands.literal("wander")
                                                 .executes(ctx -> teleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name"), MovementOrder.WANDER)))))
-                        .then(Commands.literal("dueltp")
+                        .then(Commands.literal("_dueltpOld")
+                                .requires(source -> false)
                                 .then(Commands.literal("all")
                                         .executes(ctx -> duelTeleportAll(ctx.getSource())))
                                 .then(Commands.literal("follow")
@@ -3445,6 +3543,10 @@ public class TameCommands {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = event.getServer();
         if (server == null) return;
+        if (server.getTickCount() % 20 == 0) {
+            cleanupSimpleDuelState(server, true);
+            refreshChangedDuelCommandStates(server);
+        }
         if (!PENDING_TELEPORT_CLIENT_REFRESH.isEmpty()) {
             PENDING_TELEPORT_CLIENT_REFRESH.entrySet().removeIf(entry -> processPendingTeleportClientRefresh(server, entry.getKey(), entry.getValue()));
         }
@@ -4545,9 +4647,7 @@ public class TameCommands {
             sendInfoPage(p, "Collar",
                     "/tames collar",
                     "/tames collar notag",
-                    "/tames collar removeTag",
-                    "Lists your tames with collar tags (or without via notag), including stored collar tier in registry.",
-                    "removeTag removes collar tags from your loaded tames, drops the collar item on the ground, and updates registry collar state."
+                    "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
             );
         }
         else if (key.equals("inspect")) {
@@ -4592,7 +4692,7 @@ public class TameCommands {
         else if (key.equals("duelsession") || key.equals("duel session")) {
             sendInfoPage(p, "DuelSession",
                     "/tames duelSession <left selection> vs <right selection>",
-                    "/tames duelSession accept <player> vs <your selection>",
+                    "/tames duel session accept <player> vs <your selection>",
                     "/tames duelSession add <selection>",
                     "/tames duelSession pull <selection>",
                     "/tames duelSession ff",
@@ -4603,7 +4703,7 @@ public class TameCommands {
         else if (key.equals("duelsessionffa") || key.equals("duel session ffa")) {
             sendInfoPage(p, "DuelSessionFFA",
                     "/tames duelSessionFFA <selection>",
-                    "/tames duelSessionFFA accept <player> vs <your selection>",
+                    "/tames duel sessionffa accept <player> vs <your selection>",
                     "/tames duelSessionFFA add <selection>",
                     "/tames duelSessionFFA pull <selection>",
                     "/tames duelSessionFFA ff",
@@ -4625,16 +4725,13 @@ public class TameCommands {
         }
         else if (key.equals("duel duel")) {
             sendInfoPage(p, "Duel Start",
-                    "/tames duel all",
-                    "/tames duel follow",
-                    "/tames duel group <group>",
-                    "/tames duel type <type>",
-                    "/tames duel name <pet>",
-                    "/tames duel state <follow|sit|wander>",
-                    "/tames duel <left selectors> vs <right selectors>",
-                    "Compact duel selectors support comma-separated mixes like: name rex, type minecraft:wolf, group gang, all, follow, sit, wander, myself, or another player's name.",
-                    "If no player name appears, the duel starts immediately as a same-owner duel/team duel.",
-                    "If player names appear, invites are created and those players must accept before the battle starts."
+                    "/tames duel selection <left selection> vs <right selection>",
+                    "/tames duel invite <player>",
+                    "/tames duel <selection>",
+                    "/tames duel nearby [radius]",
+                    "/tames duel stop",
+                    "Selections support comma-separated tame names, groups, types, and movement states.",
+                    "After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20."
             );
         }
         else if (key.equals("duel accept")) {
@@ -4655,7 +4752,8 @@ public class TameCommands {
         else if (key.equals("duel ff") || key.equals("duel forfeit")) {
             sendInfoPage(p, "Duel Forfeit",
                     "/tames duel ff",
-                    "Forfeits your currently active duel."
+                    "/tames duel tp",
+                    "These commands are available only during an active duel."
             );
         }
         else if (key.equals("duel inbox")) {
@@ -4666,13 +4764,7 @@ public class TameCommands {
         }
         else if (key.equals("duel duelleaderboard") || key.equals("duel leaderboard")) {
             sendInfoPage(p, "Duel DuelLeaderboard",
-                    "/tames duelleaderboard",
-                    "/tames duelleaderboard long",
-                    "/tames duelleaderboard [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame|owned]",
-                    "/tames duelleaderboard group <groupName> [<number>|all|everytame]",
-                    "/tames duelleaderboard type <typeName> [<number>|all|everytame|owned]",
-                    "/tames duelleaderboard all",
-                    "/tames duelleaderboard all long",
+                    "/tames duel leaderboard",
                     "Shows duel ranking for players and tames with at least 1 duel.",
                     "Default is top 10 across all players."
             );
@@ -6816,7 +6908,7 @@ public class TameCommands {
         ServerPlayer targetPlayer = source.getPlayer();
         String[] parts = splitCompactVs(spec);
         if (parts == null) {
-            return error(targetPlayer, "Use /tames duelSession accept <player> vs <your selection>.");
+            return error(targetPlayer, "Use /tames duel session accept <player> vs <your selection>.");
         }
         String challengerName = parts[0].trim();
         if (challengerName.isBlank()) {
@@ -6915,7 +7007,7 @@ public class TameCommands {
         PENDING_DUEL_SESSION_BY_PLAYER.put(owner.getUUID(), session.sessionId);
         PENDING_DUEL_SESSION_BY_PLAYER.put(target.getUUID(), session.sessionId);
         target.sendSystemMessage(Component.literal(owner.getGameProfile().getName() + " invited you to a duel session" + arenaLabel(session.arenaName) + ".").withStyle(ChatFormatting.GOLD));
-        target.sendSystemMessage(Component.literal("Accept: /tames duelSession accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
+        target.sendSystemMessage(Component.literal("Accept: /tames duel session accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
         owner.sendSystemMessage(Component.literal("Created duel session invite" + arenaLabel(session.arenaName) + " for " + target.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN));
         return 1;
     }
@@ -7122,7 +7214,7 @@ public class TameCommands {
             pending.participants.put(target.getUUID(), new PendingFfaParticipant(target.getUUID(), owner.getUUID(), null, false));
             PENDING_DUEL_SESSION_FFA_BY_PLAYER.put(target.getUUID(), pending.sessionId);
             target.sendSystemMessage(Component.literal(owner.getGameProfile().getName() + " invited you to a duel session FFA" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.GOLD));
-            target.sendSystemMessage(Component.literal("Accept: /tames duelSessionFFA accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
+            target.sendSystemMessage(Component.literal("Accept: /tames duel sessionffa accept " + owner.getGameProfile().getName() + " vs <your selection>").withStyle(ChatFormatting.GREEN));
         }
         owner.sendSystemMessage(Component.literal("Created duel session FFA invite" + arenaLabel(pending.arenaName) + ".").withStyle(ChatFormatting.GREEN));
         return 1;
@@ -7132,7 +7224,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         String[] parts = splitCompactVs(spec);
         if (parts == null) {
-            return error(player, "Use /tames duelSessionFFA accept <player> vs <your selection>.");
+            return error(player, "Use /tames duel sessionffa accept <player> vs <your selection>.");
         }
         CompactDuelSideParseResult accepted = parseCompactDuelSide(source, player, parts[1]);
         if (!accepted.error.isBlank()) {
@@ -9582,10 +9674,10 @@ public class TameCommands {
         if (player == null) {
             return 0;
         }
+        boolean remembered = TameRegistry.getOwnerGroups(player.getUUID()).stream()
+                .anyMatch(existing -> existing != null && existing.equalsIgnoreCase(group));
         List<TameData> members = ownedGroup(player.getUUID(), group);
-        if (members.isEmpty()) {
-            return error(player, "No tames in group '" + group + "'.");
-        }
+        if (members.isEmpty() && !remembered) return error(player, "Group '" + group + "' does not exist.");
         int removed = 0;
         for (TameData data : members) {
             if (data == null || !isInGroup(data, group)) {
@@ -9595,15 +9687,8 @@ public class TameCommands {
                 removed++;
             }
         }
-        if (removed <= 0) {
-            if (TameRegistry.getOwnerGroups(player.getUUID()).stream().noneMatch(existing -> existing.equalsIgnoreCase(group))) {
-                return error(player, "No tames in group '" + group + "'.");
-            }
-        }
         TameRegistry.forgetGroup(player.getUUID(), group);
-        if (removed > 0) {
-            TameRegistry.markDirty();
-        }
+        TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Deleted group '" + group + "' from " + removed + " tame(s).").withStyle(ChatFormatting.YELLOW));
         return Math.max(1, removed);
     }
@@ -21770,6 +21855,205 @@ public class TameCommands {
             return DuelSelection.single(trimmed.substring(5).trim());
         }
         return DuelSelection.single(trimmed);
+    }
+
+    private static boolean isIdleDuelSource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        return player != null && !isPreparingDuel(player.getUUID()) && !TameDuelManager.isOwnerInDuel(player.getUUID());
+    }
+
+    private static boolean isPreparingDuelSource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        return player != null && isPreparingDuel(player.getUUID()) && !TameDuelManager.isOwnerInDuel(player.getUUID());
+    }
+
+    private static boolean isActiveDuelSource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        return player != null && TameDuelManager.isOwnerInDuel(player.getUUID());
+    }
+
+    private static boolean hasSimpleDuelInviteSource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null || isPreparingDuel(player.getUUID()) || TameDuelManager.isOwnerInDuel(player.getUUID())) return false;
+        cleanupSimpleDuelState(source.getServer(), false);
+        return SIMPLE_DUEL_INVITES.values().stream().anyMatch(invite -> invite.opponent().equals(player.getUUID()));
+    }
+
+    private static boolean isPreparingDuel(UUID playerId) {
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(playerId);
+        return preparation != null && preparation.expiresAtMs > System.currentTimeMillis();
+    }
+
+    private static int simpleDuelInvite(CommandSourceStack source, String opponentName) {
+        ServerPlayer challenger = source.getPlayer();
+        if (!isIdleDuelSource(source)) return error(challenger, "You cannot invite players in your current duel state.");
+        ServerPlayer opponent = source.getServer().getPlayerList().getPlayerByName(opponentName);
+        if (opponent == null) return error(challenger, "Player is not online.");
+        if (opponent.getUUID().equals(challenger.getUUID())) return error(challenger, "You cannot duel yourself.");
+        UUID id = UUID.randomUUID();
+        SimpleDuelInvite invite = new SimpleDuelInvite(id, challenger.getUUID(), opponent.getUUID(), System.currentTimeMillis() + SIMPLE_DUEL_WINDOW_MS);
+        SIMPLE_DUEL_INVITES.put(id, invite);
+        MutableComponent accept = Component.literal("[Accept]").withStyle(style -> style
+                .withColor(ChatFormatting.GREEN)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/tames duel accept " + id))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Accept duel invite"))));
+        MutableComponent decline = Component.literal("[Decline]").withStyle(style -> style
+                .withColor(ChatFormatting.RED)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/tames duel decline " + id))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Decline duel invite"))));
+        opponent.sendSystemMessage(Component.literal(challenger.getName().getString() + " invited you to a duel. ")
+                .withStyle(ChatFormatting.GOLD).append(accept).append(Component.literal(" ")).append(decline));
+        challenger.sendSystemMessage(Component.literal("Duel invite sent to " + opponent.getName().getString() + ". It expires in 5 minutes.").withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int simpleDuelAccept(CommandSourceStack source, String rawId) {
+        ServerPlayer opponent = source.getPlayer();
+        UUID id;
+        try { id = UUID.fromString(rawId); } catch (IllegalArgumentException ex) { return error(opponent, "Invalid duel invite."); }
+        cleanupSimpleDuelState(source.getServer(), false);
+        SimpleDuelInvite invite = SIMPLE_DUEL_INVITES.get(id);
+        if (invite == null || !invite.opponent().equals(opponent.getUUID())) return error(opponent, "That duel invite expired or no longer exists.");
+        ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(invite.challenger());
+        if (challenger == null) return error(opponent, "Challenger is no longer online.");
+        if (TameDuelManager.isOwnerInDuel(opponent.getUUID()) || TameDuelManager.isOwnerInDuel(challenger.getUUID())
+                || isPreparingDuel(opponent.getUUID()) || isPreparingDuel(challenger.getUUID())) {
+            return error(opponent, "One of you is already preparing for or participating in a duel.");
+        }
+        SIMPLE_DUEL_INVITES.remove(id);
+        SimpleDuelPreparation preparation = new SimpleDuelPreparation(challenger.getUUID(), opponent.getUUID(), System.currentTimeMillis() + SIMPLE_DUEL_WINDOW_MS);
+        SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(challenger.getUUID(), preparation);
+        SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(opponent.getUUID(), preparation);
+        challenger.sendSystemMessage(Component.literal(opponent.getName().getString() + " accepted. Select with /tames duel <selection> or /tames duel nearby [radius].").withStyle(ChatFormatting.GREEN));
+        opponent.sendSystemMessage(Component.literal("Accepted. Select with /tames duel <selection> or /tames duel nearby [radius].").withStyle(ChatFormatting.GREEN));
+        refreshDuelCommands(challenger, opponent);
+        return 1;
+    }
+
+    private static int simpleDuelDecline(CommandSourceStack source, String rawId) {
+        ServerPlayer player = source.getPlayer();
+        UUID id;
+        try { id = UUID.fromString(rawId); } catch (IllegalArgumentException ex) { return error(player, "Invalid duel invite."); }
+        SimpleDuelInvite invite = SIMPLE_DUEL_INVITES.get(id);
+        if (invite == null || !invite.opponent().equals(player.getUUID())) return error(player, "That duel invite expired or no longer exists.");
+        SIMPLE_DUEL_INVITES.remove(id);
+        ServerPlayer challenger = source.getServer().getPlayerList().getPlayer(invite.challenger());
+        player.sendSystemMessage(Component.literal("Duel invite declined.").withStyle(ChatFormatting.YELLOW));
+        if (challenger != null) challenger.sendSystemMessage(Component.literal(player.getName().getString() + " declined your duel invite.").withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int simpleDuelSelect(CommandSourceStack source, String rawSelection) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null || preparation.expiresAtMs <= System.currentTimeMillis()) return error(player, "You are not preparing a duel.");
+        CompactDuelSideParseResult parsed = parseCompactDuelSide(source, player, rawSelection);
+        if (!parsed.error.isBlank() || !parsed.targetPlayerNames.isEmpty()) {
+            return error(player, parsed.error.isBlank() ? "Player names cannot be included in a duel-team selection." : parsed.error);
+        }
+        TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
+        if (!resolved.error.isBlank()) return error(player, resolved.error);
+        if (resolved.members.isEmpty()) return error(player, "Your duel selection has no loaded, living participants.");
+        preparation.setSelection(player.getUUID(), parsed.selection);
+        player.sendSystemMessage(Component.literal("Duel selection ready: " + teamSelectionLabel(parsed.selection) + ".").withStyle(ChatFormatting.GREEN));
+        ServerPlayer opponent = source.getServer().getPlayerList().getPlayer(preparation.opponent(player.getUUID()));
+        if (opponent != null) opponent.sendSystemMessage(Component.literal(player.getName().getString() + " has submitted a duel selection.").withStyle(ChatFormatting.GRAY));
+        return tryStartSimpleDuel(source, preparation);
+    }
+
+    private static int simpleDuelNearby(CommandSourceStack source, int radius) {
+        ServerPlayer player = source.getPlayer();
+        List<DuelSelection> selections = new ArrayList<>();
+        for (TamableAnimal tame : player.level().getEntitiesOfClass(TamableAnimal.class, player.getBoundingBox().inflate(Mth.clamp(radius, 1, 20)))) {
+            if (!tame.isAlive() || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) continue;
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null && data.horseType) continue;
+            selections.add(DuelSelection.single(data == null ? tame.getName().getString() : data.name));
+        }
+        if (selections.isEmpty()) return error(player, "No eligible loaded tames found within " + radius + " blocks.");
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null) return error(player, "You are not preparing a duel.");
+        preparation.setSelection(player.getUUID(), TeamSelection.of(false, selections));
+        player.sendSystemMessage(Component.literal("Selected " + selections.size() + " nearby tame(s).").withStyle(ChatFormatting.GREEN));
+        return tryStartSimpleDuel(source, preparation);
+    }
+
+    private static int tryStartSimpleDuel(CommandSourceStack source, SimpleDuelPreparation preparation) {
+        if (preparation == null || !preparation.ready()) return 1;
+        ServerPlayer first = source.getServer().getPlayerList().getPlayer(preparation.first);
+        ServerPlayer second = source.getServer().getPlayerList().getPlayer(preparation.second);
+        if (first == null || second == null) return simpleDuelStop(source, "Duel selection stopped because a player disconnected.");
+        TeamSelectionResult firstTeam = resolveLoadedTeamSelection(source, first, preparation.firstSelection);
+        TeamSelectionResult secondTeam = resolveLoadedTeamSelection(source, second, preparation.secondSelection);
+        if (!firstTeam.error.isBlank()) return error(source.getPlayer(), firstTeam.error);
+        if (!secondTeam.error.isBlank()) return error(source.getPlayer(), secondTeam.error);
+        Set<UUID> firstIds = collectLivingEntityIds(firstTeam.members);
+        Set<UUID> secondIds = collectLivingEntityIds(secondTeam.members);
+        secondIds.removeAll(firstIds);
+        if (firstIds.isEmpty() || secondIds.isEmpty()) return error(source.getPlayer(), "Both duel teams must contain eligible loaded participants.");
+        prepareTeamForDuel(firstTeam.tames);
+        prepareTeamForDuel(secondTeam.tames);
+        assignInitialDuelTargets(firstTeam.tames, secondTeam.members);
+        assignInitialDuelTargets(secondTeam.tames, firstTeam.members);
+        SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(first.getUUID());
+        SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(second.getUUID());
+        TameDuelManager.startTeamDuel(source.getServer(), first.getUUID(), firstIds, second.getUUID(), secondIds, Set.of(), false);
+        first.sendSystemMessage(Component.literal("Duel started.").withStyle(ChatFormatting.GOLD));
+        second.sendSystemMessage(Component.literal("Duel started.").withStyle(ChatFormatting.GOLD));
+        refreshDuelCommands(first, second);
+        return 1;
+    }
+
+    private static int simpleDuelStop(CommandSourceStack source, String message) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(player.getUUID());
+        if (preparation == null) return error(player, "You are not preparing a duel.");
+        UUID otherId = preparation.opponent(player.getUUID());
+        SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(otherId);
+        ServerPlayer other = source.getServer().getPlayerList().getPlayer(otherId);
+        player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
+        if (other != null) other.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
+        refreshDuelCommands(player, other);
+        return 1;
+    }
+
+    private static void refreshDuelCommands(ServerPlayer... players) {
+        for (ServerPlayer player : players) {
+            if (player != null && player.getServer() != null) player.getServer().getCommands().sendCommands(player);
+        }
+    }
+
+    private static void refreshChangedDuelCommandStates(MinecraftServer server) {
+        if (server == null) return;
+        Set<UUID> online = new HashSet<>();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            UUID id = player.getUUID();
+            online.add(id);
+            int state = TameDuelManager.isOwnerInDuel(id) ? 2 : (isPreparingDuel(id) ? 1 : 0);
+            Integer previous = LAST_DUEL_COMMAND_STATE.put(id, state);
+            if (previous == null || previous != state) server.getCommands().sendCommands(player);
+        }
+        LAST_DUEL_COMMAND_STATE.keySet().removeIf(id -> !online.contains(id));
+    }
+
+    private static void cleanupSimpleDuelState(MinecraftServer server, boolean notify) {
+        long now = System.currentTimeMillis();
+        SIMPLE_DUEL_INVITES.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().expiresAtMs() <= now);
+        Set<SimpleDuelPreparation> expired = new HashSet<>();
+        for (SimpleDuelPreparation preparation : SIMPLE_DUEL_PREPARATION_BY_PLAYER.values()) {
+            if (preparation != null && preparation.expiresAtMs <= now) expired.add(preparation);
+        }
+        for (SimpleDuelPreparation preparation : expired) {
+            SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(preparation.first);
+            SIMPLE_DUEL_PREPARATION_BY_PLAYER.remove(preparation.second);
+            ServerPlayer first = server == null ? null : server.getPlayerList().getPlayer(preparation.first);
+            ServerPlayer second = server == null ? null : server.getPlayerList().getPlayer(preparation.second);
+            if (notify) {
+                if (first != null) first.sendSystemMessage(Component.literal("Duel selection expired.").withStyle(ChatFormatting.YELLOW));
+                if (second != null) second.sendSystemMessage(Component.literal("Duel selection expired.").withStyle(ChatFormatting.YELLOW));
+            }
+            refreshDuelCommands(first, second);
+        }
     }
 
     private static int duelCompact(CommandSourceStack source, String spec) {

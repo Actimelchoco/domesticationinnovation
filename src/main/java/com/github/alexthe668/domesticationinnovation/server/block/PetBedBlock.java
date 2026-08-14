@@ -6,6 +6,7 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegis
 import com.github.alexthe668.domesticationinnovation.server.misc.DITagRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -66,6 +67,15 @@ public class PetBedBlock extends BaseEntityBlock {
                }
                TameableUtils.setPetBedPos((LivingEntity) entity, pos);
                TameableUtils.setPetBedDimension((LivingEntity) entity, currentDimension);
+               if (entity instanceof TamableAnimal tame) {
+                   TameData data = TameRegistry.get(tame.getUUID());
+                   if (data == null) {
+                       data = TameRegistry.getByTlId(TameData.getTlId(tame));
+                   }
+                   if (data != null && TameBedRegistrySync.syncFromEntity(tame, data)) {
+                       TameRegistry.markDirty();
+                   }
+               }
                Vec3 look = new Vec3(0, 0, -entity.getBbWidth()).yRot((float)Math.toRadians(180f - entity.getYHeadRot()));
                Vec3 vec3 = entity.getEyePosition().add(look);
                Vec3 vec32 = look.scale(0.5F);

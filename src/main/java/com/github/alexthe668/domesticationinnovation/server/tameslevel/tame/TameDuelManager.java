@@ -239,6 +239,14 @@ public final class TameDuelManager {
         return resolveActiveParticipantId(entityId) != null;
     }
 
+    public static synchronized boolean isOwnerInDuel(UUID ownerId) {
+        if (ownerId == null) return false;
+        for (DuelBattle battle : BATTLE_BY_ID.values()) {
+            if (battle != null && (ownerId.equals(battle.ownerA) || ownerId.equals(battle.ownerB))) return true;
+        }
+        return false;
+    }
+
     public static synchronized boolean isTameInDuel(UUID tameId) {
         return isEntityInDuel(tameId);
     }

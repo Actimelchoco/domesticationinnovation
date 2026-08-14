@@ -12,8 +12,6 @@ final class TameCollarCommands {
         return Commands.literal("collar")
                 .executes(ctx -> TameCommands.collarList(ctx.getSource(), false))
                 .then(Commands.literal("notag")
-                        .executes(ctx -> TameCommands.collarList(ctx.getSource(), true)))
-                .then(Commands.literal("removeTag")
-                        .executes(ctx -> TameCommands.collarRemoveTag(ctx.getSource())));
+                        .executes(ctx -> TameCommands.collarList(ctx.getSource(), true)));
     }
 }
