@@ -54,6 +54,7 @@ import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.commands.arguments.DimensionArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -837,6 +838,46 @@ public class TameCommands {
                                 .executes(ctx -> hungerInventoryAutopickup(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled"), StringArgumentType.getString(ctx, "name")))));
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildOrganizedDuelLeaderboardCommand() {
+        return Commands.literal("leaderboard")
+                .requires(TameCommands::isIdleDuelSource)
+                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false))
+                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null,
+                                IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                .then(Commands.literal("all")
+                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, Integer.MAX_VALUE, false)))
+                .then(Commands.literal("owned")
+                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, 10, false))
+                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null,
+                                        IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                        .then(Commands.literal("all")
+                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null, null, Integer.MAX_VALUE, false))))
+                .then(Commands.literal("type")
+                        .then(Commands.argument("tameType", ResourceLocationArgument.id())
+                                .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
+                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null,
+                                        ResourceLocationArgument.getId(ctx, "tameType").toString(), 10, false))
+                                .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null,
+                                                ResourceLocationArgument.getId(ctx, "tameType").toString(),
+                                                IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                .then(Commands.literal("all")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null,
+                                                ResourceLocationArgument.getId(ctx, "tameType").toString(), Integer.MAX_VALUE, false)))
+                                .then(Commands.literal("owned")
+                                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null,
+                                                ResourceLocationArgument.getId(ctx, "tameType").toString(), 10, false))
+                                        .then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null,
+                                                        ResourceLocationArgument.getId(ctx, "tameType").toString(),
+                                                        IntegerArgumentType.getInteger(ctx, "limit"), false)))
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", false, null,
+                                                        ResourceLocationArgument.getId(ctx, "tameType").toString(), Integer.MAX_VALUE, false))))));
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildOrganizedDuelCommand() {
         return Commands.literal("duel")
                 .then(Commands.literal("selection")
@@ -849,9 +890,7 @@ public class TameCommands {
                         .then(Commands.argument("player", StringArgumentType.word())
                                 .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
                                 .executes(ctx -> simpleDuelInvite(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-                .then(Commands.literal("leaderboard")
-                        .requires(TameCommands::isIdleDuelSource)
-                        .executes(ctx -> duelLeaderboard(ctx.getSource(), "mmr", true, null, null, 10, false)))
+                .then(buildOrganizedDuelLeaderboardCommand())
                 .then(buildArenaCommand().requires(TameCommands::isIdleDuelSource))
                 .then(Commands.literal("session")
                         .requires(source -> false)
@@ -3373,15 +3412,15 @@ public class TameCommands {
                                         .then(Commands.literal("duelff")
                                                 .executes(ctx -> adminRankedDuelFf(ctx.getSource())))
                                         .then(Commands.literal("vorbidType")
-                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                .then(Commands.argument("type", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestKnownTameTypes(b))
                                                         .executes(ctx -> adminRankedForbidType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("forbidType")
-                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                .then(Commands.argument("type", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestKnownTameTypes(b))
                                                         .executes(ctx -> adminRankedForbidType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("allowType")
-                                                .then(Commands.argument("type", StringArgumentType.word())
+                                                .then(Commands.argument("type", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameRegistry.getRankedForbiddenTameTypes(), b))
                                                         .executes(ctx -> adminRankedAllowType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("setArena")
@@ -7936,6 +7975,7 @@ public class TameCommands {
         }
 
         if (changed > 0 && session != null) {
+            normalizeRankedRoundAfterPoolChange(source.getServer(), session);
             teleportDuelSessionIdleTamesHome(source.getServer(), session, session.currentRoundA, session.currentRoundB);
             syncIdleDuelSessionTames(source.getServer(), session);
         }
@@ -11647,8 +11687,10 @@ public class TameCommands {
             }
             return error(player, message.toString());
         }
-        String respawnedList = respawnedNames.isEmpty() ? "none" : String.join(", ", respawnedNames);
-        player.sendSystemMessage(Component.literal("Respawned: " + respawnedList + ".").withStyle(ChatFormatting.WHITE));
+        String respawnMessage = success > 1
+                ? "Respawned " + success + " tames."
+                : "Respawned: " + respawnedNames.get(0) + ".";
+        player.sendSystemMessage(Component.literal(respawnMessage).withStyle(ChatFormatting.WHITE));
         sendAffordabilityFailures(player, reincarnateAfter ? "Could not afford respawn reincarnation for" : "Could not afford respawn for", unaffordable);
         if (failed > 0 && !failReasons.isEmpty()) {
             player.sendSystemMessage(Component.literal("Respawn failed for " + failed + ": " + String.join("; ", failReasons)).withStyle(ChatFormatting.RED));
@@ -11793,7 +11835,7 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
-        if (data != null && data.liveOnly) return RespawnResult.fail("live-only modified tames cannot be rebuilt or respawned");
+        if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
 
         String typeId = recoverEntityTypeId(data);
@@ -12369,7 +12411,7 @@ public class TameCommands {
     }
 
     private static RecoverResult recoverPetEntity(CommandSourceStack source, ServerPlayer p, TameData data) {
-        if (data != null && data.liveOnly) return RecoverResult.fail("live-only modified tames cannot be recovered");
+        if (data != null && data.horseType) return RecoverResult.fail("horse-type tames cannot be recovered");
         if (p == null || data == null) return RecoverResult.fail("invalid context");
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
         clearGuardianAnchor(data);
@@ -13008,7 +13050,7 @@ public class TameCommands {
     }
 
     private static String validateUnloadedHomeTeleport(CommandSourceStack source, ServerPlayer owner, TameData data, SpawnTarget target) {
-        if (data != null && data.liveOnly) return "live-only modified tames cannot use unloaded teleport or rebuild paths";
+        if (data != null && data.horseType) return "horse-type tames cannot use unloaded teleport or rebuild paths";
         if (source == null || owner == null || data == null || target == null || target.level == null || target.pos == null) {
             return "invalid context";
         }
@@ -14859,7 +14901,10 @@ public class TameCommands {
             }
         }
         if (!names.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Teleport: " + String.join(", ", names) + ".").withStyle(ChatFormatting.WHITE));
+            String teleportMessage = names.size() > 1
+                    ? "Teleported " + names.size() + " tames."
+                    : "Teleport: " + names.iterator().next() + ".";
+            player.sendSystemMessage(Component.literal(teleportMessage).withStyle(ChatFormatting.WHITE));
         }
     }
 
@@ -23481,6 +23526,29 @@ public class TameCommands {
         }
         if (changed) {
             persistRankedPoolToRegistry();
+            normalizeRankedRoundAfterPoolChange(server, session);
+        }
+    }
+
+    private static void normalizeRankedRoundAfterPoolChange(MinecraftServer server, ActiveDuelSession session) {
+        if (server == null || session == null || !session.ranked) return;
+        session.currentRoundA = session.currentRoundA.stream()
+                .filter(session.poolA::contains)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        session.currentRoundB = session.currentRoundB.stream()
+                .filter(session.poolA::contains)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        boolean sideMissing = session.currentRoundA.isEmpty() || session.currentRoundB.isEmpty();
+        if (!sideMissing) return;
+
+        forceEndDuelSessionSide(server, session.currentRoundA);
+        forceEndDuelSessionSide(server, session.currentRoundB);
+        restoreRankedRoundPlayers(server, session);
+        session.currentRoundA = Set.of();
+        session.currentRoundB = Set.of();
+        session.roundStartedAtTick = -1L;
+        if (session.nextRoundAtTick < 0L) {
+            scheduleNextDuelSessionRound(server, session);
         }
     }
 

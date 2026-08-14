@@ -64,6 +64,7 @@ public class TameSpawnEvents {
     );
     private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
     private static final Map<UUID, PendingNewTameNotification> PENDING_NEW_TAME_NOTIFICATIONS = new HashMap<>();
+    private static final Map<UUID, Long> PENDING_RANDOM_TAME_NAMES = new HashMap<>();
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
 
     @SubscribeEvent
@@ -193,6 +194,10 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onTamed(AnimalTameEvent event) {
         if (!(event.getAnimal() instanceof TamableAnimal tame)) return;
+        if (!tame.hasCustomName()) {
+            // Forge can fire AnimalTameEvent before isTame() reflects the new state.
+            PENDING_RANDOM_TAME_NAMES.put(tame.getUUID(), tame.level().getGameTime() + 1L);
+        }
         if (event.getTamer() != null && tame.getOwnerUUID() == null) {
             // Ensure owner is available before registry dead-entry matching.
             tame.setOwnerUUID(event.getTamer().getUUID());
@@ -203,6 +208,7 @@ public class TameSpawnEvents {
         // instead of creating a second live entry with the same base identity.
         TameData data = registerOrRestoreTame(tame, true, true);
         if (data == null) return;
+        PENDING_RANDOM_TAME_NAMES.remove(tame.getUUID());
         boolean changed = false;
         if (event.getTamer() != null) {
             if (!event.getTamer().getUUID().equals(data.ownerUUID)) {
@@ -338,11 +344,37 @@ public class TameSpawnEvents {
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || PENDING_NEW_TAME_NOTIFICATIONS.isEmpty()) {
+        if (event.phase != TickEvent.Phase.END) {
             return;
         }
         MinecraftServer server = event.getServer();
-        PENDING_NEW_TAME_NOTIFICATIONS.entrySet().removeIf(entry -> trySendPendingNewTameNotification(server, entry.getKey(), entry.getValue()));
+        if (!PENDING_NEW_TAME_NOTIFICATIONS.isEmpty()) {
+            PENDING_NEW_TAME_NOTIFICATIONS.entrySet().removeIf(entry -> trySendPendingNewTameNotification(server, entry.getKey(), entry.getValue()));
+        }
+        if (!PENDING_RANDOM_TAME_NAMES.isEmpty()) {
+            processPendingRandomTameNames(server);
+        }
+    }
+
+    private static void processPendingRandomTameNames(MinecraftServer server) {
+        if (server == null) return;
+        long now = server.overworld().getGameTime();
+        PENDING_RANDOM_TAME_NAMES.entrySet().removeIf(entry -> {
+            if (entry.getValue() > now) return false;
+            for (ServerLevel level : server.getAllLevels()) {
+                Entity entity = level.getEntity(entry.getKey());
+                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
+                if (tame.hasCustomName()) return true;
+                TameData data = registerOrRestoreTame(tame, true, true);
+                if (data == null) return true;
+                String randomName = pickRandomUnusedTameName(usedServerTameNames(tame));
+                if (!randomName.isBlank()) data.name = uniqueLoadedNameFor(tame, randomName);
+                LevelSystem.updateTameName(tame, data);
+                TameRegistry.markDirty();
+                return true;
+            }
+            return now - entry.getValue() > 200L;
+        });
     }
 
     public static void queueDeferredStatRefresh(TamableAnimal tame, TameData data, long delayTicks) {
@@ -767,7 +799,7 @@ public class TameSpawnEvents {
         return left.contains(right) || right.contains(left);
     }
 
-    public static String uniqueLoadedNameFor(TamableAnimal self, String requestedName) {
+    public static String uniqueLoadedNameFor(LivingEntity self, String requestedName) {
         String base = stripLevelPrefixes(requestedName);
         java.util.Set<String> used = usedServerTameNames(self);
 
@@ -807,12 +839,14 @@ public class TameSpawnEvents {
             if (data != null) {
                 TameRegistry.rebindEntityUuid(data, living.getUUID());
             } else {
-                data = new TameData(living, modified.getTameOwnerUUID(), true);
+                data = new TameData(living, modified.getTameOwnerUUID(), living instanceof AbstractHorse);
+                String randomName = pickRandomUnusedTameName(usedServerTameNames(living));
+                if (!randomName.isBlank()) data.name = uniqueLoadedNameFor(living, randomName);
                 TameRegistry.register(data);
             }
         }
-        data.liveOnly = true;
         data.horseType = living instanceof AbstractHorse;
+        data.liveOnly = data.horseType;
         data.ownerUUID = modified.getTameOwnerUUID();
         data.dead = false;
         data.stored = false;
@@ -832,7 +866,7 @@ public class TameSpawnEvents {
         return !cleaned.isBlank() && usedServerTameNames(self).contains(cleaned.toLowerCase(Locale.ROOT));
     }
 
-    private static java.util.Set<String> usedServerTameNames(TamableAnimal self) {
+    private static java.util.Set<String> usedServerTameNames(LivingEntity self) {
         java.util.Set<String> used = new java.util.HashSet<>();
         UUID selfTlId = TameData.getTlId(self);
         for (TameData data : TameRegistry.TAMES.values()) {
@@ -844,7 +878,10 @@ public class TameSpawnEvents {
         if (self.level() != null && self.level().getServer() != null) {
             for (var level : self.level().getServer().getAllLevels()) {
                 for (var entity : level.getAllEntities()) {
-                    if (!(entity instanceof TamableAnimal other) || !other.isTame()) continue;
+                    if (!(entity instanceof LivingEntity other)) continue;
+                    boolean tamed = (other instanceof TamableAnimal tamable && tamable.isTame())
+                            || (other instanceof ModifedToBeTameable modified && modified.isTame());
+                    if (!tamed) continue;
                     if (other.getUUID().equals(self.getUUID())) continue;
                     String otherName;
                     TameData reg = TameRegistry.get(other.getUUID());
