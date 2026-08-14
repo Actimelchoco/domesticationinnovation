@@ -496,7 +496,7 @@ public final class TameDuelManager {
         }
     }
 
-    public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, TamableAnimal tame) {
+    public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, LivingEntity tame) {
         if (server == null || tame == null) {
             return null;
         }
@@ -524,8 +524,8 @@ public final class TameDuelManager {
         setDuelCombatTarget(tame, target);
     }
 
-    public static synchronized void refreshLoadedDuelParticipant(MinecraftServer server, TamableAnimal tame) {
-        if (server == null || tame == null || !tame.isTame() || !tame.isAlive()) {
+    public static synchronized void refreshLoadedDuelParticipant(MinecraftServer server, LivingEntity tame) {
+        if (server == null || tame == null || !TameEntityAdapter.isTame(tame) || !tame.isAlive()) {
             return;
         }
         UUID tameId = tame.getUUID();
@@ -534,19 +534,18 @@ public final class TameDuelManager {
             participantId = resolveActiveParticipantId(TameData.getTlId(tame));
         }
         if (participantId == null) {
-            restoreMossyGolemTargetGoalsIfNeeded(tame);
+            if (tame instanceof TamableAnimal tamable) restoreMossyGolemTargetGoalsIfNeeded(tamable);
             removeDuelFollowRangeBoost(tame);
             return;
         }
-        ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
+        if (tame instanceof TamableAnimal tamable) ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
         TameCommands.applyMovementOrderCode(tame, 2);
-        tame.setOrderedToSit(false);
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
-        forceMossyGolemCombatCommand(tame);
+        if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
         applyDuelFollowRangeBoost(tame);
-        LivingEntity current = tame.getTarget();
+        LivingEntity current = TameEntityAdapter.target(tame);
         if (isUsableCurrentDuelTarget(tame, current)) {
             setDuelCombatTarget(tame, current);
             return;
@@ -570,11 +569,11 @@ public final class TameDuelManager {
     private static void maintainTargets(MinecraftServer server, Set<UUID> ownTeam, Set<UUID> enemyTeam) {
         if (ownTeam == null || ownTeam.isEmpty() || enemyTeam == null || enemyTeam.isEmpty()) return;
         for (UUID ownId : ownTeam) {
-            TamableAnimal own = findLoadedTame(server, ownId);
+            LivingEntity own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
             applyDuelFollowRangeBoost(own);
             keepParticipantNearBattle(server, own, enemyTeam);
-            LivingEntity current = own.getTarget();
+            LivingEntity current = TameEntityAdapter.target(own);
             if (isUsableCurrentDuelTarget(own, current)) {
                 setDuelCombatTarget(own, current);
                 continue;
@@ -588,7 +587,7 @@ public final class TameDuelManager {
         }
     }
 
-    private static void keepParticipantNearBattle(MinecraftServer server, TamableAnimal participant, Set<UUID> enemyTeam) {
+    private static void keepParticipantNearBattle(MinecraftServer server, LivingEntity participant, Set<UUID> enemyTeam) {
         if (server == null || participant == null || enemyTeam == null || enemyTeam.isEmpty()) {
             return;
         }
@@ -606,7 +605,7 @@ public final class TameDuelManager {
         double angle = (Math.PI * 2.0D / 8.0D) * slot;
         Vec3 targetPos = anchor.position().add(Math.cos(angle) * 3.0D, 0.0D, Math.sin(angle) * 3.0D);
         TameCommands.autoFollowTeleportLoadedToLocation(participant, targetLevel, targetPos, participant.getYRot(), participant.getXRot());
-        participant.getNavigation().stop();
+        if (participant instanceof net.minecraft.world.entity.Mob mob) mob.getNavigation().stop();
         setDuelCombatTarget(participant, anchor);
     }
 
@@ -623,7 +622,7 @@ public final class TameDuelManager {
         return null;
     }
 
-    private static boolean isUsableCurrentDuelTarget(TamableAnimal own, LivingEntity current) {
+    private static boolean isUsableCurrentDuelTarget(LivingEntity own, LivingEntity current) {
         if (own == null || current == null || !current.isAlive()) {
             return false;
         }
@@ -640,11 +639,11 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
+        TameCommands.applyMovementOrderCode(tame, 2);
+        applyDuelFollowRangeBoost(tame);
         if (tame instanceof TamableAnimal tamable) {
             ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
-            TameCommands.applyMovementOrderCode(tamable, 2);
             tamable.setOrderedToSit(false);
-            applyDuelFollowRangeBoost(tamable);
             forceMossyGolemCombatCommand(tamable);
         }
         if (tame instanceof IComandableMob commandableMob) {
@@ -754,7 +753,7 @@ public final class TameDuelManager {
         TameRegistry.markDirty();
     }
 
-    private static LivingEntity nearestLoadedOpponent(MinecraftServer server, TamableAnimal from, Set<UUID> opponentIds) {
+    private static LivingEntity nearestLoadedOpponent(MinecraftServer server, LivingEntity from, Set<UUID> opponentIds) {
         if (server == null || from == null || opponentIds == null || opponentIds.isEmpty()) return null;
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
@@ -1007,11 +1006,11 @@ public final class TameDuelManager {
     }
 
     private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
-        TamableAnimal tame = findLoadedTame(server, participantId);
+        LivingEntity tame = findLoadedTame(server, participantId);
         if (tame == null) return;
         clearDuelCombatTarget(tame);
         removeDuelFollowRangeBoost(tame);
-        restoreMossyGolemTargetGoalsIfNeeded(tame);
+        if (tame instanceof TamableAnimal tamable) restoreMossyGolemTargetGoalsIfNeeded(tamable);
     }
 
     private static void setDuelCombatTarget(LivingEntity tame, LivingEntity target) {
@@ -1019,8 +1018,7 @@ public final class TameDuelManager {
             return;
         }
         if (target == null || !target.isAlive()) {
-            if (tame instanceof TamableAnimal tamable) clearDuelCombatTarget(tamable);
-            else if (tame instanceof net.minecraft.world.entity.Mob mob) mob.setTarget(null);
+            clearDuelCombatTarget(tame);
             return;
         }
         if (tame instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != target) {
@@ -1033,12 +1031,14 @@ public final class TameDuelManager {
         }
     }
 
-    private static void clearDuelCombatTarget(TamableAnimal tame) {
+    private static void clearDuelCombatTarget(LivingEntity tame) {
         if (tame == null) {
             return;
         }
-        tame.setTarget(null);
-        tame.getNavigation().stop();
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
         try {
             tame.getBrain().eraseMemory(MemoryModuleType.ANGRY_AT);
             tame.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
@@ -1046,7 +1046,7 @@ public final class TameDuelManager {
         }
     }
 
-    private static void applyDuelFollowRangeBoost(TamableAnimal tame) {
+    private static void applyDuelFollowRangeBoost(LivingEntity tame) {
         if (tame == null) {
             return;
         }
@@ -1062,7 +1062,7 @@ public final class TameDuelManager {
         ));
     }
 
-    private static void removeDuelFollowRangeBoost(TamableAnimal tame) {
+    private static void removeDuelFollowRangeBoost(LivingEntity tame) {
         if (tame == null) {
             return;
         }
@@ -2055,9 +2055,9 @@ public final class TameDuelManager {
         }
     }
 
-    private static TamableAnimal findLoadedTame(MinecraftServer server, UUID tameId) {
+    private static LivingEntity findLoadedTame(MinecraftServer server, UUID tameId) {
         LivingEntity entity = findLoadedLivingParticipant(server, tameId);
-        return entity instanceof TamableAnimal tame && tame.isTame() ? tame : null;
+        return TameEntityAdapter.isTame(entity) ? entity : null;
     }
 
     public static synchronized boolean hasDuelMovementLock(UUID entityId) {

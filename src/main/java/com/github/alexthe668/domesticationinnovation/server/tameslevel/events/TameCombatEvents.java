@@ -9,6 +9,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDeathRecord;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -24,7 +25,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -86,17 +87,17 @@ public class TameCombatEvents {
             }
         }
 
-        TamableAnimal tame = resolveTameAttacker(event);
-        if (tame != null && tame.isTame()) {
+        LivingEntity tame = resolveTameAttacker(event);
+        if (tame != null && TameEntityAdapter.isTame(tame)) {
             LevelSystem.trackDamage(mob, tame);
             boolean duelPink = TameDuelManager.isTameInDuel(tame.getUUID()) && !TameDuelManager.isTeamAEntity(tame.getUUID());
             BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount(), duelPink);
-        } else if (mob instanceof TamableAnimal targetTame && targetTame.isTame()) {
-            BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), targetTame, event.getAmount());
+        } else if (TameEntityAdapter.isTame(mob)) {
+            BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), mob, event.getAmount());
         }
         if (tame == null && event.getSource().getEntity() instanceof LivingEntity modifiedAttacker
                 && modifiedAttacker instanceof ModifedToBeTameable modified
-                && modified.isTame()
+                && TameEntityAdapter.isTame(modifiedAttacker)
                 && (!(modifiedAttacker instanceof AbstractHorse horse)
                     || horse.getControllingPassenger() instanceof net.minecraft.world.entity.player.Player)
                 && TameRegistry.get(modifiedAttacker.getUUID()) != null) {
@@ -127,9 +128,10 @@ public class TameCombatEvents {
 
     @SubscribeEvent
     public static void onTameDrops(LivingDropsEvent event) {
-        if (event == null || !(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+        if (event == null || !TameEntityAdapter.isTame(event.getEntity())) {
             return;
         }
+        LivingEntity tame = event.getEntity();
         List<ItemStack> allowed = collectRetainedDeathItems(tame);
         event.getDrops().removeIf(drop -> !shouldKeepDrop(drop, allowed));
     }
@@ -139,8 +141,8 @@ public class TameCombatEvents {
         if (event == null || event.isCanceled() || event.getDrops().isEmpty()) {
             return;
         }
-        TamableAnimal killerTame = resolveTameAttacker(event.getSource());
-        if (killerTame == null || !killerTame.isTame() || !killerTame.isAlive()) {
+        LivingEntity killerTame = resolveTameAttacker(event.getSource());
+        if (killerTame == null || !TameEntityAdapter.isTame(killerTame) || !killerTame.isAlive()) {
             return;
         }
         TameData data = TameRegistry.get(killerTame.getUUID());
@@ -173,9 +175,7 @@ public class TameCombatEvents {
         if (event.isCanceled()) return;
 
         LivingEntity tame = event.getEntity();
-        boolean normalTame = tame instanceof TamableAnimal tamable && tamable.isTame();
-        boolean modifiedTame = tame instanceof ModifedToBeTameable modified && modified.isTame();
-        if (!normalTame && !modifiedTame) return;
+        if (!TameEntityAdapter.isTame(tame)) return;
 
         UUID tlId = TameData.getTlId(tame);
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
@@ -233,7 +233,7 @@ public class TameCombatEvents {
                     data.deathHistory.remove(0);
                 }
             }
-            if (tame instanceof TamableAnimal tamable) TameBedRegistrySync.syncFromEntity(tamable, data);
+            if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameBedRegistrySync.syncFromEntity(tamable, data);
             TameRegistry.markDirty();
         }
         if (tame instanceof net.minecraft.world.entity.Mob mob) {
@@ -297,7 +297,7 @@ public class TameCombatEvents {
         Set<UUID> seenDuelRaptors = new HashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof TamableAnimal tame)) {
+                if (!(entity instanceof LivingEntity tame)) {
                     continue;
                 }
                 if (!isAlexsCavesVallumraptor(tame) || !tame.isAlive() || !TameDuelManager.isTameInDuel(tame.getUUID())) {
@@ -323,14 +323,14 @@ public class TameCombatEvents {
         DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.removeIf(id -> !seenDuelRaptors.contains(id) && !TameDuelManager.isTameInDuel(id));
     }
 
-    private static void killDuelVallumraptorForInvisibility(TamableAnimal tame) {
+    private static void killDuelVallumraptorForInvisibility(LivingEntity tame) {
         if (tame == null || tame.level().isClientSide || !tame.isAlive()) {
             return;
         }
         tame.hurt(tame.damageSources().magic(), Math.max(1000.0F, tame.getMaxHealth() * 10.0F));
     }
 
-    private static boolean isAlexsCavesVallumraptor(TamableAnimal tame) {
+    private static boolean isAlexsCavesVallumraptor(LivingEntity tame) {
         if (tame == null) {
             return false;
         }
@@ -338,7 +338,7 @@ public class TameCombatEvents {
         return id != null && "alexscaves".equals(id.getNamespace()) && "vallumraptor".equals(id.getPath());
     }
 
-    private static boolean isVallumraptorHiding(TamableAnimal tame) {
+    private static boolean isVallumraptorHiding(LivingEntity tame) {
         if (tame == null) {
             return false;
         }
@@ -382,7 +382,7 @@ public class TameCombatEvents {
         }
     }
 
-    private static TamableAnimal resolveTameAttacker(LivingHurtEvent event) {
+    private static LivingEntity resolveTameAttacker(LivingHurtEvent event) {
         return resolveTameAttacker(event.getSource());
     }
 
@@ -390,8 +390,8 @@ public class TameCombatEvents {
         if (event == null || event.getSource() == null) {
             return null;
         }
-        TamableAnimal tame = resolveTameAttacker(event.getSource());
-        return tame != null && tame.isTame() ? tame.getUUID() : null;
+        LivingEntity tame = resolveTameAttacker(event.getSource());
+        return tame != null && TameEntityAdapter.isTame(tame) ? tame.getUUID() : null;
     }
 
     private static UUID resolveKillerParticipantUuid(LivingDeathEvent event) {
@@ -402,33 +402,33 @@ public class TameCombatEvents {
         if (player != null) {
             return player.getUUID();
         }
-        TamableAnimal tame = resolveTameAttacker(event.getSource());
-        return tame != null && tame.isTame() ? tame.getUUID() : null;
+        LivingEntity tame = resolveTameAttacker(event.getSource());
+        return tame != null && TameEntityAdapter.isTame(tame) ? tame.getUUID() : null;
     }
 
-    private static TamableAnimal resolveTameAttacker(DamageSource source) {
+    private static LivingEntity resolveTameAttacker(DamageSource source) {
         if (source == null) {
             return null;
         }
-        TamableAnimal tame = resolveTameFromEntity(source.getEntity());
+        LivingEntity tame = resolveTameFromEntity(source.getEntity());
         if (tame != null) {
             return tame;
         }
         return resolveTameFromEntity(source.getDirectEntity());
     }
 
-    private static TamableAnimal resolveTameFromEntity(Entity entity) {
-        if (entity instanceof TamableAnimal tame && tame.isTame()) {
-            return tame;
+    private static LivingEntity resolveTameFromEntity(Entity entity) {
+        if (entity instanceof LivingEntity living && TameEntityAdapter.isTame(living)) {
+            return living;
         }
-        if (entity instanceof EvokerFangs fangs && fangs.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame;
+        if (entity instanceof EvokerFangs fangs && TameEntityAdapter.isTame(TameEntityAdapter.owner(fangs))) {
+            return TameEntityAdapter.owner(fangs);
         }
-        if (entity instanceof Projectile projectile && projectile.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame;
+        if (entity instanceof Projectile projectile && TameEntityAdapter.isTame(TameEntityAdapter.owner(projectile))) {
+            return TameEntityAdapter.owner(projectile);
         }
-        if (entity instanceof OwnableEntity ownable && ownable.getOwner() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame;
+        if (entity instanceof OwnableEntity ownable && TameEntityAdapter.isTame(ownable.getOwner())) {
+            return ownable.getOwner();
         }
         return null;
     }
@@ -441,7 +441,7 @@ public class TameCombatEvents {
         if (player != null) {
             return player.getUUID();
         }
-        TamableAnimal tame = resolveTameAttacker(source);
+        LivingEntity tame = resolveTameAttacker(source);
         return resolveDuelParticipantUuid(tame);
     }
 
@@ -452,7 +452,7 @@ public class TameCombatEvents {
         if (source.getEntity() instanceof ServerPlayer player) {
             return player;
         }
-        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof ServerPlayer player) {
+        if (source.getDirectEntity() instanceof Projectile projectile && TameEntityAdapter.owner(projectile) instanceof ServerPlayer player) {
             return player;
         }
         return null;
@@ -462,17 +462,17 @@ public class TameCombatEvents {
         if (entity instanceof ServerPlayer player) {
             return player.getUUID();
         }
-        if (entity instanceof TamableAnimal tame && tame.isTame()) {
-            UUID tlId = TameData.getTlId(tame);
+        if (TameEntityAdapter.isTame(entity)) {
+            UUID tlId = TameData.getTlId(entity);
             if (tlId != null && TameDuelManager.isEntityInDuel(tlId)) {
                 return tlId;
             }
-            return tame.getUUID();
+            return entity.getUUID();
         }
         return null;
     }
 
-    private static List<ItemStack> collectRetainedDeathItems(TamableAnimal tame) {
+    private static List<ItemStack> collectRetainedDeathItems(LivingEntity tame) {
         List<ItemStack> allowed = new ArrayList<>();
         if (tame == null) {
             return allowed;
@@ -612,7 +612,7 @@ public class TameCombatEvents {
     private static void processDeath(PendingDeath death) {
         LivingEntity dead = death.dead();
         ServerLevel serverLevel = dead.level() instanceof ServerLevel level ? level : null;
-        TamableAnimal effectiveKillerTame = resolveEffectiveKillerTame(serverLevel, death);
+        LivingEntity effectiveKillerTame = resolveEffectiveKillerTame(serverLevel, death);
         UUID effectiveKillerTameUuid = effectiveKillerTame != null ? effectiveKillerTame.getUUID() : death.killerTameUuid();
         UUID deadParticipantId = death.duelParticipantId();
         if (dead != null && deadParticipantId != null && TameDuelManager.isEntityInDuel(deadParticipantId)) {
@@ -630,7 +630,7 @@ public class TameCombatEvents {
             return;
         }
         for (UUID tameId : death.contributors()) {
-            if (!(serverLevel.getEntity(tameId) instanceof TamableAnimal tame) || !tame.isTame()) {
+            if (!(serverLevel.getEntity(tameId) instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) {
                 continue;
             }
             TameData data = TameRegistry.get(tameId);
@@ -653,23 +653,23 @@ public class TameCombatEvents {
         return effectiveKillerTameUuid;
     }
 
-    private static TamableAnimal resolveEffectiveKillerTame(ServerLevel level, PendingDeath death) {
+    private static LivingEntity resolveEffectiveKillerTame(ServerLevel level, PendingDeath death) {
         if (level == null || death == null) {
             return null;
         }
-        if (death.killer() instanceof TamableAnimal tame && tame.isTame()) {
-            return tame;
+        if (TameEntityAdapter.isTame(death.killer())) {
+            return death.killer();
         }
-        if (death.killerTameUuid() != null && level.getEntity(death.killerTameUuid()) instanceof TamableAnimal tame && tame.isTame()) {
+        if (death.killerTameUuid() != null && level.getEntity(death.killerTameUuid()) instanceof LivingEntity tame && TameEntityAdapter.isTame(tame)) {
             return tame;
         }
         if (death.contributors() == null || death.contributors().isEmpty()) {
             return null;
         }
-        TamableAnimal best = null;
+        LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         for (UUID tameId : death.contributors()) {
-            if (!(level.getEntity(tameId) instanceof TamableAnimal contributor) || !contributor.isTame() || !contributor.isAlive()) {
+            if (!(level.getEntity(tameId) instanceof LivingEntity contributor) || !TameEntityAdapter.isTame(contributor) || !contributor.isAlive()) {
                 continue;
             }
             double dist = contributor.distanceToSqr(death.dead());
@@ -693,7 +693,7 @@ public class TameCombatEvents {
             LivingEntity killer = null;
             UUID killerTameUuid = null;
 
-            TamableAnimal killerTame = resolveTameAttacker(event.getSource());
+            LivingEntity killerTame = resolveTameAttacker(event.getSource());
             if (killerTame != null) {
                 killer = killerTame;
                 killerTameUuid = killerTame.getUUID();
@@ -702,10 +702,9 @@ public class TameCombatEvents {
             }
             if (killerTameUuid == null
                     && event.getSource().getDirectEntity() instanceof OwnableEntity ownable
-                    && ownable.getOwner() instanceof TamableAnimal tame
-                    && tame.isTame()) {
-                killer = tame;
-                killerTameUuid = tame.getUUID();
+                    && TameEntityAdapter.isTame(ownable.getOwner())) {
+                killer = ownable.getOwner();
+                killerTameUuid = killer.getUUID();
             }
 
             Set<UUID> contributors = new HashSet<>(LevelSystem.mobDamageTracker.getOrDefault(dead.getUUID(), Set.of()));

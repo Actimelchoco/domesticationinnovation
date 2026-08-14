@@ -8,6 +8,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
@@ -15,7 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
@@ -27,17 +28,18 @@ import java.lang.reflect.Method;
 public class TameBehaviorEvents {
     @SubscribeEvent
     public static void onTameTick(LivingEvent.LivingTickEvent event) {
-        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) return;
+        if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
         if (tame.level().isClientSide) return;
         if (!tame.isAlive()) return;
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) {
-            data = TameSpawnEvents.registerOrRestoreTame(tame, true);
+            data = tame instanceof net.minecraft.world.entity.TamableAnimal tamable
+                    ? TameSpawnEvents.registerOrRestoreTame(tamable, true) : null;
             if (data == null) {
                 return;
             }
         }
-        TameSpawnEvents.processDeferredStatRefresh(tame, data);
+        if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (hasInvalidTarget(tame)) {
@@ -45,7 +47,7 @@ public class TameBehaviorEvents {
         }
 
         if (tame.tickCount % 10 == 0) {
-            TameCommands.syncLiveMovementStateFor(tame);
+            if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameCommands.syncLiveMovementStateFor(tamable);
             TamePerformanceProfiler.run("behavior.boss_movement_override", () -> handleBossMovementOverride(tame, activeData));
         }
 
@@ -60,7 +62,7 @@ public class TameBehaviorEvents {
 
         int scanInterval = getBehaviorScanInterval(tame);
         if (tame.tickCount % scanInterval != 0) return;
-        if (tame.isOrderedToSit()) return;
+        if (TameEntityAdapter.isStayingStill(tame)) return;
 
         if (data.skeletonMovement && tame.getTarget() != null && tame.getTarget().isAlive() && tame.tickCount % 100 == 0) {
             TamePerformanceProfiler.run("behavior.skeleton_spacing", () -> handleSkeletonSpacing(tame));
@@ -75,7 +77,7 @@ public class TameBehaviorEvents {
     @SubscribeEvent
     public static void onTameMount(EntityMountEvent event) {
         if (!event.isMounting()) return;
-        if (!(event.getEntityMounting() instanceof TamableAnimal tame) || !tame.isTame()) return;
+        if (!(event.getEntityMounting() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
         if (TLAdminRuntimeSettings.sitOnChairsEnabled()) return;
 
         Entity mount = event.getEntityBeingMounted();
@@ -95,19 +97,19 @@ public class TameBehaviorEvents {
         tame.stopRiding();
     }
 
-    private static int getBehaviorScanInterval(TamableAnimal tame) {
+    private static int getBehaviorScanInterval(PathfinderMob tame) {
         if (isIdleOrSitting(tame)) {
             return 40;
         }
         return hasValidCurrentTarget(tame) ? 15 : 8;
     }
 
-    private static int getGuardianReturnInterval(TamableAnimal tame) {
+    private static int getGuardianReturnInterval(PathfinderMob tame) {
         return isIdleOrSitting(tame) ? 80 : 40;
     }
 
-    private static boolean isIdleOrSitting(TamableAnimal tame) {
-        if (tame.isOrderedToSit()) {
+    private static boolean isIdleOrSitting(PathfinderMob tame) {
+        if (TameEntityAdapter.isStayingStill(tame)) {
             return true;
         }
         if (tame.getTarget() != null && tame.getTarget().isAlive()) {
@@ -119,7 +121,7 @@ public class TameBehaviorEvents {
                 && tame.tickCount - tame.getLastHurtMobTimestamp() >= 100;
     }
 
-    private static void handleSkeletonSpacing(TamableAnimal tame) {
+    private static void handleSkeletonSpacing(PathfinderMob tame) {
         LivingEntity target = tame.getTarget();
         if (target == null || !target.isAlive()) {
             return;
@@ -140,7 +142,7 @@ public class TameBehaviorEvents {
         tame.getNavigation().moveTo(targetX, tame.getY(), targetZ, 1.1D);
     }
 
-    private static void handleGuardianMovement(TamableAnimal tame, TameData data) {
+    private static void handleGuardianMovement(PathfinderMob tame, TameData data) {
         updateGuardianPhase(tame, data);
         if (data.guardianRelaxing) {
             handleGuardianRelaxedWander(tame, data);
@@ -149,7 +151,7 @@ public class TameBehaviorEvents {
         }
     }
 
-    private static void handleGuardianReturn(TamableAnimal tame, TameData data) {
+    private static void handleGuardianReturn(PathfinderMob tame, TameData data) {
         if (data == null || !data.hasHome) {
             return;
         }
@@ -172,7 +174,7 @@ public class TameBehaviorEvents {
         tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
     }
 
-    private static void handleGuardianRelaxedWander(TamableAnimal tame, TameData data) {
+    private static void handleGuardianRelaxedWander(PathfinderMob tame, TameData data) {
         if (data == null || !data.hasHome) {
             return;
         }
@@ -205,14 +207,14 @@ public class TameBehaviorEvents {
         tame.getNavigation().moveTo(targetX, home.getY(), targetZ, 0.95D);
     }
 
-    private static void handleCloseOwner(TamableAnimal tame, TameData data) {
-        if (data == null || !data.closeMovement || data.hasHome || tame.isOrderedToSit()) {
+    private static void handleCloseOwner(PathfinderMob tame, TameData data) {
+        if (data == null || !data.closeMovement || data.hasHome || TameEntityAdapter.isStayingStill(tame)) {
             return;
         }
         if (tame.getTarget() != null && tame.getTarget().isAlive()) {
             return;
         }
-        if (!(tame.getOwner() instanceof ServerPlayer owner)) {
+        if (!(TameEntityAdapter.owner(tame) instanceof ServerPlayer owner)) {
             return;
         }
         if (owner.level() != tame.level()) {
@@ -235,14 +237,15 @@ public class TameBehaviorEvents {
         }
     }
 
-    private static void handleBossMovementOverride(TamableAnimal tame, TameData data) {
+    private static void handleBossMovementOverride(PathfinderMob tame, TameData data) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
             return;
         }
         if (TameMode.byId(data.mode) != TameMode.BOSS) {
             return;
         }
-        boolean hasBossTarget = TameGoalSupport.hasSharedBossTarget(serverLevel, tame)
+        boolean hasBossTarget = (tame instanceof net.minecraft.world.entity.TamableAnimal tamable
+                && TameGoalSupport.hasSharedBossTarget(serverLevel, tamable))
                 || hasValidCurrentTarget(tame);
         int desiredOrderCode = hasBossTarget ? 2 : 0;
         if (data.movementOrder == desiredOrderCode) {
@@ -251,7 +254,7 @@ public class TameBehaviorEvents {
         TameCommands.applyMovementOrderCode(tame, desiredOrderCode);
     }
 
-    private static boolean hasInvalidTarget(TamableAnimal tame) {
+    private static boolean hasInvalidTarget(PathfinderMob tame) {
         LivingEntity target = tame.getTarget();
         if (target == null) {
             return false;
@@ -262,12 +265,12 @@ public class TameBehaviorEvents {
         return !isValidCombatTarget(tame, target);
     }
 
-    private static boolean hasValidCurrentTarget(TamableAnimal tame) {
+    private static boolean hasValidCurrentTarget(PathfinderMob tame) {
         LivingEntity target = tame.getTarget();
         return target != null && isValidCombatTarget(tame, target);
     }
 
-    private static boolean shouldSwitchTarget(TamableAnimal tame, LivingEntity candidate) {
+    private static boolean shouldSwitchTarget(PathfinderMob tame, LivingEntity candidate) {
         if (tame == null || candidate == null) {
             return false;
         }
@@ -283,22 +286,22 @@ public class TameBehaviorEvents {
         return candidateDist + 4.0D < currentDist;
     }
 
-    private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target) {
+    private static boolean isValidCombatTarget(PathfinderMob tame, LivingEntity target) {
         return isValidCombatTarget(tame, target, tame == null ? null : tame.level());
     }
 
-    private static boolean isValidCombatTarget(TamableAnimal tame, LivingEntity target, net.minecraft.world.level.Level sourceLevel) {
+    private static boolean isValidCombatTarget(PathfinderMob tame, LivingEntity target, net.minecraft.world.level.Level sourceLevel) {
         if (tame == null || target == null) return false;
         if (!target.isAlive()) return false;
         if (target == tame) return false;
         if (sourceLevel != null && target.level() != sourceLevel) return false;
         if (target instanceof Player) return false;
-        if (target instanceof TamableAnimal otherTame && otherTame.isTame()) return false;
-        if (tame != null && TameRegistry.isProtectedAttackTarget(tame, target)) return false;
+        if (TameEntityAdapter.isTame(target)) return false;
+        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) return false;
         return true;
     }
 
-    private static void updateGuardianReturnTimer(TamableAnimal tame, TameData data) {
+    private static void updateGuardianReturnTimer(PathfinderMob tame, TameData data) {
         if (data == null || !data.hasHome) {
             return;
         }
@@ -341,7 +344,7 @@ public class TameBehaviorEvents {
         data.guardianReturnTicks = 0;
     }
 
-    private static void updateGuardianTargetTimeout(TamableAnimal tame, TameData data) {
+    private static void updateGuardianTargetTimeout(PathfinderMob tame, TameData data) {
         if (tame == null || data == null || !data.hasHome) {
             return;
         }
@@ -388,7 +391,7 @@ public class TameBehaviorEvents {
         data.guardianTargetBestDistanceSq = 0.0D;
     }
 
-    private static void updateGuardianPhase(TamableAnimal tame, TameData data) {
+    private static void updateGuardianPhase(PathfinderMob tame, TameData data) {
         if (tame == null || data == null || !data.hasHome || tame.level().isClientSide) {
             return;
         }
@@ -408,15 +411,15 @@ public class TameBehaviorEvents {
         TameRegistry.markDirty();
     }
 
-    private static int randomGuardianStrictDuration(TamableAnimal tame) {
+    private static int randomGuardianStrictDuration(PathfinderMob tame) {
         return 2400 + tame.getRandom().nextInt(2401);
     }
 
-    private static int randomGuardianRelaxDuration(TamableAnimal tame) {
+    private static int randomGuardianRelaxDuration(PathfinderMob tame) {
         return 600 + tame.getRandom().nextInt(1801);
     }
 
-    private static boolean isMutantCreeperMinionExploding(TamableAnimal tame) {
+    private static boolean isMutantCreeperMinionExploding(PathfinderMob tame) {
         if (!isMutantCreeperMinion(tame)) {
             return false;
         }
@@ -437,7 +440,7 @@ public class TameBehaviorEvents {
         }
     }
 
-    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+    private static boolean isMutantCreeperMinion(PathfinderMob tame) {
         if (tame == null) {
             return false;
         }

@@ -7577,7 +7577,7 @@ public class TameCommands {
             return error(player, resolved.error);
         }
         Set<UUID> selectedIds = collectLivingEntityIds(resolved.members);
-        selectedIds.removeIf(id -> !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+        selectedIds.removeIf(id -> !TameEntityAdapter.isTame(findLoadedLivingParticipant(source.getServer(), id)));
         if (selectedIds.isEmpty()) {
             return error(player, "No loaded/alive tames matched that selection.");
         }
@@ -7910,10 +7910,10 @@ public class TameCommands {
                 }
                 selectedIds.addAll(collectLivingEntityIds(resolved.members));
                 selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
-                        && !(findLoadedLivingParticipant(source.getServer(), id) instanceof TamableAnimal));
+                        && !TameEntityAdapter.isTame(findLoadedLivingParticipant(source.getServer(), id)));
                 selectedIds.removeIf(id -> {
                     LivingEntity living = findLoadedLivingParticipant(source.getServer(), id);
-                    return living instanceof TamableAnimal tame && !hasFoodForDuel(tame);
+                    return living != null && TameEntityAdapter.isTame(living) && !hasFoodForDuel(living);
                 });
             } else {
                 selectedIds.addAll(resolveOwnedRankedParticipantsFromSelection(source.getServer(), player, parsed.selection));
@@ -11889,11 +11889,6 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
         TameRegistry.bindEntityToData(respawned, data);
-        LivingEntity attached = TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId);
-        if (attached != respawned) {
-            respawned.discard();
-            return RespawnResult.fail("spawned tame did not attach to its registry identity");
-        }
         clearMatchingDiBedRespawnRequests(source, data);
         TameRegistry.register(data);
         TameRegistry.markDirty();
@@ -12186,11 +12181,6 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
         TameRegistry.bindEntityToData(respawned, data);
-        LivingEntity attached = TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId);
-        if (attached != respawned) {
-            respawned.discard();
-            return RespawnResult.fail("spawned tame did not attach to its registry identity");
-        }
         TameRegistry.register(data);
         return RespawnResult.ok();
     }
@@ -14184,6 +14174,13 @@ public class TameCommands {
         return true;
     }
 
+    public static boolean autoFollowTeleportLoadedToLocation(LivingEntity tame, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (tame instanceof TamableAnimal tamable) return autoFollowTeleportLoadedToLocation(tamable, level, pos, yRot, xRot);
+        if (tame == null || level == null || pos == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) return false;
+        tame.teleportTo(level, pos.x, pos.y, pos.z, Set.of(), yRot, xRot);
+        return true;
+    }
+
     public static boolean autoFollowQueueCrossDimensionLiveTeleport(TamableAnimal tame, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
         if (tame == null || data == null || level == null || pos == null || !tame.isAlive() || !(tame.level() instanceof ServerLevel sourceLevel)) {
             return false;
@@ -14385,11 +14382,32 @@ public class TameCommands {
         ));
     }
 
+    private static void queueDelayedTeleportClientRefresh(ServerPlayer owner, LivingEntity tame, boolean strongRefresh) {
+        if (tame instanceof TamableAnimal tamable) {
+            queueDelayedTeleportClientRefresh(owner, tamable, strongRefresh);
+            return;
+        }
+        if (tame == null || tame.level() == null || tame.level().getServer() == null || !TameEntityAdapter.isTame(tame)) return;
+        MinecraftServer server = tame.level().getServer();
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        PENDING_TELEPORT_CLIENT_REFRESH.put(tame.getUUID(), new PendingTeleportClientRefresh(
+                tame.getUUID(), TameData.getTlId(tame), tame.level().dimension().location().toString(),
+                now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS, strongRefresh));
+    }
+
     public static void queueClientReloadForTame(TamableAnimal tame) {
         queueClientReloadForTame(tame, true);
     }
 
     public static void queueClientReloadForTame(TamableAnimal tame, boolean strongRefresh) {
+        queueDelayedTeleportClientRefresh(null, tame, strongRefresh);
+    }
+
+    public static void queueClientReloadForTame(LivingEntity tame) {
+        queueDelayedTeleportClientRefresh(null, tame, true);
+    }
+
+    public static void queueClientReloadForTame(LivingEntity tame, boolean strongRefresh) {
         queueDelayedTeleportClientRefresh(null, tame, strongRefresh);
     }
 
@@ -19815,6 +19833,20 @@ public class TameCommands {
         });
     }
 
+    public static void applyMovementOrderCode(LivingEntity tame, int orderCode) {
+        if (tame instanceof TamableAnimal tamable) {
+            applyMovementOrderCode(tamable, orderCode);
+            return;
+        }
+        TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+        applyLivingMovementOverride(tame, data, switch (orderCode) {
+            case 1 -> MovementOrder.SIT;
+            case 2 -> MovementOrder.WANDER;
+            case 3 -> MovementOrder.GUARDIAN;
+            default -> MovementOrder.FOLLOW;
+        });
+    }
+
     private static boolean isLivingTameSitting(LivingEntity tame) {
         if (tame instanceof TamableAnimal tamable) return tamable.isOrderedToSit();
         return tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
@@ -20639,6 +20671,11 @@ public class TameCommands {
         return consumeHungerForAction(data, tame, cost);
     }
 
+    public static boolean consumeHungerForNaturalHeal(TameData data, LivingEntity tame, float healAmount) {
+        int cost = (int) Math.ceil(Math.max(0.0F, healAmount) * 100.0F);
+        return consumeHungerForAction(data, tame, cost);
+    }
+
     private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, LivingEntity tame) {
         return true;
     }
@@ -21132,7 +21169,7 @@ public class TameCommands {
         return food <= 0 ? ChatFormatting.DARK_GRAY : food < TAME_HUNGER_LOW_FOOD_POINTS ? ChatFormatting.RED : food < TAME_HUNGER_GREEN_FOOD_POINTS ? TAME_HUNGER_MESSAGE_COLOR : ChatFormatting.GREEN;
     }
 
-    public static int storeHungerFoodFromDrop(TamableAnimal tame, TameData data, ItemStack stack) {
+    public static int storeHungerFoodFromDrop(LivingEntity tame, TameData data, ItemStack stack) {
         if (tame == null || data == null || stack == null || stack.isEmpty()) {
             return 0;
         }
@@ -23431,8 +23468,8 @@ public class TameCommands {
         for (LivingEntity member : members) {
             if (member instanceof ServerPlayer player) {
                 player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
-            } else if (member instanceof TamableAnimal tame) {
-                teleportTameToLocation(tame, target);
+            } else if (TameEntityAdapter.isTame(member)) {
+                autoFollowTeleportLoadedToLocation(member, target.level, target.pos, target.yRot, target.xRot);
             }
         }
     }
@@ -24423,7 +24460,7 @@ public class TameCommands {
         }
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
-            if (living instanceof TamableAnimal tame && !hasFoodForDuel(tame)) {
+            if (living != null && TameEntityAdapter.isTame(living) && !hasFoodForDuel(living)) {
                 continue;
             }
             if (living != null && living.isAlive()) {
@@ -24525,8 +24562,8 @@ public class TameCommands {
             LivingEntity living = findLoadedLivingParticipant(server, participantId);
             if (living instanceof ServerPlayer player) {
                 player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
-            } else if (living instanceof TamableAnimal tame) {
-                teleportTameToLocation(tame, target);
+            } else if (TameEntityAdapter.isTame(living)) {
+                autoFollowTeleportLoadedToLocation(living, target.level, target.pos, target.yRot, target.xRot);
             }
         }
     }

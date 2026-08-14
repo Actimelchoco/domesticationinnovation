@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.network.chat.Component;
@@ -288,8 +289,8 @@ public class LevelSystem {
 
         int xpAmount = dead.getExperienceReward();
         UUID killerTameId = null;
-        if (killer instanceof TamableAnimal killerTame && killerTame.isTame()) {
-            killerTameId = killerTame.getUUID();
+        if (TameEntityAdapter.isTame(killer)) {
+            killerTameId = killer.getUUID();
         }
 
         Set<UUID> participants = new LinkedHashSet<>(tameIds);

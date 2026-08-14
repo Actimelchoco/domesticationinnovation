@@ -3,8 +3,9 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.SpawnerTriggerSupport;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.resources.ResourceLocation;
@@ -28,7 +29,7 @@ public class TameProtectionEvents {
         var victim = event.getEntity();
         var attacker = event.getSource().getEntity();
         var direct = event.getSource().getDirectEntity();
-        if (victim instanceof TamableAnimal targetTame && targetTame.isTame() && isMutantCreeperMinionSelfExplosion(targetTame, event)) {
+        if (TameEntityAdapter.isTame(victim) && isMutantCreeperMinionSelfExplosion(victim, event)) {
             event.setCanceled(true);
             return;
         }
@@ -44,19 +45,20 @@ public class TameProtectionEvents {
         }
 
         // Block direct player attacks against tamed animals.
-        if (victim instanceof TamableAnimal target && target.isTame() && attacker instanceof Player) {
+        if (TameEntityAdapter.isTame(victim) && attacker instanceof Player) {
+            LivingEntity target = victim;
             if (!TameDuelManager.areDuelOpponents(attacker.getUUID(), target.getUUID())) {
                 event.setCanceled(true);
             }
             return;
         }
 
-        TamableAnimal tameAttacker = resolveTameAttacker(attacker, direct);
-        if (tameAttacker == null || !tameAttacker.isTame()) {
+        LivingEntity tameAttacker = resolveTameAttacker(attacker, direct);
+        if (tameAttacker == null || !TameEntityAdapter.isTame(tameAttacker)) {
             return;
         }
 
-        if (TameRegistry.isProtectedAttackTarget(tameAttacker, victim)) {
+        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tameAttacker), victim)) {
             event.setCanceled(true);
             return;
         }
@@ -66,7 +68,7 @@ public class TameProtectionEvents {
                 event.setCanceled(true);
                 return;
             }
-            if (victim instanceof TamableAnimal targetTame && targetTame.isTame()) {
+            if (TameEntityAdapter.isTame(victim)) {
                 event.setCanceled(true);
                 return;
             }
@@ -85,8 +87,8 @@ public class TameProtectionEvents {
             event.setCanceled(true);
             return;
         }
-        if (victim instanceof TamableAnimal targetTame && targetTame.isTame()) {
-            if (TameDuelManager.areDuelOpponents(tameAttacker.getUUID(), targetTame.getUUID())) {
+        if (TameEntityAdapter.isTame(victim)) {
+            if (TameDuelManager.areDuelOpponents(tameAttacker.getUUID(), victim.getUUID())) {
                 return;
             }
             event.setCanceled(true);
@@ -171,7 +173,8 @@ public class TameProtectionEvents {
 
     @SubscribeEvent
     public static void onDeath(LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof TamableAnimal tame) || !tame.isTame()) {
+        LivingEntity tame = event.getEntity();
+        if (!TameEntityAdapter.isTame(tame)) {
             return;
         }
         if (!isMutantCreeperMinionSelfExplosion(tame, event.getSource())) {
@@ -179,19 +182,19 @@ public class TameProtectionEvents {
         }
         event.setCanceled(true);
         tame.setHealth(Math.max(1.0F, Math.min(tame.getMaxHealth(), 1.0F)));
-        tame.setTarget(null);
+        TameEntityAdapter.setTarget(tame, null);
         tame.setLastHurtByMob(null);
         tame.setLastHurtMob(null);
-        tame.getNavigation().stop();
+        if (tame instanceof net.minecraft.world.entity.Mob mob) mob.getNavigation().stop();
     }
 
     @SubscribeEvent
     public static void onLivingTick(LivingEvent.LivingTickEvent event) {
-        if (!(event.getEntity() instanceof TamableAnimal tame)) return;
-        if (!tame.isTame()) return;
+        LivingEntity tame = event.getEntity();
+        if (!TameEntityAdapter.isTame(tame)) return;
         if (isMutantCreeperMinionExploding(tame)) return;
 
-        net.minecraft.world.entity.LivingEntity target = tame.getTarget();
+        net.minecraft.world.entity.LivingEntity target = TameEntityAdapter.target(tame);
         if (target == null) {
             return;
         }
@@ -199,37 +202,37 @@ public class TameProtectionEvents {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID())) {
                 return;
             }
-            tame.setTarget(null);
+            TameEntityAdapter.setTarget(tame, null);
             return;
         }
         if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
             if (target instanceof Player) {
-                tame.setTarget(null);
+                TameEntityAdapter.setTarget(tame, null);
                 return;
             }
-            if (target instanceof TamableAnimal targetTame && targetTame.isTame()) {
-                tame.setTarget(null);
+            if (TameEntityAdapter.isTame(target)) {
+                TameEntityAdapter.setTarget(tame, null);
                 return;
             }
         }
-        if (target instanceof TamableAnimal targetTame && targetTame.isTame()) {
-            if (TameDuelManager.areDuelOpponents(tame.getUUID(), targetTame.getUUID())) {
+        if (TameEntityAdapter.isTame(target)) {
+            if (TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID())) {
                 return;
             }
-            tame.setTarget(null);
+            TameEntityAdapter.setTarget(tame, null);
             return;
         }
-        if (TameRegistry.isProtectedAttackTarget(tame, target)) {
-            tame.setTarget(null);
+        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) {
+            TameEntityAdapter.setTarget(tame, null);
         }
     }
 
-    private static TamableAnimal resolveTameAttacker(net.minecraft.world.entity.Entity attacker, net.minecraft.world.entity.Entity direct) {
-        if (attacker instanceof TamableAnimal tame) {
+    private static LivingEntity resolveTameAttacker(net.minecraft.world.entity.Entity attacker, net.minecraft.world.entity.Entity direct) {
+        if (attacker instanceof LivingEntity tame) {
             return tame;
         }
-        if (direct instanceof Projectile projectile && projectile.getOwner() instanceof TamableAnimal tame) {
-            return tame;
+        if (direct instanceof Projectile projectile) {
+            return TameEntityAdapter.owner(projectile);
         }
         return null;
     }
@@ -238,10 +241,10 @@ public class TameProtectionEvents {
         if (attacker instanceof Player player) {
             return player.getUUID();
         }
-        if (direct instanceof Projectile projectile && projectile.getOwner() instanceof Player player) {
+        if (direct instanceof Projectile projectile && TameEntityAdapter.owner(projectile) instanceof Player player) {
             return player.getUUID();
         }
-        TamableAnimal tame = resolveTameAttacker(attacker, direct);
+        LivingEntity tame = resolveTameAttacker(attacker, direct);
         return tame == null ? null : tame.getUUID();
     }
 
@@ -252,27 +255,27 @@ public class TameProtectionEvents {
         if (source.getEntity() instanceof Player player) {
             return player;
         }
-        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof Player owner) {
+        if (source.getDirectEntity() instanceof Projectile projectile && TameEntityAdapter.owner(projectile) instanceof Player owner) {
             return owner;
         }
         return null;
     }
 
-    private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, LivingAttackEvent event) {
+    private static boolean isMutantCreeperMinionSelfExplosion(LivingEntity tame, LivingAttackEvent event) {
         if (tame == null || event == null || !isMutantCreeperMinionSelfExplosion(tame, event.getSource())) {
             return false;
         }
         return true;
     }
 
-    private static boolean isMutantCreeperMinionSelfExplosion(TamableAnimal tame, net.minecraft.world.damagesource.DamageSource source) {
+    private static boolean isMutantCreeperMinionSelfExplosion(LivingEntity tame, net.minecraft.world.damagesource.DamageSource source) {
         if (tame == null || source == null || source.getEntity() != tame || !source.is(DamageTypeTags.IS_EXPLOSION)) {
             return false;
         }
         return isMutantCreeperMinion(tame);
     }
 
-    private static boolean isMutantCreeperMinionExploding(TamableAnimal tame) {
+    private static boolean isMutantCreeperMinionExploding(LivingEntity tame) {
         if (!isMutantCreeperMinion(tame)) {
             return false;
         }
@@ -293,7 +296,7 @@ public class TameProtectionEvents {
         }
     }
 
-    private static boolean isMutantCreeperMinion(TamableAnimal tame) {
+    private static boolean isMutantCreeperMinion(LivingEntity tame) {
         if (tame == null) {
             return false;
         }

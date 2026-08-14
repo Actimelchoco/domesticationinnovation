@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,7 +15,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -24,11 +25,11 @@ import java.util.List;
 
 public final class OwnerProtectionAbilityModule {
     public interface Hooks {
-        void debugAbilityUse(TamableAnimal tame, String ability);
+        void debugAbilityUse(LivingEntity tame, String ability);
 
-        void applySupportActivationVisual(TamableAnimal tame, String source);
+        void applySupportActivationVisual(LivingEntity tame, String source);
 
-        void grantSupportXp(TamableAnimal supporter, TameData data, LivingEntity beneficiary, long now, float effectiveAmount, float scale);
+        void grantSupportXp(LivingEntity supporter, TameData data, LivingEntity beneficiary, long now, float effectiveAmount, float scale);
     }
 
     private OwnerProtectionAbilityModule() {}
@@ -37,15 +38,15 @@ public final class OwnerProtectionAbilityModule {
         if (!(owner.level() instanceof ServerLevel level)) return;
         long now = level.getGameTime();
 
-        List<TamableAnimal> nearbyTames = collectOwnedNearbyTames(level, owner, 3.0D);
+        List<LivingEntity> nearbyTames = collectOwnedNearbyTames(level, owner, 3.0D);
         if (nearbyTames.isEmpty()) return;
 
-        TamableAnimal bestShieldBlocker = null;
+        LivingEntity bestShieldBlocker = null;
         TameData bestShieldData = null;
         int bestShieldLevel = 0;
         double bestShieldDistance = Double.MAX_VALUE;
 
-        for (TamableAnimal tame : nearbyTames) {
+        for (LivingEntity tame : nearbyTames) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
             if (!LevelSystem.hasAbility(data, "shield_block")) continue;
@@ -64,7 +65,7 @@ public final class OwnerProtectionAbilityModule {
             handleShieldBlockOwner(level, owner, bestShieldBlocker, bestShieldData, event, now, hooks);
         }
 
-        for (TamableAnimal tame : nearbyTames) {
+        for (LivingEntity tame : nearbyTames) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
             handleGuardianRepulse(owner, tame, data, now, hooks);
@@ -72,9 +73,9 @@ public final class OwnerProtectionAbilityModule {
         }
     }
 
-    public static void onTick(TamableAnimal tame, TameData data) {
+    public static void onTick(LivingEntity tame, TameData data) {
         if (!LevelSystem.hasAbility(data, "last_stand_fury")) return;
-        LivingEntity owner = tame.getOwner();
+        LivingEntity owner = TameEntityAdapter.owner(tame);
         if (owner == null || !owner.isAlive()) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "last_stand_fury"));
@@ -90,11 +91,11 @@ public final class OwnerProtectionAbilityModule {
         tame.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 40, speedAmp, false, false, true));
     }
 
-    public static void onTameHurt(TamableAnimal tame, TameData data, LivingHurtEvent event, Hooks hooks) {
+    public static void onTameHurt(LivingEntity tame, TameData data, LivingHurtEvent event, Hooks hooks) {
         handleShieldBlock(tame, data, event, hooks);
     }
 
-    private static void handleGuardianRepulse(ServerPlayer owner, TamableAnimal tame, TameData data, long now, Hooks hooks) {
+    private static void handleGuardianRepulse(ServerPlayer owner, LivingEntity tame, TameData data, long now, Hooks hooks) {
         if (!LevelSystem.hasAbility(data, "guardian_repulse")) return;
         if (!tame.isAlive() || tame.distanceToSqr(owner) > 9.0D) return;
         if (!isReady(data, "guardian_repulse_tick", now)) return;
@@ -127,7 +128,7 @@ public final class OwnerProtectionAbilityModule {
         }
     }
 
-    private static void handleSkyLaunch(ServerPlayer owner, TamableAnimal tame, TameData data, long now, Hooks hooks) {
+    private static void handleSkyLaunch(ServerPlayer owner, LivingEntity tame, TameData data, long now, Hooks hooks) {
         if (!LevelSystem.hasAbility(data, "sky_launch")) return;
         if (!tame.isAlive() || tame.distanceToSqr(owner) > 9.0D) return;
         if (!isReady(data, "sky_launch_tick", now)) return;
@@ -158,7 +159,7 @@ public final class OwnerProtectionAbilityModule {
         }
     }
 
-    private static void handleShieldBlock(TamableAnimal tame, TameData data, LivingHurtEvent event, Hooks hooks) {
+    private static void handleShieldBlock(LivingEntity tame, TameData data, LivingHurtEvent event, Hooks hooks) {
         if (!LevelSystem.hasAbility(data, "shield_block")) return;
         if (event.getAmount() <= 0.0F) return;
 
@@ -172,8 +173,8 @@ public final class OwnerProtectionAbilityModule {
 
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
         setAbilityCooldown(data, "shield_block_tick", now, cooldownTicks);
-        tame.setTarget(null);
-        tame.getNavigation().stop();
+        TameEntityAdapter.setTarget(tame, null);
+        if (tame instanceof net.minecraft.world.entity.Mob mob) mob.getNavigation().stop();
         TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
         if (tame.level() instanceof ServerLevel level) {
             hooks.grantSupportXp(tame, data, tame, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
@@ -183,7 +184,7 @@ public final class OwnerProtectionAbilityModule {
         hooks.debugAbilityUse(tame, "shield_block");
     }
 
-    private static void handleShieldBlockOwner(ServerLevel level, ServerPlayer owner, TamableAnimal tame, TameData data, LivingHurtEvent event, long now, Hooks hooks) {
+    private static void handleShieldBlockOwner(ServerLevel level, ServerPlayer owner, LivingEntity tame, TameData data, LivingHurtEvent event, long now, Hooks hooks) {
         if (event.getAmount() <= 0.0F) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "shield_block"));
@@ -194,8 +195,8 @@ public final class OwnerProtectionAbilityModule {
         long cooldownTicks = Math.max(30L, 300L - (long) Math.max(0, levelValue - 1) * 20L);
         setAbilityCooldown(data, "shield_block_tick", now, cooldownTicks);
         dashShieldBlockToOwner(level, owner, tame, data, levelValue);
-        tame.setTarget(null);
-        tame.getNavigation().stop();
+        TameEntityAdapter.setTarget(tame, null);
+        if (tame instanceof net.minecraft.world.entity.Mob mob) mob.getNavigation().stop();
         TameableUtils.setImmuneTime(tame, Math.max(TameableUtils.getImmuneTime(tame), 20));
         hooks.applySupportActivationVisual(tame, "shield_block");
         hooks.grantSupportXp(tame, data, owner, now, Math.max(0.0F, before - event.getAmount()), 0.75F);
@@ -204,7 +205,7 @@ public final class OwnerProtectionAbilityModule {
         hooks.debugAbilityUse(tame, "shield_block");
     }
 
-    private static void dashShieldBlockToOwner(ServerLevel level, ServerPlayer owner, TamableAnimal tame, TameData data, int levelValue) {
+    private static void dashShieldBlockToOwner(ServerLevel level, ServerPlayer owner, LivingEntity tame, TameData data, int levelValue) {
         Vec3 start = tame.position();
         Vec3 ownerPos = owner.position();
         Vec3 toOwner = ownerPos.subtract(start);
@@ -222,7 +223,7 @@ public final class OwnerProtectionAbilityModule {
             if (!nearby.isAlive()) continue;
             if (nearby == tame || nearby == owner) continue;
             if (!(nearby instanceof Monster)) continue;
-            if (TameRegistry.isProtectedAttackTarget(tame, nearby)) continue;
+            if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), nearby)) continue;
             LevelSystem.trackDamage(nearby, tame);
             nearby.hurt(tame.damageSources().mobAttack(tame), damage);
         }
@@ -235,16 +236,16 @@ public final class OwnerProtectionAbilityModule {
         level.playSound(null, tame.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.NEUTRAL, 0.8F, 1.2F);
     }
 
-    private static List<TamableAnimal> collectOwnedNearbyTames(ServerLevel level, ServerPlayer owner, double radius) {
+    private static List<LivingEntity> collectOwnedNearbyTames(ServerLevel level, ServerPlayer owner, double radius) {
         if (owner == null) {
             return List.of();
         }
         AABB box = owner.getBoundingBox().inflate(radius);
-        List<TamableAnimal> tames = level.getEntitiesOfClass(TamableAnimal.class, box, tame ->
-                tame.isTame()
+        List<LivingEntity> tames = level.getEntitiesOfClass(LivingEntity.class, box, tame ->
+                TameEntityAdapter.isTame(tame)
                         && tame.isAlive()
-                        && !tame.isOrderedToSit()
-                        && owner.getUUID().equals(tame.getOwnerUUID())
+                        && !TameEntityAdapter.isStayingStill(tame)
+                        && owner.getUUID().equals(TameEntityAdapter.ownerUuid(tame))
                         && TameRegistry.get(tame.getUUID()) != null
         );
         return tames == null ? List.of() : tames;

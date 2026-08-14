@@ -10,6 +10,7 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegis
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.ChatFormatting;
@@ -145,7 +146,7 @@ public class TameableUtils {
         if (target instanceof Player) {
             return hasSameOwnerAs(source, target);
         }
-        return target instanceof TamableAnimal tame && tame.isTame() && hasSameOwnerAs(source, target);
+        return TameEntityAdapter.isTame(target) && hasSameOwnerAs(source, target);
     }
 
     public static boolean shouldBlockOffensiveDiTarget(LivingEntity source, Entity target) {
@@ -161,11 +162,11 @@ public class TameableUtils {
         if (target instanceof Player) {
             return true;
         }
-        if (target instanceof TamableAnimal tame && tame.isTame()) {
+        if (TameEntityAdapter.isTame(target)) {
             return true;
         }
-        if (source instanceof TamableAnimal tameSource && tameSource.isTame()) {
-            return TameRegistry.isProtectedAttackTarget(tameSource, target);
+        if (TameEntityAdapter.isTame(source)) {
+            return TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(source), target);
         }
         return false;
     }
@@ -239,41 +240,24 @@ public class TameableUtils {
         if (entity instanceof Frog) {
             return ((ModifedToBeTameable) entity).isTame() && DomesticationMod.CONFIG.tameableFrog.get();
         }
-        return entity instanceof ModifedToBeTameable && ((ModifedToBeTameable) entity).isTame() || entity instanceof TamableAnimal && ((TamableAnimal) entity).isTame();
+        return TameEntityAdapter.isTame(entity);
     }
 
     public static boolean couldBeTamed(Entity entity) {
-        return entity instanceof ModifedToBeTameable || entity instanceof TamableAnimal;
+        return TameEntityAdapter.isSupported(entity);
     }
 
 
     public static Entity getOwnerOf(Entity entity) {
-        if (entity instanceof ModifedToBeTameable) {
-            return ((ModifedToBeTameable) entity).getTameOwner();
-        }
-        if (entity instanceof TamableAnimal) {
-            return ((TamableAnimal) entity).getOwner();
-        }
-        return null;
+        return TameEntityAdapter.owner(entity);
     }
 
     public static UUID getOwnerUUIDOf(Entity entity) {
-        if (entity instanceof ModifedToBeTameable) {
-            return ((ModifedToBeTameable) entity).getTameOwnerUUID();
-        }
-        if (entity instanceof TamableAnimal) {
-            return ((TamableAnimal) entity).getOwnerUUID();
-        }
-        return null;
+        return TameEntityAdapter.ownerUuid(entity);
     }
 
     public static void setOwnerUUIDOf(Entity entity, UUID uuid) {
-        if (entity instanceof ModifedToBeTameable) {
-            ((ModifedToBeTameable) entity).setTameOwnerUUID(uuid);
-        }
-        if (entity instanceof TamableAnimal) {
-            ((TamableAnimal) entity).setOwnerUUID(uuid);
-        }
+        TameEntityAdapter.setOwner(entity, uuid);
     }
 
     private static void setEnchantmentTag(LivingEntity enchanted, ListTag enchants) {

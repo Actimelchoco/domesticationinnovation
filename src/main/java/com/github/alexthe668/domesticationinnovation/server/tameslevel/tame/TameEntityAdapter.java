@@ -5,6 +5,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
 
@@ -19,9 +20,45 @@ public final class TameEntityAdapter {
         return entity instanceof ModifedToBeTameable modified && modified.isTame();
     }
 
+    public static boolean isSupported(Entity entity) {
+        return entity instanceof TamableAnimal || entity instanceof ModifedToBeTameable;
+    }
+
+    public static LivingEntity living(Entity entity) {
+        return entity instanceof LivingEntity living && isSupported(entity) ? living : null;
+    }
+
     public static UUID ownerUuid(Entity entity) {
         if (entity instanceof TamableAnimal tamable) return tamable.getOwnerUUID();
         return entity instanceof ModifedToBeTameable modified ? modified.getTameOwnerUUID() : null;
+    }
+
+    public static LivingEntity owner(Entity entity) {
+        if (entity instanceof TamableAnimal tamable) return tamable.getOwner();
+        return entity instanceof ModifedToBeTameable modified ? modified.getTameOwner() : null;
+    }
+
+    public static boolean isStayingStill(Entity entity) {
+        if (entity instanceof TamableAnimal tamable) return tamable.isOrderedToSit();
+        return entity instanceof ModifedToBeTameable modified && modified.isStayingStill();
+    }
+
+    public static boolean isFollowingOwner(Entity entity) {
+        if (entity instanceof TamableAnimal tamable) return !tamable.isOrderedToSit();
+        return entity instanceof ModifedToBeTameable modified && modified.isFollowingOwner();
+    }
+
+    public static boolean isValidAttackTarget(Entity entity, LivingEntity target) {
+        if (entity instanceof ModifedToBeTameable modified) return modified.isValidAttackTarget(target);
+        return entity instanceof TamableAnimal tamable && !tamable.isAlliedTo(target);
+    }
+
+    public static LivingEntity target(Entity entity) {
+        return entity instanceof Mob mob ? mob.getTarget() : null;
+    }
+
+    public static void setTarget(Entity entity, LivingEntity target) {
+        if (entity instanceof Mob mob) mob.setTarget(target);
     }
 
     public static void setOwner(Entity entity, UUID ownerUuid) {
