@@ -6,6 +6,7 @@ import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.block.DIBlockRegistry;
 import com.github.alexthe668.domesticationinnovation.server.TLMigrationImportData;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
 import com.github.alexthe668.domesticationinnovation.server.misc.LanternRequest;
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
@@ -467,15 +468,15 @@ public class TameCommands {
     }
 
     private static final class RecoverResult {
-        private final TamableAnimal entity;
+        private final LivingEntity entity;
         private final String error;
 
-        private RecoverResult(TamableAnimal entity, String error) {
+        private RecoverResult(LivingEntity entity, String error) {
             this.entity = entity;
             this.error = error;
         }
 
-        private static RecoverResult ok(TamableAnimal entity) {
+        private static RecoverResult ok(LivingEntity entity) {
             return new RecoverResult(entity, "");
         }
 
@@ -3756,7 +3757,7 @@ public class TameCommands {
                     if (data != null) {
                         markRecoverRequired(data);
                     }
-                    if (!pending.silent) {
+                    if (!pending.silent && (data == null || !data.horseType)) {
                         String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
                         String message = pending.liveEntityOnly
                                 ? "Failed, " + recoverHint
@@ -3798,7 +3799,7 @@ public class TameCommands {
                 if (data != null) {
                     markRecoverRequired(data);
                 }
-                if (!pending.silent) {
+                if (!pending.silent && (data == null || !data.horseType)) {
                     String recoverHint = "Use " + recoverCommandForName(data != null && data.name != null && !data.name.isBlank() ? data.name : pending.tameName) + ".";
                     String message = pending.liveEntityOnly
                             ? "Failed, " + recoverHint
@@ -4374,7 +4375,9 @@ public class TameCommands {
                 if (data != null) {
                     markRecoverRequired(data);
                 }
-                owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use " + recoverCommandForName(request.getNametag()) + ".").withStyle(ChatFormatting.RED));
+                if (data == null || !data.horseType) {
+                    owner.sendSystemMessage(Component.literal("Failed to tp unloaded " + request.getNametag() + " (entity load timeout). Use " + recoverCommandForName(request.getNametag()) + ".").withStyle(ChatFormatting.RED));
+                }
                 worldData.removeLanternRequest(request);
                 loadChunksAround(sourceLevel, request.getPetUUID(), request.getChunkPosition(), false);
             }
@@ -11710,9 +11713,9 @@ public class TameCommands {
             if (bedId != null) {
                 ServerLevel bedLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, bedId));
                 if (bedLevel != null) {
-                    // Pet beds are 7/16 of a block tall. Target their top surface so the
-                    // tame keeps the bed's X/Z coordinate instead of being moved beside it.
-                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY + 7.0D / 16.0D, data.petBedZ + 0.5D), 0.0F, 0.0F);
+                    // Use the block above the assigned bed. This keeps the tame centered
+                    // on its bed and gives the sitting pose a collision-safe footing.
+                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY + 1.0D, data.petBedZ + 0.5D), 0.0F, 0.0F);
                 }
             }
         }
@@ -11747,7 +11750,7 @@ public class TameCommands {
             if (bedId != null) {
                 ServerLevel bedLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, bedId));
                 if (bedLevel != null) {
-                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY, data.petBedZ + 0.5D), 0.0F, 0.0F);
+                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY + 1.0D, data.petBedZ + 0.5D), 0.0F, 0.0F);
                 }
             }
         }
@@ -12436,7 +12439,8 @@ public class TameCommands {
 
         ServerLevel level = p.serverLevel();
         Entity spawned = entityType.create(level);
-        if (!(spawned instanceof TamableAnimal recovered)) {
+        if (!(spawned instanceof LivingEntity recovered)
+                || (!(recovered instanceof TamableAnimal) && !(recovered instanceof ModifedToBeTameable))) {
             return RecoverResult.fail("stored type is not tamable");
         }
 
@@ -12449,19 +12453,19 @@ public class TameCommands {
         recovered.moveTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot());
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         UUID ownerId = p.getUUID();
-        enforceTamedOwnerPreserveCollar(recovered, ownerId);
+        enforceRecoveredTameOwner(recovered, ownerId);
 
         if (!level.addFreshEntity(recovered)) {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
         }
         clearAdminCloneTags(recovered);
 
-        boolean normalized = applyTypeBasePlusBonus(recovered, data);
+        boolean normalized = LevelSystem.reapplyTypeBasePlusBonuses(recovered, data);
         if (!normalized) {
             LevelSystem.updateTameName(recovered, data);
             recovered.setHealth(recovered.getMaxHealth());
         }
-        finalizeRespawnState(recovered, data);
+        finalizeRecoveredLivingState(recovered, data);
 
         data.ownerUUID = p.getUUID();
         TameRegistry.bindEntityToData(recovered, data);
@@ -12518,7 +12522,8 @@ public class TameCommands {
         }
 
         Entity spawned = entityType.create(target.level);
-        if (!(spawned instanceof TamableAnimal recovered)) {
+        if (!(spawned instanceof LivingEntity recovered)
+                || (!(recovered instanceof TamableAnimal) && !(recovered instanceof ModifedToBeTameable))) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "stored type is not tamable");
             return RecoverResult.fail("stored type is not tamable");
         }
@@ -12532,7 +12537,7 @@ public class TameCommands {
         recovered.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         recovered.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceTamedOwnerPreserveCollar(recovered, resolvedOwnerId);
+        enforceRecoveredTameOwner(recovered, resolvedOwnerId);
 
         if (!target.level.addFreshEntity(recovered)) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
@@ -12540,12 +12545,12 @@ public class TameCommands {
         }
         clearAdminCloneTags(recovered);
 
-        boolean normalized = applyTypeBasePlusBonus(recovered, data);
+        boolean normalized = LevelSystem.reapplyTypeBasePlusBonuses(recovered, data);
         if (!normalized) {
             LevelSystem.updateTameName(recovered, data);
             recovered.setHealth(recovered.getMaxHealth());
         }
-        finalizeRespawnState(recovered, data);
+        finalizeRecoveredLivingState(recovered, data);
 
         data.ownerUUID = resolvedOwnerId;
         data.stored = false;
@@ -13480,6 +13485,10 @@ public class TameCommands {
     }
 
     private static void markRecoverRequired(TameData data) {
+        if (data != null && data.horseType) {
+            clearAutoFollowRetryState(data);
+            return;
+        }
         UUID key = autoFollowKey(data);
         if (key == null) {
             return;
@@ -13489,6 +13498,10 @@ public class TameCommands {
     }
 
     private static void noteAutoFollowImmediateTeleportFailure(MinecraftServer server, TameData data) {
+        if (data != null && data.horseType) {
+            clearAutoFollowRetryState(data);
+            return;
+        }
         UUID key = autoFollowKey(data);
         if (key == null) {
             return;
@@ -13517,6 +13530,10 @@ public class TameCommands {
     }
 
     private static boolean requiresRecoverAfterAutoFollowFailure(TameData data) {
+        if (data != null && data.horseType) {
+            clearAutoFollowRetryState(data);
+            return false;
+        }
         UUID key = autoFollowKey(data);
         return key != null && AUTO_FOLLOW_RECOVER_REQUIRED.contains(key);
     }
@@ -16198,7 +16215,7 @@ public class TameCommands {
         snapshot.remove(ADMIN_CLONE_SILENT_TAG);
     }
 
-    private static void clearAdminCloneTags(TamableAnimal tame) {
+    private static void clearAdminCloneTags(LivingEntity tame) {
         if (tame == null) {
             return;
         }
@@ -19115,6 +19132,43 @@ public class TameCommands {
         if (collar != null && tame instanceof Wolf wolf) {
             wolf.setCollarColor(collar);
         }
+    }
+
+    private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId) {
+        if (tame instanceof TamableAnimal tamable) {
+            enforceTamedOwnerPreserveCollar(tamable, ownerId);
+        } else if (tame instanceof ModifedToBeTameable modified) {
+            modified.setTame(true);
+            modified.setTameOwnerUUID(ownerId);
+        }
+    }
+
+    private static void finalizeRecoveredLivingState(LivingEntity tame, TameData data) {
+        if (tame instanceof TamableAnimal tamable) {
+            finalizeRespawnState(tamable, data);
+            return;
+        }
+        if (tame == null || data == null) return;
+        data.stored = false;
+        data.dead = false;
+        data.deadGameTime = 0L;
+        data.deadUnixMillis = 0L;
+        data.deathDimension = "";
+        data.deathX = 0;
+        data.deathY = 0;
+        data.deathZ = 0;
+        tame.stopRiding();
+        if (tame.isVehicle()) tame.ejectPassengers();
+        tame.removeAllEffects();
+        tame.setHealth(tame.getMaxHealth());
+        tame.hurtTime = 0;
+        tame.deathTime = 0;
+        tame.invulnerableTime = 0;
+        tame.setRemainingFireTicks(0);
+        tame.fallDistance = 0.0F;
+        tame.setDeltaMovement(Vec3.ZERO);
+        TameRegistry.bindEntityToData(tame, data);
+        LevelSystem.updateTameName(tame, data);
     }
 
     private static void markRegistryTameDead(MinecraftServer server, TameData data, String deathMessage) {
@@ -24465,7 +24519,7 @@ public class TameCommands {
                 TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
                 if (tame == null || !tame.isAlive()) {
                     RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
-                    TamableAnimal rebuilt = recovered.entity;
+                    TamableAnimal rebuilt = recovered.entity instanceof TamableAnimal tamable ? tamable : null;
                     if (rebuilt != null && rebuilt.isAlive()) {
                         applyMovementOrderCode(rebuilt, 1);
                     }
