@@ -9079,10 +9079,8 @@ public class TameCommands {
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
-        Entity entity = player.serverLevel().getEntity(data.uuid);
-        if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
-            return error(player, "Pet is not loaded.");
-        }
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+        if (tame == null) return error(player, "Pet is not loaded.");
         setGuardianAnchor(player, tame, data);
         player.sendSystemMessage(Component.literal("Set guardian anchor for " + data.name + " at your current location."));
         return 1;
@@ -9093,10 +9091,8 @@ public class TameCommands {
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
-        Entity entity = player.serverLevel().getEntity(data.uuid);
-        if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
-            return error(player, "Pet is not loaded.");
-        }
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+        if (tame == null) return error(player, "Pet is not loaded.");
         setGuardianAnchorWithoutRemember(player, tame, data);
         player.sendSystemMessage(Component.literal("Set home guardian anchor for " + data.name + " at your current location."));
         return 1;
@@ -9107,10 +9103,8 @@ public class TameCommands {
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
-        Entity entity = player.serverLevel().getEntity(data.uuid);
-        if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
-            return error(player, "Pet is not loaded.");
-        }
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+        if (tame == null) return error(player, "Pet is not loaded.");
         if (!restorePreviousGuardianAnchor(tame, data)) {
             return error(player, "No previous guardian anchor stored for " + data.name + ".");
         }
@@ -10639,7 +10633,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         List<TameData> requested = ownedGroup(p.getUUID(), group);
         int deadSkipped = ownedDeadGroup(p.getUUID(), group).size();
-        List<TamableAnimal> targets = new ArrayList<>();
+        List<LivingEntity> targets = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
@@ -10655,7 +10649,7 @@ public class TameCommands {
                 skippedDuel++;
                 continue;
             }
-            TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+            LivingEntity ta = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (ta == null) {
                 boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
@@ -10670,10 +10664,11 @@ public class TameCommands {
         }
         TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
         if (!payment.success) return error(p, payment.error);
-        for (TamableAnimal ta : targets) {
+        for (LivingEntity ta : targets) {
             TameData data = TameRegistry.get(ta.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(ta));
             if (consumeHungerForCommandTeleport(p, data, ta)) {
-                teleportTameToPlayer(ta, p);
+                teleportLivingTameToPlayer(ta, p);
             }
         }
         for (TameData d : queuedTargets) {
@@ -10704,7 +10699,7 @@ public class TameCommands {
         if (requested.isEmpty()) return error(p, "No tames found for type '" + typeFilter + "'.");
         int deadSkipped = ownedDeadType(p.getUUID(), typeFilter).size();
 
-        List<TamableAnimal> targets = new ArrayList<>();
+        List<LivingEntity> targets = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
         List<String> failedQueueNames = new ArrayList<>();
@@ -10720,7 +10715,7 @@ public class TameCommands {
                 skippedDuel++;
                 continue;
             }
-            TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+            LivingEntity ta = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (ta == null) {
                 boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
@@ -10735,10 +10730,11 @@ public class TameCommands {
         }
         TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
         if (!payment.success) return error(p, payment.error);
-        for (TamableAnimal ta : targets) {
+        for (LivingEntity ta : targets) {
             TameData data = TameRegistry.get(ta.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(ta));
             if (consumeHungerForCommandTeleport(p, data, ta)) {
-                teleportTameToPlayer(ta, p);
+                teleportLivingTameToPlayer(ta, p);
             }
         }
         for (TameData d : queuedTargets) {
@@ -10782,15 +10778,11 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
-            Entity e = p.serverLevel().getEntity(d.uuid);
-            if (e instanceof TamableAnimal ta && ta.isTame()) {
-                if (isDuelLocked(ta)) {
-                    skippedDuel++;
-                    continue;
-                }
-                applyMovementOverride(ta, order);
-                count++;
-            }
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (tame == null || d.horseType) continue;
+            if (isDuelLocked(d)) { skippedDuel++; continue; }
+            applyLivingMovementOverride(tame, d, order);
+            count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames in group to " + movementLabel(order) + "."));
         sendDuelCommandSkipNotice(p, skippedDuel, "movement");
@@ -10802,15 +10794,11 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
-            Entity e = p.serverLevel().getEntity(d.uuid);
-            if (e instanceof TamableAnimal ta && ta.isTame()) {
-                if (isDuelLocked(ta)) {
-                    skippedDuel++;
-                    continue;
-                }
-                applyMovementOverride(ta, order);
-                count++;
-            }
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (tame == null || d.horseType) continue;
+            if (isDuelLocked(d)) { skippedDuel++; continue; }
+            applyLivingMovementOverride(tame, d, order);
+            count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames of type '" + typeFilter + "' to " + movementLabel(order) + "."));
         sendDuelCommandSkipNotice(p, skippedDuel, "movement");
@@ -10821,9 +10809,11 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         MovementOrder selectedState = parseMovementOrder(stateName);
         if (selectedState == null) return error(p, "Invalid state. Use follow, wander, or sit.");
-        List<TamableAnimal> selected = loadedOwnedStateTames(source, p.getUUID(), selectedState);
-        for (TamableAnimal tame : selected) {
-            applyMovementOverride(tame, targetOrder);
+        List<LivingEntity> selected = loadedOwnedStateLivingTames(source, p.getUUID(), selectedState);
+        for (LivingEntity tame : selected) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            applyLivingMovementOverride(tame, data, targetOrder);
         }
         p.sendSystemMessage(Component.literal("Set " + selected.size() + " loaded " + movementLabel(selectedState) + " tames to " + movementLabel(targetOrder) + "."));
         return 1;
@@ -10833,10 +10823,11 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
-        TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
-        if (ta == null) return error(p, "Pet is not loaded.");
-        if (isDuelLocked(ta)) return error(p, "That tame is in a duel. Use /tames dueltp for emergency duel teleports.");
-        applyMovementOverride(ta, order);
+        LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+        if (tame == null) return error(p, "Pet is not loaded.");
+        if (d.horseType) return error(p, "Horse-type tames cannot use follow, wander, or sit commands.");
+        if (isDuelLocked(d)) return error(p, "That tame is in a duel. Use /tames dueltp for emergency duel teleports.");
+        applyLivingMovementOverride(tame, d, order);
         p.sendSystemMessage(Component.literal("Set " + d.name + " to " + movementLabel(order) + "."));
         return 1;
     }
@@ -10856,13 +10847,11 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         int count = 0;
         int skippedDuel = 0;
-        for (TamableAnimal ta : p.level().getEntitiesOfClass(TamableAnimal.class, p.getBoundingBox().inflate(nearbyOnly ? 32 : 500))) {
-            if (!ta.isTame() || !p.getUUID().equals(ta.getOwnerUUID())) continue;
-            if (isDuelLocked(ta)) {
-                skippedDuel++;
-                continue;
-            }
-            applyMovementOverride(ta, order);
+        for (TameData data : ownedTames(p.getUUID())) {
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
+            if (tame == null || data.horseType || (nearbyOnly && tame.distanceToSqr(p) > 32.0D * 32.0D)) continue;
+            if (isDuelLocked(data)) { skippedDuel++; continue; }
+            applyLivingMovementOverride(tame, data, order);
             count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " tames to " + movementLabel(order) + "."));
@@ -10874,13 +10863,11 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         int count = 0;
         int skippedDuel = 0;
-        for (TamableAnimal tame : loadedOwnedAllTames(source, p.getUUID())) {
-            if (!tame.isTame()) continue;
-            if (isDuelLocked(tame)) {
-                skippedDuel++;
-                continue;
-            }
-            applyMovementOverride(tame, order);
+        for (TameData data : ownedTames(p.getUUID())) {
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
+            if (tame == null || data.horseType) continue;
+            if (isDuelLocked(data)) { skippedDuel++; continue; }
+            applyLivingMovementOverride(tame, data, order);
             count++;
         }
         p.sendSystemMessage(Component.literal("Set " + count + " loaded tames to " + movementLabel(order) + "."));
@@ -10915,6 +10902,16 @@ public class TameCommands {
         if (!payment.success) return error(p, payment.error);
         TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
         if (ta == null) {
+            LivingEntity modified = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
+            if (modified != null && !(modified instanceof TamableAnimal)) {
+                if (!consumeHungerForCommandTeleport(p, d, modified)) return 0;
+                modified.teleportTo(p.serverLevel(), p.getX(), p.getY(), p.getZ(), java.util.Set.of(), p.getYRot(), p.getXRot());
+                if (orderOverride != null && !d.horseType) {
+                    applyLivingMovementOverride(modified, d, orderOverride);
+                }
+                p.sendSystemMessage(Component.literal("Teleport: " + d.name).withStyle(ChatFormatting.WHITE));
+                return 1;
+            }
             if (!consumeHungerForCommandTeleport(p, d, null)) return 0;
             UnloadedTpResult unloaded = tpUnloadedViaLanternOrRecover(source, p, d);
             if (!unloaded.success) return error(p, "Failed to tp unloaded tame: " + unloaded.error);
@@ -14050,6 +14047,10 @@ public class TameCommands {
         return tame != null && player != null && !tame.level().dimension().equals(player.level().dimension());
     }
 
+    private static boolean isCrossDimension(LivingEntity tame, ServerPlayer player) {
+        return tame != null && player != null && !tame.level().dimension().equals(player.level().dimension());
+    }
+
     private static boolean isCrossDimension(TameData data, ServerPlayer player) {
         if (data == null || player == null || data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) {
             return false;
@@ -14912,11 +14913,11 @@ public class TameCommands {
         return Math.max(0, base + Math.max(0, inLevel));
     }
 
-    private static void sendTeleportNames(ServerPlayer player, Collection<TamableAnimal> loaded, Collection<TameData> unloaded) {
+    private static void sendTeleportNames(ServerPlayer player, Collection<? extends LivingEntity> loaded, Collection<TameData> unloaded) {
         if (player == null) return;
         LinkedHashSet<String> names = new LinkedHashSet<>();
         if (loaded != null) {
-            for (TamableAnimal tame : loaded) {
+            for (LivingEntity tame : loaded) {
                 if (tame != null) names.add(tame.getName().getString());
             }
         }
@@ -14930,6 +14931,18 @@ public class TameCommands {
                     ? "Teleported " + names.size() + " tames."
                     : "Teleport: " + names.iterator().next() + ".";
             player.sendSystemMessage(Component.literal(teleportMessage).withStyle(ChatFormatting.WHITE));
+        }
+    }
+
+    private static void teleportLivingTameToPlayer(LivingEntity tame, ServerPlayer player) {
+        if (tame instanceof TamableAnimal tamable) {
+            teleportTameToPlayer(tamable, player);
+        } else if (tame != null && player != null) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            clearGuardianAnchor(data);
+            tame.teleportTo(player.serverLevel(), player.getX(), player.getY(), player.getZ(), java.util.Set.of(), player.getYRot(), player.getXRot());
+            if (data != null && !data.horseType) applyLivingMovementOverride(tame, data, MovementOrder.FOLLOW);
         }
     }
 
@@ -19698,13 +19711,19 @@ public class TameCommands {
         return key == null ? tame.getType().toString() : key.toString();
     }
 
-    private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
-        List<TamableAnimal> list = new ArrayList<>();
+    private static List<LivingEntity> loadedOwnedStateLivingTames(CommandSourceStack source, UUID owner, MovementOrder order) {
+        List<LivingEntity> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
-            if (isDuelLocked(data)) continue;
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+            if (isDuelLocked(data) || data.horseType) continue;
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
             if (tame == null || !tame.isAlive()) continue;
-            if (!matchesMovementOrder(tame, order)) continue;
+            int expected = switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER -> 2;
+                case GUARDIAN -> 3;
+            };
+            if (data.movementOrder != expected) continue;
             list.add(tame);
         }
         return list;
@@ -19731,6 +19750,41 @@ public class TameCommands {
             case 3 -> MovementOrder.GUARDIAN;
             default -> MovementOrder.FOLLOW;
         });
+    }
+
+    private static boolean isLivingTameSitting(LivingEntity tame) {
+        if (tame instanceof TamableAnimal tamable) return tamable.isOrderedToSit();
+        return tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
+    }
+
+    private static void applyLivingMovementOverride(LivingEntity tame, TameData data, MovementOrder order) {
+        if (tame instanceof TamableAnimal tamable) {
+            applyMovementOverride(tamable, order);
+            return;
+        }
+        if (!(tame instanceof ModifedToBeTameable modified) || !modified.isTame() || data == null || data.horseType) return;
+        if ((order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
+            order = MovementOrder.SIT;
+        }
+        if (order != MovementOrder.GUARDIAN) clearGuardianAnchor(data);
+        data.movementOrder = switch (order) {
+            case FOLLOW -> 0;
+            case SIT -> 1;
+            case WANDER -> 2;
+            case GUARDIAN -> 3;
+        };
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
+        if (tame instanceof IComandableMob commandable) {
+            commandable.setCommand(switch (order) {
+                case SIT, GUARDIAN -> 1;
+                case FOLLOW -> 2;
+                case WANDER -> 0;
+            });
+        }
+        TameRegistry.markDirty();
     }
 
     private static void applyMovementOverride(TamableAnimal tame, MovementOrder order) {
@@ -20079,7 +20133,7 @@ public class TameCommands {
         return normalized.startsWith("legendary_monsters:");
     }
 
-    private static void setGuardianAnchor(ServerPlayer player, TamableAnimal tame, TameData data) {
+    private static void setGuardianAnchor(ServerPlayer player, LivingEntity tame, TameData data) {
         if (player == null || tame == null || data == null) {
             return;
         }
@@ -20087,14 +20141,14 @@ public class TameCommands {
         applyGuardianAnchor(player.serverLevel().dimension().location().toString(), player.blockPosition().getX(), player.blockPosition().getY(), player.blockPosition().getZ(), tame, data);
     }
 
-    private static void setGuardianAnchorWithoutRemember(ServerPlayer player, TamableAnimal tame, TameData data) {
+    private static void setGuardianAnchorWithoutRemember(ServerPlayer player, LivingEntity tame, TameData data) {
         if (player == null || tame == null || data == null) {
             return;
         }
         applyGuardianAnchor(player.serverLevel().dimension().location().toString(), player.blockPosition().getX(), player.blockPosition().getY(), player.blockPosition().getZ(), tame, data);
     }
 
-    private static void applyGuardianAnchor(String dimensionId, int x, int y, int z, TamableAnimal tame, TameData data) {
+    private static void applyGuardianAnchor(String dimensionId, int x, int y, int z, LivingEntity tame, TameData data) {
         data.hasHome = true;
         data.homeDimension = dimensionId == null ? "" : dimensionId;
         data.homeX = x;
@@ -20106,12 +20160,12 @@ public class TameCommands {
         data.guardianTargetUuid = null;
         data.guardianTargetStuckTicks = 0;
         data.guardianTargetBestDistanceSq = 0.0D;
-        applyMovementOverride(tame, MovementOrder.GUARDIAN);
-        refreshRegistrySnapshotFor(tame);
+        applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         TameRegistry.markDirty();
     }
 
-    private static boolean restorePreviousGuardianAnchor(TamableAnimal tame, TameData data) {
+    private static boolean restorePreviousGuardianAnchor(LivingEntity tame, TameData data) {
         if (tame == null || data == null || !data.hasPreviousHome) {
             return false;
         }
@@ -20146,8 +20200,8 @@ public class TameCommands {
             data.previousHomeY = 0;
             data.previousHomeZ = 0;
         }
-        applyMovementOverride(tame, MovementOrder.GUARDIAN);
-        refreshRegistrySnapshotFor(tame);
+        applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         TameRegistry.markDirty();
         return true;
     }
@@ -20323,6 +20377,18 @@ public class TameCommands {
         return list;
     }
 
+    private static List<TamableAnimal> loadedOwnedStateTames(CommandSourceStack source, UUID owner, MovementOrder order) {
+        List<TamableAnimal> list = new ArrayList<>();
+        for (TameData data : ownedTames(owner)) {
+            if (isDuelLocked(data)) continue;
+            TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+            if (tame == null || !tame.isAlive()) continue;
+            if (!matchesMovementOrder(tame, order)) continue;
+            list.add(tame);
+        }
+        return list;
+    }
+
     private static void processTameHunger(MinecraftServer server) {
         if (server == null || server.overworld() == null || server.overworld().getGameTime() % 20L != 0L) {
             return;
@@ -20334,7 +20400,7 @@ public class TameCommands {
             if (data == null || data.uuid == null || data.dead || data.stored || !processed.add(data.uuid)) {
                 continue;
             }
-            TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
@@ -20355,7 +20421,7 @@ public class TameCommands {
                     changed = true;
                     continue;
                 }
-                applyMovementOrderCode(tame, 1);
+                applyLivingMovementOverride(tame, data, MovementOrder.SIT);
                 notifyOwnerHungerEmpty(server, data);
                 changed = true;
                 continue;
@@ -20370,8 +20436,8 @@ public class TameCommands {
         }
     }
 
-    private static int hungerDrainPerSecond(TamableAnimal tame, TameData data, long now) {
-        if (tame == null || data == null || tame.isOrderedToSit() || data.movementOrder == 1) {
+    private static int hungerDrainPerSecond(LivingEntity tame, TameData data, long now) {
+        if (tame == null || data == null || isLivingTameSitting(tame) || data.movementOrder == 1) {
             return 0;
         }
         MinecraftServer server = tame.getServer();
@@ -20385,7 +20451,7 @@ public class TameCommands {
                 return 0;
             }
         }
-        LivingEntity target = tame.getTarget();
+        LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
             return scalePassiveSaturationCost(data, 3);
         }
@@ -20407,7 +20473,7 @@ public class TameCommands {
         return Math.max(1, (int) Math.round(baseCost * (1.0D + level * 0.01D)));
     }
 
-    private static boolean ensureHungerSaturation(TameData data, TamableAnimal tame, int required) {
+    private static boolean ensureHungerSaturation(TameData data, LivingEntity tame, int required) {
         if (data == null) {
             return false;
         }
@@ -20445,7 +20511,7 @@ public class TameCommands {
         return true;
     }
 
-    private static boolean hasFoodForDuel(TamableAnimal tame) {
+    private static boolean hasFoodForDuel(LivingEntity tame) {
         if (tame == null) {
             return false;
         }
@@ -20456,7 +20522,7 @@ public class TameCommands {
         return hasFoodForDuel(data);
     }
 
-    public static boolean isHungerBlockingMovement(TamableAnimal tame) {
+    public static boolean isHungerBlockingMovement(LivingEntity tame) {
         if (tame == null) {
             return false;
         }
@@ -20491,7 +20557,7 @@ public class TameCommands {
         return DuelSelectionResult.ok(fed);
     }
 
-    private static boolean consumeHungerForAction(TameData data, TamableAnimal tame, int saturationCost) {
+    private static boolean consumeHungerForAction(TameData data, LivingEntity tame, int saturationCost) {
         if (data == null || saturationCost <= 0) {
             return true;
         }
@@ -20510,11 +20576,11 @@ public class TameCommands {
         return consumeHungerForAction(data, tame, cost);
     }
 
-    private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, TamableAnimal tame) {
+    private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, LivingEntity tame) {
         return true;
     }
 
-    private static boolean consumeOneHungerFood(TameData data, TamableAnimal tame) {
+    private static boolean consumeOneHungerFood(TameData data, LivingEntity tame) {
         if (data == null || data.hungerInventory.isEmpty()) {
             return false;
         }
@@ -20541,7 +20607,7 @@ public class TameCommands {
         return false;
     }
 
-    private static int hungerFoodPoints(ItemStack stack, TameData data, TamableAnimal tame) {
+    private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {
         if (stack == null || stack.isEmpty()) {
             return 0;
         }
@@ -20558,7 +20624,7 @@ public class TameCommands {
         return points;
     }
 
-    private static boolean isPreferredHungerFood(ItemStack stack, TameData data, TamableAnimal tame) {
+    private static boolean isPreferredHungerFood(ItemStack stack, TameData data, LivingEntity tame) {
         if (stack == null || stack.isEmpty()) {
             return false;
         }
@@ -20699,7 +20765,7 @@ public class TameCommands {
         return sent;
     }
 
-    private static boolean refillHungerFromNearbyDrumChest(TamableAnimal tame, TameData data) {
+    private static boolean refillHungerFromNearbyDrumChest(LivingEntity tame, TameData data) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
             return false;
         }
@@ -24304,12 +24370,12 @@ public class TameCommands {
         return available;
     }
 
-    private static List<TamableAnimal> resolveLoadedRoundTames(MinecraftServer server, Set<UUID> ids) {
-        List<TamableAnimal> tames = new ArrayList<>();
+    private static List<LivingEntity> resolveLoadedRoundTames(MinecraftServer server, Set<UUID> ids) {
+        List<LivingEntity> tames = new ArrayList<>();
         for (UUID id : ids) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
-            if (living instanceof TamableAnimal tame && tame.isAlive()) {
-                tames.add(tame);
+            if (living != null && living.isAlive() && !(living instanceof ServerPlayer)) {
+                tames.add(living);
             }
         }
         return tames;
@@ -24334,13 +24400,24 @@ public class TameCommands {
         if (player != null) {
             return player;
         }
-        TamableAnimal tame = findLoadedTameByUuid(server, entityId);
-        if (tame != null) {
-            return tame;
-        }
         TameData data = rankedTameDataForParticipant(entityId);
         if (data != null) {
-            return findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            return findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
+        }
+        return findLoadedLivingTameByIdentity(server, entityId, null);
+    }
+
+    private static LivingEntity findLoadedLivingTameByIdentity(MinecraftServer server, UUID tameUuid, UUID tlId) {
+        if (server == null) return null;
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
+                boolean identityMatch = (tameUuid != null && tameUuid.equals(living.getUUID()))
+                        || (tlId != null && tlId.equals(TameData.getTlId(living)));
+                if (!identityMatch) continue;
+                if (living instanceof TamableAnimal tamable && tamable.isTame()) return living;
+                if (living instanceof ModifedToBeTameable modified && modified.isTame()) return living;
+            }
         }
         return null;
     }
@@ -25124,16 +25201,18 @@ public class TameCommands {
         return ids;
     }
 
-    private static void prepareTeamForDuel(List<TamableAnimal> tames) {
+    private static void prepareTeamForDuel(List<? extends LivingEntity> tames) {
         if (tames == null) return;
-        for (TamableAnimal tame : tames) {
-            applySitFollowOverride(tame, false);
+        for (LivingEntity tame : tames) {
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            if (data != null && !data.horseType) applyLivingMovementOverride(tame, data, MovementOrder.WANDER);
         }
     }
 
-    private static void assignInitialDuelTargets(List<TamableAnimal> actingTames, List<? extends LivingEntity> opponents) {
+    private static void assignInitialDuelTargets(List<? extends LivingEntity> actingTames, List<? extends LivingEntity> opponents) {
         if (actingTames == null || opponents == null) return;
-        for (TamableAnimal tame : actingTames) {
+        for (LivingEntity tame : actingTames) {
             LivingEntity enemy = nearestLoadedLivingOpponent(tame, opponents);
             if (enemy != null) {
                 TameDuelManager.assignDuelTarget(tame, enemy);
@@ -25316,7 +25395,7 @@ public class TameCommands {
         return best;
     }
 
-    private static LivingEntity nearestLoadedLivingOpponent(TamableAnimal from, List<? extends LivingEntity> opponents) {
+    private static LivingEntity nearestLoadedLivingOpponent(LivingEntity from, List<? extends LivingEntity> opponents) {
         if (from == null || opponents == null || opponents.isEmpty()) return null;
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
@@ -25551,6 +25630,22 @@ public class TameCommands {
             }
         }
         return null;
+    }
+
+    private static LivingEntity findLoadedOwnedLivingTameByIdentity(CommandSourceStack source, UUID owner, TameData data) {
+        if (source == null || source.getServer() == null || owner == null || data == null) return null;
+        LivingEntity living = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        if (living == null) return null;
+        UUID liveOwner = living instanceof TamableAnimal tamable
+                ? tamable.getOwnerUUID()
+                : living instanceof ModifedToBeTameable modified ? modified.getTameOwnerUUID() : null;
+        if (!owner.equals(liveOwner)) {
+            if (!owner.equals(data.ownerUUID)) return null;
+            if (living instanceof TamableAnimal tamable) tamable.setOwnerUUID(owner);
+            if (living instanceof ModifedToBeTameable modified) modified.setTameOwnerUUID(owner);
+        }
+        if (data.tlId != null) TameData.syncTlIdToEntity(living, data.tlId);
+        return living;
     }
 
     private static TamableAnimal findLoadedTameByUuid(CommandSourceStack source, UUID tameUuid) {

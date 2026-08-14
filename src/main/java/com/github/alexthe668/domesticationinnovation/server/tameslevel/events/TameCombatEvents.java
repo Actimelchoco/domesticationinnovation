@@ -172,8 +172,10 @@ public class TameCombatEvents {
     public static void onTameDeath(LivingDeathEvent event) {
         if (event.isCanceled()) return;
 
-        if (!(event.getEntity() instanceof TamableAnimal tame)) return;
-        if (!tame.isTame()) return;
+        LivingEntity tame = event.getEntity();
+        boolean normalTame = tame instanceof TamableAnimal tamable && tamable.isTame();
+        boolean modifiedTame = tame instanceof ModifedToBeTameable modified && modified.isTame();
+        if (!normalTame && !modifiedTame) return;
 
         UUID tlId = TameData.getTlId(tame);
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
@@ -231,11 +233,13 @@ public class TameCombatEvents {
                     data.deathHistory.remove(0);
                 }
             }
-            TameBedRegistrySync.syncFromEntity(tame, data);
+            if (tame instanceof TamableAnimal tamable) TameBedRegistrySync.syncFromEntity(tamable, data);
             TameRegistry.markDirty();
         }
-        tame.setTarget(null);
-        tame.getNavigation().stop();
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
         tame.getPersistentData().putBoolean(DEATH_REMOVAL_TAG, true);
         if (!tame.isRemoved()) {
             tame.remove(net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);
@@ -515,7 +519,7 @@ public class TameCombatEvents {
         return false;
     }
 
-    private static void notifyOwnerOfDeath(TamableAnimal tame, TameData data, String deathMessage) {
+    private static void notifyOwnerOfDeath(LivingEntity tame, TameData data, String deathMessage) {
         if (!(tame.level() instanceof ServerLevel serverLevel) || data == null || data.ownerUUID == null) {
             return;
         }
@@ -534,7 +538,7 @@ public class TameCombatEvents {
         );
     }
 
-    private static boolean shouldInstantRebuildNearOwner(TamableAnimal tame, TameData data, boolean diedInDuel) {
+    private static boolean shouldInstantRebuildNearOwner(LivingEntity tame, TameData data, boolean diedInDuel) {
         return false;
     }
 

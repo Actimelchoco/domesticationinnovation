@@ -378,7 +378,7 @@ public class LevelSystem {
     // XP LOSS ON DEATH
     // ===============================
 
-    public static void onTameDeath(TamableAnimal tame, boolean applyPenaltyAndCountDeath) {
+    public static void onTameDeath(LivingEntity tame, boolean applyPenaltyAndCountDeath) {
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) {
             UUID tlId = TameData.getTlId(tame);

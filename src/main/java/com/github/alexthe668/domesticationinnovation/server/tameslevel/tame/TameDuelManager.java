@@ -520,7 +520,7 @@ public final class TameDuelManager {
         return nearestLoadedOpponent(server, tame, opponents);
     }
 
-    public static synchronized void assignDuelTarget(TamableAnimal tame, LivingEntity target) {
+    public static synchronized void assignDuelTarget(LivingEntity tame, LivingEntity target) {
         setDuelCombatTarget(tame, target);
     }
 
@@ -635,20 +635,21 @@ public final class TameDuelManager {
 
     private static void prepareParticipantForDuel(MinecraftServer server, UUID participantId) {
         resetParticipantCooldownsForDuel(participantId);
-        TamableAnimal tame = findLoadedTame(server, participantId);
+        LivingEntity tame = findLoadedLivingParticipant(server, participantId);
         if (tame == null || !tame.isAlive()) {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
-        ensureMossyGolemDuelTargetGoalsIfNeeded(tame);
-        // Keep participant AI combat-active and not sitting.
-        TameCommands.applyMovementOrderCode(tame, 2);
-        tame.setOrderedToSit(false);
-        applyDuelFollowRangeBoost(tame);
+        if (tame instanceof TamableAnimal tamable) {
+            ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
+            TameCommands.applyMovementOrderCode(tamable, 2);
+            tamable.setOrderedToSit(false);
+            applyDuelFollowRangeBoost(tamable);
+            forceMossyGolemCombatCommand(tamable);
+        }
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
-        forceMossyGolemCombatCommand(tame);
     }
 
     private static boolean isLegendaryMonstersMossyGolem(TamableAnimal tame) {
@@ -1013,16 +1014,17 @@ public final class TameDuelManager {
         restoreMossyGolemTargetGoalsIfNeeded(tame);
     }
 
-    private static void setDuelCombatTarget(TamableAnimal tame, LivingEntity target) {
+    private static void setDuelCombatTarget(LivingEntity tame, LivingEntity target) {
         if (tame == null) {
             return;
         }
         if (target == null || !target.isAlive()) {
-            clearDuelCombatTarget(tame);
+            if (tame instanceof TamableAnimal tamable) clearDuelCombatTarget(tamable);
+            else if (tame instanceof net.minecraft.world.entity.Mob mob) mob.setTarget(null);
             return;
         }
-        if (tame.getTarget() != target) {
-            tame.setTarget(target);
+        if (tame instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != target) {
+            mob.setTarget(target);
         }
         try {
             tame.getBrain().setMemoryWithExpiry(MemoryModuleType.ANGRY_AT, target.getUUID(), 600L);
@@ -1625,7 +1627,7 @@ public final class TameDuelManager {
         }
         TameCommands.cancelPendingImmediateChunkTeleport(server, data);
         TameData snapshot = TameData.fromTag(data.toTag().copy());
-        TamableAnimal loaded = findLoadedTame(server, participantId);
+        LivingEntity loaded = findLoadedLivingParticipant(server, participantId);
         if (loaded != null) {
             CompoundTag entitySnapshot = new CompoundTag();
             loaded.save(entitySnapshot);
@@ -2003,7 +2005,7 @@ public final class TameDuelManager {
         if (xpReward <= 0) {
             return;
         }
-        TamableAnimal loadedTame = findLoadedTame(server, participantId);
+        LivingEntity loadedTame = findLoadedLivingParticipant(server, participantId);
         if (loadedTame != null) {
             LevelSystem.grantXP(loadedTame, tame, xpReward);
             return;

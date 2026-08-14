@@ -3,7 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 
 import java.util.UUID;
 
@@ -29,7 +29,7 @@ public class TameDeathRecord {
     public boolean reincarnated = false;
     public boolean autoReincarnateOnRespawn = false;
 
-    public static TameDeathRecord fromTame(TameData data, TamableAnimal tame, long gameTime) {
+    public static TameDeathRecord fromTame(TameData data, LivingEntity tame, long gameTime) {
         TameDeathRecord record = new TameDeathRecord();
         record.uuid = data.uuid;
         record.tlId = data.ensureTlId();
