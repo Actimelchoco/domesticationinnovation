@@ -3778,7 +3778,7 @@ public class TameCommands {
                 TameData liveData = pendingTeleportData(pending);
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
-                teleportTameToLocation(tame, pending.target);
+                teleportTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
                 resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
                 if (liveData != null && liveData.movementOrder == 1) {
                     applyMovementOrderCode(tame, 1);
@@ -3977,7 +3977,7 @@ public class TameCommands {
                 if (loaded.getTarget() != null && loaded.getTarget().isAlive()) {
                     continue;
                 }
-                teleportTameToLocation(loaded, target);
+                teleportTameToLocation(loaded, target, isAssignedBedTarget(data, target));
                 continue;
             }
             ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
@@ -13122,7 +13122,7 @@ public class TameCommands {
             logRebuildTrace("tpUnloadedHomeViaLanternOrRecover.loadedDirect", data,
                     "entityUuid=" + loaded.getUUID() + " entityTlId=" + TameData.getTlId(loaded) + " targetDim=" + (target != null && target.level != null ? target.level.dimension().location() : "null") + " targetPos=" + (target == null ? "null" : target.pos));
             if (target != null && target.level != null && target.pos != null) {
-                teleportTameToLocation(loaded, target);
+                teleportTameToLocation(loaded, target, isAssignedBedTarget(data, target));
                 return UnloadedTpResult.queued();
             }
             return UnloadedTpResult.fail("invalid target");
@@ -13259,7 +13259,7 @@ public class TameCommands {
             logRebuildTrace("tryImmediateChunkLoadTeleport.liveInSourceLevel", data,
                     "sourceDim=" + sourceLevel.dimension().location() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
             try {
-                teleportTameToLocation(tame, target);
+                teleportTameToLocation(tame, target, isAssignedBedTarget(data, target));
                 if (data.movementOrder == 1) {
                     applyMovementOrderCode(tame, 1);
                 }
@@ -13741,7 +13741,7 @@ public class TameCommands {
                 failedNames.add((data == null || data.name == null ? "unknown" : data.name) + " (no food)");
                 continue;
             }
-            teleportTameToLocation(tame, loadedDestinations.get(i));
+            teleportTameToLocation(tame, loadedDestinations.get(i), true);
             applyMovementOrderCode(tame, 1);
             if (data != null && data.movementOrder != 1) {
                 data.movementOrder = 1;
@@ -14188,8 +14188,12 @@ public class TameCommands {
     }
 
     private static void teleportTameToLocation(TamableAnimal tame, SpawnTarget target) {
+        teleportTameToLocation(tame, target, false);
+    }
+
+    private static void teleportTameToLocation(TamableAnimal tame, SpawnTarget target, boolean exactTarget) {
         if (tame == null || target == null || target.level == null || target.pos == null) return;
-        SpawnTarget resolvedTarget = findSafeTameTeleportTarget(tame, target);
+        SpawnTarget resolvedTarget = exactTarget ? target : findSafeTameTeleportTarget(tame, target);
         if (resolvedTarget == null) {
             resolvedTarget = target;
         }
@@ -14320,7 +14324,7 @@ public class TameCommands {
         SpawnTarget target = new SpawnTarget(level, pos, yRot, xRot);
         TamableAnimal loaded = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
-            teleportTameToLocation(loaded, target);
+                teleportTameToLocation(loaded, target, isAssignedBedTarget(data, target));
             TamableAnimal moved = owner.getServer() == null ? null : findLoadedTameByIdentity(owner.getServer(), data.uuid, data.tlId);
             if (moved != null) {
                 applyMovementOverride(moved, MovementOrder.FOLLOW);
@@ -14964,6 +14968,14 @@ public class TameCommands {
                     : "Teleport: " + names.iterator().next() + ".";
             player.sendSystemMessage(Component.literal(teleportMessage).withStyle(ChatFormatting.WHITE));
         }
+    }
+
+    private static boolean isAssignedBedTarget(TameData data, SpawnTarget target) {
+        if (data == null || target == null || target.level == null || target.pos == null || !data.hasPetBed) return false;
+        if (data.petBedDimension == null || !data.petBedDimension.equalsIgnoreCase(target.level.dimension().location().toString())) return false;
+        return Math.abs(target.pos.x - (data.petBedX + 0.5D)) < 0.01D
+                && Math.abs(target.pos.y - (data.petBedY + 1.0D)) < 0.01D
+                && Math.abs(target.pos.z - (data.petBedZ + 0.5D)) < 0.01D;
     }
 
     private static String compactRecoverNames(Collection<String> rawNames) {
