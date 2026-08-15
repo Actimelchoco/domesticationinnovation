@@ -132,6 +132,20 @@ public class TameSpawnEvents {
                 && living instanceof ModifedToBeTameable modified
                 && !(living instanceof TamableAnimal)
                 && modified.isTame()) {
+            UUID entityTlId = TameData.readOrCreateTlId(living);
+            TameData existingByTlId = TameRegistry.getByTlId(entityTlId);
+            if (existingByTlId != null) {
+                LivingEntity loadedByTlId = findOtherLoadedLivingByTlId(living, entityTlId);
+                if (loadedByTlId != null) {
+                    if (shouldKeepJoiningLivingTame(living, loadedByTlId, existingByTlId)) {
+                        forceRemoveLivingTameEntity(loadedByTlId);
+                        TameRegistry.rebindEntityUuid(existingByTlId, living.getUUID());
+                    } else {
+                        forceRemoveLivingTameEntity(living);
+                        return;
+                    }
+                }
+            }
             registerLiveOnlyModifiedTame(living, modified);
             return;
         }
@@ -711,6 +725,33 @@ public class TameSpawnEvents {
         return null;
     }
 
+    private static LivingEntity findOtherLoadedLivingByTlId(LivingEntity context, UUID tlId) {
+        if (context == null || tlId == null || context.level() == null || context.level().getServer() == null) return null;
+        for (var level : context.level().getServer().getAllLevels()) {
+            for (var entity : level.getAllEntities()) {
+                if (!(entity instanceof LivingEntity other) || other == context) continue;
+                boolean tamed = (other instanceof TamableAnimal tamable && tamable.isTame())
+                        || (other instanceof ModifedToBeTameable modified && modified.isTame());
+                if (tamed && tlId.equals(TameData.getTlId(other))) {
+                    return other;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean shouldKeepJoiningLivingTame(LivingEntity joining, LivingEntity loaded, TameData tlData) {
+        int joiningXp = resolveTrackedXp(joining, tlData);
+        int loadedXp = resolveTrackedXp(loaded, tlData);
+        if (joiningXp != loadedXp) return joiningXp > loadedXp;
+        TameData joiningData = TameRegistry.get(joining.getUUID());
+        TameData loadedData = TameRegistry.get(loaded.getUUID());
+        int joiningLevel = joiningData != null ? joiningData.level : (tlData == null ? 1 : tlData.level);
+        int loadedLevel = loadedData != null ? loadedData.level : (tlData == null ? 1 : tlData.level);
+        if (joiningLevel != loadedLevel) return joiningLevel > loadedLevel;
+        return joining.tickCount >= loaded.tickCount;
+    }
+
     private static boolean shouldKeepJoiningTame(TamableAnimal joining, TamableAnimal loaded, TameData tlData) {
         int joiningXp = resolveTrackedXp(joining, tlData);
         int loadedXp = resolveTrackedXp(loaded, tlData);
@@ -737,6 +778,10 @@ public class TameSpawnEvents {
     }
 
     private static int resolveTrackedXp(TamableAnimal tame, TameData fallback) {
+        return resolveTrackedXp((LivingEntity) tame, fallback);
+    }
+
+    private static int resolveTrackedXp(LivingEntity tame, TameData fallback) {
         if (tame == null) {
             return Integer.MIN_VALUE;
         }
@@ -1057,6 +1102,19 @@ public class TameSpawnEvents {
         if (!tame.isRemoved()) {
             tame.discard();
         }
+    }
+
+    private static void forceRemoveLivingTameEntity(LivingEntity tame) {
+        if (tame instanceof TamableAnimal tamable) {
+            forceRemoveTameEntity(tamable);
+            return;
+        }
+        if (tame == null) return;
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
+        tame.discard();
     }
 
     private record PendingNewTameNotification(UUID ownerUuid, UUID tameUuid, UUID tlId, String name, long dueTick) {}

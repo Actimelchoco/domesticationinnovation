@@ -1,5 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
@@ -268,6 +270,9 @@ public abstract class AxolotlMixin extends Animal implements ModifedToBeTameable
     }
 
     public boolean isValidAttackTarget(LivingEntity target){
+        if (TameDuelManager.areDuelOpponents(this.getUUID(), target.getUUID())) {
+            return true;
+        }
         if(this.isAlliedTo(target)){
            return false;
         }

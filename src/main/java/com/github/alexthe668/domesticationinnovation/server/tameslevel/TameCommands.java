@@ -7930,7 +7930,7 @@ public class TameCommands {
         if (data == null || data.dead || data.uuid == null) {
             return;
         }
-        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (loaded == null || !loaded.isAlive()) {
             return;
         }
@@ -7965,9 +7965,9 @@ public class TameCommands {
             return;
         }
         SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
-        TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
-            teleportTameToLocation(loaded, target);
+            teleportLivingTameToLocation(loaded, target, false);
             return;
         }
         recoverPetEntityAtLocation(owner, target, data);
@@ -8002,9 +8002,14 @@ public class TameCommands {
                 }
             }
         }
-        for (UUID tameId : selectedTameIds) {
-            if (ownedRanked.contains(tameId)) {
-                resolved.add(tameId);
+        for (UUID participantId : ownedRanked) {
+            TameData rankedData = rankedTameDataForParticipant(participantId);
+            if (rankedData == null) {
+                continue;
+            }
+            if (selectedTameIds.contains(rankedData.uuid)
+                    || (rankedData.tlId != null && selectedTameIds.contains(rankedData.tlId))) {
+                resolved.add(participantId);
             }
         }
         return resolved;
@@ -8821,8 +8826,6 @@ public class TameCommands {
         if (spec == null) return error(p, "Invalid mode.");
         TameMode mode = spec.mode();
         applyModeSpec(d, mode, spec.bodyguardRange());
-        LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
-        if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Mode set to " + modeLabel(mode, d) + " for " + d.name + "."));
         return 1;
@@ -8837,8 +8840,6 @@ public class TameCommands {
         TameData sample = null;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
             applyModeSpec(d, mode, spec.bodyguardRange());
-            LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
-            if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
@@ -8858,8 +8859,6 @@ public class TameCommands {
         TameData sample = null;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
             applyModeSpec(d, mode, spec.bodyguardRange());
-            LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
-            if (e != null && mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
@@ -8881,7 +8880,6 @@ public class TameCommands {
             LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (e == null || !e.isAlive()) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
-            if (mode != TameMode.PASSIVE) applyMovementOrderCode(e, 0);
             if (sample == null) {
                 sample = d;
             }
@@ -8906,9 +8904,6 @@ public class TameCommands {
             TameData d = TameRegistry.get(tame.getUUID());
             if (d == null) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
-            if (mode != TameMode.PASSIVE) {
-                applySitFollowOverride(tame, false);
-            }
             if (sample == null) {
                 sample = d;
             }
@@ -16072,8 +16067,8 @@ public class TameCommands {
             if (group == null || group.size() <= 1) continue;
             groupsProcessed++;
             group.sort((a, b) -> {
-                boolean aLoaded = findLoadedTameByUuid(source, a.uuid) != null;
-                boolean bLoaded = findLoadedTameByUuid(source, b.uuid) != null;
+                boolean aLoaded = findLoadedLivingTameByIdentity(source.getServer(), a.uuid, null) != null;
+                boolean bLoaded = findLoadedLivingTameByIdentity(source.getServer(), b.uuid, null) != null;
                 if (aLoaded != bLoaded) return aLoaded ? -1 : 1;
                 if (a.level != b.level) return Integer.compare(b.level, a.level);
                 if (a.kills != b.kills) return Integer.compare(b.kills, a.kills);
@@ -16086,7 +16081,7 @@ public class TameCommands {
                 if (duplicate == null || duplicate.uuid == null || duplicate.uuid.equals(keeper.uuid)) continue;
                 mergeDuplicateIntoKeeper(keeper, duplicate);
 
-                TamableAnimal loaded = findLoadedTameByUuid(source, duplicate.uuid);
+                LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), duplicate.uuid, null);
                 if (loaded != null) {
                     TameDuelManager.endDuelForTame(source.getServer(), loaded.getUUID());
                     if (loaded.isAlive()) {
@@ -16102,7 +16097,7 @@ public class TameCommands {
                 TameRegistry.DEATH_HISTORY.removeIf(r -> r != null && duplicate.uuid.equals(r.uuid));
             }
 
-            TamableAnimal keeperLoaded = findLoadedTameByUuid(source, keeper.uuid);
+            LivingEntity keeperLoaded = findLoadedLivingTameByIdentity(source.getServer(), keeper.uuid, null);
             if (keeperLoaded != null) {
                 LevelSystem.updateTameName(keeperLoaded, keeper);
             }

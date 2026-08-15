@@ -1,5 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.IFrog;
@@ -176,6 +178,9 @@ public abstract class FrogMixin extends Animal implements ModifedToBeTameable, I
     }
 
     public boolean isValidAttackTarget(LivingEntity target) {
+        if (TameDuelManager.areDuelOpponents(this.getUUID(), target.getUUID())) {
+            return true;
+        }
         if (this.isAlliedTo(target)) {
             return false;
         }
