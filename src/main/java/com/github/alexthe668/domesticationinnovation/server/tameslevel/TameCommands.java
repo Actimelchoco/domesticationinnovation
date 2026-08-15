@@ -2043,6 +2043,10 @@ public class TameCommands {
                                         ))))
                         .then(Commands.literal("ranked")
                                 .executes(ctx -> rankedStatus(ctx.getSource()))
+                                .then(Commands.literal("feed")
+                                        .executes(ctx -> rankedFeed(ctx.getSource())))
+                                .then(Commands.literal("setRankedChest")
+                                        .executes(ctx -> setRankedChest(ctx.getSource())))
                                 .then(Commands.literal("add")
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
@@ -7932,6 +7936,26 @@ public class TameCommands {
 
     private static int rankedAddSelection(CommandSourceStack source, String selectionSpec) {
         return rankedModifySelection(source, selectionSpec, true);
+    }
+
+    private static int rankedFeed(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) return 0;
+        if (!depositHeldRankedFood(player)) {
+            return error(player, "Hold edible food in your main hand to add ranked saturation.");
+        }
+        return 1;
+    }
+
+    private static int setRankedChest(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) return 0;
+        BlockPos pos = inventoryBelowPlayerPosition(player);
+        if (pos == null) return error(player, "Stand on an inventory to set it as the ranked chest.");
+        String dimension = player.serverLevel().dimension().location().toString();
+        TameRegistry.setRankedChest(dimension, pos.getX(), pos.getY(), pos.getZ());
+        player.sendSystemMessage(Component.literal("Ranked chest set to " + formatBlockLocation(dimension, pos) + ".").withStyle(ChatFormatting.GREEN));
+        return 1;
     }
 
     private static int rankedPullSelection(CommandSourceStack source, String selectionSpec) {
@@ -21439,6 +21463,11 @@ public class TameCommands {
     }
 
     private static InventoryAccess inventoryBelowPlayer(ServerPlayer player) {
+        BlockPos pos = inventoryBelowPlayerPosition(player);
+        return player == null || pos == null ? null : inventoryAccessFromBlockEntity(player.serverLevel().getBlockEntity(pos), Direction.UP);
+    }
+
+    private static BlockPos inventoryBelowPlayerPosition(ServerPlayer player) {
         if (player == null) return null;
         ServerLevel level = player.serverLevel();
         BlockPos supportPos = BlockPos.containing(
@@ -21451,7 +21480,7 @@ public class TameCommands {
         candidates.add(player.blockPosition().below());
         for (BlockPos candidate : candidates) {
             InventoryAccess access = inventoryAccessFromBlockEntity(level.getBlockEntity(candidate), Direction.UP);
-            if (access != null) return access;
+            if (access != null) return candidate.immutable();
         }
         return null;
     }
@@ -22829,7 +22858,7 @@ public class TameCommands {
         if (points <= 0) return false;
         ItemStack stack = player.getMainHandItem();
         PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-        stats.rankedSaturation = Math.max(0, stats.rankedSaturation + points);
+        stats.rankedSaturation = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, stats.rankedSaturation) + points);
         stack.shrink(stack.getCount());
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Added " + points + " ranked saturation (total " + stats.rankedSaturation + ").").withStyle(ChatFormatting.GREEN));

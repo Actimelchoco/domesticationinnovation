@@ -45,6 +45,7 @@ public class TameRegistry {
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
+    private static CompoundTag RANKED_CHEST = new CompoundTag();
     private static final Set<UUID> RANKED_PARTICIPANTS = new LinkedHashSet<>();
     private static final Set<String> RANKED_FORBIDDEN_TAME_TYPE_IDS = new LinkedHashSet<>();
     private static final List<CompoundTag> TEMPORARY_TAMES = new ArrayList<>();
@@ -122,6 +123,7 @@ public class TameRegistry {
         OWNER_TELEPORT_APPROVED_CREDITS.putAll(savedData.getOwnerTeleportApprovedCredits());
         PlayerDebugSettings.loadAll(savedData.getPlayerDebugSettings());
         RANKED_ARENA_NAME = savedData.getRankedArenaName();
+        RANKED_CHEST = savedData.getRankedChest();
         RANKED_PARTICIPANTS.clear();
         RANKED_PARTICIPANTS.addAll(savedData.getRankedParticipants());
         RANKED_FORBIDDEN_TAME_TYPE_IDS.clear();
@@ -295,6 +297,7 @@ public class TameRegistry {
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setPlayerDebugSettings(PlayerDebugSettings.saveAll());
         savedData.setRankedArenaName(RANKED_ARENA_NAME);
+        savedData.setRankedChest(RANKED_CHEST);
         savedData.setRankedParticipants(RANKED_PARTICIPANTS);
         savedData.setRankedForbiddenTameTypeIds(RANKED_FORBIDDEN_TAME_TYPE_IDS);
         savedData.setTemporaryTames(TEMPORARY_TAMES);
@@ -406,6 +409,20 @@ public class TameRegistry {
             data.duelPoints = 0.0D;
         }
         PLAYER_DUEL_STATS.clear();
+        markDirty();
+    }
+
+    public static CompoundTag getRankedChest() {
+        return RANKED_CHEST.copy();
+    }
+
+    public static void setRankedChest(String dimension, int x, int y, int z) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("dimension", dimension == null ? "" : dimension);
+        tag.putInt("x", x);
+        tag.putInt("y", y);
+        tag.putInt("z", z);
+        RANKED_CHEST = tag;
         markDirty();
     }
 

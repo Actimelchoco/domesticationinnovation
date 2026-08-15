@@ -36,6 +36,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
     private final Map<UUID, CompoundTag> playerDebugSettings = new HashMap<>();
     private String rankedArenaName = "";
+    private CompoundTag rankedChest = new CompoundTag();
     private final Set<UUID> rankedParticipants = new LinkedHashSet<>();
     private final Set<String> rankedForbiddenTameTypeIds = new LinkedHashSet<>();
     private final List<CompoundTag> temporaryTames = new ArrayList<>();
@@ -297,6 +298,14 @@ public class TameRegistrySavedData extends SavedData {
         this.rankedArenaName = rankedArenaName == null ? "" : rankedArenaName.trim();
     }
 
+    public CompoundTag getRankedChest() {
+        return rankedChest.copy();
+    }
+
+    public void setRankedChest(CompoundTag rankedChest) {
+        this.rankedChest = rankedChest == null ? new CompoundTag() : rankedChest.copy();
+    }
+
     public Set<UUID> getRankedParticipants() {
         return rankedParticipants;
     }
@@ -535,6 +544,7 @@ public class TameRegistrySavedData extends SavedData {
         if (rankedArenaName != null && !rankedArenaName.isBlank()) {
             tag.putString("rankedArenaName", rankedArenaName);
         }
+        if (!rankedChest.isEmpty()) tag.put("rankedChest", rankedChest.copy());
         ListTag rankedParticipantsTag = new ListTag();
         for (UUID participantId : rankedParticipants) {
             if (participantId == null) {
@@ -774,6 +784,7 @@ public class TameRegistrySavedData extends SavedData {
         if (tag.contains("rankedArenaName", Tag.TAG_STRING)) {
             data.rankedArenaName = tag.getString("rankedArenaName").trim();
         }
+        if (tag.contains("rankedChest", Tag.TAG_COMPOUND)) data.rankedChest = tag.getCompound("rankedChest").copy();
         if (tag.contains("rankedParticipants", Tag.TAG_LIST)) {
             ListTag rankedParticipantsList = tag.getList("rankedParticipants", Tag.TAG_COMPOUND);
             for (Tag entry : rankedParticipantsList) {
