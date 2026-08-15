@@ -24850,17 +24850,17 @@ public class TameCommands {
                 if (hasPendingImmediateChunkTeleport(data)) {
                     continue;
                 }
-                TamableAnimal tame = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+                LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
                 if (tame == null || !tame.isAlive()) {
                     RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
-                    TamableAnimal rebuilt = recovered.entity instanceof TamableAnimal tamable ? tamable : null;
-                    if (rebuilt != null && rebuilt.isAlive()) {
+                    LivingEntity rebuilt = recovered.entity;
+                    if (rebuilt != null && rebuilt.isAlive() && TameEntityAdapter.isTame(rebuilt)) {
                         applyMovementOrderCode(rebuilt, 1);
                     }
                     session.idleSitHoldUntilTick.put(id, now + 20L);
                     continue;
                 }
-                teleportTameToLocation(tame, target);
+                teleportLivingTameToLocation(tame, target, false);
                 applyMovementOrderCode(tame, 1);
                 session.idleSitHoldUntilTick.put(id, now + 20L);
             }
@@ -24888,7 +24888,7 @@ public class TameCommands {
                 data.stored = false;
                 TameRegistry.markDirty();
             }
-            TamableAnimal loaded = findLoadedTameByIdentity(server, data.uuid, data.tlId);
+            LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
             if (loaded != null && loaded.isAlive()) {
                 continue;
             }
