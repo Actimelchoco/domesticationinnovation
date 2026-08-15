@@ -12552,7 +12552,7 @@ public class TameCommands {
     private static int teleportAll(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         List<TameData> requested = ownedTamesForAllCommands(p.getUUID());
-        List<TamableAnimal> targets = new ArrayList<>();
+        List<LivingEntity> targets = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
@@ -12568,7 +12568,7 @@ public class TameCommands {
                 skippedDuel++;
                 continue;
             }
-            TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+            LivingEntity ta = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (ta == null) {
                 boolean cross = isCrossDimension(d, p);
                 queuedTargets.add(d);
@@ -12583,10 +12583,11 @@ public class TameCommands {
         }
         TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
         if (!payment.success) return error(p, payment.error);
-        for (TamableAnimal ta : targets) {
+        for (LivingEntity ta : targets) {
             TameData data = TameRegistry.get(ta.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(ta));
             if (consumeHungerForCommandTeleport(p, data, ta)) {
-                teleportTameToPlayer(ta, p);
+                teleportLivingTameToPlayer(ta, p);
             }
         }
         for (TameData d : queuedTargets) {
@@ -12664,7 +12665,7 @@ public class TameCommands {
         if (fromDimension == null) return error(p, "Invalid dimension.");
 
         List<TameData> requested = ownedTamesForAllCommands(p.getUUID());
-        List<TamableAnimal> targets = new ArrayList<>();
+        List<LivingEntity> targets = new ArrayList<>();
         List<TameData> queuedTargets = new ArrayList<>();
         int queued = 0;
         int queueFailed = 0;
@@ -12682,7 +12683,7 @@ public class TameCommands {
                 skippedDuel++;
                 continue;
             }
-            TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
+            LivingEntity ta = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (ta == null) {
                 if (!matchesDimensionFilter(d, null, dimensionId)) {
                     continue;
@@ -12704,10 +12705,11 @@ public class TameCommands {
 
         TeleportPaymentResult payment = payTeleportXp(p, cost, targets.size() + queuedTargets.size());
         if (!payment.success) return error(p, payment.error);
-        for (TamableAnimal ta : targets) {
+        for (LivingEntity ta : targets) {
             TameData data = TameRegistry.get(ta.getUUID());
+            if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(ta));
             if (consumeHungerForCommandTeleport(p, data, ta)) {
-                teleportTameToPlayer(ta, p);
+                teleportLivingTameToPlayer(ta, p);
             }
         }
         for (TameData d : queuedTargets) {
@@ -13566,7 +13568,7 @@ public class TameCommands {
         return null;
     }
 
-    private static boolean matchesDimensionFilter(TameData data, TamableAnimal loaded, ResourceLocation targetDimensionId) {
+    private static boolean matchesDimensionFilter(TameData data, LivingEntity loaded, ResourceLocation targetDimensionId) {
         if (targetDimensionId == null) return false;
         if (loaded != null) {
             return loaded.level().dimension().location().equals(targetDimensionId);
