@@ -203,6 +203,7 @@ public final class TameDuelManager {
         // Ensure participants have a valid target immediately after duel-start prep.
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
+        maintainTeamOneGlow(server, battle);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -485,8 +486,26 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            syncPlayerEnemyGlow(server, battle);
+            maintainTeamOneGlow(server, battle);
+            if (teamOneGlowEnabled(battle)) syncPlayerEnemyGlow(server, battle);
         }
+    }
+
+    private static void maintainTeamOneGlow(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) return;
+        if (!teamOneGlowEnabled(battle)) return;
+        for (UUID participantId : battle.teamA) {
+            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
+            if (participant != null && participant.isAlive()) {
+                participant.addEffect(new MobEffectInstance(MobEffects.GLOWING, 30, 0, false, false, false));
+            }
+        }
+    }
+
+    private static boolean teamOneGlowEnabled(DuelBattle battle) {
+        return battle != null && (battle.ranked
+                ? PlayerDebugSettings.rankedGlow(battle.ownerA)
+                : PlayerDebugSettings.duelsGlow(battle.ownerA));
     }
 
     public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, LivingEntity tame) {

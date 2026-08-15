@@ -989,11 +989,16 @@ public class TameCommands {
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("chestxDrumRange")
-                        .then(Commands.argument("blockRangeNumber", IntegerArgumentType.integer(1, 64))
-                                .then(Commands.argument("heightNumber", IntegerArgumentType.integer(0, 16))
+                        .executes(ctx -> listChestDrumRanges(ctx.getSource()))
+                        .then(Commands.argument("blockRangeNumber", IntegerArgumentType.integer(1, 50))
+                                .then(Commands.argument("heightNumber", IntegerArgumentType.integer(0, 10))
                                         .executes(ctx -> setChestDrumRange(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "blockRangeNumber"),
                                                 IntegerArgumentType.getInteger(ctx, "heightNumber"))))))
+                .then(Commands.literal("duelsGlow")
+                        .executes(ctx -> toggleDuelGlow(ctx.getSource(), false)))
+                .then(Commands.literal("rankedGlow")
+                        .executes(ctx -> toggleDuelGlow(ctx.getSource(), true)))
                 .then(Commands.literal("herding")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -3933,7 +3938,6 @@ public class TameCommands {
 
     private static List<DrumRespawnInventory> findMorningDrumRespawnInventories(MinecraftServer server, UUID ownerUuid, List<TameData> candidates) {
         List<DrumRespawnInventory> result = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
         List<LevelPosition> centers = new ArrayList<>();
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
         if (owner != null) centers.add(new LevelPosition(owner.serverLevel(), owner.blockPosition()));
@@ -3942,21 +3946,44 @@ public class TameCommands {
             ServerLevel level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
             if (level != null) centers.add(new LevelPosition(level, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ)));
         }
-        int radius = PlayerDebugSettings.chestDrumBlockRange(ownerUuid);
-        int height = PlayerDebugSettings.chestDrumHeight(ownerUuid);
-        for (LevelPosition center : centers) {
-            for (BlockPos pos : BlockPos.betweenClosed(center.pos.offset(-radius, -height, -radius), center.pos.offset(radius, height, radius))) {
-                if (!center.level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) continue;
-                if (!(center.level.getBlockEntity(pos.below()) instanceof DrumBlockEntity drum) || !ownerUuid.equals(drum.getPlacerUUID())) continue;
-                BlockEntity blockEntity = center.level.getBlockEntity(pos);
-                InventoryAccess inventory = inventoryAccessFromBlockEntity(blockEntity, Direction.DOWN);
-                String key = center.level.dimension().location() + "|" + pos.asLong();
-                if (inventory != null && countPetBeds(inventory) > 0 && seen.add(key)) {
-                    result.add(new DrumRespawnInventory(center.level, pos.immutable(), inventory));
-                }
-            }
+        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(server, ownerUuid)) {
+            ResourceLocation dimensionId = ResourceLocation.tryParse(range.dimension());
+            ServerLevel level = dimensionId == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
+            if (level == null) continue;
+            BlockPos pos = new BlockPos(range.x(), range.y(), range.z());
+            boolean inRange = centers.stream().anyMatch(center -> center.level == level
+                    && Math.abs(center.pos.getX() - pos.getX()) <= range.blockRange()
+                    && Math.abs(center.pos.getZ() - pos.getZ()) <= range.blockRange()
+                    && Math.abs(center.pos.getY() - pos.getY()) <= range.height());
+            if (!inRange) continue;
+            InventoryAccess inventory = inventoryAccessFromBlockEntity(level.getBlockEntity(pos), Direction.DOWN);
+            if (inventory != null && countPetBeds(inventory) > 0) result.add(new DrumRespawnInventory(level, pos, inventory));
         }
         return result;
+    }
+
+    private static List<PlayerDebugSettings.ChestDrumRange> validChestDrumRanges(MinecraftServer server, UUID ownerUuid) {
+        List<PlayerDebugSettings.ChestDrumRange> valid = new ArrayList<>();
+        for (PlayerDebugSettings.ChestDrumRange range : PlayerDebugSettings.chestDrumRanges(ownerUuid)) {
+            ResourceLocation dimensionId = ResourceLocation.tryParse(range.dimension());
+            ServerLevel level = dimensionId == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
+            if (level == null) {
+                PlayerDebugSettings.removeChestDrumRange(ownerUuid, range);
+                continue;
+            }
+            BlockPos inventoryPos = new BlockPos(range.x(), range.y(), range.z());
+            if (!level.hasChunkAt(inventoryPos)) {
+                valid.add(range);
+                continue;
+            }
+            boolean exists = inventoryAccessFromBlockEntity(level.getBlockEntity(inventoryPos), Direction.DOWN) != null
+                    && level.getBlockState(inventoryPos.below()).is(DIBlockRegistry.DRUM.get())
+                    && level.getBlockEntity(inventoryPos.below()) instanceof DrumBlockEntity drum
+                    && ownerUuid.equals(drum.getPlacerUUID());
+            if (exists) valid.add(range);
+            else PlayerDebugSettings.removeChestDrumRange(ownerUuid, range);
+        }
+        return valid;
     }
 
     private static int countPetBeds(InventoryAccess inventory) {
@@ -12723,10 +12750,57 @@ public class TameCommands {
     private static int setChestDrumRange(CommandSourceStack source, int blockRange, int height) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
-        PlayerDebugSettings.setChestDrumRange(player.getUUID(), blockRange, height);
-        player.sendSystemMessage(Component.literal("Chest x drum range set to " + blockRange + " blocks and " + height + " blocks high.")
+        BlockPos inventoryPos = drumInventoryBelowPlayerPosition(player);
+        if (inventoryPos == null) return error(player, "Stand on an inventory with your drum directly beneath it.");
+        String dimension = player.serverLevel().dimension().location().toString();
+        PlayerDebugSettings.setChestDrumRange(player.getUUID(), dimension, inventoryPos.getX(), inventoryPos.getY(), inventoryPos.getZ(), blockRange, height);
+        player.sendSystemMessage(Component.literal("Chest x drum range at " + formatBlockLocation(dimension, inventoryPos) + " set to " + blockRange + " blocks and " + height + " blocks high.")
                 .withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int listChestDrumRanges(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        List<PlayerDebugSettings.ChestDrumRange> ranges = validChestDrumRanges(source.getServer(), player.getUUID());
+        if (ranges.isEmpty()) return error(player, "You have no configured chest x drum locations.");
+        player.sendSystemMessage(Component.literal("Chest x drum locations:").withStyle(ChatFormatting.GOLD));
+        for (PlayerDebugSettings.ChestDrumRange range : ranges) {
+            player.sendSystemMessage(Component.literal("- " + formatBlockLocation(range.dimension(), new BlockPos(range.x(), range.y(), range.z()))
+                    + ": range " + range.blockRange() + ", height " + range.height()).withStyle(ChatFormatting.YELLOW));
+        }
+        return ranges.size();
+    }
+
+    private static int toggleDuelGlow(CommandSourceStack source, boolean ranked) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        UUID playerId = player.getUUID();
+        boolean enabled = ranked ? !PlayerDebugSettings.rankedGlow(playerId) : !PlayerDebugSettings.duelsGlow(playerId);
+        if (ranked) PlayerDebugSettings.setRankedGlow(playerId, enabled);
+        else PlayerDebugSettings.setDuelsGlow(playerId, enabled);
+        player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow " + (enabled ? "enabled." : "disabled."))
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static String formatBlockLocation(String dimension, BlockPos pos) {
+        return dimension + " [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]";
+    }
+
+    private static BlockPos drumInventoryBelowPlayerPosition(ServerPlayer player) {
+        if (player == null) return null;
+        ServerLevel level = player.serverLevel();
+        BlockPos supportPos = BlockPos.containing(player.getX(), player.getBoundingBox().minY - 0.01D, player.getZ());
+        LinkedHashSet<BlockPos> candidates = new LinkedHashSet<>();
+        candidates.add(supportPos);
+        candidates.add(player.blockPosition().below());
+        for (BlockPos pos : candidates) {
+            if (inventoryAccessFromBlockEntity(level.getBlockEntity(pos), Direction.UP) == null) continue;
+            if (!level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) continue;
+            if (level.getBlockEntity(pos.below()) instanceof DrumBlockEntity drum && player.getUUID().equals(drum.getPlacerUUID())) return pos.immutable();
+        }
+        return null;
     }
 
     private static int guardianAddSelectionToGroup(CommandSourceStack source, String setName, String selectionRaw) {
@@ -20653,6 +20727,9 @@ public class TameCommands {
             return;
         }
         long now = server.overworld().getGameTime();
+        if (now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) validChestDrumRanges(server, player.getUUID());
+        }
         boolean changed = false;
         Set<UUID> processed = new HashSet<>();
         for (TameData data : TameRegistry.TAMES.values()) {
@@ -20663,8 +20740,8 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
-                changed |= refillHungerFromNearbyDrumChest(tame, data);
+            if (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
+                changed |= refillHungerFromNearbyDrumChest(tame, data, now);
             }
             changed |= updateHungerWarningState(server, data);
             int drain = hungerDrainPerSecond(tame, data, now);
@@ -21003,18 +21080,19 @@ public class TameCommands {
         return sent;
     }
 
-    private static boolean refillHungerFromNearbyDrumChest(LivingEntity tame, TameData data) {
+    private static boolean refillHungerFromNearbyDrumChest(LivingEntity tame, TameData data, long now) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
             return false;
         }
-        BlockPos center = tame.blockPosition();
         UUID ownerUuid = data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
-        int radius = PlayerDebugSettings.chestDrumBlockRange(ownerUuid);
-        int height = PlayerDebugSettings.chestDrumHeight(ownerUuid);
-        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -height, -radius), center.offset(radius, height, radius))) {
-            if (!level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) {
-                continue;
-            }
+        BlockPos center = tame.blockPosition();
+        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(level.getServer(), ownerUuid)) {
+            if (!level.dimension().location().toString().equals(range.dimension())) continue;
+            BlockPos pos = new BlockPos(range.x(), range.y(), range.z());
+            if (Math.abs(center.getX() - pos.getX()) > range.blockRange()
+                    || Math.abs(center.getZ() - pos.getZ()) > range.blockRange()
+                    || Math.abs(center.getY() - pos.getY()) > range.height()) continue;
+            if (now % chestDrumFeedIntervalTicks(range) != 0L) continue;
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity == null) {
                 continue;
@@ -21045,6 +21123,15 @@ public class TameCommands {
             }
         }
         return false;
+    }
+
+    private static long chestDrumFeedIntervalTicks(PlayerDebugSettings.ChestDrumRange range) {
+        long configuredVolume = (2L * range.blockRange() + 1L) * (2L * range.blockRange() + 1L) * (2L * range.height() + 1L);
+        long defaultVolume = (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_BLOCK_RANGE + 1L)
+                * (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_BLOCK_RANGE + 1L)
+                * (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_HEIGHT + 1L);
+        long multiplier = Math.max(1L, (configuredVolume + defaultVolume - 1L) / defaultVolume);
+        return TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS * multiplier;
     }
 
     private static int hungerInventoryGive(CommandSourceStack source, String selectionRaw) {

@@ -1,8 +1,10 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +32,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> INVENTORY_NO_FOOD = new HashMap<>();
     private static final Map<UUID, Boolean> INVENTORY_SUMMARY = new HashMap<>();
     private static final Map<UUID, Integer> INVENTORY_SUMMARY_MINUTES = new HashMap<>();
-    private static final Map<UUID, Integer> CHEST_DRUM_BLOCK_RANGE = new HashMap<>();
-    private static final Map<UUID, Integer> CHEST_DRUM_HEIGHT = new HashMap<>();
+    private static final Map<UUID, List<ChestDrumRange>> CHEST_DRUM_RANGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -45,6 +46,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> NEW_TAME_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> AUTO_RESPAWN_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
+    private static final Map<UUID, Boolean> DUELS_GLOW = new HashMap<>();
+    private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -75,7 +78,9 @@ public final class PlayerDebugSettings {
             new BooleanSetting("rankedDuelSummaryMessages", RANKED_DUEL_SUMMARY_MESSAGES, false),
             new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
-            new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false)
+            new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
+            new BooleanSetting("duelsGlow", DUELS_GLOW, true),
+            new BooleanSetting("rankedGlow", RANKED_GLOW, true)
     );
 
     public static boolean enemyKilled(UUID player) {
@@ -138,12 +143,11 @@ public final class PlayerDebugSettings {
         return 20L * 60L * inventorySummaryMinutes(player);
     }
 
-    public static int chestDrumBlockRange(UUID player) {
-        return Math.max(1, Math.min(64, CHEST_DRUM_BLOCK_RANGE.getOrDefault(player, DEFAULT_CHEST_DRUM_BLOCK_RANGE)));
+    public record ChestDrumRange(String dimension, int x, int y, int z, int blockRange, int height) {
     }
 
-    public static int chestDrumHeight(UUID player) {
-        return Math.max(0, Math.min(16, CHEST_DRUM_HEIGHT.getOrDefault(player, DEFAULT_CHEST_DRUM_HEIGHT)));
+    public static List<ChestDrumRange> chestDrumRanges(UUID player) {
+        return player == null ? List.of() : List.copyOf(CHEST_DRUM_RANGES.getOrDefault(player, List.of()));
     }
 
     public static boolean duelAssistMessages(UUID player) {
@@ -200,6 +204,14 @@ public final class PlayerDebugSettings {
 
     public static boolean noAutoSetBed(UUID player) {
         return getBoolean(NO_AUTO_SET_BED, player, false);
+    }
+
+    public static boolean duelsGlow(UUID player) {
+        return getBoolean(DUELS_GLOW, player, true);
+    }
+
+    public static boolean rankedGlow(UUID player) {
+        return getBoolean(RANKED_GLOW, player, true);
     }
 
     public static void setEnemyKilled(UUID player, boolean enabled) {
@@ -267,16 +279,22 @@ public final class PlayerDebugSettings {
         markDirty();
     }
 
-    public static void setChestDrumRange(UUID player, int blockRange, int height) {
+    public static void setChestDrumRange(UUID player, String dimension, int x, int y, int z, int blockRange, int height) {
         if (player == null) {
             return;
         }
-        int normalizedRange = Math.max(1, Math.min(64, blockRange));
-        int normalizedHeight = Math.max(0, Math.min(16, height));
-        if (normalizedRange == DEFAULT_CHEST_DRUM_BLOCK_RANGE) CHEST_DRUM_BLOCK_RANGE.remove(player);
-        else CHEST_DRUM_BLOCK_RANGE.put(player, normalizedRange);
-        if (normalizedHeight == DEFAULT_CHEST_DRUM_HEIGHT) CHEST_DRUM_HEIGHT.remove(player);
-        else CHEST_DRUM_HEIGHT.put(player, normalizedHeight);
+        int normalizedRange = Math.max(1, Math.min(50, blockRange));
+        int normalizedHeight = Math.max(0, Math.min(10, height));
+        List<ChestDrumRange> ranges = CHEST_DRUM_RANGES.computeIfAbsent(player, ignored -> new ArrayList<>());
+        ranges.removeIf(range -> range.dimension().equals(dimension) && range.x() == x && range.y() == y && range.z() == z);
+        ranges.add(new ChestDrumRange(dimension, x, y, z, normalizedRange, normalizedHeight));
+        markDirty();
+    }
+
+    public static void removeChestDrumRange(UUID player, ChestDrumRange range) {
+        List<ChestDrumRange> ranges = CHEST_DRUM_RANGES.get(player);
+        if (ranges == null || !ranges.remove(range)) return;
+        if (ranges.isEmpty()) CHEST_DRUM_RANGES.remove(player);
         markDirty();
     }
 
@@ -362,6 +380,14 @@ public final class PlayerDebugSettings {
         setBoolean(NO_AUTO_SET_BED, player, enabled, false);
     }
 
+    public static void setDuelsGlow(UUID player, boolean enabled) {
+        setBoolean(DUELS_GLOW, player, enabled, true);
+    }
+
+    public static void setRankedGlow(UUID player, boolean enabled) {
+        setBoolean(RANKED_GLOW, player, enabled, true);
+    }
+
     public static void setOtherGeneral(UUID player, boolean enabled) {
         setNewTameMessages(player, enabled);
         setAutoRespawnMessages(player, enabled);
@@ -386,15 +412,20 @@ public final class PlayerDebugSettings {
             CompoundTag row = out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag());
             row.putInt("inventorySummaryMinutes", Math.max(1, entry.getValue()));
         }
-        for (Map.Entry<UUID, Integer> entry : CHEST_DRUM_BLOCK_RANGE.entrySet()) {
-            if (entry.getKey() != null && entry.getValue() != null) {
-                out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).putInt("chestDrumBlockRange", entry.getValue());
+        for (Map.Entry<UUID, List<ChestDrumRange>> entry : CHEST_DRUM_RANGES.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
+            ListTag list = new ListTag();
+            for (ChestDrumRange range : entry.getValue()) {
+                CompoundTag saved = new CompoundTag();
+                saved.putString("dimension", range.dimension());
+                saved.putInt("x", range.x());
+                saved.putInt("y", range.y());
+                saved.putInt("z", range.z());
+                saved.putInt("blockRange", range.blockRange());
+                saved.putInt("height", range.height());
+                list.add(saved);
             }
-        }
-        for (Map.Entry<UUID, Integer> entry : CHEST_DRUM_HEIGHT.entrySet()) {
-            if (entry.getKey() != null && entry.getValue() != null) {
-                out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).putInt("chestDrumHeight", entry.getValue());
-            }
+            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("chestDrumRanges", list);
         }
         return out;
     }
@@ -418,11 +449,15 @@ public final class PlayerDebugSettings {
             if (tag.contains("inventorySummaryMinutes", Tag.TAG_INT)) {
                 INVENTORY_SUMMARY_MINUTES.put(player, Math.max(1, tag.getInt("inventorySummaryMinutes")));
             }
-            if (tag.contains("chestDrumBlockRange", Tag.TAG_INT)) {
-                CHEST_DRUM_BLOCK_RANGE.put(player, tag.getInt("chestDrumBlockRange"));
-            }
-            if (tag.contains("chestDrumHeight", Tag.TAG_INT)) {
-                CHEST_DRUM_HEIGHT.put(player, tag.getInt("chestDrumHeight"));
+            if (tag.contains("chestDrumRanges", Tag.TAG_LIST)) {
+                ListTag list = tag.getList("chestDrumRanges", Tag.TAG_COMPOUND);
+                List<ChestDrumRange> ranges = new ArrayList<>();
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag saved = list.getCompound(i);
+                    ranges.add(new ChestDrumRange(saved.getString("dimension"), saved.getInt("x"), saved.getInt("y"), saved.getInt("z"),
+                            Math.max(1, Math.min(50, saved.getInt("blockRange"))), Math.max(0, Math.min(10, saved.getInt("height")))));
+                }
+                if (!ranges.isEmpty()) CHEST_DRUM_RANGES.put(player, ranges);
             }
         }
     }
@@ -448,8 +483,7 @@ public final class PlayerDebugSettings {
             setting.values().clear();
         }
         INVENTORY_SUMMARY_MINUTES.clear();
-        CHEST_DRUM_BLOCK_RANGE.clear();
-        CHEST_DRUM_HEIGHT.clear();
+        CHEST_DRUM_RANGES.clear();
     }
 
     private static void markDirty() {
