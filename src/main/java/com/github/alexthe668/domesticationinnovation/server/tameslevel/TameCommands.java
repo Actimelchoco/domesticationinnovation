@@ -4609,6 +4609,7 @@ public class TameCommands {
                     "/tames inventory system",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
+                    "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
                     "A container above a drum can refill nearby loaded hungry tames within 20 blocks once per minute, up to green food status.",
@@ -4618,7 +4619,9 @@ public class TameCommands {
         else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
             sendInfoPage(p, "Inventory System",
                     "Saturation is the tame's ready-to-use food buffer. One food point restores 100 saturation.",
-                    "Following drains four times its previous saturation rate. Wandering and fighting retain their normal rates.",
+                    "Following drains 2 saturation per second, wandering or guarding drains 1, and fighting with a live target drains 4.",
+                    "During duels and ranked, movement state does not matter: drain is fixed at 1 saturation every 4 seconds.",
+                    "Outside duels and ranked, all saturation costs scale by tame level. The per-level increase doubles after every 50 levels.",
                     "Natural regeneration also consumes saturation. Command teleports do not consume saturation.",
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
@@ -20531,19 +20534,16 @@ public class TameCommands {
             if (Math.floorMod(elapsedSeconds + stagger, DUEL_HUNGER_DRAIN_INTERVAL_SECONDS) != 0L) {
                 return 0;
             }
+            return 1;
         }
         LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
-            return scalePassiveSaturationCost(data, 3);
+            return scaleSaturationCost(data, 4);
         }
-        if (data.movementOrder == 2) {
-            return scalePassiveSaturationCost(data, 1);
+        if (data.movementOrder == 2 || data.movementOrder == 3) {
+            return scaleSaturationCost(data, 1);
         }
-        return scalePassiveSaturationCost(data, 2) * 4;
-    }
-
-    private static int scalePassiveSaturationCost(TameData data, int baseCost) {
-        return Math.max(1, (int) Math.ceil(scaleSaturationCost(data, baseCost) / 4.0D));
+        return scaleSaturationCost(data, 2);
     }
 
     private static int scaleSaturationCost(TameData data, int baseCost) {
@@ -20551,7 +20551,16 @@ public class TameCommands {
             return 0;
         }
         int level = data == null ? 1 : Math.max(1, data.level);
-        return Math.max(1, (int) Math.round(baseCost * (1.0D + level * 0.01D)));
+        int remainingLevels = level;
+        double weightedLevels = 0.0D;
+        double bandWeight = 1.0D;
+        while (remainingLevels > 0) {
+            int levelsInBand = Math.min(50, remainingLevels);
+            weightedLevels += levelsInBand * bandWeight;
+            remainingLevels -= levelsInBand;
+            bandWeight *= 2.0D;
+        }
+        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D)));
     }
 
     private static boolean ensureHungerSaturation(TameData data, LivingEntity tame, int required) {
@@ -21091,11 +21100,22 @@ public class TameCommands {
 
     private static int hungerInventoryDistribute(CommandSourceStack source, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        selected.removeIf(data -> data == null || findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId) == null);
+        if (selected.isEmpty()) {
+            return hungerMessage(player, "No selected loaded tames were found.");
+        }
+
+        BlockEntity below = player.serverLevel().getBlockEntity(player.blockPosition().below());
+        InventoryAccess standingInventory = inventoryAccessFromBlockEntity(below);
+        if (standingInventory != null) {
+            return distributeHungerFoodFromInventory(player, selected, standingInventory);
+        }
+
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
-            return hungerMessage(player, "Hold food to distribute.");
+            return hungerMessage(player, "Stand on an inventory containing food or hold food to distribute.");
         }
-        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> hungerFoodPoints(held, data, null) <= 0);
         if (selected.isEmpty()) {
             return hungerMessage(player, "No selected tames can accept that food.");
@@ -21131,6 +21151,45 @@ public class TameCommands {
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return moved;
+    }
+
+    private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory) {
+        int moved = 0;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            while (true) {
+                ItemStack sourceStack = inventory.getItem(slot);
+                if (sourceStack == null || sourceStack.isEmpty()) break;
+                ItemStack one = sourceStack.copy();
+                one.setCount(1);
+                List<TameData> accepting = selected.stream()
+                        .filter(data -> canAddHungerFoodStack(data, one))
+                        .sorted(Comparator.comparingInt(TameCommands::totalHungerFoodPoints))
+                        .collect(Collectors.toCollection(ArrayList::new));
+                if (accepting.isEmpty()) break;
+                ItemStack extracted = inventory.remove(slot, 1);
+                if (extracted == null || extracted.isEmpty()) break;
+                extracted.setCount(1);
+                TameData target = accepting.get(0);
+                if (!addHungerFoodStack(target, extracted)) break;
+                target.hungerEmptyNotified = false;
+                resetHungerFoodNotifications(target);
+                moved++;
+            }
+        }
+        if (moved <= 0) {
+            return hungerMessage(player, "The inventory below you has no compatible food or selected tames are full.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) from the inventory to loaded tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        return moved;
+    }
+
+    private static boolean canAddHungerFoodStack(TameData data, ItemStack incoming) {
+        if (data == null || incoming == null || incoming.isEmpty() || hungerFoodPoints(incoming, data, null) <= 0) return false;
+        for (ItemStack existing : data.hungerInventory) {
+            if (ItemStack.isSameItemSameTags(existing, incoming) && existing.getCount() < existing.getMaxStackSize()) return true;
+        }
+        return data.hungerInventory.size() < TAME_HUNGER_MAX_STACKS;
     }
 
     private static int hungerInventoryTaste(CommandSourceStack source, String type, String selectionRaw) {
