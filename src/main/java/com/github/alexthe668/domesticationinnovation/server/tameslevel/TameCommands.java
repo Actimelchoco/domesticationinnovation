@@ -2460,32 +2460,20 @@ public class TameCommands {
                                                 .then(Commands.argument("name", StringArgumentType.word())
                                                         .suggests((ctx, b) -> suggestMovementStates(b))
                                                         .executes(ctx -> guardianDeployCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
-                                .then(Commands.literal("capture")
-                                        .requires(source -> false)
+                                .then(Commands.literal("addCurrentToGroup")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
-                                                .then(Commands.literal("all")
-                                                        .executes(ctx -> guardianCaptureCurrentAll(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), false))
-                                                        .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
-                                                                .executes(ctx -> guardianCaptureCurrentAll(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent")))))
-                                                .then(Commands.literal("group")
-                                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                                .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                                .executes(ctx -> guardianCaptureCurrentGroup(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
-                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
-                                                                        .executes(ctx -> guardianCaptureCurrentGroup(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))
-                                                .then(Commands.literal("type")
-                                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                                .executes(ctx -> guardianCaptureCurrentType(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
-                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
-                                                                        .executes(ctx -> guardianCaptureCurrentType(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))
-                                                .then(Commands.literal("state")
-                                                        .then(Commands.argument("name", StringArgumentType.word())
-                                                                .suggests((ctx, b) -> suggestMovementStates(b))
-                                                                .executes(ctx -> guardianCaptureCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), false))
-                                                                .then(Commands.argument("includeInactiveCurrent", BoolArgumentType.bool())
-                                                                        .executes(ctx -> guardianCaptureCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), StringArgumentType.getString(ctx, "name"), BoolArgumentType.getBool(ctx, "includeInactiveCurrent"))))))))
+                                                .executes(ctx -> guardianCaptureCurrentAll(ctx.getSource(), StringArgumentType.getString(ctx, "setName"), false))))
+                                .then(Commands.literal("addToGroup")
+                                        .then(Commands.argument("setName", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
+                                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                        .executes(ctx -> guardianAddSelectionToGroup(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "setName"),
+                                                                StringArgumentType.getString(ctx, "selection")
+                                                        )))))
                                 .then(Commands.literal("info")
                                         .requires(source -> false)
                                         .then(Commands.argument("setName", StringArgumentType.word())
@@ -2538,15 +2526,7 @@ public class TameCommands {
                                                                         StringArgumentType.getString(ctx, "setName"),
                                                                         StringArgumentType.getString(ctx, "pet")
                                                                 )))))
-                                        .then(Commands.argument("setName", StringArgumentType.word())
-                                                .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
-                                                .then(Commands.argument("pet", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                                        .executes(ctx -> guardianNamedSetPet(
-                                                                ctx.getSource(),
-                                                                StringArgumentType.getString(ctx, "setName"),
-                                                                StringArgumentType.getString(ctx, "pet")
-                                                        )))))
+                                        )
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .requires(source -> false)
@@ -2595,13 +2575,7 @@ public class TameCommands {
                                                         .executes(ctx -> guardianPetHome(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
                                                 .then(Commands.literal("previous")
                                                         .executes(ctx -> guardianPetPrevious(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> guardianPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))
-                                        .then(Commands.literal("home")
-                                                .executes(ctx -> guardianPetHome(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
-                                        .then(Commands.literal("previous")
-                                                .executes(ctx -> guardianPetPrevious(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                                )
                         .then(Commands.literal("movement")
                                 .then(Commands.literal("all")
                                         .then(Commands.argument("name", StringArgumentType.word())
@@ -4615,6 +4589,8 @@ public class TameCommands {
                     "/tames guardian manageGroup remove <name> <pet|all|group <group>|type <type>|state <state>>",
                     "/tames guardian manageGroup delete <name>",
                     "/tames guardian deployGroup <name>",
+                    "/tames guardian addCurrentToGroup <guardianGroup>",
+                    "/tames guardian addToGroup <guardianGroup> <tame selection>",
                     "A guardian anchor is a return point. After combat, the tame paths back there.",
                     "If it still has not returned after about 60 seconds, it is teleported back.",
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
@@ -12623,6 +12599,37 @@ public class TameCommands {
         player.sendSystemMessage(Component.literal("Automatic bed setting " + (enabled ? "disabled" : "enabled") + ".")
                 .withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int guardianAddSelectionToGroup(CommandSourceStack source, String setName, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian group name cannot be blank.");
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return error(player, "No living owned tames matched '" + selectionRaw + "'.");
+        }
+        int added = 0;
+        int skippedHorse = 0;
+        String dimension = player.serverLevel().dimension().location().toString();
+        BlockPos position = player.blockPosition();
+        for (TameData data : selected) {
+            if (data.horseType) {
+                skippedHorse++;
+                continue;
+            }
+            putGuardianSetAnchor(data, normalizedSet, dimension, position.getX(), position.getY(), position.getZ());
+            added++;
+        }
+        if (added <= 0) {
+            return error(player, "No selected tames can use guardian groups.");
+        }
+        TameRegistry.markDirty();
+        String skippedText = skippedHorse > 0 ? " Skipped " + skippedHorse + " horse-type tame(s)." : "";
+        player.sendSystemMessage(Component.literal(
+                "Added " + added + " tame(s) to guardian group '" + normalizedSet + "' at your current location." + skippedText
+        ).withStyle(ChatFormatting.GREEN));
+        return added;
     }
 
     private static int teleportAllHomeFromDimension(CommandSourceStack source, ServerLevel fromDimension) {
