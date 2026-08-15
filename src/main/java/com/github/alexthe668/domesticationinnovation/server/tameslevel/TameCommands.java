@@ -3860,10 +3860,12 @@ public class TameCommands {
                     continue;
                 }
                 boolean eligibleBefore = isReincarnationEligible(data);
+                boolean guardianBeforeDeath = data.movementOrder == 3;
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
+                applyBedRespawnMovement(server, data, guardianBeforeDeath);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
             }
@@ -3873,10 +3875,12 @@ public class TameCommands {
                     continue;
                 }
                 boolean eligibleBefore = isReincarnationEligible(data);
+                boolean guardianBeforeDeath = data.movementOrder == 3;
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
+                applyBedRespawnMovement(server, data, guardianBeforeDeath);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
                 break;
@@ -3914,9 +3918,11 @@ public class TameCommands {
                 TameData data = candidates.get(candidateIndex++);
                 prepareDrumInventoryReincarnation(data, station.inventory);
                 boolean eligibleBefore = isReincarnationEligible(data);
+                boolean guardianBeforeDeath = data.movementOrder == 3;
                 Vec3 spawn = Vec3.upFromBottomCenterOf(station.inventoryPos, 1.0D);
                 RespawnResult result = respawnDeadTameAtServer(data, station.level, spawn, 0.0F, 0.0F);
                 if (!result.success) continue;
+                applyBedRespawnMovement(server, data, guardianBeforeDeath);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnated, normal);
             }
@@ -11641,12 +11647,14 @@ public class TameCommands {
                 failReasons.add(data.name + " (invalid target dimension)");
                 continue;
             }
+            boolean guardianBeforeDeath = data.movementOrder == 3;
             RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
             if (!result.success) {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
             }
+            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data, guardianBeforeDeath);
             if (reincarnateAfter) {
                 LivingEntity respawned = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
                 if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
@@ -11728,12 +11736,14 @@ public class TameCommands {
                 failReasons.add(data.name + " (invalid target dimension)");
                 continue;
             }
+            boolean guardianBeforeDeath = data.movementOrder == 3;
             RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
             if (!result.success) {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
             }
+            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data, guardianBeforeDeath);
             PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!payment.success) {
                 failed++;
@@ -12288,18 +12298,33 @@ public class TameCommands {
         }
         Vec3 spawnPos = Vec3.upFromBottomCenterOf(bedPos, 0.8F);
         float yRot = yawFromDirection(facing);
+        boolean guardianBeforeDeath = data.movementOrder == 3;
         RespawnResult result = respawnDeadTameAtServer(data, level, spawnPos, yRot, 0.0F);
         if (!result.success) {
             return false;
         }
-        TamableAnimal loaded = findLoadedTameByUuid(level.getServer(), data.uuid);
-        if (loaded != null) {
-            if (loaded instanceof IComandableMob commandableMob) {
-                commandableMob.setCommand(1);
-            }
-            loaded.setOrderedToSit(true);
-        }
+        applyBedRespawnMovement(level.getServer(), data, guardianBeforeDeath);
         return true;
+    }
+
+    private static boolean isBedRespawnTarget(SpawnTarget target) {
+        if (target == null || target.level == null || target.pos == null) return false;
+        BlockPos pos = BlockPos.containing(target.pos.x, target.pos.y - 0.5D, target.pos.z);
+        return target.level.getBlockState(pos).getBlock() instanceof PetBedBlock;
+    }
+
+    private static void applyBedRespawnMovement(MinecraftServer server, TameData data, boolean guardianBeforeDeath) {
+        if (server == null || data == null) return;
+        LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
+        if (respawned == null || !respawned.isAlive()) return;
+        applyLivingMovementOverride(respawned, data, guardianBeforeDeath ? MovementOrder.GUARDIAN : MovementOrder.SIT);
+        if (respawned instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
+        else {
+            CompoundTag snapshot = new CompoundTag();
+            respawned.save(snapshot);
+            data.entitySnapshot = snapshot;
+        }
+        TameRegistry.markDirty();
     }
 
     private static float yawFromDirection(Direction direction) {
