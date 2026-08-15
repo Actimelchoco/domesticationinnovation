@@ -979,6 +979,9 @@ public class TameCommands {
                 .then(Commands.literal("healthSiphon")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("noAutoSetBed")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("herding")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -12643,6 +12646,17 @@ public class TameCommands {
         return teleportHomeBatch(source, player, requested, "TPHome all", ownedDeadTamesForAllCommands(player.getUUID()).size());
     }
 
+    static int setNoAutoSetBed(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        PlayerDebugSettings.setNoAutoSetBed(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Automatic bed setting " + (enabled ? "disabled" : "enabled") + ".")
+                .withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
+        return 1;
+    }
+
     private static int teleportAllHomeFromDimension(CommandSourceStack source, ServerLevel fromDimension) {
         ServerPlayer player = source.getPlayer();
         if (fromDimension == null) return error(player, "Invalid dimension.");
@@ -14179,7 +14193,8 @@ public class TameCommands {
                 resolvedTarget.pos.z,
                 resolvedTarget.yRot,
                 resolvedTarget.xRot,
-                data
+                data,
+                exactTarget
         );
         if (!result.success()) {
             System.err.println("[TamesLevel] Command tphome failed for tame " + tame.getUUID() + ": " + result.error());
@@ -15024,6 +15039,14 @@ public class TameCommands {
                         .then(debugDuelBoolean("start", false, "start"))
                         .then(debugDuelBoolean("sum", false, "sum"))
                         .then(debugDuelBoolean("all", false, "all")))
+                .then(Commands.literal("ranked")
+                        .executes(ctx -> rankedDebugStatus(ctx.getSource()))
+                        .then(debugDuelBoolean("general", true, "general"))
+                        .then(debugDuelBoolean("kill", true, "kill"))
+                        .then(debugDuelBoolean("result", true, "result"))
+                        .then(debugDuelBoolean("start", true, "start"))
+                        .then(debugDuelBoolean("sum", true, "sum"))
+                        .then(debugDuelBoolean("all", true, "all")))
                 .then(Commands.literal("inventory")
                         .executes(ctx -> inventoryDebugStatus(ctx.getSource()))
                         .then(Commands.literal("lowOnFood")
@@ -15257,11 +15280,23 @@ public class TameCommands {
     private static int debugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         UUID playerId = p.getUUID();
-        p.sendSystemMessage(Component.literal("Debug groups: /tames debug duel|inventory|combat|other").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("Debug groups: /tames debug duel|ranked|inventory|combat|other").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Duel -> kill: " + PlayerDebugSettings.duelKillNotifications(playerId, false) + ", result: " + PlayerDebugSettings.duelResultMessages(playerId, false) + ", start: " + PlayerDebugSettings.duelStartMessages(playerId, false) + ", sum: " + PlayerDebugSettings.duelSummaryMessages(playerId, false) + ", assists: " + PlayerDebugSettings.duelAssistMessages(playerId)).withStyle(ChatFormatting.YELLOW));
         p.sendSystemMessage(Component.literal("Inventory -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(playerId) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(playerId) + ", sum: " + PlayerDebugSettings.inventorySummary(playerId) + ", sumMin: " + PlayerDebugSettings.inventorySummaryMinutes(playerId)).withStyle(ChatFormatting.YELLOW));
         p.sendSystemMessage(Component.literal("Combat -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId)).withStyle(ChatFormatting.YELLOW));
         p.sendSystemMessage(Component.literal("Other -> NewTame: " + PlayerDebugSettings.newTameMessages(playerId) + ", respawnedAutomatically: " + PlayerDebugSettings.autoRespawnMessages(playerId) + ", levelUp: " + PlayerDebugSettings.levelUp(playerId)).withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int rankedDebugStatus(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        UUID playerId = player.getUUID();
+        player.sendSystemMessage(Component.literal(
+                "Ranked debug -> kill: " + PlayerDebugSettings.duelKillNotifications(playerId, true)
+                        + ", result: " + PlayerDebugSettings.duelResultMessages(playerId, true)
+                        + ", start: " + PlayerDebugSettings.duelStartMessages(playerId, true)
+                        + ", sum: " + PlayerDebugSettings.duelSummaryMessages(playerId, true)
+        ).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 

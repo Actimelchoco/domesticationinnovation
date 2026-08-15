@@ -7,6 +7,8 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DITagRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -57,7 +59,7 @@ public class PetBedBlock extends BaseEntityBlock {
     }
 
     public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
-        if(TameableUtils.isTamed(entity) && isIntentionalPetBedSit(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
+        if(TameableUtils.isTamed(entity) && isIntentionalPetBedSit(entity) && !automaticBedSettingDisabled(entity) && !entity.getType().is(DITagRegistry.REFUSES_PET_BEDS) && !level.isClientSide && DomesticationMod.CONFIG.petBedRespawns.get()){
            if((entity.tickCount + entity.getId()) % 10 == 0 && random.nextInt(6) == 0){
                String currentDimension = level.dimension().location().toString();
                TameData claimedBy = TameRegistry.getTameByPetBed(currentDimension, pos);
@@ -89,6 +91,10 @@ public class PetBedBlock extends BaseEntityBlock {
            }
         }
         super.entityInside(state, level, pos, entity);
+    }
+
+    private boolean automaticBedSettingDisabled(Entity entity) {
+        return PlayerDebugSettings.noAutoSetBed(TameEntityAdapter.ownerUuid(entity));
     }
 
     private boolean isIntentionalPetBedSit(Entity entity) {

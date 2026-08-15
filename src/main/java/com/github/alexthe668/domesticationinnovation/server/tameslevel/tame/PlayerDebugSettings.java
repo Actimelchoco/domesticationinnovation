@@ -40,6 +40,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> RANKED_DUEL_SUMMARY_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> NEW_TAME_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> AUTO_RESPAWN_MESSAGES = new HashMap<>();
+    private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -69,7 +70,8 @@ public final class PlayerDebugSettings {
             new BooleanSetting("rankedDuelResultMessages", RANKED_DUEL_RESULT_MESSAGES, true),
             new BooleanSetting("rankedDuelSummaryMessages", RANKED_DUEL_SUMMARY_MESSAGES, false),
             new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
-            new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true)
+            new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
+            new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false)
     );
 
     public static boolean enemyKilled(UUID player) {
@@ -182,6 +184,10 @@ public final class PlayerDebugSettings {
 
     public static boolean autoRespawnMessages(UUID player) {
         return getBoolean(AUTO_RESPAWN_MESSAGES, player, true);
+    }
+
+    public static boolean noAutoSetBed(UUID player) {
+        return getBoolean(NO_AUTO_SET_BED, player, false);
     }
 
     public static void setEnemyKilled(UUID player, boolean enabled) {
@@ -325,6 +331,10 @@ public final class PlayerDebugSettings {
 
     public static void setAutoRespawnMessages(UUID player, boolean enabled) {
         setBoolean(AUTO_RESPAWN_MESSAGES, player, enabled, true);
+    }
+
+    public static void setNoAutoSetBed(UUID player, boolean enabled) {
+        setBoolean(NO_AUTO_SET_BED, player, enabled, false);
     }
 
     public static void setOtherGeneral(UUID player, boolean enabled) {

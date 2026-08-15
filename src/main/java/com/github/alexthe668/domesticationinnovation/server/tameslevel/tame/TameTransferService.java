@@ -95,6 +95,20 @@ public final class TameTransferService {
             float xRot,
             TameData data
     ) {
+        return transferToLocation(tame, targetLevel, x, y, z, yRot, xRot, data, false);
+    }
+
+    public static TransferResult transferToLocation(
+            TamableAnimal tame,
+            ServerLevel targetLevel,
+            double x,
+            double y,
+            double z,
+            float yRot,
+            float xRot,
+            TameData data,
+            boolean exactTarget
+    ) {
         if (tame == null || targetLevel == null) {
             return new TransferResult(null, false, "invalid context");
         }
@@ -103,7 +117,9 @@ public final class TameTransferService {
         }
 
         boolean crossDimension = !tame.level().dimension().equals(targetLevel.dimension());
-        List<double[]> attempts = transferAttempts(targetLevel, tame, x, y, z);
+        List<double[]> attempts = exactTarget
+                ? List.of(new double[]{x, y, z})
+                : transferAttempts(targetLevel, tame, x, y, z);
         if (!crossDimension) {
             double[] dest = attempts.isEmpty() ? new double[]{x, y, z} : attempts.get(0);
             tame.teleportTo(dest[0], dest[1], dest[2]);
