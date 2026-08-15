@@ -782,6 +782,7 @@ public class TameCommands {
         private final long expiresAtMs;
         private TeamSelection firstSelection;
         private TeamSelection secondSelection;
+        private boolean fundingFailed;
 
         private SimpleDuelPreparation(UUID first, UUID second, long expiresAtMs) {
             this.first = first;
@@ -931,13 +932,16 @@ public class TameCommands {
                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                 .executes(ctx -> duelSessionFfaCompact(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                 .then(Commands.literal("nearby")
-                        .requires(TameCommands::isPreparingDuelSource)
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
                         .executes(ctx -> simpleDuelNearby(ctx.getSource(), 3))
                         .then(Commands.argument("radius", IntegerArgumentType.integer(1, 20))
                                 .executes(ctx -> simpleDuelNearby(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "radius")))))
-                .then(Commands.literal("stop")
+                .then(Commands.literal("cancel")
                         .requires(TameCommands::isPreparingDuelSource)
                         .executes(ctx -> simpleDuelStop(ctx.getSource(), "Duel selection stopped.")))
+                .then(Commands.literal("startAgain")
+                        .requires(TameCommands::isDuelFundingRetrySource)
+                        .executes(ctx -> simpleDuelStartAgain(ctx.getSource())))
                 .then(Commands.literal("ff")
                         .requires(TameCommands::isActiveDuelSource)
                         .executes(ctx -> duelForfeit(ctx.getSource())))
@@ -953,7 +957,7 @@ public class TameCommands {
                         .then(Commands.argument("inviteId", StringArgumentType.word())
                                 .executes(ctx -> simpleDuelDecline(ctx.getSource(), StringArgumentType.getString(ctx, "inviteId")))))
                 .then(Commands.argument("selection", StringArgumentType.greedyString())
-                        .requires(TameCommands::isPreparingDuelSource)
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                         .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "selection"))));
     }
@@ -7606,6 +7610,8 @@ public class TameCommands {
             }
         }
         player.sendSystemMessage(Component.literal("Ranked arena: " + arenaName + ". Pool size: " + RANKED_POOL.size() + ". Active in duel: " + active + ".").withStyle(ChatFormatting.AQUA));
+        PlayerDuelStats playerStats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
+        player.sendSystemMessage(Component.literal("Ranked saturation: " + playerStats.rankedSaturation + ".").withStyle(ChatFormatting.GREEN));
         ActiveDuelSession session = RANKED_DUEL_SESSION;
         if (session != null && !session.currentRoundA.isEmpty() && !session.currentRoundB.isEmpty()) {
             List<LivingEntity> teamA = resolveLoadedRoundMembers(source.getServer(), session.currentRoundA);
@@ -7801,7 +7807,7 @@ public class TameCommands {
             if (add) {
                 selectedIds.add(player.getUUID());
                 for (LivingEntity tame : loadedOwnedDuelTames(source, player.getUUID())) {
-                    if (tame != null && tame.isAlive() && hasFoodForDuel(tame)) {
+                    if (tame != null && tame.isAlive()) {
                         selectedIds.add(tame.getUUID());
                     }
                 }
@@ -7822,10 +7828,6 @@ public class TameCommands {
                 selectedIds.addAll(collectLivingEntityIds(resolved.members));
                 selectedIds.removeIf(id -> !(includeSelfRequested && player.getUUID().equals(id))
                         && !TameEntityAdapter.isTame(findLoadedLivingParticipant(source.getServer(), id)));
-                selectedIds.removeIf(id -> {
-                    LivingEntity living = findLoadedLivingParticipant(source.getServer(), id);
-                    return living != null && TameEntityAdapter.isTame(living) && !hasFoodForDuel(living);
-                });
             } else {
                 selectedIds.addAll(resolveOwnedRankedParticipantsFromSelection(source.getServer(), player, parsed.selection));
             }
@@ -7837,6 +7839,9 @@ public class TameCommands {
             return error(player, add
                     ? "No loaded/alive ranked participants matched that selection."
                     : "No ranked participants matched that selection.");
+        }
+        if (add && !depositHeldRankedFood(player)) {
+            return error(player, "Hold edible food in your main hand to add ranked tames.");
         }
 
         ActiveDuelSession session = RANKED_DUEL_SESSION;
@@ -20571,12 +20576,7 @@ public class TameCommands {
             return 0;
         }
         if (TameDuelManager.isEntityInDuel(tame.getUUID())) {
-            long elapsedSeconds = now / 20L;
-            int stagger = Math.floorMod(tame.getUUID().hashCode(), DUEL_HUNGER_DRAIN_INTERVAL_SECONDS);
-            if (Math.floorMod(elapsedSeconds + stagger, DUEL_HUNGER_DRAIN_INTERVAL_SECONDS) != 0L) {
-                return 0;
-            }
-            return 1;
+            return 0;
         }
         LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
@@ -20622,7 +20622,7 @@ public class TameCommands {
     }
 
     public static boolean hasFoodForDuel(TameData data) {
-        return data == null || !isHungerBlockingAbilities(data);
+        return true;
     }
 
     private static boolean handleDuelHungerFailure(MinecraftServer server, TameData data) {
@@ -20644,14 +20644,7 @@ public class TameCommands {
     }
 
     private static boolean hasFoodForDuel(LivingEntity tame) {
-        if (tame == null) {
-            return false;
-        }
-        TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null) {
-            data = TameRegistry.getByTlId(TameData.getTlId(tame));
-        }
-        return hasFoodForDuel(data);
+        return tame != null;
     }
 
     public static boolean isHungerBlockingMovement(LivingEntity tame) {
@@ -20666,27 +20659,7 @@ public class TameCommands {
     }
 
     private static DuelSelectionResult requireDuelFood(DuelSelectionResult result) {
-        if (result == null || !result.error.isBlank() || result.tames.isEmpty()) {
-            return result;
-        }
-        List<LivingEntity> fed = new ArrayList<>();
-        List<String> hungry = new ArrayList<>();
-        for (LivingEntity tame : result.tames) {
-            if (tame == null || !tame.isAlive()) {
-                continue;
-            }
-            if (hasFoodForDuel(tame)) {
-                fed.add(tame);
-            } else {
-                hungry.add(tame.getName().getString());
-            }
-        }
-        if (fed.isEmpty()) {
-            return DuelSelectionResult.fail(hungry.isEmpty()
-                    ? "Selected duel tames have no food."
-                    : "Selected duel tames have no food: " + String.join(", ", hungry) + ".");
-        }
-        return DuelSelectionResult.ok(fed);
+        return result;
     }
 
     private static boolean consumeHungerForAction(TameData data, LivingEntity tame, int saturationCost) {
@@ -22375,6 +22348,18 @@ public class TameCommands {
         return player != null && isPreparingDuel(player.getUUID()) && !TameDuelManager.isOwnerInDuel(player.getUUID());
     }
 
+    private static boolean isPreparingDuelSelectionSource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        SimpleDuelPreparation preparation = player == null ? null : SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        return isPreparingDuelSource(source) && preparation != null && !preparation.fundingFailed;
+    }
+
+    private static boolean isDuelFundingRetrySource(CommandSourceStack source) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        SimpleDuelPreparation preparation = player == null ? null : SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        return isPreparingDuelSource(source) && preparation != null && preparation.fundingFailed;
+    }
+
     private static boolean isActiveDuelSource(CommandSourceStack source) {
         ServerPlayer player = source == null ? null : source.getPlayer();
         return player != null && TameDuelManager.isOwnerInDuel(player.getUUID());
@@ -22499,6 +22484,17 @@ public class TameCommands {
         Set<UUID> secondIds = collectLivingEntityIds(secondTeam.members);
         secondIds.removeAll(firstIds);
         if (firstIds.isEmpty() || secondIds.isEmpty()) return error(source.getPlayer(), "Both duel teams must contain eligible loaded participants.");
+        int firstCost = duelTeamLevelCost(firstTeam.tames, first.getUUID());
+        int secondCost = duelTeamLevelCost(secondTeam.tames, second.getUUID());
+        if (!canPayHeldFood(first, firstCost) || !canPayHeldFood(second, secondCost)) {
+            preparation.fundingFailed = true;
+            notifyDuelFundingFailure(first, firstCost);
+            notifyDuelFundingFailure(second, secondCost);
+            refreshDuelCommands(first, second);
+            return 0;
+        }
+        consumeHeldFoodPoints(first, firstCost);
+        consumeHeldFoodPoints(second, secondCost);
         prepareTeamForDuel(firstTeam.tames);
         prepareTeamForDuel(secondTeam.tames);
         assignInitialDuelTargets(firstTeam.tames, secondTeam.members);
@@ -22510,6 +22506,63 @@ public class TameCommands {
         second.sendSystemMessage(Component.literal("Duel started.").withStyle(ChatFormatting.GOLD));
         refreshDuelCommands(first, second);
         return 1;
+    }
+
+    private static int simpleDuelStartAgain(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null || !preparation.fundingFailed) return error(player, "No duel is waiting for food payment.");
+        preparation.fundingFailed = false;
+        return tryStartSimpleDuel(source, preparation);
+    }
+
+    private static int duelTeamLevelCost(List<LivingEntity> tames, UUID ownerId) {
+        int total = 0;
+        for (LivingEntity tame : tames) {
+            TameData data = tame == null ? null : rankedTameDataForParticipant(tame.getUUID());
+            if (data != null && ownerId.equals(data.ownerUUID)) total += Math.max(1, data.level);
+        }
+        return total;
+    }
+
+    private static void notifyDuelFundingFailure(ServerPlayer player, int cost) {
+        if (player == null) return;
+        int held = heldFoodPoints(player);
+        String message = held < cost
+                ? "Duel needs " + cost + " food saturation from your held food; you have " + held + ". Hold more food, then use /tames duel startAgain, or /tames duel cancel."
+                : "The other player does not have enough held food. Use /tames duel startAgain when ready, or /tames duel cancel.";
+        player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.RED));
+    }
+
+    private static int heldFoodPoints(ServerPlayer player) {
+        if (player == null) return 0;
+        ItemStack stack = player.getMainHandItem();
+        int each = stackFoodPointsPerItem(stack);
+        return each <= 0 ? 0 : each * stack.getCount();
+    }
+
+    private static boolean canPayHeldFood(ServerPlayer player, int cost) {
+        return cost <= 0 || heldFoodPoints(player) >= cost;
+    }
+
+    private static void consumeHeldFoodPoints(ServerPlayer player, int cost) {
+        if (player == null || cost <= 0) return;
+        ItemStack stack = player.getMainHandItem();
+        int each = stackFoodPointsPerItem(stack);
+        if (each <= 0) return;
+        stack.shrink((int) Math.ceil(cost / (double) each));
+    }
+
+    private static boolean depositHeldRankedFood(ServerPlayer player) {
+        int points = heldFoodPoints(player);
+        if (points <= 0) return false;
+        ItemStack stack = player.getMainHandItem();
+        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
+        stats.rankedSaturation = Math.max(0, stats.rankedSaturation + points);
+        stack.shrink(stack.getCount());
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Added " + points + " ranked saturation (total " + stats.rankedSaturation + ").").withStyle(ChatFormatting.GREEN));
+        return true;
     }
 
     private static int simpleDuelStop(CommandSourceStack source, String message) {
@@ -23949,6 +24002,9 @@ public class TameCommands {
         if (round == null || round.teamA.isEmpty() || round.teamB.isEmpty()) {
             return false;
         }
+        if (session.ranked && !chargeRankedRoundSaturation(server, session, round)) {
+            return false;
+        }
         captureRankedRoundPlayerReturnTargets(server, session, round.teamA, round.teamB);
         teleportDuelSessionIdleTamesHome(server, session, round.teamA, round.teamB);
         teleportDuelSessionParticipants(server, round.teamA, session.spawnA);
@@ -23968,6 +24024,63 @@ public class TameCommands {
         session.nextRoundAtTick = -1L;
         notifyDuelSessionOwners(server, session, duelStartedComponent(server, round.teamA, round.teamB));
         return true;
+    }
+
+    private static boolean chargeRankedRoundSaturation(MinecraftServer server, ActiveDuelSession session, DuelSessionRound round) {
+        Map<UUID, Integer> costs = new LinkedHashMap<>();
+        LinkedHashSet<UUID> roundIds = new LinkedHashSet<>(round.teamA);
+        roundIds.addAll(round.teamB);
+        for (UUID participantId : roundIds) {
+            TameData data = rankedTameDataForParticipant(participantId);
+            if (data == null || data.ownerUUID == null) continue;
+            costs.merge(data.ownerUUID, Math.max(1, data.level), Integer::sum);
+        }
+
+        Set<UUID> insufficientOwners = new LinkedHashSet<>();
+        for (Map.Entry<UUID, Integer> entry : costs.entrySet()) {
+            ServerPlayer owner = server.getPlayerList().getPlayer(entry.getKey());
+            PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(entry.getKey(), owner == null ? "" : owner.getGameProfile().getName());
+            if (stats.rankedSaturation < entry.getValue()) insufficientOwners.add(entry.getKey());
+        }
+        for (UUID ownerId : insufficientOwners) {
+            pullAllRankedTamesForOwner(server, session, ownerId);
+            ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
+            if (owner != null) {
+                owner.sendSystemMessage(Component.literal("Not enough ranked saturation. All your ranked tames were pulled and sent home.").withStyle(ChatFormatting.RED));
+            }
+        }
+        if (!insufficientOwners.isEmpty()) {
+            round.teamA.removeIf(id -> insufficientOwners.contains(participantOwnerForSession(server, id)));
+            round.teamB.removeIf(id -> insufficientOwners.contains(participantOwnerForSession(server, id)));
+        }
+        if (round.teamA.isEmpty() || round.teamB.isEmpty()) return false;
+
+        for (Map.Entry<UUID, Integer> entry : costs.entrySet()) {
+            if (insufficientOwners.contains(entry.getKey())) continue;
+            PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(entry.getKey(), "");
+            stats.rankedSaturation = Math.max(0, stats.rankedSaturation - entry.getValue());
+        }
+        TameRegistry.markDirty();
+        return true;
+    }
+
+    private static void pullAllRankedTamesForOwner(MinecraftServer server, ActiveDuelSession session, UUID ownerId) {
+        for (UUID participantId : new ArrayList<>(RANKED_POOL)) {
+            TameData data = rankedTameDataForParticipant(participantId);
+            if (data == null || !ownerId.equals(data.ownerUUID)) continue;
+            RANKED_POOL.remove(participantId);
+            session.poolA.remove(participantId);
+            session.poolB.remove(participantId);
+            session.queuedPullAfterRound.remove(participantId);
+            session.idleSitHoldUntilTick.remove(participantId);
+            loadPulledRankedParticipantNearOwner(server, participantId);
+            LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
+            SpawnTarget home = spawnTargetFromGuardianHome(server, data);
+            if (loaded != null && loaded.isAlive() && home != null) {
+                teleportLivingTameToLocation(loaded, home, true);
+            }
+        }
+        persistRankedPoolToRegistry();
     }
 
     private static void scheduleNextDuelSessionRound(MinecraftServer server, ActiveDuelSession session) {
@@ -24575,7 +24688,7 @@ public class TameCommands {
                     continue;
                 }
                 TameData data = rankedTameDataForParticipant(id);
-                if (data != null && !data.dead && hasFoodForDuel(data) && !TameRegistry.isRankedTameTypeForbidden(tameTypeId(data))) {
+                if (data != null && !data.dead && !TameRegistry.isRankedTameTypeForbidden(tameTypeId(data))) {
                     available.add(id);
                 }
             }
@@ -24583,9 +24696,6 @@ public class TameCommands {
         }
         for (UUID id : pool) {
             LivingEntity living = findLoadedLivingParticipant(server, id);
-            if (living != null && TameEntityAdapter.isTame(living) && !hasFoodForDuel(living)) {
-                continue;
-            }
             if (living != null && living.isAlive()) {
                 available.add(id);
             }

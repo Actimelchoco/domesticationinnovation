@@ -338,14 +338,7 @@ public final class TameDuelManager {
     }
 
     private static boolean hasDuelFood(UUID participantId) {
-        if (participantId == null) {
-            return false;
-        }
-        TameData data = TameRegistry.get(participantId);
-        if (data == null) {
-            data = TameRegistry.getByTlId(participantId);
-        }
-        return data == null || TameCommands.hasFoodForDuel(data);
+        return participantId != null;
     }
 
     public static synchronized boolean endDuelForTame(MinecraftServer server, UUID tameId) {

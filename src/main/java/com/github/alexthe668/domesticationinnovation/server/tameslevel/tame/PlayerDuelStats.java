@@ -18,6 +18,7 @@ public class PlayerDuelStats {
     public int duelLosses = 0;
     public int duelCount = 0;
     public double duelPoints = 0.0D;
+    public int rankedSaturation = 0;
 
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
@@ -33,6 +34,7 @@ public class PlayerDuelStats {
         tag.putInt("duelLosses", Math.max(0, duelLosses));
         tag.putInt("duelCount", Math.max(0, duelCount));
         tag.putDouble("duelPoints", Math.max(0.0D, duelPoints));
+        tag.putInt("rankedSaturation", Math.max(0, rankedSaturation));
         return tag;
     }
 
@@ -57,6 +59,7 @@ public class PlayerDuelStats {
             data.duelLosses = Math.max(0, tag.getInt("duelLosses"));
             data.duelCount = Math.max(0, tag.getInt("duelCount"));
             data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
+            data.rankedSaturation = Math.max(0, tag.getInt("rankedSaturation"));
         }
         return data;
     }
