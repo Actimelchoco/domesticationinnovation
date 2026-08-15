@@ -2042,79 +2042,6 @@ public class TameCommands {
                                                 .executes(ctx -> participantsList(ctx.getSource(), true, false)))
                                         .then(Commands.literal("active")
                                                 .executes(ctx -> participantsList(ctx.getSource(), false, true)))))
-                                .then(Commands.literal("duelTeamOld")
-                                        .then(Commands.literal("invite")
-                                                .then(Commands.argument("player", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
-                                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                                .executes(ctx -> duelInviteTeam(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "player"),
-                                                                        StringArgumentType.getString(ctx, "selection")
-                                                                ))
-                                                                .then(Commands.literal("spectator")
-                                                                        .then(Commands.argument("players", StringArgumentType.greedyString())
-                                                                                .suggests((ctx, b) -> suggestDuelSpectators(ctx.getSource(), b))
-                                                                                .executes(ctx -> duelInviteTeamWithSpectators(
-                                                                                        ctx.getSource(),
-                                                                                        StringArgumentType.getString(ctx, "player"),
-                                                                                        StringArgumentType.getString(ctx, "selection"),
-                                                                                        StringArgumentType.getString(ctx, "players")
-                                                                                )))))))
-                                        .then(Commands.literal("accept")
-                                                .then(Commands.argument("player", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
-                                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                                .executes(ctx -> duelAcceptTeam(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "player"),
-                                                                        StringArgumentType.getString(ctx, "selection")
-                                                                ))
-                                                                .then(Commands.literal("spectator")
-                                                                        .then(Commands.argument("players", StringArgumentType.greedyString())
-                                                                                .suggests((ctx, b) -> suggestDuelSpectators(ctx.getSource(), b))
-                                                                                .executes(ctx -> duelAcceptTeamWithSpectators(
-                                                                                        ctx.getSource(),
-                                                                                        StringArgumentType.getString(ctx, "player"),
-                                                                                        StringArgumentType.getString(ctx, "selection"),
-                                                                                        StringArgumentType.getString(ctx, "players")
-                                                                                )))))))
-                                        .then(Commands.literal("quick")
-                                                .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                                .executes(ctx -> duelAcceptQuickTeam(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "selection")
-                                                                ))
-                                                                .then(Commands.literal("spectator")
-                                                                        .then(Commands.argument("players", StringArgumentType.greedyString())
-                                                                                .suggests((ctx, b) -> suggestDuelSpectators(ctx.getSource(), b))
-                                                                                .executes(ctx -> duelAcceptQuickTeamWithSpectators(
-                                                                                        ctx.getSource(),
-                                                                                        StringArgumentType.getString(ctx, "selection"),
-                                                                                        StringArgumentType.getString(ctx, "players")
-                                                                                ))))))
-                                        .then(Commands.literal("vs")
-                                                .then(Commands.argument("left", StringArgumentType.string())
-                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                        .then(Commands.argument("right", StringArgumentType.greedyString())
-                                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                                .executes(ctx -> duelStartSameOwnerTeam(
-                                                                        ctx.getSource(),
-                                                                        StringArgumentType.getString(ctx, "left"),
-                                                                        StringArgumentType.getString(ctx, "right")
-                                                                ))
-                                                                .then(Commands.literal("spectator")
-                                                                        .then(Commands.argument("players", StringArgumentType.greedyString())
-                                                                                .suggests((ctx, b) -> suggestDuelSpectators(ctx.getSource(), b))
-                                                                                .executes(ctx -> duelStartSameOwnerTeamWithSpectators(
-                                                                                        ctx.getSource(),
-                                                                                        StringArgumentType.getString(ctx, "left"),
-                                                                                        StringArgumentType.getString(ctx, "right"),
-                                                                                        StringArgumentType.getString(ctx, "players")
-                                                                                )))))))
                                 .then(Commands.literal("decline")
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
@@ -2125,7 +2052,7 @@ public class TameCommands {
                                 .then(Commands.literal("ff")
                                         .executes(ctx -> duelForfeit(ctx.getSource())))
                                 .then(Commands.literal("inbox")
-                                        .executes(ctx -> duelInbox(ctx.getSource()))))
+                                        .executes(ctx -> duelInbox(ctx.getSource())))
 
                         .then(buildOrganizedDuelCommand())
                         .then(Commands.literal("info")
@@ -2212,7 +2139,10 @@ public class TameCommands {
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
                                 .then(Commands.literal("all")
-                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE)))
+                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE))
+                                        .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
+                                                .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), true, null, null))))
                                 .then(Commands.literal("everytame")
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE)))
                                 .then(Commands.literal("group")
@@ -2224,7 +2154,10 @@ public class TameCommands {
                                                 .then(Commands.literal("all")
                                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
+                                                .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
+                                                        .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), false, StringArgumentType.getString(ctx, "name"), null)))))
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
@@ -2242,7 +2175,10 @@ public class TameCommands {
                                                         .then(Commands.literal("all")
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
                                                         .then(Commands.literal("everytame")
-                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE))))))
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
+                                                .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
+                                                        .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), true, null, StringArgumentType.getString(ctx, "name"))))))
                                 .then(Commands.literal("owned")
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, 10))
                                         .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -2269,7 +2205,11 @@ public class TameCommands {
                                                 .then(Commands.literal("all")
                                                         .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
-                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
+                                                .then(Commands.literal("asc")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10, true)))
+                                                .then(Commands.literal("desc")
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, 10, false)))))
                                 .then(Commands.argument("type", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestLeaderboardModes(b))
                                         .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), true, null, null, 10))
@@ -2286,7 +2226,7 @@ public class TameCommands {
                                                         .then(Commands.literal("all")
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))
                                                         .then(Commands.literal("everytame")
-                                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE))))))
+                                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "type"), false, null, null, Integer.MAX_VALUE)))))
 
                         .then(Commands.literal("_duelleaderboardOld")
                                 .requires(source -> false)
@@ -4025,6 +3965,9 @@ public class TameCommands {
             if (isDuelLocked(data.uuid)) {
                 continue;
             }
+            if (diedOnCurrentGameDay(server, data)) {
+                continue;
+            }
             if (ownerUuid != null && !ownerUuid.equals(data.ownerUUID)) {
                 continue;
             }
@@ -4068,9 +4011,18 @@ public class TameCommands {
     private static int reviveXpCost(TameData data, ReviveMode mode) {
         int baseCost = Math.max(0, LevelSystem.estimateInvestedXp(data));
         if (mode == ReviveMode.ARISE) {
-            return Math.max(1, baseCost * 2);
+            return Math.max(1, baseCost * 5);
         }
         return baseCost;
+    }
+
+    private static boolean diedOnCurrentGameDay(MinecraftServer server, TameData data) {
+        if (server == null || server.overworld() == null || data == null || data.deadGameTime <= 0L) {
+            return false;
+        }
+        long currentGameTime = server.overworld().getGameTime();
+        return currentGameTime >= data.deadGameTime
+                && currentGameTime / 24000L == data.deadGameTime / 24000L;
     }
 
     private static int reviveApprovedItemCost(TameData data, ReviveMode mode) {
@@ -4549,7 +4501,12 @@ public class TameCommands {
                     "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|all|everytame]",
                     "/tames leaderboard type <typeName> [<number>|all|everytame]",
                     "/tames leaderboard owned [mix|kills|deaths|assists|lvl|days|type <typeName>] [<number>|all|everytame]",
+                    "/tames leaderboard all <daysAlive|deaths|kills|assists|level|mmr> [asc]",
+                    "/tames leaderboard group <name> <sort> [asc]",
+                    "/tames leaderboard owned <sort> [asc]",
+                    "/tames leaderboard type <name> <sort> [asc]",
                     "Modes sort by weighted combat score, kills, deaths, assists, level, or days since last death.",
+                    "Sort order defaults to descending. MMR sorting includes rank-division headers without duel-stat detail lines.",
                     "Leaderboard shows all owners by default, but only includes tames with invested XP above 0. Use 'owned' or 'type <typeName>' to filter it.",
                     "'days' means days since last death, or born day if the tame never died."
             );
@@ -4755,10 +4712,10 @@ public class TameCommands {
             );
         }
         else if (key.equals("arise")) {
-            sendInfoPage(p, "Arise",
+            sendInfoPage(p, "Arise (5xPrice)",
                     "/tames arise <name|all|group <name>|type <name>>",
                     "Arise respawns the tame at your current position.",
-                    "Payment options: double invested XP, or ceil(level/10) approved items, or 1 totem in main hand."
+                    "Payment options: five times invested XP, or ceil(level/10) approved items, or 1 totem in main hand."
             );
         }
         else if (key.equals("arisereincarnated")) {
@@ -11605,6 +11562,7 @@ public class TameCommands {
         List<String> respawnedNames = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
+        List<String> diedTodayNames = new ArrayList<>();
 
         for (TameData data : candidates) {
             if (data == null || data.uuid == null) {
@@ -11618,6 +11576,11 @@ public class TameCommands {
                 continue;
             }
             if (!isDeadEntry(data.uuid)) {
+                continue;
+            }
+            if (mode == ReviveMode.RESPAWN && diedOnCurrentGameDay(source.getServer(), data)) {
+                failed++;
+                diedTodayNames.add(data.name == null || data.name.isBlank() ? "unknown" : data.name);
                 continue;
             }
             if (findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid) != null) {
@@ -11664,6 +11627,11 @@ public class TameCommands {
             }
             success++;
             respawnedNames.add(tameDisplayName(data));
+        }
+
+        if (!diedTodayNames.isEmpty()) {
+            failReasons.add(String.join(", ", diedTodayNames)
+                    + " died today; use arise(5xPrice) or wait until tomorrow.");
         }
 
         if (success <= 0) {
@@ -14521,8 +14489,29 @@ public class TameCommands {
     }
 
     private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit) {
+        return leaderboard(source, mode, includeAll, groupFilter, typeFilter, requestedLimit, false);
+    }
+
+    private static int leaderboardSorted(CommandSourceStack source, String sortOrder, boolean includeAll, String groupFilter, String typeFilter) {
+        String[] parts = sortOrder == null ? new String[0] : sortOrder.trim().split("\\s+");
+        if (parts.length < 1 || parts.length > 2) {
+            return error(source.getPlayer(), "Use a sort order followed optionally by asc or desc.");
+        }
+        boolean ascending = parts.length == 2 && parts[1].equalsIgnoreCase("asc");
+        if (parts.length == 2 && !ascending && !parts[1].equalsIgnoreCase("desc")) {
+            return error(source.getPlayer(), "Sort direction must be asc or desc.");
+        }
+        return leaderboard(source, parts[0], includeAll, groupFilter, typeFilter, 10, ascending);
+    }
+
+    private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit, boolean ascending) {
         ServerPlayer p = source.getPlayer();
         String m = mode == null ? "mix" : mode.trim().toLowerCase(Locale.ROOT);
+        if (m.equals("daysalive")) m = "days";
+        if (m.equals("level")) m = "lvl";
+        if (!Set.of("mix", "score", "kills", "deaths", "assists", "days", "lvl", "mmr").contains(m)) {
+            return error(p, "Invalid sort order. Use daysAlive, deaths, kills, assists, level, or mmr.");
+        }
         List<TameData> entries = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
             if (!includeAll && !p.getUUID().equals(d.ownerUUID)) continue;
@@ -14531,24 +14520,35 @@ public class TameCommands {
             if (leaderboardInvestedXp(d) <= 0) continue;
             entries.add(d);
         }
-        if (m.equals("mix") || m.equals("score")) entries.sort((a, b) -> Integer.compare(weightedCombatScore(b), weightedCombatScore(a)));
-        else if (m.equals("kills")) entries.sort((a, b) -> Integer.compare(b.kills, a.kills));
-        else if (m.equals("deaths")) entries.sort((a, b) -> Integer.compare(b.deaths, a.deaths));
-        else if (m.equals("assists")) entries.sort((a, b) -> Integer.compare(b.assists, a.assists));
-        else if (m.equals("days")) entries.sort((a, b) -> Long.compare(daysAlive(source, b), daysAlive(source, a)));
-        else entries.sort((a, b) -> Integer.compare(b.level, a.level));
+        Comparator<TameData> comparator;
+        if (m.equals("mix") || m.equals("score")) comparator = Comparator.comparingInt(TameCommands::weightedCombatScore);
+        else if (m.equals("kills")) comparator = Comparator.comparingInt(data -> data.kills);
+        else if (m.equals("deaths")) comparator = Comparator.comparingInt(data -> data.deaths);
+        else if (m.equals("assists")) comparator = Comparator.comparingInt(data -> data.assists);
+        else if (m.equals("days")) comparator = Comparator.comparingLong(data -> daysAlive(source, data));
+        else if (m.equals("mmr")) comparator = Comparator.comparingInt(data -> data.duelMmr);
+        else comparator = Comparator.comparingInt(data -> data.level);
+        if (!ascending) comparator = comparator.reversed();
+        entries.sort(comparator.thenComparing(data -> data.name == null ? "" : data.name, String.CASE_INSENSITIVE_ORDER));
 
         if (entries.isEmpty()) return error(p, "No entries found.");
         int limit = Math.min(Math.max(1, requestedLimit), entries.size());
         String scope = includeAll ? "all players" : "your tames";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
         String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
-        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + ") | " + scope + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("---- Leaderboard (" + m + " " + (ascending ? "asc" : "desc") + ") | " + scope + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("score / kills / assists / deaths / days").withStyle(ChatFormatting.DARK_GRAY));
+        String activeRankBucket = null;
         for (int i = 0; i < limit; i++) {
             TameData d = entries.get(i);
+            DuelLeaderboardRankBucket rankBucket = duelLeaderboardRankBucket(d.duelMmr);
+            if (m.equals("mmr") && !rankBucket.label().equals(activeRankBucket)) {
+                activeRankBucket = rankBucket.label();
+                p.sendSystemMessage(Component.literal("---" + activeRankBucket + ":---").withStyle(rankBucket.color()));
+            }
             int score = weightedCombatScore(d);
             p.sendSystemMessage(Component.literal((i + 1) + ". ").withStyle(ChatFormatting.GOLD)
+                    .append(m.equals("mmr") ? Component.literal("(" + d.duelMmr + ") ").withStyle(rankBucket.color()) : Component.empty())
                     .append(Component.literal("(" + ownerInitials(source.getServer(), d.ownerUUID) + ") ").withStyle(ChatFormatting.GRAY))
                     .append(Component.literal("[" + d.level + "] ").withStyle(ChatFormatting.YELLOW))
                     .append(Component.literal(d.name + " ").withStyle(ChatFormatting.AQUA))
@@ -21141,8 +21141,7 @@ public class TameCommands {
             return hungerMessage(player, "No selected loaded tames were found.");
         }
 
-        BlockEntity below = player.serverLevel().getBlockEntity(player.blockPosition().below());
-        InventoryAccess standingInventory = inventoryAccessFromBlockEntity(below);
+        InventoryAccess standingInventory = inventoryBelowPlayer(player);
         if (standingInventory != null) {
             return distributeHungerFoodFromInventory(player, selected, standingInventory);
         }
@@ -21186,6 +21185,24 @@ public class TameCommands {
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) to tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return moved;
+    }
+
+    private static InventoryAccess inventoryBelowPlayer(ServerPlayer player) {
+        if (player == null) return null;
+        ServerLevel level = player.serverLevel();
+        BlockPos supportPos = BlockPos.containing(
+                player.getX(),
+                player.getBoundingBox().minY - 0.01D,
+                player.getZ()
+        );
+        LinkedHashSet<BlockPos> candidates = new LinkedHashSet<>();
+        candidates.add(supportPos);
+        candidates.add(player.blockPosition().below());
+        for (BlockPos candidate : candidates) {
+            InventoryAccess access = inventoryAccessFromBlockEntity(level.getBlockEntity(candidate), Direction.UP);
+            if (access != null) return access;
+        }
+        return null;
     }
 
     private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory) {
@@ -21671,10 +21688,18 @@ public class TameCommands {
     }
 
     private static InventoryAccess inventoryAccessFromBlockEntity(BlockEntity blockEntity) {
+        return inventoryAccessFromBlockEntity(blockEntity, null);
+    }
+
+    private static InventoryAccess inventoryAccessFromBlockEntity(BlockEntity blockEntity, Direction accessSide) {
+        if (blockEntity == null) return null;
         if (blockEntity instanceof Container container) {
             return new ContainerInventoryAccess(container);
         }
-        LazyOptional<IItemHandler> itemHandler = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, null);
+        LazyOptional<IItemHandler> itemHandler = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, accessSide);
+        if (!itemHandler.isPresent() && accessSide != null) {
+            itemHandler = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, null);
+        }
         if (itemHandler.isPresent()) {
             IItemHandler handler = itemHandler.orElse(null);
             if (handler != null) {
@@ -26704,8 +26729,25 @@ public class TameCommands {
         suggestCommandString(b, "kills");
         suggestCommandString(b, "deaths");
         suggestCommandString(b, "assists");
-        suggestCommandString(b, "lvl");
-        suggestCommandString(b, "days");
+        suggestCommandString(b, "level");
+        suggestCommandString(b, "daysAlive");
+        suggestCommandString(b, "mmr");
+        return b.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestLeaderboardSortOrders(SuggestionsBuilder b) {
+        suggestCommandString(b, "daysAlive");
+        suggestCommandString(b, "daysAlive asc");
+        suggestCommandString(b, "deaths");
+        suggestCommandString(b, "deaths asc");
+        suggestCommandString(b, "kills");
+        suggestCommandString(b, "kills asc");
+        suggestCommandString(b, "assists");
+        suggestCommandString(b, "assists asc");
+        suggestCommandString(b, "level");
+        suggestCommandString(b, "level asc");
+        suggestCommandString(b, "mmr");
+        suggestCommandString(b, "mmr asc");
         return b.buildFuture();
     }
 
