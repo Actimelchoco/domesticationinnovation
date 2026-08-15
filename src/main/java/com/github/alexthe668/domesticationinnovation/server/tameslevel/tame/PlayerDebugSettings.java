@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public final class PlayerDebugSettings {
     public static final int DEFAULT_INVENTORY_SUMMARY_MINUTES = 10;
+    public static final int DEFAULT_CHEST_DRUM_BLOCK_RANGE = 20;
+    public static final int DEFAULT_CHEST_DRUM_HEIGHT = 2;
 
     private PlayerDebugSettings() {
     }
@@ -28,6 +30,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> INVENTORY_NO_FOOD = new HashMap<>();
     private static final Map<UUID, Boolean> INVENTORY_SUMMARY = new HashMap<>();
     private static final Map<UUID, Integer> INVENTORY_SUMMARY_MINUTES = new HashMap<>();
+    private static final Map<UUID, Integer> CHEST_DRUM_BLOCK_RANGE = new HashMap<>();
+    private static final Map<UUID, Integer> CHEST_DRUM_HEIGHT = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -132,6 +136,14 @@ public final class PlayerDebugSettings {
 
     public static long inventorySummaryIntervalTicks(UUID player) {
         return 20L * 60L * inventorySummaryMinutes(player);
+    }
+
+    public static int chestDrumBlockRange(UUID player) {
+        return Math.max(1, Math.min(64, CHEST_DRUM_BLOCK_RANGE.getOrDefault(player, DEFAULT_CHEST_DRUM_BLOCK_RANGE)));
+    }
+
+    public static int chestDrumHeight(UUID player) {
+        return Math.max(0, Math.min(16, CHEST_DRUM_HEIGHT.getOrDefault(player, DEFAULT_CHEST_DRUM_HEIGHT)));
     }
 
     public static boolean duelAssistMessages(UUID player) {
@@ -255,6 +267,19 @@ public final class PlayerDebugSettings {
         markDirty();
     }
 
+    public static void setChestDrumRange(UUID player, int blockRange, int height) {
+        if (player == null) {
+            return;
+        }
+        int normalizedRange = Math.max(1, Math.min(64, blockRange));
+        int normalizedHeight = Math.max(0, Math.min(16, height));
+        if (normalizedRange == DEFAULT_CHEST_DRUM_BLOCK_RANGE) CHEST_DRUM_BLOCK_RANGE.remove(player);
+        else CHEST_DRUM_BLOCK_RANGE.put(player, normalizedRange);
+        if (normalizedHeight == DEFAULT_CHEST_DRUM_HEIGHT) CHEST_DRUM_HEIGHT.remove(player);
+        else CHEST_DRUM_HEIGHT.put(player, normalizedHeight);
+        markDirty();
+    }
+
     public static void setDuelAssistMessages(UUID player, boolean enabled) {
         setBoolean(DUEL_ASSIST_MESSAGES, player, enabled, true);
     }
@@ -361,6 +386,16 @@ public final class PlayerDebugSettings {
             CompoundTag row = out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag());
             row.putInt("inventorySummaryMinutes", Math.max(1, entry.getValue()));
         }
+        for (Map.Entry<UUID, Integer> entry : CHEST_DRUM_BLOCK_RANGE.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).putInt("chestDrumBlockRange", entry.getValue());
+            }
+        }
+        for (Map.Entry<UUID, Integer> entry : CHEST_DRUM_HEIGHT.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).putInt("chestDrumHeight", entry.getValue());
+            }
+        }
         return out;
     }
 
@@ -382,6 +417,12 @@ public final class PlayerDebugSettings {
             }
             if (tag.contains("inventorySummaryMinutes", Tag.TAG_INT)) {
                 INVENTORY_SUMMARY_MINUTES.put(player, Math.max(1, tag.getInt("inventorySummaryMinutes")));
+            }
+            if (tag.contains("chestDrumBlockRange", Tag.TAG_INT)) {
+                CHEST_DRUM_BLOCK_RANGE.put(player, tag.getInt("chestDrumBlockRange"));
+            }
+            if (tag.contains("chestDrumHeight", Tag.TAG_INT)) {
+                CHEST_DRUM_HEIGHT.put(player, tag.getInt("chestDrumHeight"));
             }
         }
     }
@@ -407,6 +448,8 @@ public final class PlayerDebugSettings {
             setting.values().clear();
         }
         INVENTORY_SUMMARY_MINUTES.clear();
+        CHEST_DRUM_BLOCK_RANGE.clear();
+        CHEST_DRUM_HEIGHT.clear();
     }
 
     private static void markDirty() {

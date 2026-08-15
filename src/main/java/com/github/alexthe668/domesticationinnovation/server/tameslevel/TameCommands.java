@@ -4,6 +4,8 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.block.DIBlockRegistry;
+import com.github.alexthe668.domesticationinnovation.server.block.DrumBlockEntity;
+import com.github.alexthe668.domesticationinnovation.server.block.PetBedBlock;
 import com.github.alexthe668.domesticationinnovation.server.TLMigrationImportData;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
@@ -92,6 +94,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
@@ -172,7 +175,6 @@ public class TameCommands {
     private static final int TAME_HUNGER_MAX_STACKS = 10;
     private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 4;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
-    private static final int TAME_HUNGER_DRUM_REFILL_RADIUS = 20;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
     private static final ChatFormatting TAME_HUNGER_MESSAGE_COLOR = ChatFormatting.GOLD;
@@ -986,6 +988,12 @@ public class TameCommands {
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("chestxDrumRange")
+                        .then(Commands.argument("blockRangeNumber", IntegerArgumentType.integer(1, 64))
+                                .then(Commands.argument("heightNumber", IntegerArgumentType.integer(0, 16))
+                                        .executes(ctx -> setChestDrumRange(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "blockRangeNumber"),
+                                                IntegerArgumentType.getInteger(ctx, "heightNumber"))))))
                 .then(Commands.literal("herding")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -3838,49 +3846,160 @@ public class TameCommands {
             }
         }
         for (UUID ownerUuid : owners) {
+            List<String> reincarnatedNames = new ArrayList<>();
+            List<String> normalNames = new ArrayList<>();
+            processMorningDrumInventoryRespawns(server, ownerUuid, reincarnatedNames, normalNames);
             for (TameData data : coloredMorningRespawnCandidates(server, ownerUuid)) {
                 SpawnTarget target = resolveMorningRespawnTarget(server, data);
                 if (target == null) {
                     continue;
                 }
+                boolean eligibleBefore = isReincarnationEligible(data);
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
                 clearMatchingDiBedRespawnRequests(server, data);
-                ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
-                LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
-                if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
-                    owner.displayClientMessage(
-                            Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
-                                    .append(Component.literal(" " + respawnProgressSuffix(data))),
-                            false
-                    );
-                }
+                addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
             }
             for (TameData data : whiteMorningRespawnCandidates(server, ownerUuid)) {
                 SpawnTarget target = resolveMorningRespawnTarget(server, data);
                 if (target == null) {
                     continue;
                 }
+                boolean eligibleBefore = isReincarnationEligible(data);
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
                 clearMatchingDiBedRespawnRequests(server, data);
-                ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
-                LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
-                if (owner != null && respawned != null && PlayerDebugSettings.autoRespawnMessages(owner.getUUID())) {
-                    owner.displayClientMessage(
-                            Component.translatable("message.domesticationinnovation.respawn", respawned.getName())
-                                    .append(Component.literal(" " + respawnProgressSuffix(data))),
-                            false
-                    );
-                }
+                addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
                 break;
             }
+            sendMorningRespawnSummary(server, ownerUuid, reincarnatedNames, normalNames);
         }
     }
+
+    private static void addMorningRespawnSummaryName(TameData data, boolean wasReincarnated, List<String> reincarnated, List<String> normal) {
+        if (data == null) return;
+        String name = stripLevelPrefixes(tameDisplayName(data));
+        if (wasReincarnated) reincarnated.add(name);
+        else normal.add(name);
+    }
+
+    private static void sendMorningRespawnSummary(MinecraftServer server, UUID ownerUuid, List<String> reincarnated, List<String> normal) {
+        ServerPlayer owner = server == null ? null : server.getPlayerList().getPlayer(ownerUuid);
+        if (owner == null || !PlayerDebugSettings.autoRespawnMessages(ownerUuid)) return;
+        if (!reincarnated.isEmpty()) {
+            owner.sendSystemMessage(Component.literal(String.join(", ", reincarnated) + " respawned.").withStyle(ChatFormatting.GREEN));
+        }
+        if (!normal.isEmpty()) {
+            owner.sendSystemMessage(Component.literal(String.join(", ", normal) + " respawned but did not reincarnate.").withStyle(ChatFormatting.YELLOW));
+        }
+    }
+
+    private static void processMorningDrumInventoryRespawns(MinecraftServer server, UUID ownerUuid, List<String> reincarnated, List<String> normal) {
+        List<TameData> candidates = morningUnanchoredRespawnCandidates(server, ownerUuid);
+        if (candidates.isEmpty()) return;
+        List<DrumRespawnInventory> stations = findMorningDrumRespawnInventories(server, ownerUuid, candidates);
+        int candidateIndex = 0;
+        for (DrumRespawnInventory station : stations) {
+            int beds = countPetBeds(station.inventory);
+            while (beds-- > 0 && candidateIndex < candidates.size()) {
+                TameData data = candidates.get(candidateIndex++);
+                prepareDrumInventoryReincarnation(data, station.inventory);
+                boolean eligibleBefore = isReincarnationEligible(data);
+                Vec3 spawn = Vec3.upFromBottomCenterOf(station.inventoryPos, 1.0D);
+                RespawnResult result = respawnDeadTameAtServer(data, station.level, spawn, 0.0F, 0.0F);
+                if (!result.success) continue;
+                clearMatchingDiBedRespawnRequests(server, data);
+                addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnated, normal);
+            }
+            if (candidateIndex >= candidates.size()) break;
+        }
+    }
+
+    private static List<TameData> morningUnanchoredRespawnCandidates(MinecraftServer server, UUID ownerUuid) {
+        List<TameData> result = new ArrayList<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !data.dead || data.uuid == null || !ownerUuid.equals(data.ownerUUID)) continue;
+            if (isDuelLocked(data.uuid) || diedOnCurrentGameDay(server, data)) continue;
+            if (findLoadedLivingTameByIdentity(server, data.uuid, data.tlId) != null) continue;
+            result.add(data);
+        }
+        result.sort(respawnQueueComparator(ownerUuid));
+        return result;
+    }
+
+    private static List<DrumRespawnInventory> findMorningDrumRespawnInventories(MinecraftServer server, UUID ownerUuid, List<TameData> candidates) {
+        List<DrumRespawnInventory> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        List<LevelPosition> centers = new ArrayList<>();
+        ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
+        if (owner != null) centers.add(new LevelPosition(owner.serverLevel(), owner.blockPosition()));
+        for (TameData data : candidates) {
+            ResourceLocation id = ResourceLocation.tryParse(data.lastKnownDimension);
+            ServerLevel level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+            if (level != null) centers.add(new LevelPosition(level, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ)));
+        }
+        int radius = PlayerDebugSettings.chestDrumBlockRange(ownerUuid);
+        int height = PlayerDebugSettings.chestDrumHeight(ownerUuid);
+        for (LevelPosition center : centers) {
+            for (BlockPos pos : BlockPos.betweenClosed(center.pos.offset(-radius, -height, -radius), center.pos.offset(radius, height, radius))) {
+                if (!center.level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) continue;
+                if (!(center.level.getBlockEntity(pos.below()) instanceof DrumBlockEntity drum) || !ownerUuid.equals(drum.getPlacerUUID())) continue;
+                BlockEntity blockEntity = center.level.getBlockEntity(pos);
+                InventoryAccess inventory = inventoryAccessFromBlockEntity(blockEntity, Direction.DOWN);
+                String key = center.level.dimension().location() + "|" + pos.asLong();
+                if (inventory != null && countPetBeds(inventory) > 0 && seen.add(key)) {
+                    result.add(new DrumRespawnInventory(center.level, pos.immutable(), inventory));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static int countPetBeds(InventoryAccess inventory) {
+        int count = 0;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty() && stack.getItem() instanceof BlockItem item && item.getBlock() instanceof PetBedBlock) count += stack.getCount();
+        }
+        return count;
+    }
+
+    private static void prepareDrumInventoryReincarnation(TameData data, InventoryAccess inventory) {
+        if (!isReincarnationEligible(data)) return;
+        TameDeathRecord record = latestAvailableDeathForTame(data.ownerUUID, data.uuid, data.tlId, data.name);
+        if (record == null || record.reincarnated || record.snapshot == null || record.snapshot.isEmpty()) return;
+        int restoredLevels = Math.max(1, highestRecordedLevel(data) - Math.max(1, data.level));
+        if (consumeFoodValueFromInventory(inventory, restoredLevels * FOOD_POINTS_PER_APPROVED_ITEM)) {
+            record.autoReincarnateOnRespawn = true;
+            TameRegistry.markDirty();
+        }
+    }
+
+    private static boolean consumeFoodValueFromInventory(InventoryAccess inventory, int requiredPoints) {
+        int available = 0;
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            available += stackFoodPointsPerItem(stack) * stack.getCount();
+        }
+        if (available < requiredPoints) return false;
+        int remaining = requiredPoints;
+        for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            int each = stackFoodPointsPerItem(stack);
+            if (each <= 0) continue;
+            int amount = Math.min(stack.getCount(), (int) Math.ceil(remaining / (double) each));
+            ItemStack removed = inventory.remove(slot, amount);
+            remaining -= removed.getCount() * each;
+        }
+        return remaining <= 0;
+    }
+
+    private record LevelPosition(ServerLevel level, BlockPos pos) {}
+    private record DrumRespawnInventory(ServerLevel level, BlockPos inventoryPos, InventoryAccess inventory) {}
 
     private static void processMorningGuardianWanderLocks(MinecraftServer server) {
         if (server == null) {
@@ -12601,6 +12720,15 @@ public class TameCommands {
         return 1;
     }
 
+    private static int setChestDrumRange(CommandSourceStack source, int blockRange, int height) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        PlayerDebugSettings.setChestDrumRange(player.getUUID(), blockRange, height);
+        player.sendSystemMessage(Component.literal("Chest x drum range set to " + blockRange + " blocks and " + height + " blocks high.")
+                .withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
     private static int guardianAddSelectionToGroup(CommandSourceStack source, String setName, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
         String normalizedSet = normalizeGuardianSetName(setName);
@@ -20880,8 +21008,10 @@ public class TameCommands {
             return false;
         }
         BlockPos center = tame.blockPosition();
-        int radius = TAME_HUNGER_DRUM_REFILL_RADIUS;
-        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -1, -radius), center.offset(radius, 2, radius))) {
+        UUID ownerUuid = data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
+        int radius = PlayerDebugSettings.chestDrumBlockRange(ownerUuid);
+        int height = PlayerDebugSettings.chestDrumHeight(ownerUuid);
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-radius, -height, -radius), center.offset(radius, height, radius))) {
             if (!level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) {
                 continue;
             }
