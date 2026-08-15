@@ -431,15 +431,15 @@ public class TameCommands {
     }
 
     private static final class DuelSelectionResult {
-        private final List<TamableAnimal> tames;
+        private final List<LivingEntity> tames;
         private final String error;
 
-        private DuelSelectionResult(List<TamableAnimal> tames, String error) {
+        private DuelSelectionResult(List<LivingEntity> tames, String error) {
             this.tames = tames;
             this.error = error == null ? "" : error;
         }
 
-        private static DuelSelectionResult ok(List<TamableAnimal> tames) {
+        private static DuelSelectionResult ok(List<LivingEntity> tames) {
             return new DuelSelectionResult(tames, "");
         }
 
@@ -450,16 +450,16 @@ public class TameCommands {
 
     private static final class TeamSelectionResult {
         private final List<LivingEntity> members;
-        private final List<TamableAnimal> tames;
+        private final List<LivingEntity> tames;
         private final String error;
 
-        private TeamSelectionResult(List<LivingEntity> members, List<TamableAnimal> tames, String error) {
+        private TeamSelectionResult(List<LivingEntity> members, List<LivingEntity> tames, String error) {
             this.members = members;
             this.tames = tames;
             this.error = error == null ? "" : error;
         }
 
-        private static TeamSelectionResult ok(List<LivingEntity> members, List<TamableAnimal> tames) {
+        private static TeamSelectionResult ok(List<LivingEntity> members, List<LivingEntity> tames) {
             return new TeamSelectionResult(members, tames, "");
         }
 
@@ -4618,7 +4618,7 @@ public class TameCommands {
         else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
             sendInfoPage(p, "Inventory System",
                     "Saturation is the tame's ready-to-use food buffer. One food point restores 100 saturation.",
-                    "Following drains 2 saturation per second. Wandering drains 1 per second. Fighting drains 3 per second.",
+                    "Following drains four times its previous saturation rate. Wandering and fighting retain their normal rates.",
                     "Natural regeneration also consumes saturation. Command teleports do not consume saturation.",
                     "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
@@ -6508,7 +6508,7 @@ public class TameCommands {
         cleanupExpiredDuelInviteStore(inviteStore);
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), selection);
         if (!challengerResult.error.isBlank()) return error(challenger, challengerResult.error);
-        List<TamableAnimal> challengerGroup = challengerResult.tames;
+        List<LivingEntity> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(challenger, "Your selected duel tames are not loaded/alive.");
 
         inviteStore.computeIfAbsent(targetPlayer.getUUID(), ignored -> new HashMap<>())
@@ -6602,8 +6602,8 @@ public class TameCommands {
         DuelSelectionResult rightResult = resolveLoadedDuelSelection(source, owner.getUUID(), rightSelection);
         if (!rightResult.error.isBlank()) return error(owner, rightResult.error);
 
-        List<TamableAnimal> leftGroup = new ArrayList<>(leftResult.tames);
-        List<TamableAnimal> rightGroup = new ArrayList<>(rightResult.tames);
+        List<LivingEntity> leftGroup = new ArrayList<>(leftResult.tames);
+        List<LivingEntity> rightGroup = new ArrayList<>(rightResult.tames);
         if (leftSelection != null && leftSelection.kind == DuelSelectionKind.ALL) {
             leftGroup = remainingDuelOpponents(source, owner.getUUID(), rightGroup);
         }
@@ -6615,11 +6615,11 @@ public class TameCommands {
 
         Set<UUID> leftIds = new HashSet<>();
         Set<UUID> rightIds = new HashSet<>();
-        for (TamableAnimal tame : leftGroup) {
+        for (LivingEntity tame : leftGroup) {
             if (tame == null || !tame.isAlive()) continue;
             leftIds.add(tame.getUUID());
         }
-        for (TamableAnimal tame : rightGroup) {
+        for (LivingEntity tame : rightGroup) {
             if (tame == null || !tame.isAlive()) continue;
             rightIds.add(tame.getUUID());
         }
@@ -6631,20 +6631,10 @@ public class TameCommands {
             return error(owner, "Selection resolved to an empty team.");
         }
 
-        for (TamableAnimal own : leftGroup) {
-            applySitFollowOverride(own, false);
-            TamableAnimal enemy = nearestLoadedOpponent(own, rightGroup);
-            if (enemy != null) {
-                own.setTarget(enemy);
-            }
-        }
-        for (TamableAnimal own : rightGroup) {
-            applySitFollowOverride(own, false);
-            TamableAnimal enemy = nearestLoadedOpponent(own, leftGroup);
-            if (enemy != null) {
-                own.setTarget(enemy);
-            }
-        }
+        prepareTeamForDuel(leftGroup);
+        prepareTeamForDuel(rightGroup);
+        assignInitialDuelTargets(leftGroup, rightGroup);
+        assignInitialDuelTargets(rightGroup, leftGroup);
 
         TameDuelManager.startGroupDuel(source.getServer(), owner.getUUID(), leftIds, owner.getUUID(), rightIds, spectators.playerIds, spectators.broadcastToServer);
         notifyDuelSpectators(source.getServer(), owner.getUUID(), owner.getUUID(), spectators,
@@ -6734,36 +6724,25 @@ public class TameCommands {
 
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
-        List<TamableAnimal> challengerGroup = challengerResult.tames;
+        List<LivingEntity> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(targetPlayer, "Challenger selected duel tames are not loaded/alive.");
         DuelSelectionResult targetResult = resolveLoadedDuelSelection(source, targetPlayer.getUUID(), targetSelection);
         if (!targetResult.error.isBlank()) return error(targetPlayer, targetResult.error);
-        List<TamableAnimal> targetGroup = targetResult.tames;
+        List<LivingEntity> targetGroup = targetResult.tames;
         if (targetGroup.isEmpty()) return error(targetPlayer, "Your selected duel tames are not loaded/alive.");
 
         Set<UUID> challengerIds = new HashSet<>();
         Set<UUID> targetIds = new HashSet<>();
-        for (TamableAnimal tame : challengerGroup) {
-            applySitFollowOverride(tame, false);
+        for (LivingEntity tame : challengerGroup) {
+            applyMovementOrderCode(tame, 0);
             challengerIds.add(tame.getUUID());
         }
-        for (TamableAnimal tame : targetGroup) {
-            applySitFollowOverride(tame, false);
+        for (LivingEntity tame : targetGroup) {
+            applyMovementOrderCode(tame, 0);
             targetIds.add(tame.getUUID());
         }
-
-        for (TamableAnimal own : challengerGroup) {
-            TamableAnimal enemy = nearestLoadedOpponent(own, targetGroup);
-            if (enemy != null) {
-                own.setTarget(enemy);
-            }
-        }
-        for (TamableAnimal own : targetGroup) {
-            TamableAnimal enemy = nearestLoadedOpponent(own, challengerGroup);
-            if (enemy != null) {
-                own.setTarget(enemy);
-            }
-        }
+        assignInitialDuelTargets(challengerGroup, targetGroup);
+        assignInitialDuelTargets(targetGroup, challengerGroup);
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
@@ -6866,32 +6845,25 @@ public class TameCommands {
 
         DuelSelectionResult challengerResult = resolveLoadedDuelSelection(source, challenger.getUUID(), firstTeamDuelSelection(invite.challengerSelection));
         if (!challengerResult.error.isBlank()) return error(targetPlayer, challengerResult.error);
-        List<TamableAnimal> challengerGroup = challengerResult.tames;
+        List<LivingEntity> challengerGroup = challengerResult.tames;
         if (challengerGroup.isEmpty()) return error(targetPlayer, "Challenger selected duel tames are not loaded/alive.");
         DuelSelectionResult targetResult = resolveLoadedDuelSelection(source, targetPlayer.getUUID(), targetSelection);
         if (!targetResult.error.isBlank()) return error(targetPlayer, targetResult.error);
-        List<TamableAnimal> targetGroup = targetResult.tames;
+        List<LivingEntity> targetGroup = targetResult.tames;
         if (targetGroup.isEmpty()) return error(targetPlayer, "Your selected duel tames are not loaded/alive.");
 
         Set<UUID> challengerIds = new HashSet<>();
         Set<UUID> targetIds = new HashSet<>();
-        for (TamableAnimal tame : challengerGroup) {
-            applySitFollowOverride(tame, false);
+        for (LivingEntity tame : challengerGroup) {
+            applyMovementOrderCode(tame, 0);
             challengerIds.add(tame.getUUID());
         }
-        for (TamableAnimal tame : targetGroup) {
-            applySitFollowOverride(tame, false);
+        for (LivingEntity tame : targetGroup) {
+            applyMovementOrderCode(tame, 0);
             targetIds.add(tame.getUUID());
         }
-
-        for (TamableAnimal own : challengerGroup) {
-            TamableAnimal enemy = nearestLoadedOpponent(own, targetGroup);
-            if (enemy != null) own.setTarget(enemy);
-        }
-        for (TamableAnimal own : targetGroup) {
-            TamableAnimal enemy = nearestLoadedOpponent(own, challengerGroup);
-            if (enemy != null) own.setTarget(enemy);
-        }
+        assignInitialDuelTargets(challengerGroup, targetGroup);
+        assignInitialDuelTargets(targetGroup, challengerGroup);
         DuelSpectators spectators = mergeDuelSpectators(invite.spectators, extraSpectators);
         TameDuelManager.startGroupDuel(source.getServer(), challenger.getUUID(), challengerIds, targetPlayer.getUUID(), targetIds, spectators.playerIds, spectators.broadcastToServer);
 
@@ -7889,7 +7861,7 @@ public class TameCommands {
         if (selfOnly) {
             if (add) {
                 selectedIds.add(player.getUUID());
-                for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
+                for (LivingEntity tame : loadedOwnedDuelTames(source, player.getUUID())) {
                     if (tame != null && tame.isAlive() && hasFoodForDuel(tame)) {
                         selectedIds.add(tame.getUUID());
                     }
@@ -11716,16 +11688,9 @@ public class TameCommands {
         if (toMe || data == null) {
             return new SpawnTarget(source.getLevel(), source.getPosition(), source.getRotation().y, source.getRotation().x);
         }
-        if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) {
-            ResourceLocation bedId = ResourceLocation.tryParse(data.petBedDimension);
-            if (bedId != null) {
-                ServerLevel bedLevel = source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, bedId));
-                if (bedLevel != null) {
-                    // Use the block above the assigned bed. This keeps the tame centered
-                    // on its bed and gives the sitting pose a collision-safe footing.
-                    return new SpawnTarget(bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY + 1.0D, data.petBedZ + 0.5D), 0.0F, 0.0F);
-                }
-            }
+        SpawnTarget petBedTarget = resolveAutomaticRespawnBedTarget(source.getServer(), data);
+        if (petBedTarget != null) {
+            return petBedTarget;
         }
         SpawnTarget queuedBedTarget = resolveBedTargetFromDiQueue(source, data);
         if (queuedBedTarget != null) {
@@ -13684,7 +13649,7 @@ public class TameCommands {
         return false;
     }
     private static int teleportHomeBatch(CommandSourceStack source, ServerPlayer player, List<TameData> requested, String label, int deadSkipped) {
-        List<TamableAnimal> loadedTargets = new ArrayList<>();
+        List<LivingEntity> loadedTargets = new ArrayList<>();
         List<SpawnTarget> loadedDestinations = new ArrayList<>();
         List<TameData> loadedData = new ArrayList<>();
         List<TameData> unloadedTargets = new ArrayList<>();
@@ -13712,7 +13677,7 @@ public class TameCommands {
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (invalid respawn home)");
                 continue;
             }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
             if (tame == null) {
                 String queueError = validateUnloadedHomeTeleport(source, player, data, target);
                 if (queueError != null) {
@@ -13729,14 +13694,14 @@ public class TameCommands {
             loadedData.add(data);
         }
         for (int i = 0; i < loadedTargets.size(); i++) {
-            TamableAnimal tame = loadedTargets.get(i);
+            LivingEntity tame = loadedTargets.get(i);
             TameData data = i < loadedData.size() ? loadedData.get(i) : TameRegistry.get(tame.getUUID());
             if (!consumeHungerForCommandTeleport(player, data, tame)) {
                 queueFailed++;
                 failedNames.add((data == null || data.name == null ? "unknown" : data.name) + " (no food)");
                 continue;
             }
-            teleportTameToLocation(tame, loadedDestinations.get(i), true);
+            teleportLivingTameToLocation(tame, loadedDestinations.get(i), true);
             applyMovementOrderCode(tame, 1);
             if (data != null && data.movementOrder != 1) {
                 data.movementOrder = 1;
@@ -14220,6 +14185,18 @@ public class TameCommands {
             ServerPlayer owner = ownerPlayerForRefresh(tame, moved, data);
             queueDelayedTeleportClientRefresh(owner, moved);
         }
+    }
+
+    private static void teleportLivingTameToLocation(LivingEntity tame, SpawnTarget target, boolean exactTarget) {
+        if (tame instanceof TamableAnimal tamable) {
+            teleportTameToLocation(tamable, target, exactTarget);
+            return;
+        }
+        if (tame == null || target == null || target.level == null || target.pos == null || !tame.isAlive()) return;
+        TameData data = TameRegistry.get(tame.getUUID());
+        clearGuardianAnchor(data);
+        tame.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z,
+                java.util.Set.of(), target.yRot, target.xRot);
     }
 
     private static SpawnTarget findSafeTameTeleportTarget(TamableAnimal tame, SpawnTarget target) {
@@ -14997,7 +14974,7 @@ public class TameCommands {
         if (data == null || target == null || target.level == null || target.pos == null || !data.hasPetBed) return false;
         if (data.petBedDimension == null || !data.petBedDimension.equalsIgnoreCase(target.level.dimension().location().toString())) return false;
         return Math.abs(target.pos.x - (data.petBedX + 0.5D)) < 0.01D
-                && Math.abs(target.pos.y - (data.petBedY + 1.0D)) < 0.01D
+                && Math.abs(target.pos.y - (data.petBedY + 0.8D)) < 0.01D
                 && Math.abs(target.pos.z - (data.petBedZ + 0.5D)) < 0.01D;
     }
 
@@ -19556,6 +19533,14 @@ public class TameCommands {
         return tame != null && currentLiveMovementOrder(tame, data) == order;
     }
 
+    private static boolean matchesMovementOrder(LivingEntity tame, MovementOrder order) {
+        if (tame instanceof TamableAnimal tamable) return matchesMovementOrder(tamable, order);
+        if (!(tame instanceof ModifedToBeTameable modified)) return false;
+        if (modified.isStayingStill()) return order == MovementOrder.SIT;
+        if (modified.isFollowingOwner()) return order == MovementOrder.FOLLOW;
+        return matchesMovementOrderSnapshot(TameRegistry.get(tame.getUUID()), order);
+    }
+
     private static boolean isDuelLocked(TameData data) {
         return data != null && data.uuid != null && isDuelLocked(data.uuid);
     }
@@ -20552,7 +20537,7 @@ public class TameCommands {
         if (data.movementOrder == 2) {
             return scalePassiveSaturationCost(data, 1);
         }
-        return scalePassiveSaturationCost(data, 2);
+        return scalePassiveSaturationCost(data, 2) * 4;
     }
 
     private static int scalePassiveSaturationCost(TameData data, int baseCost) {
@@ -20631,9 +20616,9 @@ public class TameCommands {
         if (result == null || !result.error.isBlank() || result.tames.isEmpty()) {
             return result;
         }
-        List<TamableAnimal> fed = new ArrayList<>();
+        List<LivingEntity> fed = new ArrayList<>();
         List<String> hungry = new ArrayList<>();
-        for (TamableAnimal tame : result.tames) {
+        for (LivingEntity tame : result.tames) {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
@@ -21951,6 +21936,16 @@ public class TameCommands {
         return list;
     }
 
+    private static List<LivingEntity> loadedOwnedDuelTames(CommandSourceStack source, UUID owner) {
+        List<LivingEntity> list = new ArrayList<>();
+        for (TameData data : ownedTamesForAllCommands(owner)) {
+            if (data == null || data.horseType || isInactiveEntry(data.uuid)) continue;
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
+            if (tame != null && tame.isAlive()) list.add(tame);
+        }
+        return list;
+    }
+
     private static DuelSelectionResult resolveLoadedDuelSelection(CommandSourceStack source, UUID owner, DuelSelection selection) {
         if (selection == null) return DuelSelectionResult.fail("Invalid duel selection.");
         DuelSelectionResult resolved = switch (selection.kind) {
@@ -21961,7 +21956,8 @@ public class TameCommands {
                 if (order == null) {
                     yield DuelSelectionResult.fail("Invalid movement state '" + selection.value + "'.");
                 }
-                List<TamableAnimal> loaded = loadedOwnedStateTames(source, owner, order);
+                List<LivingEntity> loaded = loadedOwnedDuelTames(source, owner);
+                loaded.removeIf(tame -> !matchesMovementOrder(tame, order));
                 if (loaded.isEmpty()) {
                     yield DuelSelectionResult.fail("No loaded alive tames found for state '" + movementLabel(order) + "'.");
                 }
@@ -21975,7 +21971,7 @@ public class TameCommands {
                 if (isDeadEntry(data.uuid)) {
                     yield DuelSelectionResult.fail("That tame is dead and cannot duel.");
                 }
-                TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+                LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
                 if (tame == null || !tame.isAlive()) {
                     yield DuelSelectionResult.fail("That tame is not loaded/alive.");
                 }
@@ -21986,9 +21982,9 @@ public class TameCommands {
                 if (owned.isEmpty()) {
                     yield DuelSelectionResult.fail("You have no living tames to duel.");
                 }
-                List<TamableAnimal> loaded = new ArrayList<>();
+                List<LivingEntity> loaded = new ArrayList<>();
                 for (TameData data : owned) {
-                    TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+                    LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
                     if (tame != null && tame.isAlive()) {
                         loaded.add(tame);
                     }
@@ -22006,7 +22002,7 @@ public class TameCommands {
         if (owner == null) return TeamSelectionResult.fail("Owner is not online.");
         if (selection == null) return TeamSelectionResult.fail("Invalid duel team selection.");
         List<LivingEntity> members = new ArrayList<>();
-        List<TamableAnimal> tames = new ArrayList<>();
+        List<LivingEntity> tames = new ArrayList<>();
         Set<UUID> seen = new LinkedHashSet<>();
         if (selection.includeSelf) {
             if (!owner.isAlive()) {
@@ -22021,7 +22017,7 @@ public class TameCommands {
                 if (!tameResult.error.isBlank()) {
                     return TeamSelectionResult.fail(tameResult.error);
                 }
-                for (TamableAnimal tame : tameResult.tames) {
+                for (LivingEntity tame : tameResult.tames) {
                     if (tame == null || !tame.isAlive()) {
                         continue;
                     }
@@ -22044,14 +22040,14 @@ public class TameCommands {
             return DuelSelectionResult.fail("Group '" + group + "' has no tames.");
         }
         List<String> dead = new ArrayList<>();
-        List<TamableAnimal> loaded = new ArrayList<>();
+        List<LivingEntity> loaded = new ArrayList<>();
         for (TameData data : groupMembers) {
             String name = data.name == null || data.name.isBlank() ? "unknown" : data.name;
             if (isDeadEntry(data.uuid)) {
                 dead.add(name);
                 continue;
             }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
             if (tame != null && tame.isAlive()) {
                 loaded.add(tame);
             }
@@ -22070,14 +22066,14 @@ public class TameCommands {
             return DuelSelectionResult.fail("Type '" + type + "' has no tames.");
         }
         List<String> dead = new ArrayList<>();
-        List<TamableAnimal> loaded = new ArrayList<>();
+        List<LivingEntity> loaded = new ArrayList<>();
         for (TameData data : typeMembers) {
             String name = data.name == null || data.name.isBlank() ? "unknown" : data.name;
             if (isDeadEntry(data.uuid)) {
                 dead.add(name);
                 continue;
             }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, owner, data.uuid);
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
             if (tame != null && tame.isAlive()) {
                 loaded.add(tame);
             }
@@ -22090,17 +22086,17 @@ public class TameCommands {
         return DuelSelectionResult.ok(loaded);
     }
 
-    private static List<TamableAnimal> remainingDuelOpponents(CommandSourceStack source, UUID owner, List<TamableAnimal> excluded) {
+    private static List<LivingEntity> remainingDuelOpponents(CommandSourceStack source, UUID owner, List<LivingEntity> excluded) {
         Set<UUID> excludedIds = new HashSet<>();
         if (excluded != null) {
-            for (TamableAnimal tame : excluded) {
+            for (LivingEntity tame : excluded) {
                 if (tame != null) {
                     excludedIds.add(tame.getUUID());
                 }
             }
         }
-        List<TamableAnimal> remaining = new ArrayList<>();
-        for (TamableAnimal tame : loadedOwnedAllTames(source, owner)) {
+        List<LivingEntity> remaining = new ArrayList<>();
+        for (LivingEntity tame : loadedOwnedDuelTames(source, owner)) {
             if (tame == null || !tame.isAlive()) continue;
             if (excludedIds.contains(tame.getUUID())) continue;
             if (!hasFoodForDuel(tame)) continue;
@@ -22630,8 +22626,8 @@ public class TameCommands {
         }
         List<LivingEntity> sideAMembers = new ArrayList<>();
         List<LivingEntity> sideBMembers = new ArrayList<>();
-        List<TamableAnimal> sideATames = new ArrayList<>();
-        List<TamableAnimal> sideBTames = new ArrayList<>();
+        List<LivingEntity> sideATames = new ArrayList<>();
+        List<LivingEntity> sideBTames = new ArrayList<>();
         Set<UUID> sideAOwners = new LinkedHashSet<>();
         Set<UUID> sideBOwners = new LinkedHashSet<>();
         for (PendingDuelParticipant participant : match.participants.values()) {

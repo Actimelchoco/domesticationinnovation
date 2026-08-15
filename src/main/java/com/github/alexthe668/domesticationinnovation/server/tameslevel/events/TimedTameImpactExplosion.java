@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -9,7 +10,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.Vec3;
@@ -32,8 +32,8 @@ final class TimedTameImpactExplosion {
             if (TameableUtils.shouldBlockOffensiveDiTarget(shooter, nearby)) {
                 continue;
             }
-            if (shooter instanceof TamableAnimal tame) {
-                LevelSystem.trackDamage(nearby, tame);
+            if (TameEntityAdapter.isTame(shooter)) {
+                LevelSystem.trackDamage(nearby, shooter);
             }
             nearby.hurt(projectile.damageSources().mobProjectile(projectile, shooter), damage);
             Vec3 push = nearby.position().subtract(projectile.position());

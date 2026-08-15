@@ -1,10 +1,10 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ThrownPotion;
 import net.minecraft.world.item.ItemStack;
@@ -92,8 +92,8 @@ public class TimedTameThrownPotion extends ThrownPotion {
         if (target instanceof Player player) {
             return !areDuelOpponents(thrower, player);
         }
-        if (target instanceof TamableAnimal tameTarget && tameTarget.isTame()) {
-            return !areDuelOpponents(thrower, tameTarget);
+        if (TameEntityAdapter.isTame(target)) {
+            return !areDuelOpponents(thrower, target);
         }
         return false;
     }

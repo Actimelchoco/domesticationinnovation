@@ -2,12 +2,12 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.WitherSkull;
 import net.minecraft.world.level.Level;
@@ -78,8 +78,8 @@ public class TimedTameWitherSkull extends WitherSkull {
             if (nearby == shooter || nearby == excluded) continue;
             if (TameableUtils.shouldBlockOffensiveDiTarget(shooter, nearby)) continue;
 
-            if (shooter instanceof TamableAnimal tame) {
-                LevelSystem.trackDamage(nearby, tame);
+            if (TameEntityAdapter.isTame(shooter)) {
+                LevelSystem.trackDamage(nearby, shooter);
             }
             nearby.hurt(this.damageSources().mobProjectile(this, shooter), SPLASH_DAMAGE);
             Vec3 push = nearby.position().subtract(this.position());

@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -10,7 +11,6 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.DragonFireball;
 import net.minecraft.world.level.Level;
@@ -50,12 +50,12 @@ public class TimedTameDragonFireball extends DragonFireball {
         LivingEntity shooter = this.getOwner() instanceof LivingEntity living ? living : null;
         float damage = DIRECT_HIT_DAMAGE;
         int levelValue = 1;
-        float ghastCastDamage = 2.75F;
-        if (shooter instanceof TamableAnimal tame) {
-            TameData data = TameRegistry.get(tame.getUUID());
+        float castDamage = 2.75F;
+        if (TameEntityAdapter.isTame(shooter)) {
+            TameData data = TameRegistry.get(shooter.getUUID());
             if (data != null) {
                 levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dragon_fireball"));
-                ghastCastDamage = TameAbilityEvents.offensiveAbilityCastDamage(data, "ghast_fireball", levelValue);
+                castDamage = TameAbilityEvents.offensiveAbilityCastDamage(data, "dragon_fireball", levelValue);
             }
         }
 
@@ -64,8 +64,8 @@ public class TimedTameDragonFireball extends DragonFireball {
                 if (!nearby.isAlive() || nearby == shooter) continue;
                 if (TameableUtils.shouldBlockOffensiveDiTarget(shooter, nearby)) continue;
 
-                if (shooter instanceof TamableAnimal tame) {
-                    LevelSystem.trackDamage(nearby, tame);
+                if (TameEntityAdapter.isTame(shooter)) {
+                    LevelSystem.trackDamage(nearby, shooter);
                 }
                 nearby.hurt(this.damageSources().mobProjectile(this, shooter), damage);
                 Vec3 push = nearby.position().subtract(this.position());
@@ -83,7 +83,7 @@ public class TimedTameDragonFireball extends DragonFireball {
             serverLevel.sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY(), this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
         }
         if (shooter != null) {
-            float cloudDamage = dragonCloudDamagePerPulse(ghastCastDamage, levelValue);
+            float cloudDamage = dragonCloudDamagePerPulse(castDamage, levelValue);
             TimedTameDragonBreathCloud cloud = new TimedTameDragonBreathCloud(this.level(), shooter, this.getX(), this.getY(), this.getZ(), levelValue, cloudDamage);
             this.level().addFreshEntity(cloud);
         }

@@ -2,8 +2,8 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ThrownTrident;
 import net.minecraft.world.item.ItemStack;
@@ -43,8 +43,8 @@ public class TimedTameTrident extends ThrownTrident {
                 && shooter != null
                 && entityHitResult.getEntity() instanceof LivingEntity target) {
             if (!TameableUtils.shouldBlockOffensiveDiTarget(shooter, target)) {
-                if (shooter instanceof TamableAnimal tame) {
-                    LevelSystem.trackDamage(target, tame);
+                if (TameEntityAdapter.isTame(shooter)) {
+                    LevelSystem.trackDamage(target, shooter);
                 }
                 float damage = (float) Math.max(0.0D, this.getBaseDamage());
                 if (damage <= 0.0F) {
