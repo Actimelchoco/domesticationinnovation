@@ -48,6 +48,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
     private static final Map<UUID, Boolean> DUELS_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
+    private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -80,7 +81,8 @@ public final class PlayerDebugSettings {
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
             new BooleanSetting("duelsGlow", DUELS_GLOW, true),
-            new BooleanSetting("rankedGlow", RANKED_GLOW, true)
+            new BooleanSetting("rankedGlow", RANKED_GLOW, true),
+            new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false)
     );
 
     public static boolean enemyKilled(UUID player) {
@@ -212,6 +214,10 @@ public final class PlayerDebugSettings {
 
     public static boolean rankedGlow(UUID player) {
         return getBoolean(RANKED_GLOW, player, true);
+    }
+
+    public static boolean friendlyFire(UUID player) {
+        return getBoolean(FRIENDLY_FIRE, player, false);
     }
 
     public static void setEnemyKilled(UUID player, boolean enabled) {
@@ -386,6 +392,10 @@ public final class PlayerDebugSettings {
 
     public static void setRankedGlow(UUID player, boolean enabled) {
         setBoolean(RANKED_GLOW, player, enabled, true);
+    }
+
+    public static void setFriendlyFire(UUID player, boolean enabled) {
+        setBoolean(FRIENDLY_FIRE, player, enabled, false);
     }
 
     public static void setOtherGeneral(UUID player, boolean enabled) {

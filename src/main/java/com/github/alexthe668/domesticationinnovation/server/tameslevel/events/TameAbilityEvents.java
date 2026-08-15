@@ -2427,7 +2427,7 @@ public class TameAbilityEvents {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), otherTame.getUUID())) {
                 return false;
             }
-            if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+            if (!TLAdminRuntimeSettings.friendlyFireEnabled(TameEntityAdapter.ownerUuid(tame))) {
                 return true;
             }
             return true;

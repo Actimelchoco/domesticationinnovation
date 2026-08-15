@@ -1,5 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
+import java.util.UUID;
+
 public final class TLAdminRuntimeSettings {
     private TLAdminRuntimeSettings() {
     }
@@ -16,6 +18,10 @@ public final class TLAdminRuntimeSettings {
 
     public static boolean friendlyFireEnabled() {
         return friendlyFireEnabled;
+    }
+
+    public static boolean friendlyFireEnabled(UUID ownerUuid) {
+        return friendlyFireEnabled && PlayerDebugSettings.friendlyFire(ownerUuid);
     }
 
     public static void setFriendlyFireEnabled(boolean enabled) {

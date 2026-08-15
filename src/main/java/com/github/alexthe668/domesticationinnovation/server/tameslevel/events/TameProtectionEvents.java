@@ -6,6 +6,9 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.NeutralMob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.resources.ResourceLocation;
@@ -63,8 +66,9 @@ public class TameProtectionEvents {
             return;
         }
 
-        if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+        if (!TLAdminRuntimeSettings.friendlyFireEnabled(TameEntityAdapter.ownerUuid(tameAttacker))) {
             if (victim instanceof Player) {
+                clearForbiddenPlayerAggression(tameAttacker);
                 event.setCanceled(true);
                 return;
             }
@@ -205,9 +209,9 @@ public class TameProtectionEvents {
             TameEntityAdapter.setTarget(tame, null);
             return;
         }
-        if (!TLAdminRuntimeSettings.friendlyFireEnabled()) {
+        if (!TLAdminRuntimeSettings.friendlyFireEnabled(TameEntityAdapter.ownerUuid(tame))) {
             if (target instanceof Player) {
-                TameEntityAdapter.setTarget(tame, null);
+                clearForbiddenPlayerAggression(tame);
                 return;
             }
             if (TameEntityAdapter.isTame(target)) {
@@ -224,6 +228,21 @@ public class TameProtectionEvents {
         }
         if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) {
             TameEntityAdapter.setTarget(tame, null);
+        }
+    }
+
+    private static void clearForbiddenPlayerAggression(LivingEntity tame) {
+        if (tame == null) return;
+        TameEntityAdapter.setTarget(tame, null);
+        tame.setLastHurtByMob(null);
+        tame.setLastHurtMob(null);
+        tame.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        tame.getBrain().eraseMemory(MemoryModuleType.ANGRY_AT);
+        tame.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        if (tame instanceof Mob mob) mob.getNavigation().stop();
+        if (tame instanceof NeutralMob neutral) {
+            neutral.setPersistentAngerTarget(null);
+            neutral.setRemainingPersistentAngerTime(0);
         }
     }
 

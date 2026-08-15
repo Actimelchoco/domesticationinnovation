@@ -999,6 +999,10 @@ public class TameCommands {
                         .executes(ctx -> toggleDuelGlow(ctx.getSource(), false)))
                 .then(Commands.literal("rankedGlow")
                         .executes(ctx -> toggleDuelGlow(ctx.getSource(), true)))
+                .then(Commands.literal("friendlyFire")
+                        .executes(ctx -> playerFriendlyFireStatus(ctx.getSource()))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setPlayerFriendlyFire(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("herding")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -3325,6 +3329,7 @@ public class TameCommands {
                                                                 StringArgumentType.getString(ctx, "class")
                                                         )))))
                                 .then(Commands.literal("friendlyFire")
+                                        .executes(ctx -> adminFriendlyFireStatus(ctx.getSource()))
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> adminSetFriendlyFire(
                                                         ctx.getSource(),
@@ -12809,6 +12814,23 @@ public class TameCommands {
         return 1;
     }
 
+    private static int playerFriendlyFireStatus(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        boolean requested = PlayerDebugSettings.friendlyFire(player.getUUID());
+        boolean effective = TLAdminRuntimeSettings.friendlyFireEnabled(player.getUUID());
+        player.sendSystemMessage(Component.literal("Friendly fire: " + requested + (requested != effective ? " (disabled by admin setting)" : ""))
+                .withStyle(effective ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int setPlayerFriendlyFire(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        PlayerDebugSettings.setFriendlyFire(player.getUUID(), enabled);
+        return playerFriendlyFireStatus(source);
+    }
+
     private static String formatBlockLocation(String dimension, BlockPos pos) {
         return dimension + " [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]";
     }
@@ -20438,6 +20460,13 @@ public class TameCommands {
         int removed = removeForbiddenTypeFromRanked(source.getServer(), normalized);
         String finalType = normalized;
         source.sendSuccess(() -> Component.literal("Forbade " + finalType + " from ranked; removed " + removed + " participant(s).").withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminFriendlyFireStatus(CommandSourceStack source) {
+        boolean enabled = TLAdminRuntimeSettings.friendlyFireEnabled();
+        source.sendSuccess(() -> Component.literal("Temporary admin setting: friendly fire is " + (enabled ? "ENABLED" : "DISABLED") + ".")
+                .withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN), false);
         return 1;
     }
 
