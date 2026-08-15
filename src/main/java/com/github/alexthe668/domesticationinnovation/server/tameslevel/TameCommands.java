@@ -19905,6 +19905,11 @@ public class TameCommands {
                 case WANDER -> 0;
             });
         }
+        if (order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) {
+            tryInvokeBooleanSetter(tame, "setOrderedToSit", false);
+            tryInvokeBooleanSetter(tame, "setSitting", false);
+            tryInvokeBooleanSetter(tame, "setSleeping", false);
+        }
         TameRegistry.markDirty();
     }
 
@@ -20035,7 +20040,7 @@ public class TameCommands {
         tryInvokeStaticHelper("com.github.alexthe668.domesticationinnovation.server.misc.TameableUtils", tame, order);
     }
 
-    private static void tryInvokeBooleanSetter(TamableAnimal tame, String methodName, boolean value) {
+    private static void tryInvokeBooleanSetter(LivingEntity tame, String methodName, boolean value) {
         try {
             Method m = tame.getClass().getMethod(methodName, boolean.class);
             m.setAccessible(true);

@@ -8,7 +8,6 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
@@ -20,10 +19,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
-import net.minecraft.world.entity.monster.Enemy;
-import net.minecraft.world.phys.AABB;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
@@ -98,10 +94,6 @@ public class TameSpawnEvents {
             return;
         }
 
-        if (living.tickCount % 10 == 0 && TameMode.byId(data.mode) == TameMode.MONSTER_HUNTER) {
-            updateInterfaceMonsterHunterTarget(living);
-        }
-
         if (living instanceof AbstractHorse horse) {
             data.horseType = true;
             if (horse.getControllingPassenger() instanceof net.minecraft.world.entity.player.Player) {
@@ -130,30 +122,6 @@ public class TameSpawnEvents {
             data.lastKnownY = y;
             data.lastKnownZ = z;
             TameRegistry.markDirty();
-        }
-    }
-
-    private static void updateInterfaceMonsterHunterTarget(LivingEntity tame) {
-        if (!(tame instanceof Mob mob) || !(tame.level() instanceof ServerLevel level)) return;
-        LivingEntity current = mob.getTarget();
-        if (current != null && current.isAlive() && current instanceof Enemy) return;
-
-        LivingEntity nearest = null;
-        double nearestDistance = Double.MAX_VALUE;
-        AABB search = tame.getBoundingBox().inflate(10.0D);
-        for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class, search,
-                entity -> entity.isAlive() && entity instanceof Enemy)) {
-            if (candidate == tame) continue;
-            double distance = tame.distanceToSqr(candidate);
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
-                nearest = candidate;
-            }
-        }
-        if (nearest != null) {
-            mob.setTarget(nearest);
-        } else if (current != null) {
-            mob.setTarget(null);
         }
     }
 

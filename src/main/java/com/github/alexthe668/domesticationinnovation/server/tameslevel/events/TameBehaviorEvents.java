@@ -19,6 +19,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
@@ -62,11 +63,17 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_target_timeout", () -> updateGuardianTargetTimeout(tame, activeData));
         }
 
+        if (!(tame instanceof TamableAnimal)
+                && tame.tickCount % 10 == 0
+                && TameMode.byId(activeData.mode) == TameMode.MONSTER_HUNTER) {
+            TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
+        }
+
         int scanInterval = getBehaviorScanInterval(tame);
         if (tame.tickCount % scanInterval != 0) return;
         if (TameEntityAdapter.isStayingStill(tame)) return;
 
-        if (!(tame instanceof TamableAnimal)) {
+        if (!(tame instanceof TamableAnimal) && TameMode.byId(activeData.mode) != TameMode.MONSTER_HUNTER) {
             TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
         }
 
@@ -282,13 +289,14 @@ public class TameBehaviorEvents {
             tame.setTarget(priority);
             return;
         }
-        double radius = mode == TameMode.BODYGUARD ? Math.max(4, data.bodyguardRange) : 24.0D;
+        double radius = mode == TameMode.MONSTER_HUNTER ? 10.0D
+                : mode == TameMode.BODYGUARD ? Math.max(4, data.bodyguardRange) : 24.0D;
         LivingEntity best = null;
         double bestDistance = Double.MAX_VALUE;
         for (LivingEntity candidate : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
             if (!isValidCombatTarget(tame, candidate)) continue;
-            if ((mode == TameMode.MONSTER_HUNTER || mode == TameMode.BODYGUARD || mode == TameMode.BOSS)
-                    && !(candidate instanceof Monster)) continue;
+            if (mode == TameMode.MONSTER_HUNTER && !(candidate instanceof Enemy)) continue;
+            if ((mode == TameMode.BODYGUARD || mode == TameMode.BOSS) && !(candidate instanceof Monster)) continue;
             double distance = tame.distanceToSqr(candidate);
             if (distance < bestDistance) {
                 bestDistance = distance;

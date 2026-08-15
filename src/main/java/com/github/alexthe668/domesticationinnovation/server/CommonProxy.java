@@ -971,7 +971,12 @@ public class CommonProxy {
         if (TameableUtils.isTamed(event.getEntity()) && !TameableUtils.isZombiePet(event.getEntity())) {
             if (!(event.getEntity() instanceof TamableAnimal)) {
                 Entity owner = TameableUtils.getOwnerOf(event.getEntity());
-                if (!event.getEntity().level().isClientSide && event.getEntity().level().getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES) && owner instanceof ServerPlayer) {
+                TameData tracked = TameRegistry.get(event.getEntity().getUUID());
+                if (tracked == null) {
+                    UUID tlId = TameData.getTlId(event.getEntity());
+                    tracked = tlId == null ? null : TameRegistry.getByTlId(tlId);
+                }
+                if (tracked == null && !event.getEntity().level().isClientSide && event.getEntity().level().getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES) && owner instanceof ServerPlayer) {
                     owner.sendSystemMessage(event.getEntity().getCombatTracker().getDeathMessage());
                 }
             }
