@@ -170,6 +170,7 @@ public class TameCommands {
     private static final int FOOD_POINTS_PER_APPROVED_ITEM = 20;
     private static final int TAME_HUNGER_INITIAL_SATURATION = 1000;
     private static final int TAME_HUNGER_SATURATION_PER_FOOD_POINT = 100;
+    private static final int RANKED_SATURATION_PER_FOOD_POINT = 100;
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 10;
@@ -996,9 +997,13 @@ public class TameCommands {
                                                 IntegerArgumentType.getInteger(ctx, "blockRangeNumber"),
                                                 IntegerArgumentType.getInteger(ctx, "heightNumber"))))))
                 .then(Commands.literal("duelsGlow")
-                        .executes(ctx -> toggleDuelGlow(ctx.getSource(), false)))
+                        .executes(ctx -> duelGlowStatus(ctx.getSource(), false))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelGlow(ctx.getSource(), false, BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("rankedGlow")
-                        .executes(ctx -> toggleDuelGlow(ctx.getSource(), true)))
+                        .executes(ctx -> duelGlowStatus(ctx.getSource(), true))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setDuelGlow(ctx.getSource(), true, BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("friendlyFire")
                         .executes(ctx -> playerFriendlyFireStatus(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -2707,6 +2712,7 @@ public class TameCommands {
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
                                         .executes(ctx -> duelTeleportPet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("tphome")
+                                .executes(ctx -> teleportNearbyHome(ctx.getSource()))
                                 .then(Commands.literal("all")
                                         .executes(ctx -> teleportAllHome(ctx.getSource()))
                                         .then(Commands.literal("dim")
@@ -4635,6 +4641,9 @@ public class TameCommands {
     static int infoDetail(CommandSourceStack source, String topic) {
         ServerPlayer p = source.getPlayer();
         String key = topic.trim().toLowerCase(Locale.ROOT);
+        if (key.length() >= 2 && key.startsWith("\"") && key.endsWith("\"")) {
+            key = key.substring(1, key.length() - 1).trim();
+        }
         if (key.equals("leaderboard")) {
             sendInfoPage(p, "Leaderboard",
                     "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|all|everytame]",
@@ -4711,7 +4720,7 @@ public class TameCommands {
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
-                    "A container above a drum can refill nearby loaded hungry tames within 20 blocks once per minute, up to green food status.",
+                    "Register a container above your drum with /tames settings chestxDrumRange <range> <height>. It refills loaded hungry tames to green.",
                     "Bread works as simple default food but counts for half points. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -4726,7 +4735,7 @@ public class TameCommands {
                     "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
                     "/tames debug inventory lowOnFood|noFood|sum <true|false> and /tames debug inventory sumMin <minutes> control hunger notifications.",
-                    "Drum refill: place a food container directly above a drum. Loaded hungry tames within 20 blocks check it once per minute and pull valid food until they reach green food status.",
+                    "Drum refill: stand on a container directly above your drum and use /tames settings chestxDrumRange <range> <height>. Larger configured volumes have longer feed intervals.",
                     "Owners get low-food, last-food, and configurable low/no-food digest notifications."
             );
         }
@@ -4750,17 +4759,13 @@ public class TameCommands {
             sendInfoPage(p, "Guardian",
                     "/tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>",
                     "/tames guardian deploy <all|group <group>|type <type>|state <follow|wander|sit>>",
-                    "/tames guardian manageGroup <name> <pet>",
-                    "/tames guardian manageGroup remove <name> <pet|all|group <group>|type <type>|state <state>>",
-                    "/tames guardian manageGroup delete <name>",
-                    "/tames guardian deployGroup <name>",
                     "/tames guardian addCurrentToGroup <guardianGroup>",
                     "/tames guardian addToGroup <guardianGroup> <tame selection>",
                     "A guardian anchor is a return point. After combat, the tame paths back there.",
                     "If it still has not returned after about 60 seconds, it is teleported back.",
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
                     "'deploy' activates the current guardian locations for the selected tames.",
-                    "Managed groups store per-tame guardian positions under a shared name and later redeploy those members with deployGroup."
+                    "Guardian groups store per-tame guardian positions under a shared name."
             );
         }
         else if (key.equals("guardian_arrow") || key.equals("guardianarrow")) {
@@ -4818,7 +4823,9 @@ public class TameCommands {
         }
         else if (key.equals("tphome")) {
             sendInfoPage(p, "TPHome",
+                    "/tames tphome",
                     "/tames tphome <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>",
+                    "Without a selection, TPHome sends loaded owned tames within 32 blocks home.",
                     "Teleports tames to the same target the respawn system would use.",
                     "Target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
                     "TPHome is free.",
@@ -4979,11 +4986,16 @@ public class TameCommands {
         else if (key.equals("ranked")) {
             sendInfoPage(p, "Ranked",
                     "/tames ranked",
+                    "/tames ranked feed",
+                    "/tames ranked setRankedChest",
                     "/tames ranked add <selection>",
                     "/tames ranked pull <selection>",
                     "/tames admin ranked setArena <arenaName>",
                     "/tames admin ranked setA|setB|setWaitingA|setWaitingB",
                     "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
+                    "feed consumes the edible main-hand stack and saves 100 ranked saturation per food point.",
+                    "setRankedChest stores the inventory beneath you; the newest location replaces the previous ranked chest.",
+                    "Each selected tame costs its level in ranked saturation per round. Saturation persists across logout and restart.",
                     "Only tames whose owners are online are selected into rounds.",
                     "Offline-owner tames stay idle at waiting until their owner is online again.",
                     "The ranked arena is reserved and cannot be used through /tames duel arena."
@@ -4995,8 +5007,10 @@ public class TameCommands {
                     "/tames duel invite <player>",
                     "/tames duel <selection>",
                     "/tames duel nearby [radius]",
-                    "/tames duel stop",
+                    "/tames duel cancel",
+                    "/tames duel startAgain",
                     "Selections support comma-separated tame names, groups, types, and movement states.",
+                    "If food funding fails, startAgain retries and cancel ends the preparation.",
                     "After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20."
             );
         }
@@ -5332,7 +5346,9 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), petName);
         if (d == null) return error(p, "Pet not found.");
-        sendTameStats(source, p, d, false, true, false);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), d.uuid, d.tlId);
+        if (loaded instanceof TamableAnimal tamable && syncCollarStateFromLoadedTame(tamable, d)) TameRegistry.markDirty();
+        sendTameStats(source, p, d, false, true, true);
         return 1;
     }
 
@@ -5340,7 +5356,9 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), petName);
         if (d == null) return error(p, "Pet not found.");
-        sendTameStats(source, p, d, true, true, false);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), d.uuid, d.tlId);
+        if (loaded instanceof TamableAnimal tamable && syncCollarStateFromLoadedTame(tamable, d)) TameRegistry.markDirty();
+        sendTameStats(source, p, d, true, true, true);
         return 1;
     }
 
@@ -5352,8 +5370,7 @@ public class TameCommands {
         if (data == null || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
             return;
         }
-        if (tame instanceof TamableAnimal tamable) syncCollarStateFromLoadedTame(tamable, data);
-        sendTameStats(player.createCommandSourceStack(), player, data, true, false, true);
+        statShort(player.createCommandSourceStack(), data.name);
     }
 
     private static int reincarnatePet(CommandSourceStack source, String petName) {
@@ -8075,7 +8092,7 @@ public class TameCommands {
                 session.idleSitHoldUntilTick.remove(participantId);
             }
             if (removed) {
-                loadPulledRankedParticipantNearOwner(source.getServer(), participantId);
+                sendPulledRankedParticipantHome(source.getServer(), participantId);
                 changed++;
             } else {
                 skipped++;
@@ -8134,7 +8151,7 @@ public class TameCommands {
         TameRegistry.markDirty();
     }
 
-    private static void loadPulledRankedParticipantNearOwner(MinecraftServer server, UUID participantId) {
+    private static void sendPulledRankedParticipantHome(MinecraftServer server, UUID participantId) {
         if (server == null || participantId == null) {
             return;
         }
@@ -8150,7 +8167,10 @@ public class TameCommands {
         if (owner == null || !owner.isAlive()) {
             return;
         }
-        SpawnTarget target = new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot());
+        SpawnTarget target = resolveRespawnTarget(owner.createCommandSourceStack(), owner, data, false);
+        if (target == null || target.level == null || target.pos == null) {
+            return;
+        }
         LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
             teleportLivingTameToLocation(loaded, target, false);
@@ -12790,6 +12810,19 @@ public class TameCommands {
         return teleportHomeBatch(source, player, requested, "TPHome all", ownedDeadTamesForAllCommands(player.getUUID()).size());
     }
 
+    private static int teleportNearbyHome(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        List<TameData> nearby = new ArrayList<>();
+        for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
+            LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (loaded == null || !loaded.isAlive() || loaded.level() != player.level()) continue;
+            if (loaded.distanceToSqr(player) <= 32.0D * 32.0D) nearby.add(data);
+        }
+        if (nearby.isEmpty()) return error(player, "No living owned tames found within 32 blocks.");
+        return teleportHomeBatch(source, player, nearby, "TPHome nearby", 0);
+    }
+
     static int setNoAutoSetBed(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) {
@@ -12826,11 +12859,19 @@ public class TameCommands {
         return ranges.size();
     }
 
-    private static int toggleDuelGlow(CommandSourceStack source, boolean ranked) {
+    private static int duelGlowStatus(CommandSourceStack source, boolean ranked) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        boolean enabled = ranked ? PlayerDebugSettings.rankedGlow(player.getUUID()) : PlayerDebugSettings.duelsGlow(player.getUUID());
+        player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow is " + (enabled ? "enabled." : "disabled."))
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setDuelGlow(CommandSourceStack source, boolean ranked, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
         UUID playerId = player.getUUID();
-        boolean enabled = ranked ? !PlayerDebugSettings.rankedGlow(playerId) : !PlayerDebugSettings.duelsGlow(playerId);
         if (ranked) PlayerDebugSettings.setRankedGlow(playerId, enabled);
         else PlayerDebugSettings.setDuelsGlow(playerId, enabled);
         player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow " + (enabled ? "enabled." : "disabled."))
@@ -21182,18 +21223,16 @@ public class TameCommands {
             }
             boolean changed = false;
             for (int slot = 0; slot < handler.getSlots() && totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS; slot++) {
-                ItemStack simulated = handler.extractItem(slot, 1, true);
-                if (simulated.isEmpty() || hungerFoodPoints(simulated, data, tame) <= 0) {
-                    continue;
+                while (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
+                    ItemStack simulated = handler.extractItem(slot, 1, true);
+                    if (simulated.isEmpty() || hungerFoodPoints(simulated, data, tame) <= 0) break;
+                    ItemStack one = simulated.copy();
+                    one.setCount(1);
+                    if (!addHungerFoodStack(data, one)) break;
+                    handler.extractItem(slot, 1, false);
+                    resetHungerFoodNotifications(data);
+                    changed = true;
                 }
-                ItemStack one = simulated.copy();
-                one.setCount(1);
-                if (!addHungerFoodStack(data, one)) {
-                    continue;
-                }
-                handler.extractItem(slot, 1, false);
-                resetHungerFoodNotifications(data);
-                changed = true;
             }
             if (changed) {
                 blockEntity.setChanged();
@@ -22854,15 +22893,44 @@ public class TameCommands {
     }
 
     private static boolean depositHeldRankedFood(ServerPlayer player) {
-        int points = heldFoodPoints(player);
-        if (points <= 0) return false;
+        int foodPoints = heldFoodPoints(player);
+        if (foodPoints <= 0) return false;
+        long credited = (long) foodPoints * RANKED_SATURATION_PER_FOOD_POINT;
         ItemStack stack = player.getMainHandItem();
         PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-        stats.rankedSaturation = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, stats.rankedSaturation) + points);
+        stats.rankedSaturation = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, stats.rankedSaturation) + credited);
         stack.shrink(stack.getCount());
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Added " + points + " ranked saturation (total " + stats.rankedSaturation + ").").withStyle(ChatFormatting.GREEN));
+        player.sendSystemMessage(Component.literal("Added " + credited + " ranked saturation (total " + stats.rankedSaturation + ").").withStyle(ChatFormatting.GREEN));
         return true;
+    }
+
+    private static void depositRankedFoodFromChest(MinecraftServer server, PlayerDuelStats stats, int requiredSaturation) {
+        if (server == null || stats == null || requiredSaturation <= 0) return;
+        CompoundTag chest = TameRegistry.getRankedChest();
+        ResourceLocation dimensionId = ResourceLocation.tryParse(chest.getString("dimension"));
+        if (dimensionId == null || !chest.contains("x") || !chest.contains("y") || !chest.contains("z")) return;
+        ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
+        if (level == null) return;
+        BlockPos pos = new BlockPos(chest.getInt("x"), chest.getInt("y"), chest.getInt("z"));
+        level.getChunk(pos);
+        InventoryAccess inventory = inventoryAccessFromBlockEntity(level.getBlockEntity(pos));
+        if (inventory == null) return;
+
+        long credited = 0L;
+        for (int slot = 0; slot < inventory.getContainerSize() && credited < requiredSaturation; slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            int foodPointsPerItem = stackFoodPointsPerItem(stack);
+            if (foodPointsPerItem <= 0) continue;
+            long saturationPerItem = (long) foodPointsPerItem * RANKED_SATURATION_PER_FOOD_POINT;
+            int itemsNeeded = (int) Math.min(Integer.MAX_VALUE,
+                    Math.max(1L, (requiredSaturation - credited + saturationPerItem - 1L) / saturationPerItem));
+            ItemStack removed = inventory.remove(slot, Math.min(stack.getCount(), itemsNeeded));
+            credited += (long) removed.getCount() * saturationPerItem;
+        }
+        if (credited <= 0L) return;
+        stats.rankedSaturation = (int) Math.min(Integer.MAX_VALUE,
+                (long) Math.max(0, stats.rankedSaturation) + credited);
     }
 
     private static int simpleDuelStop(CommandSourceStack source, String message) {
@@ -24340,6 +24408,9 @@ public class TameCommands {
         for (Map.Entry<UUID, Integer> entry : costs.entrySet()) {
             ServerPlayer owner = server.getPlayerList().getPlayer(entry.getKey());
             PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(entry.getKey(), owner == null ? "" : owner.getGameProfile().getName());
+            if (stats.rankedSaturation < entry.getValue()) {
+                depositRankedFoodFromChest(server, stats, entry.getValue() - stats.rankedSaturation);
+            }
             if (stats.rankedSaturation < entry.getValue()) insufficientOwners.add(entry.getKey());
         }
         for (UUID ownerId : insufficientOwners) {
@@ -24373,12 +24444,7 @@ public class TameCommands {
             session.poolB.remove(participantId);
             session.queuedPullAfterRound.remove(participantId);
             session.idleSitHoldUntilTick.remove(participantId);
-            loadPulledRankedParticipantNearOwner(server, participantId);
-            LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
-            SpawnTarget home = spawnTargetFromGuardianHome(server, data);
-            if (loaded != null && loaded.isAlive() && home != null) {
-                teleportLivingTameToLocation(loaded, home, true);
-            }
+            sendPulledRankedParticipantHome(server, participantId);
         }
         persistRankedPoolToRegistry();
     }
@@ -27036,43 +27102,23 @@ public class TameCommands {
     }
 
     static CompletableFuture<Suggestions> suggestInfoTopics(SuggestionsBuilder b) {
-        suggestCommandString(b, "leaderboard");
-        suggestCommandString(b, "duelleaderboard");
-        suggestCommandString(b, "deaths");
-        suggestCommandString(b, "loaded");
-        suggestCommandString(b, "stat");
-        suggestCommandString(b, "group");
-        suggestCommandString(b, "inventory");
-        suggestCommandString(b, "mode");
-        suggestCommandString(b, "follow");
-        suggestCommandString(b, "sit");
-        suggestCommandString(b, "wander");
-        suggestCommandString(b, "guardian");
-        suggestCommandString(b, "tool guardian");
-        suggestCommandString(b, "movement");
-        suggestCommandString(b, "tp");
-        suggestCommandString(b, "tphome");
-        suggestCommandString(b, "respawn");
-        suggestCommandString(b, "arise");
-        suggestCommandString(b, "ariseReincarnated");
-        suggestCommandString(b, "graveyard");
-        suggestCommandString(b, "reincarnate");
-        suggestCommandString(b, "sitOnChairs");
-        suggestCommandString(b, "collar");
-        suggestCommandString(b, "inspect");
-        suggestCommandString(b, "search");
-        suggestCommandString(b, "duel");
-        suggestCommandString(b, "duel duel");
-        suggestCommandString(b, "duel accept");
-        suggestCommandString(b, "duel decline");
-        suggestCommandString(b, "duel ff");
-        suggestCommandString(b, "duel inbox");
-        suggestCommandString(b, "duel duelleaderboard");
-        suggestCommandString(b, "debug");
-        suggestCommandString(b, "attribute");
-        suggestCommandString(b, "ability");
-        suggestCommandString(b, "class");
+        for (String topic : List.of(
+                "leaderboard", "duelleaderboard", "deaths", "loaded", "stat", "group",
+                "inventory", "inventory system", "mode", "follow", "sit", "wander", "guardian",
+                "guardian_arrow", "movement", "tp", "tphome", "bed", "respawn", "arise",
+                "ariseReincarnated", "graveyard", "reincarnate", "healthSiphon",
+                "enterPortalsByThemselves", "sitOnChairs", "collar", "inspect", "search", "arena",
+                "ranked", "duel", "duel duel", "duel accept", "duel decline", "duel ff",
+                "duel inbox", "duel duelleaderboard", "debug", "attribute", "ability", "class")) {
+            suggestInfoTopic(b, topic);
+        }
         return b.buildFuture();
+    }
+
+    private static void suggestInfoTopic(SuggestionsBuilder builder, String topic) {
+        if (builder == null || topic == null || topic.isBlank()) return;
+        String remaining = builder.getRemainingLowerCase();
+        if (remaining.isBlank() || topic.toLowerCase(Locale.ROOT).startsWith(remaining)) builder.suggest(topic);
     }
 
     static CompletableFuture<Suggestions> suggestAbilities(SuggestionsBuilder b) {

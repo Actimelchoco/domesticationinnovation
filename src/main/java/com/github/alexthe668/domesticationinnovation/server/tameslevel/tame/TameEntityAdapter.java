@@ -1,5 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
+import com.github.alexthe666.citadel.server.entity.IComandableMob;
+import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -39,11 +41,17 @@ public final class TameEntityAdapter {
     }
 
     public static boolean isStayingStill(Entity entity) {
+        if (DomesticationMod.CONFIG.trinaryCommandSystem.get() && entity instanceof IComandableMob commandable) {
+            return commandable.getCommand() == 1;
+        }
         if (entity instanceof TamableAnimal tamable) return tamable.isOrderedToSit();
         return entity instanceof ModifedToBeTameable modified && modified.isStayingStill();
     }
 
     public static boolean isFollowingOwner(Entity entity) {
+        if (DomesticationMod.CONFIG.trinaryCommandSystem.get() && entity instanceof IComandableMob commandable) {
+            return commandable.getCommand() == 2;
+        }
         if (entity instanceof TamableAnimal tamable) return !tamable.isOrderedToSit();
         return entity instanceof ModifedToBeTameable modified && modified.isFollowingOwner();
     }
