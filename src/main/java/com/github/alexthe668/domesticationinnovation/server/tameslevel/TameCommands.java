@@ -1348,22 +1348,7 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "oreId")
                                                 )))))
                         .then(Commands.literal("reincarnate")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                        .executes(ctx -> reincarnatePet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("rerollClass")
-                                .then(Commands.literal("confirm")
-                                        .executes(ctx -> confirmRerollClass(ctx.getSource())))
-                                .then(Commands.literal("cancel")
-                                        .executes(ctx -> cancelRerollClass(ctx.getSource())))
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                        .executes(ctx -> requestRerollClass(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("reincarnation")
                                 .executes(ctx -> reincarnationOverview(ctx.getSource()))
-                                .then(Commands.literal("_approvedItemsOld")
-                                        .requires(source -> false)
-                                        .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                                 .then(Commands.literal("auto")
                                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                                 .executes(ctx -> setAutoReincarnation(
@@ -1379,7 +1364,18 @@ public class TameCommands {
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                .executes(ctx -> reincarnateBatchType(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                                                .executes(ctx -> reincarnateBatchType(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                        .executes(ctx -> reincarnatePet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("rerollClass")
+                                .then(Commands.literal("confirm")
+                                        .executes(ctx -> confirmRerollClass(ctx.getSource())))
+                                .then(Commands.literal("cancel")
+                                        .executes(ctx -> cancelRerollClass(ctx.getSource())))
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                        .executes(ctx -> requestRerollClass(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(Commands.literal("_doNotAttackOld")
                                 .requires(source -> false)
                                 .executes(ctx -> listDoNotAttack(ctx.getSource()))
@@ -3210,7 +3206,7 @@ public class TameCommands {
                                                                         StringArgumentType.getString(ctx, "player"),
                                                                         StringArgumentType.getString(ctx, "name")
                                                                 ))))
-                                                .then(Commands.literal("reincarnation")
+                                                .then(Commands.literal("reincarnate")
                                                         .then(Commands.literal("all")
                                                                 .executes(ctx -> adminPlayerReincarnateBatchAll(
                                                                         ctx.getSource(),
@@ -4943,13 +4939,13 @@ public class TameCommands {
                     "Each row includes death time, active survival days, reincarnation cost, and the saved highest-level suffix."
             );
         }
-        else if (key.equals("reincarnate") || key.equals("reincarnation")) {
+        else if (key.equals("reincarnate")) {
             sendInfoPage(p, "Reincarnate",
                     "/tames reincarnate <pet>",
-                    "/tames reincarnation",
-                    "/tames reincarnation <all|group <name>|type <name>>",
+                    "/tames reincarnate",
+                    "/tames reincarnate <all|group <name>|type <name>>",
                     "/tames info approvedItems",
-                    "/tames reincarnation auto <true|false>",
+                    "/tames reincarnate auto <true|false>",
                     "Reincarnation is command-only. The tame must already be alive and loaded.",
                     "It restores the saved highest progress snapshot for that tame.",
                     "Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 totem in main hand.",
@@ -6379,8 +6375,8 @@ public class TameCommands {
         List<String> unaffordable = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         for (TameData data : requested) {
-            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
-            if (tame == null || !tame.isAlive()) {
+            LivingEntity tame = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (tame == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) {
                 continue;
             }
             int xpCost = LevelSystem.reincarnationXpCost(data);
@@ -6439,8 +6435,8 @@ public class TameCommands {
             if (data == null || data.dead) continue;
             if (!ownerUuid.equals(data.ownerUUID)) continue;
             if (!isReincarnationEligible(data)) continue;
-            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
-            if (tame == null || !tame.isAlive()) continue;
+            LivingEntity tame = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (tame == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) continue;
             eligible.add(data);
         }
         return eligible;
@@ -11646,8 +11642,8 @@ public class TameCommands {
         int restored = 0;
         List<String> failed = new ArrayList<>();
         for (TameData data : requested) {
-            TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
-            if (tame == null || !tame.isAlive()) {
+            LivingEntity tame = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (tame == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) {
                 continue;
             }
             int restoredLevels = Math.max(0, data.savedLevel - data.level);
