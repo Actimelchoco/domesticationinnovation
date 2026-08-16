@@ -3793,7 +3793,7 @@ public class TameCommands {
                 teleportTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
                 resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
                 if (liveData != null && liveData.movementOrder == 1) {
-                    applyMovementOrderCode(tame, 1);
+                    applyLivingMovementOverride(tame, liveData, MovementOrder.SIT);
                 }
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleport: " + pending.tameName + ".", ChatFormatting.WHITE);
@@ -8231,9 +8231,13 @@ public class TameCommands {
         LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
             teleportLivingTameToLocation(loaded, target, false);
+            applyLivingMovementOverride(loaded, data, MovementOrder.SIT);
             return;
         }
-        recoverPetEntityAtLocation(owner, target, data);
+        RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
+        if (recovered.entity != null && recovered.entity.isAlive()) {
+            applyLivingMovementOverride(recovered.entity, data, MovementOrder.SIT);
+        }
     }
 
     private static Set<UUID> resolveOwnedRankedParticipantsFromSelection(MinecraftServer server, ServerPlayer owner, TeamSelection selection) {
@@ -14067,7 +14071,7 @@ public class TameCommands {
                 continue;
             }
             teleportLivingTameToLocation(tame, loadedDestinations.get(i), true);
-            applyMovementOrderCode(tame, 1);
+            applyLivingMovementOverride(tame, data, MovementOrder.SIT);
             if (data != null && data.movementOrder != 1) {
                 data.movementOrder = 1;
                 movementChanged = true;
@@ -24377,6 +24381,7 @@ public class TameCommands {
             session.currentRoundB = removeFromSet(session.currentRoundB, participantId);
             session.idleSitHoldUntilTick.remove(participantId);
             session.queuedPullAfterRound.remove(participantId);
+            sendPulledRankedParticipantHome(server, participantId);
         }
         if (changed) {
             persistRankedPoolToRegistry();
