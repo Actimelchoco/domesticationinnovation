@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.animal.Fox;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -48,6 +49,8 @@ public final class TameDuelManager {
     private static final double DUEL_FOLLOW_RANGE_BONUS = 64.0D;
     private static final String DUEL_MOVEMENT_LOCK_KEY = "duel_movement_lock";
     private static final double DUEL_PARTICIPANT_MAX_DRIFT_SQR = 96.0D * 96.0D;
+    // Duel maintenance runs every 40 ticks. Keep enough overlap that latency cannot make the outline blink.
+    private static final int DUEL_GLOW_DURATION_TICKS = 100;
 
     private static final class DuelBattle {
         private final UUID battleId;
@@ -116,6 +119,7 @@ public final class TameDuelManager {
     private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
     private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
     private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
+    private static final Set<UUID> TEAM_ONE_GLOWED_ENTITIES = new HashSet<>();
     private static final Map<UUID, Set<String>> BLUE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, Set<String>> ORANGE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, List<GoalSnapshotEntry>> MOSSY_GOLEM_TARGET_GOAL_BACKUPS = new HashMap<>();
@@ -486,8 +490,13 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            maintainTeamOneGlow(server, battle);
-            if (teamOneGlowEnabled(battle)) syncPlayerEnemyGlow(server, battle);
+            if (teamOneGlowEnabled(battle)) {
+                maintainTeamOneGlow(server, battle);
+                syncPlayerEnemyGlow(server, battle);
+            } else {
+                clearTeamOneGlow(server, battle);
+                clearBattleViewerGlow(server, battle);
+            }
         }
     }
 
@@ -497,7 +506,30 @@ public final class TameDuelManager {
         for (UUID participantId : battle.teamA) {
             LivingEntity participant = findLoadedLivingParticipant(server, participantId);
             if (participant != null && participant.isAlive()) {
-                participant.addEffect(new MobEffectInstance(MobEffects.GLOWING, 30, 0, false, false, false));
+                participant.addEffect(new MobEffectInstance(MobEffects.GLOWING, DUEL_GLOW_DURATION_TICKS, 0, false, false, false));
+                TEAM_ONE_GLOWED_ENTITIES.add(participantId);
+            }
+        }
+    }
+
+    private static void clearTeamOneGlow(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) return;
+        for (UUID participantId : battle.teamA) {
+            if (!TEAM_ONE_GLOWED_ENTITIES.remove(participantId)) continue;
+            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
+            if (participant != null) {
+                participant.removeEffect(MobEffects.GLOWING);
+            }
+        }
+    }
+
+    private static void clearBattleViewerGlow(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) return;
+        for (UUID participantId : battle.roster) {
+            if (server.getPlayerList().getPlayer(participantId) != null
+                    && (BLUE_GLOW_ENTRIES_BY_VIEWER.containsKey(participantId)
+                    || ORANGE_GLOW_ENTRIES_BY_VIEWER.containsKey(participantId))) {
+                clearViewerEnemyGlow(server, participantId);
             }
         }
     }
@@ -556,6 +588,7 @@ public final class TameDuelManager {
             commandableMob.setCommand(0);
         }
         if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
+        clearDuelRestingState(tame);
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = TameEntityAdapter.target(tame);
         if (isUsableCurrentDuelTarget(tame, current)) {
@@ -660,6 +693,16 @@ public final class TameDuelManager {
         }
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
+        }
+        clearDuelRestingState(tame);
+    }
+
+    private static void clearDuelRestingState(LivingEntity tame) {
+        if (tame instanceof TamableAnimal tamable) {
+            tamable.setOrderedToSit(false);
+        }
+        if (tame instanceof Fox fox) {
+            fox.setSitting(false);
         }
     }
 
@@ -795,6 +838,7 @@ public final class TameDuelManager {
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
         Set<UUID> allParticipants = new HashSet<>(battle.roster);
+        clearTeamOneGlow(server, battle);
         int restoredCount = 0;
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
@@ -954,7 +998,6 @@ public final class TameDuelManager {
             if (living == null || !living.isAlive()) {
                 continue;
             }
-            living.addEffect(new MobEffectInstance(MobEffects.GLOWING, 10, 0, false, false, false));
             desired.add(id.toString());
         }
         return desired;

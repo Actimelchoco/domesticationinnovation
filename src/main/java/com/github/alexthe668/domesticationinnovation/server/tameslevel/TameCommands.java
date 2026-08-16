@@ -50,6 +50,8 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
+import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -2079,10 +2081,6 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "player")
                                                 ))))
-                                .then(Commands.literal("ff")
-                                        .executes(ctx -> duelForfeit(ctx.getSource())))
-                                .then(Commands.literal("inbox")
-                                        .executes(ctx -> duelInbox(ctx.getSource())))
 
                         .then(buildOrganizedDuelCommand())
                         .then(Commands.literal("info")
@@ -2170,9 +2168,12 @@ public class TameCommands {
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
                                 .then(Commands.literal("all")
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE))
-                                        .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
-                                                .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), true, null, null))))
+                                        .then(Commands.argument("sortType", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestLeaderboardModes(b))
+                                                .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), true, null, null, 10))
+                                                .then(Commands.argument("order", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestSortOrders(b))
+                                                        .executes(ctx -> leaderboardOrdered(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), StringArgumentType.getString(ctx, "order"), true, null, null)))))
                                 .then(Commands.literal("everytame")
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, Integer.MAX_VALUE)))
                                 .then(Commands.literal("group")
@@ -2185,9 +2186,12 @@ public class TameCommands {
                                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
                                                 .then(Commands.literal("everytame")
                                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, StringArgumentType.getString(ctx, "name"), null, Integer.MAX_VALUE)))
-                                                .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
-                                                        .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
-                                                        .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), false, StringArgumentType.getString(ctx, "name"), null)))))
+                                                .then(Commands.argument("sortType", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestLeaderboardModes(b))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), false, StringArgumentType.getString(ctx, "name"), null, 10))
+                                                        .then(Commands.argument("order", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestSortOrders(b))
+                                                                .executes(ctx -> leaderboardOrdered(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), StringArgumentType.getString(ctx, "order"), false, StringArgumentType.getString(ctx, "name"), null))))))
                                 .then(Commands.literal("type")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
@@ -2206,9 +2210,12 @@ public class TameCommands {
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))
                                                         .then(Commands.literal("everytame")
                                                                 .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, StringArgumentType.getString(ctx, "name"), Integer.MAX_VALUE)))))
-                                                .then(Commands.argument("sortOrder", StringArgumentType.greedyString())
-                                                        .suggests((ctx, b) -> suggestLeaderboardSortOrders(b))
-                                                        .executes(ctx -> leaderboardSorted(ctx.getSource(), StringArgumentType.getString(ctx, "sortOrder"), true, null, StringArgumentType.getString(ctx, "name"))))))
+                                                .then(Commands.argument("sortType", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestLeaderboardModes(b))
+                                                        .executes(ctx -> leaderboard(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), true, null, StringArgumentType.getString(ctx, "name"), 10))
+                                                        .then(Commands.argument("order", StringArgumentType.word())
+                                                                .suggests((ctx, b) -> suggestSortOrders(b))
+                                                                .executes(ctx -> leaderboardOrdered(ctx.getSource(), StringArgumentType.getString(ctx, "sortType"), StringArgumentType.getString(ctx, "order"), true, null, StringArgumentType.getString(ctx, "name")))))))
                                 .then(Commands.literal("owned")
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", false, null, null, 10))
                                         .then(Commands.argument("limit", IntegerArgumentType.integer(1))
@@ -3639,7 +3646,62 @@ public class TameCommands {
                                         .executes(ctx -> statLong(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
         );
 
+        removeLegacyCommandNodes(root);
+        cleanRootCommandNodes(root);
         dispatcher.register(Commands.literal("tame").redirect(root));
+    }
+
+    private static void cleanRootCommandNodes(CommandNode<CommandSourceStack> root) {
+        Set<String> misplacedLiterals = Set.of("assists", "daysAlive", "deaths", "decline", "ff",
+                "inbox", "kills", "level", "list", "mix", "mmr");
+        try {
+            removeCommandEntries(root, "children", (name, child) ->
+                    misplacedLiterals.contains(name) || child instanceof ArgumentCommandNode<?, ?>);
+            removeCommandEntries(root, "literals", (name, child) -> misplacedLiterals.contains(name));
+            removeCommandEntries(root, "arguments", (name, child) -> true);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not clean the /tames root command nodes", exception);
+        }
+    }
+
+    /**
+     * Old command branches used to be hidden with a false requirement. Brigadier can still
+     * serialize those nodes to clients in some command-tree sync paths, which exposes names
+     * such as {@code _deathsOld} in autocomplete. Remove them from all of Brigadier's lookup
+     * maps so they cannot be parsed or suggested.
+     */
+    private static void removeLegacyCommandNodes(CommandNode<CommandSourceStack> node) {
+        List<CommandNode<CommandSourceStack>> children = new ArrayList<>(node.getChildren());
+        for (CommandNode<CommandSourceStack> child : children) {
+            if (!child.getName().startsWith("_")) {
+                removeLegacyCommandNodes(child);
+            }
+        }
+
+        try {
+            removeLegacyEntries(node, "children");
+            removeLegacyEntries(node, "literals");
+            removeLegacyEntries(node, "arguments");
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not remove legacy /tames command nodes", exception);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void removeLegacyEntries(CommandNode<CommandSourceStack> node, String fieldName)
+            throws ReflectiveOperationException {
+        removeCommandEntries(node, fieldName, (name, child) -> name.startsWith("_"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void removeCommandEntries(CommandNode<CommandSourceStack> node, String fieldName,
+                                             java.util.function.BiPredicate<String, CommandNode<CommandSourceStack>> predicate)
+            throws ReflectiveOperationException {
+        java.lang.reflect.Field field = CommandNode.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        Map<String, CommandNode<CommandSourceStack>> entries =
+                (Map<String, CommandNode<CommandSourceStack>>) field.get(node);
+        entries.entrySet().removeIf(entry -> predicate.test(entry.getKey(), entry.getValue()));
     }
 
     @SubscribeEvent
@@ -5035,12 +5097,6 @@ public class TameCommands {
                     "/tames duel ff",
                     "/tames duel tp",
                     "These commands are available only during an active duel."
-            );
-        }
-        else if (key.equals("duel inbox")) {
-            sendInfoPage(p, "Duel Inbox",
-                    "/tames duel inbox",
-                    "Shows your currently pending duel invites."
             );
         }
         else if (key.equals("duel duelleaderboard") || key.equals("duel leaderboard")) {
@@ -14814,16 +14870,13 @@ public class TameCommands {
         return leaderboard(source, mode, includeAll, groupFilter, typeFilter, requestedLimit, false);
     }
 
-    private static int leaderboardSorted(CommandSourceStack source, String sortOrder, boolean includeAll, String groupFilter, String typeFilter) {
-        String[] parts = sortOrder == null ? new String[0] : sortOrder.trim().split("\\s+");
-        if (parts.length < 1 || parts.length > 2) {
-            return error(source.getPlayer(), "Use a sort order followed optionally by asc or desc.");
-        }
-        boolean ascending = parts.length == 2 && parts[1].equalsIgnoreCase("asc");
-        if (parts.length == 2 && !ascending && !parts[1].equalsIgnoreCase("desc")) {
+    private static int leaderboardOrdered(CommandSourceStack source, String sortType, String order,
+                                          boolean includeAll, String groupFilter, String typeFilter) {
+        boolean ascending = order != null && order.equalsIgnoreCase("asc");
+        if (!ascending && (order == null || !order.equalsIgnoreCase("desc"))) {
             return error(source.getPlayer(), "Sort direction must be asc or desc.");
         }
-        return leaderboard(source, parts[0], includeAll, groupFilter, typeFilter, 10, ascending);
+        return leaderboard(source, sortType, includeAll, groupFilter, typeFilter, 10, ascending);
     }
 
     private static int leaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit, boolean ascending) {
@@ -27138,7 +27191,7 @@ public class TameCommands {
                 "ariseReincarnated", "graveyard", "reincarnate", "healthSiphon",
                 "enterPortalsByThemselves", "sitOnChairs", "collar", "inspect", "search", "arena",
                 "ranked", "duel", "duel duel", "duel accept", "duel decline", "duel ff",
-                "duel inbox", "duel duelleaderboard", "debug", "attribute", "ability", "class")) {
+                "duel duelleaderboard", "debug", "attribute", "ability", "class")) {
             suggestInfoTopic(b, topic);
         }
         return b.buildFuture();
@@ -27227,19 +27280,9 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestLeaderboardSortOrders(SuggestionsBuilder b) {
-        suggestCommandString(b, "daysAlive");
-        suggestCommandString(b, "daysAlive asc");
-        suggestCommandString(b, "deaths");
-        suggestCommandString(b, "deaths asc");
-        suggestCommandString(b, "kills");
-        suggestCommandString(b, "kills asc");
-        suggestCommandString(b, "assists");
-        suggestCommandString(b, "assists asc");
-        suggestCommandString(b, "level");
-        suggestCommandString(b, "level asc");
-        suggestCommandString(b, "mmr");
-        suggestCommandString(b, "mmr asc");
+    private static CompletableFuture<Suggestions> suggestSortOrders(SuggestionsBuilder b) {
+        suggestCommandString(b, "asc");
+        suggestCommandString(b, "desc");
         return b.buildFuture();
     }
 
