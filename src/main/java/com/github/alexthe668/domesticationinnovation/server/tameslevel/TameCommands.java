@@ -3949,6 +3949,7 @@ public class TameCommands {
         List<TameData> result = new ArrayList<>();
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || !data.dead || data.uuid == null || !ownerUuid.equals(data.ownerUUID)) continue;
+            if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) continue;
             if (isDuelLocked(data.uuid) || diedOnCurrentGameDay(server, data)) continue;
             if (findLoadedLivingTameByIdentity(server, data.uuid, data.tlId) != null) continue;
             result.add(data);
@@ -21944,9 +21945,6 @@ public class TameCommands {
             return;
         }
         boolean freeBlackBed = hasBlackAutoReincarnationBed(server, data);
-        if (!freeBlackBed && !TameRegistry.isAutoReincarnationEnabled(data.ownerUUID)) {
-            return;
-        }
         if (!(data.hasSavedProgress && data.level < highestRecordedLevel(data))) {
             return;
         }
@@ -21957,6 +21955,17 @@ public class TameCommands {
         if (freeBlackBed) {
             record.autoReincarnateOnRespawn = true;
             TameRegistry.markDirty();
+            return;
+        }
+        int restoredLevels = Math.max(1, highestRecordedLevel(data) - Math.max(1, data.level));
+        InventoryAccess rangedDrumInventory = chestDrumInventoryInRangeOfAssignedBed(server, data);
+        if (rangedDrumInventory != null
+                && consumeFoodValueFromInventory(rangedDrumInventory, restoredLevels * FOOD_POINTS_PER_APPROVED_ITEM)) {
+            record.autoReincarnateOnRespawn = true;
+            TameRegistry.markDirty();
+            return;
+        }
+        if (!TameRegistry.isAutoReincarnationEnabled(data.ownerUUID)) {
             return;
         }
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
@@ -21971,7 +21980,6 @@ public class TameCommands {
         if (bedLevel == null) {
             return;
         }
-        int restoredLevels = Math.max(1, highestRecordedLevel(data) - Math.max(1, data.level));
         if (consumeAutoReincarnationMaterials(bedLevel, bedPos, restoredLevels)) {
             record.autoReincarnateOnRespawn = true;
             TameRegistry.markDirty();
@@ -22950,6 +22958,27 @@ public class TameCommands {
         for (ServerPlayer player : players) {
             if (player != null && player.getServer() != null) player.getServer().getCommands().sendCommands(player);
         }
+    }
+
+    private static InventoryAccess chestDrumInventoryInRangeOfAssignedBed(MinecraftServer server, TameData data) {
+        if (server == null || data == null || data.ownerUUID == null || !data.hasPetBed
+                || data.petBedDimension == null || data.petBedDimension.isBlank()) return null;
+        ResourceLocation bedDimension = ResourceLocation.tryParse(data.petBedDimension);
+        if (bedDimension == null) return null;
+        ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimension));
+        if (level == null) return null;
+        BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
+        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(server, data.ownerUUID)) {
+            if (!data.petBedDimension.equals(range.dimension())) continue;
+            BlockPos inventoryPos = new BlockPos(range.x(), range.y(), range.z());
+            if (Math.abs(bedPos.getX() - inventoryPos.getX()) > range.blockRange()
+                    || Math.abs(bedPos.getZ() - inventoryPos.getZ()) > range.blockRange()
+                    || Math.abs(bedPos.getY() - inventoryPos.getY()) > range.height()) continue;
+            level.getChunk(inventoryPos);
+            InventoryAccess inventory = inventoryAccessFromBlockEntity(level.getBlockEntity(inventoryPos), Direction.DOWN);
+            if (inventory != null) return inventory;
+        }
+        return null;
     }
 
     private static void refreshChangedDuelCommandStates(MinecraftServer server) {
