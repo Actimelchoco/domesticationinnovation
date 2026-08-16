@@ -256,7 +256,10 @@ public final class WaystonesTeleportCompat {
         if (LevelSystem.getAttributeLevel(data, "tethered_teleport") <= 0) {
             return false;
         }
-        return TameEntityAdapter.isFollowingOwner(tame);
+        // Modded tames do not all expose TL's movement mode through their live tame API.
+        // Require the registry state as well so "sit", "wander", and "guardian" cannot
+        // be mistaken for follow merely because an entity reports that it is not sitting.
+        return TameAutoFollowEvents.isFollowing(data) && TameEntityAdapter.isFollowingOwner(tame);
     }
 
     private static LivingEntity findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {

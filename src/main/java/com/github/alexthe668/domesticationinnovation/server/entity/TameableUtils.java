@@ -8,6 +8,7 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.github.alexthe668.domesticationinnovation.server.misc.DITameProgressData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
@@ -1281,6 +1282,10 @@ public class TameableUtils {
             hasTeleportFlag = data != null && data.attributeLevels.getOrDefault("tethered_teleport", 0) > 0;
         }
         if (hasTeleportFlag) {
+            TameData data = TameRegistry.get(animal.getUUID());
+            if (data != null && !TameAutoFollowEvents.isFollowing(data)) {
+                return false;
+            }
             if (animal instanceof IComandableMob commandableMob) {
                 return commandableMob.getCommand() == 2;
             } else if (animal instanceof TamableAnimal tame) {

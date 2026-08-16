@@ -3653,7 +3653,7 @@ public class TameCommands {
 
     private static void cleanRootCommandNodes(CommandNode<CommandSourceStack> root) {
         Set<String> misplacedLiterals = Set.of("assists", "daysAlive", "deaths", "decline", "ff",
-                "inbox", "kills", "level", "list", "mix", "mmr");
+                "inbox", "kills", "level", "list", "mix", "mmr", "owned");
         try {
             removeCommandEntries(root, "children", (name, child) ->
                     misplacedLiterals.contains(name) || child instanceof ArgumentCommandNode<?, ?>);
