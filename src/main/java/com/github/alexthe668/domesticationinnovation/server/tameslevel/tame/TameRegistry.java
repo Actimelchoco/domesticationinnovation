@@ -41,6 +41,7 @@ public class TameRegistry {
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_REMOVE_FROM_ALL_EXCLUSIONS = new HashMap<>();
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
+    private static final Map<String, int[]> CUSTOM_CALL_ORDERS = new HashMap<>();
     private static final Set<String> DISABLED_TAME_TYPE_IDS = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
@@ -115,6 +116,8 @@ public class TameRegistry {
         OWNER_REMOVE_FROM_ALL_EXCLUSIONS.putAll(savedData.getRemoveFromAllExclusions());
         INVERTED_CALL_ORDER_TYPE_IDS.clear();
         INVERTED_CALL_ORDER_TYPE_IDS.addAll(savedData.getInvertedCallOrderTypeIds());
+        CUSTOM_CALL_ORDERS.clear();
+        savedData.getCustomCallOrders().forEach((id, values) -> CUSTOM_CALL_ORDERS.put(id, values.clone()));
         DISABLED_TAME_TYPE_IDS.clear();
         DISABLED_TAME_TYPE_IDS.addAll(savedData.getDisabledTameTypeIds());
         PLAYER_DUEL_STATS.clear();
@@ -292,6 +295,7 @@ public class TameRegistry {
         savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setRemoveFromAllExclusions(OWNER_REMOVE_FROM_ALL_EXCLUSIONS);
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
+        savedData.setCustomCallOrders(CUSTOM_CALL_ORDERS);
         savedData.setDisabledTameTypeIds(DISABLED_TAME_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
@@ -621,6 +625,33 @@ public class TameRegistry {
         if ("minecraft".equals(namespace) || "alexscaves".equals(namespace)) {
             return false;
         }
+        return true;
+    }
+
+    public static int getCallOrderCommand(String typeId, int movementIndex, int fallback) {
+        int[] mapping = CUSTOM_CALL_ORDERS.get(normalizeTypeId(typeId));
+        return mapping != null && movementIndex >= 0 && movementIndex < mapping.length ? mapping[movementIndex] : fallback;
+    }
+
+    public static int[] getCustomCallOrder(String typeId) {
+        int[] mapping = CUSTOM_CALL_ORDERS.get(normalizeTypeId(typeId));
+        return mapping == null ? null : mapping.clone();
+    }
+
+    public static boolean setCustomCallOrder(String typeId, int movementIndex, int command) {
+        String normalized = normalizeTypeId(typeId);
+        if (normalized == null || normalized.isBlank() || movementIndex < 0 || movementIndex > 2 || command < 0 || command > 2) return false;
+        int[] mapping = CUSTOM_CALL_ORDERS.computeIfAbsent(normalized, id -> isCallOrderInvertedType(id)
+                ? new int[]{0, 1, 2} : new int[]{2, 1, 0});
+        int oldCommand = mapping[movementIndex];
+        for (int i = 0; i < mapping.length; i++) {
+            if (i != movementIndex && mapping[i] == command) {
+                mapping[i] = oldCommand;
+                break;
+            }
+        }
+        mapping[movementIndex] = command;
+        markDirty();
         return true;
     }
 

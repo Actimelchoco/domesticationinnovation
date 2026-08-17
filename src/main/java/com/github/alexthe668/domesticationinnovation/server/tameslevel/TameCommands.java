@@ -2956,6 +2956,21 @@ public class TameCommands {
                                                         StringArgumentType.getString(ctx, "pet")
                                                 ))))
                                 .then(Commands.literal("callOrder")
+                                        .then(Commands.literal("follow")
+                                                .then(Commands.argument("number", IntegerArgumentType.integer(0, 2))
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
+                                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                                .executes(ctx -> adminSetCallOrder(ctx.getSource(), "follow", IntegerArgumentType.getInteger(ctx, "number"), StringArgumentType.getString(ctx, "typeId"))))))
+                                        .then(Commands.literal("sit")
+                                                .then(Commands.argument("number", IntegerArgumentType.integer(0, 2))
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
+                                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                                .executes(ctx -> adminSetCallOrder(ctx.getSource(), "sit", IntegerArgumentType.getInteger(ctx, "number"), StringArgumentType.getString(ctx, "typeId"))))))
+                                        .then(Commands.literal("wander")
+                                                .then(Commands.argument("number", IntegerArgumentType.integer(0, 2))
+                                                        .then(Commands.argument("typeId", StringArgumentType.string())
+                                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                                .executes(ctx -> adminSetCallOrder(ctx.getSource(), "wander", IntegerArgumentType.getInteger(ctx, "number"), StringArgumentType.getString(ctx, "typeId"))))))
                                         .then(Commands.literal("info")
                                                 .executes(ctx -> adminCallOrderInfo(ctx.getSource())))
                                         .then(Commands.literal("add")
@@ -19627,6 +19642,28 @@ public class TameCommands {
         }
     }
 
+    private static int adminSetCallOrder(CommandSourceStack source, String mode, int number, String typeId) {
+        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        int movementIndex = switch (mode) {
+            case "follow" -> 0;
+            case "sit" -> 1;
+            case "wander" -> 2;
+            default -> -1;
+        };
+        if (normalized.isBlank() || movementIndex < 0) {
+            return error(source.getPlayer(), "A valid movement mode and tame type are required.");
+        }
+        if (!TameRegistry.setCustomCallOrder(normalized, movementIndex, number)) {
+            return error(source.getPlayer(), "Could not save that call-order mapping.");
+        }
+        int[] mapping = TameRegistry.getCustomCallOrder(normalized);
+        Component line = Component.literal("Call order for " + normalized + ": follow=" + mapping[0] + ", sit=" + mapping[1] + ", wander=" + mapping[2] + ".")
+                .withStyle(ChatFormatting.AQUA);
+        if (source.getPlayer() != null) source.getPlayer().sendSystemMessage(line);
+        else source.sendSuccess(() -> line, false);
+        return 1;
+    }
+
     private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId) {
         if (tame instanceof TamableAnimal tamable) {
             enforceTamedOwnerPreserveCollar(tamable, ownerId);
@@ -20068,6 +20105,13 @@ public class TameCommands {
     }
 
     private static boolean matchesSnapshotCommand(int command, MovementOrder order, String typeId) {
+        int movementIndex = switch (order) {
+            case FOLLOW -> 0;
+            case SIT -> 1;
+            case WANDER, GUARDIAN -> 2;
+        };
+        int[] custom = TameRegistry.getCustomCallOrder(typeId);
+        if (custom != null) return command == custom[movementIndex];
         if (isLegendaryMonstersType(typeId)) {
             int expected = switch (order) {
                 case FOLLOW -> 0;
@@ -20076,11 +20120,12 @@ public class TameCommands {
             };
             return command == expected;
         }
-        int expected = switch (order) {
+        int fallback = switch (order) {
             case WANDER, GUARDIAN -> usesInvertedGenericCallOrder(typeId) ? 2 : 0;
             case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 0 : 2;
             case SIT -> 1;
         };
+        int expected = TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback);
         return command == expected;
     }
 
@@ -20275,11 +20320,17 @@ public class TameCommands {
             ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
             String typeId = key == null ? tame.getType().toString() : key.toString();
             boolean inverted = usesInvertedGenericCallOrder(typeId);
-            commandable.setCommand(switch (order) {
+            int fallback = switch (order) {
                 case WANDER, GUARDIAN -> inverted ? 2 : 0;
                 case FOLLOW -> inverted ? 0 : 2;
                 case SIT -> 1;
-            });
+            };
+            int movementIndex = switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER, GUARDIAN -> 2;
+            };
+            commandable.setCommand(TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback));
         }
         if (order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) {
             tryInvokeBooleanSetter(tame, "setOrderedToSit", false);
@@ -20450,6 +20501,15 @@ public class TameCommands {
     }
 
     private static int preferredCommandInt(TamableAnimal tame, MovementOrder order) {
+        String typeId = entityTypeId(tame);
+        int[] custom = TameRegistry.getCustomCallOrder(typeId);
+        if (custom != null) {
+            return custom[switch (order) {
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER, GUARDIAN -> 2;
+            }];
+        }
         if (isLegendaryMonstersType(entityTypeId(tame))) {
             return switch (order) {
                 case FOLLOW -> 0;
@@ -20457,19 +20517,27 @@ public class TameCommands {
                 case WANDER, GUARDIAN -> 2;
             };
         }
+        int fallback;
         if (usesInvertedGenericCallOrder(tame)) {
-            return switch (order) {
+            fallback = switch (order) {
                 case FOLLOW -> 0;
                 case SIT -> 1;
                 case WANDER, GUARDIAN -> 2;
             };
+        } else {
+            fallback = switch (order) {
+                case WANDER -> 0;
+                case SIT -> 1;
+                case FOLLOW -> 2;
+                case GUARDIAN -> 0;
+            };
         }
-        return switch (order) {
-            case WANDER -> 0;
+        int movementIndex = switch (order) {
+            case FOLLOW -> 0;
             case SIT -> 1;
-            case FOLLOW -> 2;
-            case GUARDIAN -> 0;
+            case WANDER, GUARDIAN -> 2;
         };
+        return TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback);
     }
 
     private static void tryInvokeStaticHelper(String helperClassName, TamableAnimal tame, MovementOrder order) {
@@ -20544,6 +20612,11 @@ public class TameCommands {
     }
 
     private static int[] commandCandidates(TamableAnimal tame, MovementOrder order) {
+        int[] custom = TameRegistry.getCustomCallOrder(entityTypeId(tame));
+        if (custom != null) {
+            int preferred = preferredCommandInt(tame, order);
+            return new int[]{preferred, 0, 1, 2, 3};
+        }
         if (isLegendaryMonstersType(entityTypeId(tame))) {
             return switch (order) {
                 case FOLLOW -> new int[]{0, 3, 2, 1};

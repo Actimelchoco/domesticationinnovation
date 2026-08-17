@@ -31,6 +31,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Map<UUID, Set<String>> removeFromAllExclusions = new HashMap<>();
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
+    private final Map<String, int[]> customCallOrders = new HashMap<>();
     private final Set<String> disabledTameTypeIds = new LinkedHashSet<>(Set.of("minecraft:horse"));
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
@@ -184,6 +185,20 @@ public class TameRegistrySavedData extends SavedData {
                 this.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
+    }
+
+    public Map<String, int[]> getCustomCallOrders() {
+        return customCallOrders;
+    }
+
+    public void setCustomCallOrders(Map<String, int[]> mappings) {
+        customCallOrders.clear();
+        if (mappings == null) return;
+        mappings.forEach((id, values) -> {
+            if (id != null && !id.isBlank() && values != null && values.length == 3) {
+                customCallOrders.put(id.trim().toLowerCase(java.util.Locale.ROOT), values.clone());
+            }
+        });
     }
 
     public Map<UUID, Set<String>> getRemoveFromAllExclusions() {
@@ -499,6 +514,15 @@ public class TameRegistrySavedData extends SavedData {
             invertedCallOrderTag.add(net.minecraft.nbt.StringTag.valueOf(id));
         }
         tag.put("invertedCallOrderTypeIds", invertedCallOrderTag);
+        ListTag customCallOrdersTag = new ListTag();
+        customCallOrders.forEach((id, values) -> {
+            if (id == null || id.isBlank() || values == null || values.length != 3) return;
+            CompoundTag row = new CompoundTag();
+            row.putString("typeId", id);
+            row.putIntArray("commands", values);
+            customCallOrdersTag.add(row);
+        });
+        tag.put("customCallOrders", customCallOrdersTag);
         ListTag disabledTameTypesTag = new ListTag();
         for (String id : disabledTameTypeIds) {
             if (id == null || id.isBlank()) {
@@ -731,6 +755,15 @@ public class TameRegistrySavedData extends SavedData {
                         data.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
                     }
                 }
+            }
+        }
+        if (tag.contains("customCallOrders", Tag.TAG_LIST)) {
+            ListTag mappings = tag.getList("customCallOrders", Tag.TAG_COMPOUND);
+            for (Tag entry : mappings) {
+                if (!(entry instanceof CompoundTag row)) continue;
+                String id = row.getString("typeId").trim().toLowerCase(java.util.Locale.ROOT);
+                int[] values = row.getIntArray("commands");
+                if (!id.isBlank() && values.length == 3) data.customCallOrders.put(id, values);
             }
         }
         if (tag.contains("disabledTameTypeIds", Tag.TAG_LIST)) {
