@@ -100,7 +100,7 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isFollowCommand(int command, String typeId) {
-        return command == (usesInvertedGenericCallOrder(typeId) ? 1 : 2);
+        return command == (usesInvertedGenericCallOrder(typeId) ? 0 : 2);
     }
 
     private static boolean usesInvertedGenericCallOrder(String typeId) {

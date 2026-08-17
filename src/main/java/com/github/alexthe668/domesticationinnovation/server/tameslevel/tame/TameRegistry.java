@@ -598,7 +598,10 @@ public class TameRegistry {
             return false;
         }
         String normalized = normalizeTypeId(typeId);
-        return usesInvertedCallOrderByDefault(normalized) || INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized);
+        // Entries are overrides of the namespace default, not an additional
+        // source of "true". Using OR here meant a modded type (inverted by
+        // default) could never be changed by /tames admin callOrder invert.
+        return usesInvertedCallOrderByDefault(normalized) != INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized);
     }
 
     public static Set<String> getCallOrderInvertedTypes() {
@@ -626,16 +629,13 @@ public class TameRegistry {
             return false;
         }
         String normalized = normalizeTypeId(typeId);
-        boolean enabled;
         if (INVERTED_CALL_ORDER_TYPE_IDS.contains(normalized)) {
             INVERTED_CALL_ORDER_TYPE_IDS.remove(normalized);
-            enabled = false;
         } else {
             INVERTED_CALL_ORDER_TYPE_IDS.add(normalized);
-            enabled = true;
         }
         markDirty();
-        return enabled;
+        return isCallOrderInvertedType(normalized);
     }
 
     public static boolean addCallOrderInvertedType(String typeId) {

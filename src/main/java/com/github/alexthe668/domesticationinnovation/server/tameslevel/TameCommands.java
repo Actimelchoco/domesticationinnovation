@@ -18474,7 +18474,7 @@ public class TameCommands {
     private static int adminCallOrderInfo(CommandSourceStack source) {
         List<String> overrideTypes = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
         overrideTypes.sort(String::compareToIgnoreCase);
-        Component header = Component.literal("Call-order default: modded types use inverted mapping (0 wander, 1 follow, 2 sit); minecraft types keep old mapping (0 wander, 1 sit, 2 follow).")
+        Component header = Component.literal("Call-order default: modded types use inverted mapping (0 follow, 1 sit, 2 wander); minecraft types keep old mapping (0 wander, 1 sit, 2 follow).")
                 .withStyle(ChatFormatting.AQUA);
         if (source.getPlayer() != null) {
             source.getPlayer().sendSystemMessage(header);
@@ -20077,9 +20077,9 @@ public class TameCommands {
             return command == expected;
         }
         int expected = switch (order) {
-            case WANDER, GUARDIAN -> 0;
-            case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 1 : 2;
-            case SIT -> usesInvertedGenericCallOrder(typeId) ? 2 : 1;
+            case WANDER, GUARDIAN -> usesInvertedGenericCallOrder(typeId) ? 2 : 0;
+            case FOLLOW -> usesInvertedGenericCallOrder(typeId) ? 0 : 2;
+            case SIT -> 1;
         };
         return command == expected;
     }
@@ -20272,10 +20272,13 @@ public class TameCommands {
             mob.getNavigation().stop();
         }
         if (tame instanceof IComandableMob commandable) {
+            ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+            String typeId = key == null ? tame.getType().toString() : key.toString();
+            boolean inverted = usesInvertedGenericCallOrder(typeId);
             commandable.setCommand(switch (order) {
-                case SIT, GUARDIAN -> 1;
-                case FOLLOW -> 2;
-                case WANDER -> 0;
+                case WANDER, GUARDIAN -> inverted ? 2 : 0;
+                case FOLLOW -> inverted ? 0 : 2;
+                case SIT -> 1;
             });
         }
         if (order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) {
@@ -20456,10 +20459,9 @@ public class TameCommands {
         }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
-                case WANDER -> 0;
-                case FOLLOW -> 1;
-                case SIT -> 2;
-                case GUARDIAN -> 0;
+                case FOLLOW -> 0;
+                case SIT -> 1;
+                case WANDER, GUARDIAN -> 2;
             };
         }
         return switch (order) {
@@ -20551,10 +20553,9 @@ public class TameCommands {
         }
         if (usesInvertedGenericCallOrder(tame)) {
             return switch (order) {
-                case WANDER -> new int[]{0, 1, 2, 3};
-                case FOLLOW -> new int[]{1, 2, 0, 3};
-                case SIT -> new int[]{2, 1, 0, 3};
-                case GUARDIAN -> new int[]{0, 1, 2, 3};
+                case FOLLOW -> new int[]{0, 2, 1, 3};
+                case SIT -> new int[]{1, 0, 2, 3};
+                case WANDER, GUARDIAN -> new int[]{2, 0, 1, 3};
             };
         }
         return switch (order) {
