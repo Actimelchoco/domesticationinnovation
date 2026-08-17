@@ -12065,7 +12065,7 @@ public class TameCommands {
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
         respawned.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceRecoveredTameOwner(respawned, data.ownerUUID);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID, data);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12360,7 +12360,7 @@ public class TameCommands {
         respawned.setUUID(data.uuid);
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceRecoveredTameOwner(respawned, data.ownerUUID);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID, data);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12674,7 +12674,7 @@ public class TameCommands {
         recovered.moveTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot());
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         UUID ownerId = p.getUUID();
-        enforceRecoveredTameOwner(recovered, ownerId);
+        enforceRecoveredTameOwner(recovered, ownerId, data);
 
         if (!level.addFreshEntity(recovered)) {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12758,7 +12758,7 @@ public class TameCommands {
         recovered.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         recovered.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceRecoveredTameOwner(recovered, resolvedOwnerId);
+        enforceRecoveredTameOwner(recovered, resolvedOwnerId, data);
 
         if (!target.level.addFreshEntity(recovered)) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
@@ -16689,7 +16689,7 @@ public class TameCommands {
         clone.setDeltaMovement(0.0D, 0.0D, 0.0D);
         clone.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
         clone.getPersistentData().putBoolean(ADMIN_CLONE_TRANSIENT_TAG, true);
-        enforceTamedOwnerPreserveCollar(clone, data.ownerUUID);
+        enforceRecoveredTameOwner(clone, data.ownerUUID, data);
 
         if (!player.serverLevel().addFreshEntity(clone)) {
             return error(player, "Failed to spawn clone.");
@@ -17526,7 +17526,7 @@ public class TameCommands {
         rebuilt.setUUID(data.uuid);
         rebuilt.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         rebuilt.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceTamedOwnerPreserveCollar(rebuilt, data.ownerUUID);
+        enforceRecoveredTameOwner(rebuilt, data.ownerUUID, data);
         if (markJoinSkip) {
             rebuilt.getPersistentData().putBoolean(JOIN_FIX_STALE_SKIP_TAG, true);
         }
@@ -19664,9 +19664,12 @@ public class TameCommands {
         return 1;
     }
 
-    private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId) {
+    private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId, TameData data) {
         if (tame instanceof TamableAnimal tamable) {
             enforceTamedOwnerPreserveCollar(tamable, ownerId);
+            if (tamable instanceof Wolf wolf && data != null && data.collarColor >= 0) {
+                wolf.setCollarColor(DyeColor.byId(data.collarColor));
+            }
         } else if (tame instanceof ModifedToBeTameable modified) {
             modified.setTame(true);
             modified.setTameOwnerUUID(ownerId);

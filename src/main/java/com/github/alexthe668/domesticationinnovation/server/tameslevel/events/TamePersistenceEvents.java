@@ -203,6 +203,9 @@ public class TamePersistenceEvents {
             }
         }
         if (saveSnapshotTick || data.entitySnapshot == null || data.entitySnapshot.isEmpty()) {
+            if (tame instanceof net.minecraft.world.entity.animal.Wolf wolf) {
+                data.collarColor = wolf.getCollarColor().getId();
+            }
             net.minecraft.nbt.CompoundTag snapshot = new net.minecraft.nbt.CompoundTag();
             TameRegistry.bindEntityToData(tame, data);
             tame.save(snapshot);
