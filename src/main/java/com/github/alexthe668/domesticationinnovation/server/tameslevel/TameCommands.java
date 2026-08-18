@@ -12065,7 +12065,7 @@ public class TameCommands {
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
         respawned.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceRecoveredTameOwner(respawned, data.ownerUUID, data);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12079,6 +12079,7 @@ public class TameCommands {
         }
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
+        restoreRecoveredAppearance(respawned, snapshot);
         TameRegistry.bindEntityToData(respawned, data);
         clearMatchingDiBedRespawnRequests(source, data);
         TameRegistry.register(data);
@@ -12360,7 +12361,7 @@ public class TameCommands {
         respawned.setUUID(data.uuid);
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceRecoveredTameOwner(respawned, data.ownerUUID, data);
+        enforceRecoveredTameOwner(respawned, data.ownerUUID);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12371,6 +12372,7 @@ public class TameCommands {
         respawned.setHealth(respawned.getMaxHealth());
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
+        restoreRecoveredAppearance(respawned, snapshot);
         TameRegistry.bindEntityToData(respawned, data);
         TameRegistry.register(data);
         return RespawnResult.ok();
@@ -12674,7 +12676,7 @@ public class TameCommands {
         recovered.moveTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), p.getXRot());
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         UUID ownerId = p.getUUID();
-        enforceRecoveredTameOwner(recovered, ownerId, data);
+        enforceRecoveredTameOwner(recovered, ownerId);
 
         if (!level.addFreshEntity(recovered)) {
             return RecoverResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12687,6 +12689,7 @@ public class TameCommands {
             recovered.setHealth(recovered.getMaxHealth());
         }
         finalizeRecoveredLivingState(recovered, data);
+        restoreRecoveredAppearance(recovered, snapshot);
 
         data.ownerUUID = p.getUUID();
         TameRegistry.bindEntityToData(recovered, data);
@@ -12758,7 +12761,7 @@ public class TameCommands {
         recovered.moveTo(target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
         recovered.setDeltaMovement(0.0D, 0.0D, 0.0D);
         recovered.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
-        enforceRecoveredTameOwner(recovered, resolvedOwnerId, data);
+        enforceRecoveredTameOwner(recovered, resolvedOwnerId);
 
         if (!target.level.addFreshEntity(recovered)) {
             logRebuildTrace("recoverPetEntityAtLocation.fail", data, "spawn failed UUID conflict or invalid state");
@@ -12772,6 +12775,7 @@ public class TameCommands {
             recovered.setHealth(recovered.getMaxHealth());
         }
         finalizeRecoveredLivingState(recovered, data);
+        restoreRecoveredAppearance(recovered, snapshot);
 
         data.ownerUUID = resolvedOwnerId;
         data.stored = false;
@@ -16689,7 +16693,7 @@ public class TameCommands {
         clone.setDeltaMovement(0.0D, 0.0D, 0.0D);
         clone.getPersistentData().putBoolean(ADMIN_CLONE_SILENT_TAG, true);
         clone.getPersistentData().putBoolean(ADMIN_CLONE_TRANSIENT_TAG, true);
-        enforceRecoveredTameOwner(clone, data.ownerUUID, data);
+        enforceTamedOwnerPreserveCollar(clone, data.ownerUUID);
 
         if (!player.serverLevel().addFreshEntity(clone)) {
             return error(player, "Failed to spawn clone.");
@@ -17526,7 +17530,7 @@ public class TameCommands {
         rebuilt.setUUID(data.uuid);
         rebuilt.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         rebuilt.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceRecoveredTameOwner(rebuilt, data.ownerUUID, data);
+        enforceTamedOwnerPreserveCollar(rebuilt, data.ownerUUID);
         if (markJoinSkip) {
             rebuilt.getPersistentData().putBoolean(JOIN_FIX_STALE_SKIP_TAG, true);
         }
@@ -17540,6 +17544,7 @@ public class TameCommands {
             rebuilt.setHealth(rebuilt.getMaxHealth());
         }
         finalizeRespawnState(rebuilt, data);
+        restoreRecoveredAppearance(rebuilt, snapshot);
         TameRegistry.register(data);
         TameRegistry.markDirty();
         return true;
@@ -17639,6 +17644,7 @@ public class TameCommands {
             respawned.setHealth(respawned.getMaxHealth());
         }
         finalizeRespawnState(respawned, data);
+        restoreRecoveredAppearance(respawned, snapshot);
         TameRegistry.register(data);
         if (deadRecord != null) {
             deadRecord.reincarnated = true;
@@ -19664,16 +19670,41 @@ public class TameCommands {
         return 1;
     }
 
-    private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId, TameData data) {
+    private static void enforceRecoveredTameOwner(LivingEntity tame, UUID ownerId) {
         if (tame instanceof TamableAnimal tamable) {
             enforceTamedOwnerPreserveCollar(tamable, ownerId);
-            if (tamable instanceof Wolf wolf && data != null && data.collarColor >= 0) {
-                wolf.setCollarColor(DyeColor.byId(data.collarColor));
-            }
         } else if (tame instanceof ModifedToBeTameable modified) {
             modified.setTame(true);
             modified.setTameOwnerUUID(ownerId);
         }
+    }
+
+    private static void restoreRecoveredAppearance(LivingEntity tame, CompoundTag savedSnapshot) {
+        if (tame == null || savedSnapshot == null || savedSnapshot.isEmpty()) return;
+        CompoundTag current = new CompoundTag();
+        if (!tame.save(current)) return;
+        boolean changed = false;
+        for (String key : savedSnapshot.getAllKeys()) {
+            String normalized = key.toLowerCase(Locale.ROOT);
+            if (normalized.contains("collar")) continue;
+            boolean appearanceKey = normalized.equals("variant")
+                    || normalized.equals("cattype")
+                    || normalized.equals("rabbittype")
+                    || normalized.equals("foxtype")
+                    || normalized.contains("pattern")
+                    || normalized.contains("texture")
+                    || normalized.contains("appearance")
+                    || normalized.contains("skin")
+                    || normalized.contains("coat")
+                    || normalized.contains("plumage");
+            if (!appearanceKey) continue;
+            Tag value = savedSnapshot.get(key);
+            if (value != null) {
+                current.put(key, value.copy());
+                changed = true;
+            }
+        }
+        if (changed) tame.load(current);
     }
 
     private static void finalizeRecoveredLivingState(LivingEntity tame, TameData data) {
