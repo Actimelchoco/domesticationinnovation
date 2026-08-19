@@ -13472,6 +13472,9 @@ public class TameCommands {
                     "entityUuid=" + loaded.getUUID() + " entityTlId=" + TameData.getTlId(loaded) + " targetDim=" + (target != null && target.level != null ? target.level.dimension().location() : "null") + " targetPos=" + (target == null ? "null" : target.pos));
             if (target != null && target.level != null && target.pos != null) {
                 teleportTameToLocation(loaded, target, isAssignedBedTarget(data, target));
+                if (data.movementOrder == 1) {
+                    applyMovementOrderCode(loaded, 1);
+                }
                 return UnloadedTpResult.queued();
             }
             return UnloadedTpResult.fail("invalid target");
@@ -14099,14 +14102,16 @@ public class TameCommands {
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (no food)");
                 continue;
             }
+            int previousMovementOrder = data.movementOrder;
+            data.movementOrder = 1;
             UnloadedTpResult unloaded = tpUnloadedHomeViaLanternOrRecover(source, player, data, unloadedDestinations.get(i));
             if (unloaded.success) {
                 queued++;
-                if (data != null && data.movementOrder != 1) {
-                    data.movementOrder = 1;
+                if (previousMovementOrder != 1) {
                     movementChanged = true;
                 }
             } else {
+                data.movementOrder = previousMovementOrder;
                 queueFailed++;
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (" + unloaded.error + ")");
             }
@@ -20098,11 +20103,12 @@ public class TameCommands {
         if (tame == null) {
             return MovementOrder.FOLLOW;
         }
+        if (tame.isOrderedToSit()
+                || (tame instanceof ModifedToBeTameable modified && modified.isStayingStill())) {
+            return MovementOrder.SIT;
+        }
         if (tame instanceof IComandableMob commandable) {
             return resolveMovementOrderFromLiveCommand(tame, commandable.getCommand(), data != null && data.hasHome);
-        }
-        if (tame.isOrderedToSit()) {
-            return MovementOrder.SIT;
         }
         MovementOrder external = resolveExternalMovementOrder(tame, data);
         if (external != null) {
