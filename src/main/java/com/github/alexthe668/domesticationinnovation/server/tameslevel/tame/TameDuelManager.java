@@ -616,6 +616,7 @@ public final class TameDuelManager {
         for (UUID ownId : ownTeam) {
             LivingEntity own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
+            forceDuelAwakeAndMobile(own);
             applyDuelFollowRangeBoost(own);
             keepParticipantNearBattle(server, own, enemyTeam);
             LivingEntity current = TameEntityAdapter.target(own);
@@ -700,9 +701,36 @@ public final class TameDuelManager {
     private static void clearDuelRestingState(LivingEntity tame) {
         if (tame instanceof TamableAnimal tamable) {
             tamable.setOrderedToSit(false);
+            tamable.setInSittingPose(false);
         }
         if (tame instanceof Fox fox) {
             fox.setSitting(false);
+        }
+        tryInvokeDuelBooleanSetter(tame, "setOrderedToSit", false);
+        tryInvokeDuelBooleanSetter(tame, "setInSittingPose", false);
+        tryInvokeDuelBooleanSetter(tame, "setSitting", false);
+        tryInvokeDuelBooleanSetter(tame, "setSleeping", false);
+        tryInvokeDuelBooleanSetter(tame, "setPlayingDead", false);
+    }
+
+    private static void forceDuelAwakeAndMobile(LivingEntity tame) {
+        if (tame == null || !isEntityInDuel(tame.getUUID())) {
+            return;
+        }
+        if (tame instanceof IComandableMob commandableMob) {
+            commandableMob.setCommand(0);
+        }
+        clearDuelRestingState(tame);
+    }
+
+    private static void tryInvokeDuelBooleanSetter(LivingEntity tame, String methodName, boolean value) {
+        if (tame == null || methodName == null || methodName.isBlank()) {
+            return;
+        }
+        try {
+            tame.getClass().getMethod(methodName, boolean.class).invoke(tame, value);
+        } catch (ReflectiveOperationException ignored) {
+            // Optional interface tames expose different subsets of resting-state setters.
         }
     }
 

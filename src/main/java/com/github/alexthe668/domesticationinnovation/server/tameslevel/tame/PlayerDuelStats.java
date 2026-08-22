@@ -19,6 +19,8 @@ public class PlayerDuelStats {
     public int duelCount = 0;
     public double duelPoints = 0.0D;
     public int rankedSaturation = 0;
+    public long ariseCostDay = Long.MIN_VALUE;
+    public int ariseUsesToday = 0;
 
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
@@ -35,6 +37,8 @@ public class PlayerDuelStats {
         tag.putInt("duelCount", Math.max(0, duelCount));
         tag.putDouble("duelPoints", Math.max(0.0D, duelPoints));
         tag.putInt("rankedSaturation", Math.max(0, rankedSaturation));
+        tag.putLong("ariseCostDay", ariseCostDay);
+        tag.putInt("ariseUsesToday", Math.max(0, ariseUsesToday));
         return tag;
     }
 
@@ -60,6 +64,10 @@ public class PlayerDuelStats {
             data.duelCount = Math.max(0, tag.getInt("duelCount"));
             data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
             data.rankedSaturation = Math.max(0, tag.getInt("rankedSaturation"));
+            if (tag.contains("ariseCostDay", Tag.TAG_LONG)) {
+                data.ariseCostDay = tag.getLong("ariseCostDay");
+            }
+            data.ariseUsesToday = Math.max(0, tag.getInt("ariseUsesToday"));
         }
         return data;
     }

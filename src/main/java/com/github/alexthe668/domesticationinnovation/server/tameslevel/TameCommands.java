@@ -4230,9 +4230,47 @@ public class TameCommands {
     private static int reviveXpCost(TameData data, ReviveMode mode) {
         int baseCost = Math.max(0, LevelSystem.estimateInvestedXp(data));
         if (mode == ReviveMode.ARISE) {
-            return Math.max(1, baseCost * 5);
+            return Math.max(1, saturatingMultiply(baseCost, 5));
         }
         return baseCost;
+    }
+
+    private static int ariseUsesToday(ServerPlayer player) {
+        if (player == null || player.getServer() == null || player.getServer().overworld() == null) {
+            return 0;
+        }
+        long currentDay = player.getServer().overworld().getGameTime() / 24000L;
+        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
+        if (stats == null) {
+            return 0;
+        }
+        if (stats.ariseCostDay != currentDay) {
+            stats.ariseCostDay = currentDay;
+            stats.ariseUsesToday = 0;
+            TameRegistry.markDirty();
+        }
+        return Math.max(0, stats.ariseUsesToday);
+    }
+
+    private static void recordAriseUse(ServerPlayer player) {
+        int uses = ariseUsesToday(player);
+        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
+        if (stats != null) {
+            stats.ariseUsesToday = uses == Integer.MAX_VALUE ? Integer.MAX_VALUE : uses + 1;
+            TameRegistry.markDirty();
+        }
+    }
+
+    private static int applyAriseDailyMultiplier(int cost, int usesToday) {
+        int scaled = Math.max(0, cost);
+        for (int i = 0; i < Math.max(0, usesToday) && scaled < Integer.MAX_VALUE; i++) {
+            scaled = saturatingMultiply(scaled, 2);
+        }
+        return scaled;
+    }
+
+    private static int saturatingMultiply(int value, int multiplier) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) value * Math.max(0, multiplier)));
     }
 
     private static boolean diedOnCurrentGameDay(MinecraftServer server, TameData data) {
@@ -4927,7 +4965,7 @@ public class TameCommands {
                     "/tames respawn order [default|level|leaderboard]",
                     "Respawn works only on dead tames and does not apply an extra death penalty.",
                     "Respawn target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
-                    "Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 totem in main hand.",
+                    "Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 vanilla Totem of Undying in main hand.",
                     "Morning auto-respawn is split by pet bed color.",
                     "All dead tames with colored pet beds respawn the next morning.",
                     "White pet beds use the TL graveyard/respawn-order queue, and only 1 white-bed tame per owner respawns each morning."
@@ -4937,7 +4975,8 @@ public class TameCommands {
             sendInfoPage(p, "Arise (5xPrice)",
                     "/tames arise <name|all|group <name>|type <name>>",
                     "Arise respawns the tame at your current position.",
-                    "Payment options: five times invested XP, or ceil(level/10) approved items, or 1 totem in main hand."
+                    "Payment options: five times invested XP, or ceil(level/10) approved items, or 1 vanilla Totem of Undying in main hand.",
+                    "Each successful Arise doubles every payment price again for the rest of the same Minecraft day. The price resets the next day."
             );
         }
         else if (key.equals("arisereincarnated")) {
@@ -4963,7 +5002,7 @@ public class TameCommands {
                     "/tames reincarnate auto <true|false>",
                     "Reincarnation is command-only. The tame must already be alive and loaded.",
                     "It restores the saved highest progress snapshot for that tame.",
-                    "Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 totem in main hand.",
+                    "Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 vanilla Totem of Undying in main hand.",
                     "Auto reincarnation uses the player bed material check by default. Tames with a black pet bed auto reincarnate for free on respawn."
             );
         }
@@ -6458,11 +6497,19 @@ public class TameCommands {
     }
 
     private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose) {
-        return evaluatePayment(player, xpCost, approvedItemCost, allowXp, purpose, true);
+        return tryConsumePayment(player, xpCost, approvedItemCost, 1, allowXp, purpose);
+    }
+
+    private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose) {
+        return evaluatePayment(player, xpCost, approvedItemCost, totemCost, allowXp, purpose, true);
     }
 
     private static PaymentResult previewPayment(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose) {
-        return evaluatePayment(player, xpCost, approvedItemCost, allowXp, purpose, false);
+        return previewPayment(player, xpCost, approvedItemCost, 1, allowXp, purpose);
+    }
+
+    private static PaymentResult previewPayment(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose) {
+        return evaluatePayment(player, xpCost, approvedItemCost, totemCost, allowXp, purpose, false);
     }
 
     private static String tameDisplayName(TameData data) {
@@ -6473,8 +6520,13 @@ public class TameCommands {
     }
 
     private static String paymentPriceLabel(int xpCost, int approvedItemCost, boolean allowXp) {
+        return paymentPriceLabel(xpCost, approvedItemCost, 1, allowXp);
+    }
+
+    private static String paymentPriceLabel(int xpCost, int approvedItemCost, int totemCost, boolean allowXp) {
         int normalizedXp = Math.max(0, xpCost);
         int normalizedItems = Math.max(1, approvedItemCost);
+        int normalizedTotems = Math.max(1, totemCost);
         List<String> parts = new ArrayList<>();
         if (allowXp) {
             parts.add(normalizedXp + " XP");
@@ -6482,7 +6534,7 @@ public class TameCommands {
         if (approvedItemCost > 0) {
             parts.add(formatApprovedItemRequirement(normalizedItems));
         }
-        parts.add("1 totem");
+        parts.add(normalizedTotems + " vanilla totem" + (normalizedTotems == 1 ? "" : "s"));
         return String.join(" or ", parts);
     }
 
@@ -6501,18 +6553,19 @@ public class TameCommands {
         player.sendSystemMessage(Component.literal(prefix + ": " + String.join("; ", failures)).withStyle(ChatFormatting.RED));
     }
 
-    private static PaymentResult evaluatePayment(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose, boolean consume) {
+    private static PaymentResult evaluatePayment(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose, boolean consume) {
         if (player == null) {
             return PaymentResult.fail("player unavailable");
         }
         ItemStack held = player.getMainHandItem();
         int normalizedXp = Math.max(0, xpCost);
         int normalizedItems = Math.max(1, approvedItemCost);
-        if (isReincarnationTotem(held)) {
+        int normalizedTotems = Math.max(1, totemCost);
+        if (isReincarnationTotem(held) && held.getCount() >= normalizedTotems) {
             if (consume) {
-                held.shrink(1);
+                held.shrink(normalizedTotems);
             }
-            return PaymentResult.ok("1 totem");
+            return PaymentResult.ok(normalizedTotems + " vanilla totem" + (normalizedTotems == 1 ? "" : "s"));
         }
         int requiredPaymentPoints = normalizedItems * FOOD_POINTS_PER_APPROVED_ITEM;
         int heldPaymentPoints = approvedOrFoodPaymentPoints(held);
@@ -6529,10 +6582,10 @@ public class TameCommands {
             }
             return PaymentResult.ok(normalizedXp + " XP points");
         }
-        return PaymentResult.fail(describePaymentRequirement(player, normalizedXp, normalizedItems, allowXp, purpose, currentXp));
+        return PaymentResult.fail(describePaymentRequirement(player, normalizedXp, normalizedItems, normalizedTotems, allowXp, purpose, currentXp));
     }
 
-    private static String describePaymentRequirement(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose, int currentXp) {
+    private static String describePaymentRequirement(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose, int currentXp) {
         StringBuilder builder = new StringBuilder();
         builder.append("Cannot afford ").append(purpose == null || purpose.isBlank() ? "this" : purpose).append(". Need ");
         boolean appended = false;
@@ -6548,9 +6601,9 @@ public class TameCommands {
             appended = true;
         }
         if (appended) {
-            builder.append(" or 1 totem.");
+            builder.append(" or ").append(totemCost).append(" vanilla totem").append(totemCost == 1 ? "." : "s.");
         } else {
-            builder.append("1 totem.");
+            builder.append(totemCost).append(" vanilla totem").append(totemCost == 1 ? "." : "s.");
         }
         return builder.toString();
     }
@@ -6634,18 +6687,7 @@ public class TameCommands {
     }
 
     private static boolean isReincarnationTotem(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) {
-            return false;
-        }
-        if (stack.is(Items.TOTEM_OF_UNDYING)) {
-            return true;
-        }
-        ResourceLocation key = ForgeRegistries.ITEMS.getKey(stack.getItem());
-        if (key == null) {
-            return false;
-        }
-        String path = key.getPath().toLowerCase(Locale.ROOT);
-        return path.contains("totem");
+        return stack != null && !stack.isEmpty() && stack.is(Items.TOTEM_OF_UNDYING);
     }
 
     private static int showStatsToPlayer(CommandSourceStack source, String targetPlayerName, String petName) {
@@ -11814,6 +11856,7 @@ public class TameCommands {
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
         List<String> diedTodayNames = new ArrayList<>();
+        int ariseUses = mode == ReviveMode.ARISE ? ariseUsesToday(player) : 0;
 
         for (TameData data : candidates) {
             if (data == null || data.uuid == null) {
@@ -11841,14 +11884,20 @@ public class TameCommands {
             }
             int xpCost = reviveXpCost(data, mode);
             int approvedItemCost = reviveApprovedItemCost(data, mode);
+            int totemCost = 1;
+            if (mode == ReviveMode.ARISE) {
+                xpCost = applyAriseDailyMultiplier(xpCost, ariseUses);
+                approvedItemCost = applyAriseDailyMultiplier(approvedItemCost, ariseUses);
+                totemCost = applyAriseDailyMultiplier(totemCost, ariseUses);
+            }
             if (reincarnateAfter && data.hasSavedProgress && data.level < data.savedLevel) {
                 xpCost += LevelSystem.reincarnationXpCost(data);
                 approvedItemCost += Math.max(1, data.savedLevel - data.level);
             }
-            PaymentResult preview = previewPayment(player, xpCost, approvedItemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
+            PaymentResult preview = previewPayment(player, xpCost, approvedItemCost, totemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!preview.success) {
                 failed++;
-                unaffordable.add(pricedTameLabel(data, paymentPriceLabel(xpCost, approvedItemCost, true)));
+                unaffordable.add(pricedTameLabel(data, paymentPriceLabel(xpCost, approvedItemCost, totemCost, true)));
                 continue;
             }
             SpawnTarget target = resolveRespawnTarget(source, player, data, mode.toMe);
@@ -11865,7 +11914,7 @@ public class TameCommands {
                 continue;
             }
             if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data, guardianBeforeDeath);
-            PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
+            PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, totemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!payment.success) {
                 failed++;
                 failReasons.add(data.name + " (" + payment.error + ")");
@@ -11879,6 +11928,12 @@ public class TameCommands {
                 }
             }
             success++;
+            if (mode == ReviveMode.ARISE) {
+                recordAriseUse(player);
+                if (ariseUses < Integer.MAX_VALUE) {
+                    ariseUses++;
+                }
+            }
             respawnedNames.add(tameDisplayName(data));
         }
 
