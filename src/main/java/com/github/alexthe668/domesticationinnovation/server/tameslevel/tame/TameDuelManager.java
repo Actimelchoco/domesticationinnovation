@@ -1079,10 +1079,45 @@ public final class TameDuelManager {
         if (tame instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != target) {
             mob.setTarget(target);
         }
+        maintainMossyGolemDuelAttack(tame, target);
         try {
             tame.getBrain().setMemoryWithExpiry(MemoryModuleType.ANGRY_AT, target.getUUID(), 600L);
             tame.getBrain().setMemoryWithExpiry(MemoryModuleType.ATTACK_TARGET, target, 600L);
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static void maintainMossyGolemDuelAttack(LivingEntity tame, LivingEntity target) {
+        if (!(tame instanceof TamableAnimal tamable)
+                || !isLegendaryMonstersMossyGolem(tamable)
+                || target == null
+                || !target.isAlive()
+                || !areDuelOpponents(tame.getUUID(), target.getUUID())) {
+            return;
+        }
+        forceMossyGolemCombatCommand(tamable);
+        try {
+            int attackState = (int) tame.getClass().getMethod("getAttackState").invoke(tame);
+            int attackTicks = (int) tame.getClass().getMethod("getAttackTicks").invoke(tame);
+            // Its mod attack goal can be displaced after the first animation, leaving state 2
+            // running forever and preventing canUse() from starting another attack.
+            if (attackState == 2 && attackTicks >= 35) {
+                tame.getClass().getMethod("setAttackState", int.class).invoke(tame, 0);
+                attackState = 0;
+            }
+            if (attackState != 0) {
+                return;
+            }
+            if (tame.distanceTo(target) < 3.0F) {
+                if (tame instanceof net.minecraft.world.entity.Mob mob) {
+                    mob.getNavigation().stop();
+                }
+                tame.getClass().getMethod("setAttackState", int.class).invoke(tame, 2);
+            } else if (tame instanceof net.minecraft.world.entity.Mob mob) {
+                mob.getNavigation().moveTo(target, 1.0D);
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Optional-mod compatibility: leave the original goal untouched if its API changes.
         }
     }
 
