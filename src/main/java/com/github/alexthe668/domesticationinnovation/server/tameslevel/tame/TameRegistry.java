@@ -629,13 +629,28 @@ public class TameRegistry {
     }
 
     public static int getCallOrderCommand(String typeId, int movementIndex, int fallback) {
-        int[] mapping = CUSTOM_CALL_ORDERS.get(normalizeTypeId(typeId));
+        int[] mapping = resolvedCallOrder(typeId);
         return mapping != null && movementIndex >= 0 && movementIndex < mapping.length ? mapping[movementIndex] : fallback;
     }
 
     public static int[] getCustomCallOrder(String typeId) {
-        int[] mapping = CUSTOM_CALL_ORDERS.get(normalizeTypeId(typeId));
+        int[] mapping = resolvedCallOrder(typeId);
         return mapping == null ? null : mapping.clone();
+    }
+
+    private static int[] resolvedCallOrder(String typeId) {
+        String normalized = normalizeTypeId(typeId);
+        int[] configured = CUSTOM_CALL_ORDERS.get(normalized);
+        if (configured != null) {
+            return configured;
+        }
+        // Alex's Mobs raccoons use 0=wander, 1=follow, 2=stay. The generic
+        // modded-pet fallback uses a different order, which made TPHome's SIT
+        // command select the raccoon's FOLLOW mode.
+        if ("alexsmobs:raccoon".equals(normalized)) {
+            return new int[]{1, 2, 0};
+        }
+        return null;
     }
 
     public static boolean setCustomCallOrder(String typeId, int movementIndex, int command) {
