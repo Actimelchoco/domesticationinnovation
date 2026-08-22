@@ -12191,37 +12191,61 @@ public class TameCommands {
         copyPersistentDuelStats(persisted, snapshot);
         snapshot.dead = false;
         snapshot.stored = false;
+        // Ranked participants return home after the battle and must remain there.
+        // This also makes rebuilt participants inherit the same state as /tames tphome.
+        snapshot.movementOrder = 1;
         TameRegistry.register(snapshot);
         cancelPendingImmediateChunkTeleport(server, snapshot);
-        TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
-        if (loaded != null && loaded.isAlive()) {
-            teleportTameToLocation(loaded, target);
-            refreshLoadedTameStatsAfterRebuild(loaded, snapshot, true);
-            finalizeRespawnState(loaded, snapshot);
-            TameData.syncTlIdToEntity(loaded, snapshot.tlId);
-            TameGoalInstaller.installIfMissing(loaded);
-            return true;
-        }
-        if (loaded != null) {
-            loaded.remove(Entity.RemovalReason.DISCARDED);
-            loaded.discard();
-        }
-        RespawnResult result;
-        beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+        UUID returnTicket = snapshot.tlId != null ? snapshot.tlId : snapshot.uuid;
+        BlockPos returnPos = BlockPos.containing(target.pos);
+        loadChunksAround(target.level, returnTicket, returnPos, true);
         try {
-            result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+            ChunkPos returnChunk = new ChunkPos(returnPos);
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    target.level.getChunk(returnChunk.x + dx, returnChunk.z + dz);
+                }
+            }
+
+            TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
+            if (loaded != null && loaded.isAlive()) {
+                teleportTameToLocation(loaded, target);
+                // Cross-dimension transfer replaces the entity instance, so always reacquire it.
+                TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+                if (restored == null || !restored.isAlive()) {
+                    return false;
+                }
+                refreshLoadedTameStatsAfterRebuild(restored, snapshot, true);
+                finalizeRespawnState(restored, snapshot);
+                applyLivingMovementOverride(restored, snapshot, MovementOrder.SIT);
+                TameData.syncTlIdToEntity(restored, snapshot.tlId);
+                TameGoalInstaller.installIfMissing(restored);
+                return true;
+            }
+            if (loaded != null) {
+                loaded.remove(Entity.RemovalReason.DISCARDED);
+                loaded.discard();
+            }
+            RespawnResult result;
+            beginSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+            try {
+                result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
+            } finally {
+                endSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+            }
+            if (!result.success) {
+                return false;
+            }
+            TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+            if (restored != null) {
+                applyLivingMovementOverride(restored, snapshot, MovementOrder.SIT);
+                TameData.syncTlIdToEntity(restored, snapshot.tlId);
+                TameGoalInstaller.installIfMissing(restored);
+            }
+            return restored != null;
         } finally {
-            endSuppressedUnloadedTeleportMessages(snapshot.ownerUUID);
+            loadChunksAround(target.level, returnTicket, returnPos, false);
         }
-        if (!result.success) {
-            return false;
-        }
-        TamableAnimal restored = findLoadedTameByUuid(server, snapshot.uuid);
-        if (restored != null) {
-            TameData.syncTlIdToEntity(restored, snapshot.tlId);
-            TameGoalInstaller.installIfMissing(restored);
-        }
-        return true;
     }
 
     public static boolean ensureDuelParticipantRestored(MinecraftServer server, UUID participantId, CompoundTag tameSnapshotTag) {
