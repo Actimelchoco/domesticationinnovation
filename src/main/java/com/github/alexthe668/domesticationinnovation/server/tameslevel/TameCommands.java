@@ -12210,13 +12210,15 @@ public class TameCommands {
         data.cooldowns.clear();
         changed = true;
 
-        TamableAnimal loaded = findLoadedTameByUuid(server, tameUuid);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (loaded != null && loaded.isAlive()) {
             loaded.removeAllEffects();
             loaded.setSecondsOnFire(0);
             loaded.setHealth(loaded.getMaxHealth());
-            loaded.setTarget(null);
-            loaded.getNavigation().stop();
+            TameEntityAdapter.setTarget(loaded, null);
+            if (loaded instanceof net.minecraft.world.entity.Mob mob) {
+                mob.getNavigation().stop();
+            }
             loaded.setLastHurtByMob(null);
             loaded.setLastHurtMob(null);
             CompoundTag refreshed = new CompoundTag();
@@ -12262,19 +12264,33 @@ public class TameCommands {
                 }
             }
 
-            TamableAnimal loaded = findLoadedTameByUuid(server, snapshot.uuid);
+            LivingEntity loaded = findLoadedLivingTameByIdentity(server, snapshot.uuid, snapshot.tlId);
             if (loaded != null && loaded.isAlive()) {
-                teleportTameToLocation(loaded, target);
+                teleportLivingTameToLocation(loaded, target, true);
                 // Cross-dimension transfer replaces the entity instance, so always reacquire it.
-                TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+                LivingEntity restored = findLoadedLivingTameByIdentity(server, snapshot.uuid, snapshot.tlId);
                 if (restored == null || !restored.isAlive()) {
                     return false;
                 }
-                refreshLoadedTameStatsAfterRebuild(restored, snapshot, true);
-                finalizeRespawnState(restored, snapshot);
+                if (restored instanceof TamableAnimal tamable) {
+                    refreshLoadedTameStatsAfterRebuild(tamable, snapshot, true);
+                    finalizeRespawnState(tamable, snapshot);
+                    TameGoalInstaller.installIfMissing(tamable);
+                } else {
+                    restored.removeAllEffects();
+                    restored.setSecondsOnFire(0);
+                    restored.setHealth(restored.getMaxHealth());
+                    TameEntityAdapter.setTarget(restored, null);
+                    if (restored instanceof net.minecraft.world.entity.Mob mob) {
+                        mob.getNavigation().stop();
+                    }
+                }
                 applyLivingMovementOverride(restored, snapshot, MovementOrder.SIT);
                 TameData.syncTlIdToEntity(restored, snapshot.tlId);
-                TameGoalInstaller.installIfMissing(restored);
+                CompoundTag refreshed = new CompoundTag();
+                restored.save(refreshed);
+                snapshot.entitySnapshot = refreshed;
+                TameRegistry.register(snapshot);
                 return true;
             }
             if (loaded != null) {
@@ -12291,11 +12307,13 @@ public class TameCommands {
             if (!result.success) {
                 return false;
             }
-            TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+            LivingEntity restored = findLoadedLivingTameByIdentity(server, snapshot.uuid, snapshot.tlId);
             if (restored != null) {
                 applyLivingMovementOverride(restored, snapshot, MovementOrder.SIT);
                 TameData.syncTlIdToEntity(restored, snapshot.tlId);
-                TameGoalInstaller.installIfMissing(restored);
+                if (restored instanceof TamableAnimal tamable) {
+                    TameGoalInstaller.installIfMissing(tamable);
+                }
             }
             return restored != null;
         } finally {
@@ -12315,12 +12333,20 @@ public class TameCommands {
             return participantId != null && resetDuelCombatState(server, participantId);
         }
         cancelPendingImmediateChunkTeleport(server, snapshot);
-        TamableAnimal loaded = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+        LivingEntity loaded = findLoadedLivingTameByIdentity(server, snapshot.uuid, snapshot.tlId);
         if (loaded != null && loaded.isAlive()) {
-            refreshLoadedTameStatsAfterRebuild(loaded, snapshot, true);
-            finalizeRespawnState(loaded, snapshot);
+            if (loaded instanceof TamableAnimal tamable) {
+                refreshLoadedTameStatsAfterRebuild(tamable, snapshot, true);
+                finalizeRespawnState(tamable, snapshot);
+                TameGoalInstaller.installIfMissing(tamable);
+            } else {
+                loaded.removeAllEffects();
+                loaded.setSecondsOnFire(0);
+                loaded.setHealth(loaded.getMaxHealth());
+                TameEntityAdapter.setTarget(loaded, null);
+            }
+            applyLivingMovementOverride(loaded, snapshot, MovementOrder.SIT);
             TameData.syncTlIdToEntity(loaded, snapshot.tlId);
-            TameGoalInstaller.installIfMissing(loaded);
             return true;
         }
         if (loaded != null) {
@@ -12338,10 +12364,13 @@ public class TameCommands {
             }
             RespawnResult result = respawnDeadTameAtServer(snapshot, target.level, target.pos, target.yRot, target.xRot);
             if (result.success) {
-                TamableAnimal restored = findLoadedTameByIdentity(server, snapshot.uuid, snapshot.tlId);
+                LivingEntity restored = findLoadedLivingTameByIdentity(server, snapshot.uuid, snapshot.tlId);
                 if (restored != null) {
                     TameData.syncTlIdToEntity(restored, snapshot.tlId);
-                    TameGoalInstaller.installIfMissing(restored);
+                    applyLivingMovementOverride(restored, snapshot, MovementOrder.SIT);
+                    if (restored instanceof TamableAnimal tamable) {
+                        TameGoalInstaller.installIfMissing(tamable);
+                    }
                 }
                 return true;
             }

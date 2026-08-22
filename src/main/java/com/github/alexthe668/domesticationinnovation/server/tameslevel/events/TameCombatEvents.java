@@ -170,22 +170,27 @@ public class TameCombatEvents {
         });
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onTameDeath(LivingDeathEvent event) {
         if (event.isCanceled()) return;
 
         LivingEntity tame = event.getEntity();
-        if (!TameEntityAdapter.isTame(tame)) return;
-
         UUID tlId = TameData.getTlId(tame);
-        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
-                || (tlId != null && TameDuelManager.isTameInDuel(tlId))
-                || TameDuelManager.consumeRecentDuelElimination(tame.getUUID())
-                || (tlId != null && TameDuelManager.consumeRecentDuelElimination(tlId));
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null && tlId != null) {
             data = TameRegistry.getByTlId(tlId);
         }
+        // Some interface-based tames clear or temporarily stop reporting their tame
+        // state while entering death. Their persistent TL identity is authoritative.
+        if (!TameEntityAdapter.isTame(tame)
+                && (!TameEntityAdapter.isSupported(tame) || data == null)) {
+            return;
+        }
+
+        boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
+                || (tlId != null && TameDuelManager.isTameInDuel(tlId))
+                || TameDuelManager.consumeRecentDuelElimination(tame.getUUID())
+                || (tlId != null && TameDuelManager.consumeRecentDuelElimination(tlId));
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
         }

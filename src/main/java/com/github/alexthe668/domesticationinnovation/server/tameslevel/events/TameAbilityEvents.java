@@ -1073,7 +1073,7 @@ public class TameAbilityEvents {
     private static void handlePassiveHeal(LivingEntity tame, TameData data, long now) {
         if (!isReady(data, "passive_heal_tick", now)) return;
         if (tame.getHealth() >= tame.getMaxHealth()) {
-            setCooldown(data, "passive_heal_tick", now + 100L);
+            setCooldown(data, "passive_heal_tick", now + passiveHealInterval(tame));
             return;
         }
         float heal = 1.0F;
@@ -1089,7 +1089,12 @@ public class TameAbilityEvents {
             return;
         }
         tame.heal(heal);
-        setCooldown(data, "passive_heal_tick", now + 100L);
+        setCooldown(data, "passive_heal_tick", now + passiveHealInterval(tame));
+    }
+
+    private static long passiveHealInterval(LivingEntity tame) {
+        LivingEntity target = TameEntityAdapter.target(tame);
+        return target != null && target.isAlive() ? 400L : 100L;
     }
 
     private static void handleComfort(LivingEntity tame, TameData data, long now) {
