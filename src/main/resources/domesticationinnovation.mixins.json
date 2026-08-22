@@ -47,7 +47,6 @@
     "RabbitMixin",
     "SaintsDragonsDragonEntityMixin",
     "SaintsDragonsRaevyxMixin",
-    "SaintsDragonsRideableDragonMixin",
     "SaintsDragonsStegonautMixin",
     "SaintsDragonsVarasuchusMixin",
     "SculkSensorBlockMixin",
