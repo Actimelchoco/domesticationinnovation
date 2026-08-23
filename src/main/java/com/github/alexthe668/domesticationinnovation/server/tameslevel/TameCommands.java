@@ -224,6 +224,7 @@ public class TameCommands {
     private static final Set<UUID> AUTO_FOLLOW_RECOVER_REQUIRED = new HashSet<>();
     private static final long AUTO_FOLLOW_RETRY_DELAY_TICKS = 100L;
     private static final Map<UUID, PendingGuardianToolConfirm> PENDING_GUARDIAN_TOOL_CONFIRMS = new HashMap<>();
+    private static final Map<UUID, PendingGuardianRespawnDeployment> PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS = new HashMap<>();
     private static long lastMorningRegistrySweepDay = Long.MIN_VALUE;
     private static long tlMigrationLastScanned = 0L;
     private static long tlMigrationLastMatchedPayload = 0L;
@@ -3739,6 +3740,7 @@ public class TameCommands {
         }
         TamePerformanceProfiler.run("system.ranked_pool_load", TameCommands::ensureRankedPoolLoadedFromRegistry);
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
+        TamePerformanceProfiler.run("system.pending_guardian_respawn_deployments", () -> processPendingGuardianRespawnDeployments(server));
         TamePerformanceProfiler.run("system.morning_registry_sweep", () -> processMorningRegistrySweep(server));
         TamePerformanceProfiler.run("system.pending_morning_lantern_recalls", () -> processPendingMorningLanternRecalls(server));
         TamePerformanceProfiler.run("system.ranked_session_ensure", () -> ensureRankedSessionRunning(server));
@@ -12568,7 +12570,26 @@ public class TameCommands {
         if (server == null || data == null) return;
         LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (respawned == null || !respawned.isAlive()) return;
+        boolean deployGuardian = data.movementOrder == 3 && data.hasHome;
+        String guardianDimension = data.homeDimension;
+        int guardianX = data.homeX;
+        int guardianY = data.homeY;
+        int guardianZ = data.homeZ;
         applyLivingMovementOverride(respawned, data, MovementOrder.SIT);
+        if (deployGuardian) {
+            // Sitting normally clears the guardian anchor. Preserve it during
+            // the short post-respawn recovery period, then redeploy after 5s.
+            data.hasHome = true;
+            data.homeDimension = guardianDimension;
+            data.homeX = guardianX;
+            data.homeY = guardianY;
+            data.homeZ = guardianZ;
+            ServerLevel overworld = server.overworld();
+            long now = overworld == null ? server.getTickCount() : overworld.getGameTime();
+            UUID ticket = data.ensureTlId();
+            PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.put(ticket,
+                    new PendingGuardianRespawnDeployment(data.uuid, data.tlId, now + 100L));
+        }
         if (respawned instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         else {
             CompoundTag snapshot = new CompoundTag();
@@ -12576,6 +12597,30 @@ public class TameCommands {
             data.entitySnapshot = snapshot;
         }
         TameRegistry.markDirty();
+    }
+
+    private static void processPendingGuardianRespawnDeployments(MinecraftServer server) {
+        if (server == null || PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.isEmpty()) return;
+        ServerLevel overworld = server.overworld();
+        long now = overworld == null ? server.getTickCount() : overworld.getGameTime();
+        Iterator<Map.Entry<UUID, PendingGuardianRespawnDeployment>> iterator = PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.entrySet().iterator();
+        while (iterator.hasNext()) {
+            PendingGuardianRespawnDeployment pending = iterator.next().getValue();
+            if (pending == null || now < pending.dueTick) continue;
+            TameData data = pending.tlId == null ? null : TameRegistry.getByTlId(pending.tlId);
+            if (data == null && pending.tameUuid != null) data = TameRegistry.get(pending.tameUuid);
+            if (data == null || data.dead || !data.hasHome || data.movementOrder != 1) {
+                iterator.remove();
+                continue;
+            }
+            LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
+            if (tame == null || !tame.isAlive()) continue;
+            applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+            iterator.remove();
+        }
+    }
+
+    private record PendingGuardianRespawnDeployment(UUID tameUuid, UUID tlId, long dueTick) {
     }
 
     private static float yawFromDirection(Direction direction) {
