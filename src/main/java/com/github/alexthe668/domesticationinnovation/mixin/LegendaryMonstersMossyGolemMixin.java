@@ -1,6 +1,8 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -11,6 +13,9 @@ import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
@@ -20,6 +25,24 @@ public abstract class LegendaryMonstersMossyGolemMixin extends TamableAnimal {
 
     protected LegendaryMonstersMossyGolemMixin(EntityType<? extends TamableAnimal> type, Level level) {
         super(type, level);
+    }
+
+    @Inject(method = "getCommand", at = @At("HEAD"), cancellable = true, remap = false)
+    private void domesticationinnovation_guardianCombatCommand(CallbackInfoReturnable<Integer> callback) {
+        LivingEntity target = this.getTarget();
+        if (target == null || !target.isAlive()) {
+            return;
+        }
+        TameData data = TameRegistry.get(this.getUUID());
+        if (data == null) {
+            data = TameRegistry.getByTlId(TameData.getTlId(this));
+        }
+        if (data != null && data.movementOrder == 3) {
+            // Mossy Golem's native attack goal rejects command 2, which is
+            // also its stationary/guardian command. Report its combat-ready
+            // command while it has a target without changing the saved order.
+            callback.setReturnValue(0);
+        }
     }
 
     /**

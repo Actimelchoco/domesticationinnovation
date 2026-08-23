@@ -661,7 +661,7 @@ public class TameAbilityEvents {
         }
 
         tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
-        tame.setDeltaMovement(dir.x * 0.9D, 0.15D, dir.z * 0.9D);
+        tame.setDeltaMovement(Vec3.ZERO);
         tame.hurtMarked = true;
         TameCommands.queueClientReloadForTame(tame);
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), capParticles(tame, 6), 0.25D, 0.1D, 0.25D, 0.0D);
@@ -669,22 +669,28 @@ public class TameAbilityEvents {
         return true;
     }
 
-    private static Vec3 resolveDashEndpoint(ServerLevel level, LivingEntity tame, Vec3 start, Vec3 dir, double dashDistance) {
-        Vec3 desired = start.add(dir.scale(dashDistance));
-        Vec3 rayStart = start.add(0.0D, Math.max(0.25D, tame.getBbHeight() * 0.5D), 0.0D);
-        Vec3 rayEnd = desired.add(0.0D, Math.max(0.25D, tame.getBbHeight() * 0.5D), 0.0D);
-        BlockHitResult hit = level.clip(new ClipContext(rayStart, rayEnd, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, tame));
-        if (hit.getType() != BlockHitResult.Type.BLOCK) {
-            return desired;
+    public static Vec3 resolveDashEndpoint(ServerLevel level, LivingEntity tame, Vec3 start, Vec3 dir, double dashDistance) {
+        if (level == null || tame == null || start == null || dir == null || dashDistance <= 0.0D) {
+            return start;
         }
-        double standOff = Math.max(0.6D, tame.getBbWidth() * 0.5D + 0.1D);
-        Vec3 blocked = hit.getLocation().subtract(dir.scale(standOff));
-        Vec3 candidate = new Vec3(blocked.x, start.y, blocked.z);
-        BlockPos candidatePos = BlockPos.containing(candidate.x, Math.max(level.getMinBuildHeight() + 1, candidate.y), candidate.z);
-        if (!level.getBlockState(candidatePos).canBeReplaced()) {
-            candidate = candidate.add(0.0D, 1.0D, 0.0D);
+        Vec3 normalized = dir.lengthSqr() > 1.0E-8D ? dir.normalize() : Vec3.ZERO;
+        if (normalized == Vec3.ZERO) {
+            return start;
         }
-        return candidate;
+        double stepSize = 0.10D;
+        int steps = Math.max(1, (int) Math.ceil(dashDistance / stepSize));
+        AABB startBox = tame.getBoundingBox();
+        Vec3 lastSafe = start;
+        for (int step = 1; step <= steps; step++) {
+            double traveled = Math.min(dashDistance, step * stepSize);
+            Vec3 candidate = start.add(normalized.scale(traveled));
+            AABB candidateBox = startBox.move(candidate.subtract(start));
+            if (!level.noCollision(tame, candidateBox)) {
+                break;
+            }
+            lastSafe = candidate;
+        }
+        return lastSafe;
     }
 
     private static void handleEvokerFangs(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
@@ -1085,7 +1091,7 @@ public class TameAbilityEvents {
                 heal += Math.max(1, LevelSystem.getAbilityLevel(supporterData, "revitalizing_presence"));
             }
         }
-        if (!TameCommands.consumeHungerForNaturalHeal(data, tame, heal)) {
+        if (!TameCommands.consumeHungerForPassiveHeal(data, tame, heal)) {
             return;
         }
         tame.heal(heal);
@@ -1093,8 +1099,7 @@ public class TameAbilityEvents {
     }
 
     private static long passiveHealInterval(LivingEntity tame) {
-        LivingEntity target = TameEntityAdapter.target(tame);
-        return target != null && target.isAlive() ? 400L : 100L;
+        return tame != null && TameDuelManager.isEntityInDuel(tame.getUUID()) ? 200L : 100L;
     }
 
     private static void handleComfort(LivingEntity tame, TameData data, long now) {

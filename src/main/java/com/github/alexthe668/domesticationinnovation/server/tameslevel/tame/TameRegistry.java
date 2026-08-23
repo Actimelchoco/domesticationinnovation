@@ -554,6 +554,14 @@ public class TameRegistry {
             if (rule == null || rule.isBlank()) {
                 continue;
             }
+            if (rule.startsWith("tame:")) {
+                String value = rule.substring("tame:".length()).trim();
+                if ((!value.isBlank() && data.uuid != null && value.equalsIgnoreCase(data.uuid.toString()))
+                        || (!value.isBlank() && data.tlId != null && value.equalsIgnoreCase(data.tlId.toString()))) {
+                    return true;
+                }
+                continue;
+            }
             if (rule.startsWith("type:")) {
                 String value = normalizeTypeId(rule.substring("type:".length()));
                 if (value != null && !value.isBlank() && (value.equals(type) || value.equals(typePath))) {
@@ -573,6 +581,13 @@ public class TameRegistry {
             return "";
         }
         String normalizedKind = kind.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("tame".equals(normalizedKind)) {
+            try {
+                return "tame:" + UUID.fromString(value.trim());
+            } catch (IllegalArgumentException ignored) {
+                return "";
+            }
+        }
         if ("type".equals(normalizedKind)) {
             String normalizedType = normalizeTypeId(value);
             return normalizedType == null || normalizedType.isBlank() ? "" : "type:" + normalizedType;

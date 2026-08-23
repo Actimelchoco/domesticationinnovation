@@ -1020,10 +1020,14 @@ public class TameCommands {
                                 .then(Commands.argument("oreId", StringArgumentType.word())
                                         .suggests((ctx, b) -> suggestOreScentingOreIds(ctx.getSource(), b))
                                         .executes(ctx -> setOreScentingTarget(ctx.getSource(), StringArgumentType.getString(ctx, "name"), StringArgumentType.getString(ctx, "oreId"))))))
-                .then(Commands.literal("removeFromAll")
+                .then(Commands.literal("excludeFromAll")
                         .executes(ctx -> removeFromAllInfo(ctx.getSource()))
                         .then(Commands.literal("info").executes(ctx -> removeFromAllInfo(ctx.getSource())))
                         .then(Commands.literal("add")
+                                .then(Commands.literal("tame")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> setSpecificRemoveFromAll(ctx.getSource(), StringArgumentType.getString(ctx, "name"), true))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -1033,6 +1037,10 @@ public class TameCommands {
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> addRemoveFromAll(ctx.getSource(), "type", StringArgumentType.getString(ctx, "name"))))))
                         .then(Commands.literal("remove")
+                                .then(Commands.literal("tame")
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> setSpecificRemoveFromAll(ctx.getSource(), StringArgumentType.getString(ctx, "name"), false))))
                                 .then(Commands.literal("group")
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
@@ -3381,6 +3389,8 @@ public class TameCommands {
                                                 ))))
                                 .then(Commands.literal("ranked")
                                         .executes(ctx -> adminRankedStatus(ctx.getSource()))
+                                        .then(Commands.literal("pullAllParticipants")
+                                                .executes(ctx -> adminRankedPullAllParticipants(ctx.getSource())))
                                         .then(Commands.literal("duelff")
                                                 .executes(ctx -> adminRankedDuelFf(ctx.getSource())))
                                         .then(Commands.literal("vorbidType")
@@ -3948,12 +3958,11 @@ public class TameCommands {
                     continue;
                 }
                 boolean eligibleBefore = isReincarnationEligible(data);
-                boolean guardianBeforeDeath = data.movementOrder == 3;
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
-                applyBedRespawnMovement(server, data, guardianBeforeDeath);
+                applyBedRespawnMovement(server, data);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
             }
@@ -3963,12 +3972,11 @@ public class TameCommands {
                     continue;
                 }
                 boolean eligibleBefore = isReincarnationEligible(data);
-                boolean guardianBeforeDeath = data.movementOrder == 3;
                 RespawnResult result = respawnDeadTameAtServer(data, target.level, target.pos, target.yRot, target.xRot);
                 if (!result.success) {
                     continue;
                 }
-                applyBedRespawnMovement(server, data, guardianBeforeDeath);
+                applyBedRespawnMovement(server, data);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnatedNames, normalNames);
                 break;
@@ -4006,11 +4014,10 @@ public class TameCommands {
                 TameData data = candidates.get(candidateIndex++);
                 prepareDrumInventoryReincarnation(data, station.inventory);
                 boolean eligibleBefore = isReincarnationEligible(data);
-                boolean guardianBeforeDeath = data.movementOrder == 3;
                 Vec3 spawn = Vec3.upFromBottomCenterOf(station.inventoryPos, 1.0D);
                 RespawnResult result = respawnDeadTameAtServer(data, station.level, spawn, 0.0F, 0.0F);
                 if (!result.success) continue;
-                applyBedRespawnMovement(server, data, guardianBeforeDeath);
+                applyBedRespawnMovement(server, data);
                 clearMatchingDiBedRespawnRequests(server, data);
                 addMorningRespawnSummaryName(data, eligibleBefore && !data.hasSavedProgress, reincarnated, normal);
             }
@@ -5104,6 +5111,7 @@ public class TameCommands {
                     "/tames ranked add <selection>",
                     "/tames ranked pull <selection>",
                     "/tames admin ranked setArena <arenaName>",
+                    "/tames admin ranked pullAllParticipants",
                     "/tames admin ranked setA|setB|setWaitingA|setWaitingB",
                     "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
                     "feed consumes the edible main-hand stack and saves 100 ranked saturation per food point.",
@@ -5920,10 +5928,10 @@ public class TameCommands {
         }
         String rule = TameRegistry.normalizeRemoveFromAllRule(kind, value);
         if (rule.isBlank()) {
-            return error(player, "Invalid removeFromAll rule. Use group <name> or type <type>.");
+            return error(player, "Invalid excludeFromAll rule. Use tame <name>, group <name>, or type <type>.");
         }
         boolean added = TameRegistry.addRemoveFromAllExclusion(player.getUUID(), kind, value);
-        player.sendSystemMessage(Component.literal((added ? "Added" : "Already present") + " removeFromAll exclusion: " + rule + ".")
+        player.sendSystemMessage(Component.literal((added ? "Added" : "Already present") + " excludeFromAll rule: " + rule + ".")
                 .withStyle(added ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -5935,11 +5943,26 @@ public class TameCommands {
         }
         String rule = TameRegistry.normalizeRemoveFromAllRule(kind, value);
         if (rule.isBlank()) {
-            return error(player, "Invalid removeFromAll rule. Use group <name> or type <type>.");
+            return error(player, "Invalid excludeFromAll rule. Use tame <name>, group <name>, or type <type>.");
         }
         boolean removed = TameRegistry.removeRemoveFromAllExclusion(player.getUUID(), kind, value);
-        player.sendSystemMessage(Component.literal((removed ? "Removed" : "Not present") + " removeFromAll exclusion: " + rule + ".")
+        player.sendSystemMessage(Component.literal((removed ? "Removed" : "Not present") + " excludeFromAll rule: " + rule + ".")
                 .withStyle(removed ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setSpecificRemoveFromAll(CommandSourceStack source, String tameName, boolean excluded) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        TameData data = findOwnedTameAny(player.getUUID(), tameName);
+        if (data == null) return error(player, "Tame not found.");
+        UUID stableId = data.ensureTlId();
+        boolean changed = excluded
+                ? TameRegistry.addRemoveFromAllExclusion(player.getUUID(), "tame", stableId.toString())
+                : TameRegistry.removeRemoveFromAllExclusion(player.getUUID(), "tame", stableId.toString());
+        String action = excluded ? (changed ? "Excluded" : "Already excluded") : (changed ? "Included" : "Was not excluded");
+        player.sendSystemMessage(Component.literal(action + " " + tameDisplayName(data) + " from commands using 'all'.")
+                .withStyle(changed ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -5951,10 +5974,10 @@ public class TameCommands {
         List<String> rules = new ArrayList<>(TameRegistry.getRemoveFromAllExclusions(player.getUUID()));
         rules.sort(String::compareToIgnoreCase);
         if (rules.isEmpty()) {
-            player.sendSystemMessage(Component.literal("removeFromAll exclusions: <none>.").withStyle(ChatFormatting.YELLOW));
+            player.sendSystemMessage(Component.literal("excludeFromAll rules: <none>.").withStyle(ChatFormatting.YELLOW));
             return 1;
         }
-        player.sendSystemMessage(Component.literal("removeFromAll exclusions: " + String.join(", ", rules) + ".").withStyle(ChatFormatting.YELLOW));
+        player.sendSystemMessage(Component.literal("excludeFromAll rules: " + String.join(", ", rules) + ".").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -11810,14 +11833,13 @@ public class TameCommands {
                 failReasons.add(data.name + " (invalid target dimension)");
                 continue;
             }
-            boolean guardianBeforeDeath = data.movementOrder == 3;
             RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
             if (!result.success) {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
             }
-            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data, guardianBeforeDeath);
+            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data);
             if (reincarnateAfter) {
                 LivingEntity respawned = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
                 if (respawned != null && respawned.isAlive() && data.hasSavedProgress && data.level < data.savedLevel
@@ -11906,14 +11928,13 @@ public class TameCommands {
                 failReasons.add(data.name + " (invalid target dimension)");
                 continue;
             }
-            boolean guardianBeforeDeath = data.movementOrder == 3;
             RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
             if (!result.success) {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
                 continue;
             }
-            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data, guardianBeforeDeath);
+            if (isBedRespawnTarget(target)) applyBedRespawnMovement(source.getServer(), data);
             PaymentResult payment = tryConsumePayment(player, xpCost, approvedItemCost, totemCost, true, reincarnateAfter ? "respawn reincarnation" : (mode == ReviveMode.ARISE ? "arise" : "respawn"));
             if (!payment.success) {
                 failed++;
@@ -12529,12 +12550,11 @@ public class TameCommands {
         }
         Vec3 spawnPos = Vec3.upFromBottomCenterOf(bedPos, 0.8F);
         float yRot = yawFromDirection(facing);
-        boolean guardianBeforeDeath = data.movementOrder == 3;
         RespawnResult result = respawnDeadTameAtServer(data, level, spawnPos, yRot, 0.0F);
         if (!result.success) {
             return false;
         }
-        applyBedRespawnMovement(level.getServer(), data, guardianBeforeDeath);
+        applyBedRespawnMovement(level.getServer(), data);
         return true;
     }
 
@@ -12544,11 +12564,11 @@ public class TameCommands {
         return target.level.getBlockState(pos).getBlock() instanceof PetBedBlock;
     }
 
-    private static void applyBedRespawnMovement(MinecraftServer server, TameData data, boolean guardianBeforeDeath) {
+    private static void applyBedRespawnMovement(MinecraftServer server, TameData data) {
         if (server == null || data == null) return;
         LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (respawned == null || !respawned.isAlive()) return;
-        applyLivingMovementOverride(respawned, data, guardianBeforeDeath ? MovementOrder.GUARDIAN : MovementOrder.SIT);
+        applyLivingMovementOverride(respawned, data, MovementOrder.SIT);
         if (respawned instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         else {
             CompoundTag snapshot = new CompoundTag();
@@ -16991,6 +17011,50 @@ public class TameCommands {
         return 1;
     }
 
+    private static int adminRankedPullAllParticipants(CommandSourceStack source) {
+        MinecraftServer server = source == null ? null : source.getServer();
+        if (server == null) {
+            return 0;
+        }
+        ensureRankedPoolLoadedFromRegistry();
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        LinkedHashSet<UUID> participants = new LinkedHashSet<>(RANKED_POOL);
+        if (session != null) {
+            participants.addAll(session.poolA);
+            participants.addAll(session.poolB);
+            participants.addAll(session.currentRoundA);
+            participants.addAll(session.currentRoundB);
+            participants.addAll(session.queuedPullAfterRound);
+            forceEndDuelSessionSide(server, session.currentRoundA);
+            forceEndDuelSessionSide(server, session.currentRoundB);
+            restoreRankedRoundPlayers(server, session);
+        }
+
+        RANKED_POOL.clear();
+        if (session != null) {
+            session.poolA.clear();
+            session.poolB.clear();
+            session.currentRoundA = Set.of();
+            session.currentRoundB = Set.of();
+            session.queuedPullAfterRound.clear();
+            session.idleSitHoldUntilTick.clear();
+            session.rankedPlayerReturnTargets.clear();
+            session.roundStartedAtTick = -1L;
+            session.nextRoundAtTick = -1L;
+        }
+        persistRankedPoolToRegistry();
+
+        for (UUID participantId : participants) {
+            sendPulledRankedParticipantHome(server, participantId);
+        }
+        TameRegistry.markDirty();
+        int pulled = participants.size();
+        source.sendSuccess(() -> Component.literal(
+                "Pulled all " + pulled + " ranked participant" + (pulled == 1 ? "" : "s") + " across all owners."
+        ).withStyle(pulled > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
     private static int adminRankedSetArena(CommandSourceStack source, String arenaName) {
         ServerPlayer player = source.getPlayer();
         initArenaRegistry(source.getServer());
@@ -19826,6 +19890,10 @@ public class TameCommands {
             return;
         }
         if (tame == null || data == null) return;
+        // Interface-based tames use this generic rebuild path instead of
+        // finalizeRespawnState. Apply any drum/chest (or black-bed) funded
+        // reincarnation before the recovered state is snapshotted again.
+        applyLatestDeathSnapshotIfAvailable(tame, data);
         data.stored = false;
         data.dead = false;
         data.deadGameTime = 0L;
@@ -21286,6 +21354,15 @@ public class TameCommands {
         return consumeHungerForAction(data, tame, cost);
     }
 
+    public static boolean consumeHungerForPassiveHeal(TameData data, LivingEntity tame, float healAmount) {
+        int cost = (int) Math.ceil(Math.max(0.0F, healAmount) * 100.0F);
+        LivingEntity target = tame == null ? null : TameEntityAdapter.target(tame);
+        if (target != null && target.isAlive()) {
+            cost *= 2;
+        }
+        return consumeHungerForAction(data, tame, cost);
+    }
+
     private static boolean consumeHungerForCommandTeleport(ServerPlayer player, TameData data, LivingEntity tame) {
         return true;
     }
@@ -22476,7 +22553,7 @@ public class TameCommands {
         }
     }
 
-    private static boolean applyLatestDeathSnapshotIfAvailable(TamableAnimal tame, TameData current) {
+    private static boolean applyLatestDeathSnapshotIfAvailable(LivingEntity tame, TameData current) {
         if (tame == null || current == null || current.ownerUUID == null) {
             return false;
         }
@@ -24490,6 +24567,7 @@ public class TameCommands {
             refreshDuelSessionParticipantActivity(rankedSession);
             syncRankedSessionPlayers(server, rankedSession);
             applyQueuedRankedPulls(server, rankedSession);
+            enforceRankedOwnerOnlineRule(server, rankedSession);
             if (now >= rankedSession.nextIdleSitSyncTick) {
                 syncIdleDuelSessionTames(server, rankedSession);
                 rankedSession.nextIdleSitSyncTick = now + 20L;
@@ -25359,7 +25437,10 @@ public class TameCommands {
                     continue;
                 }
                 TameData data = rankedTameDataForParticipant(id);
-                if (data != null && !data.dead && !TameRegistry.isRankedTameTypeForbidden(tameTypeId(data))) {
+                if (data != null
+                        && !data.dead
+                        && isRankedParticipantOwnerOnline(server, id)
+                        && !TameRegistry.isRankedTameTypeForbidden(tameTypeId(data))) {
                     available.add(id);
                 }
             }

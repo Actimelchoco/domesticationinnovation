@@ -215,7 +215,8 @@ public final class OwnerProtectionAbilityModule {
         }
 
         Vec3 dir = toOwner.normalize();
-        Vec3 end = ownerPos.subtract(dir.scale(0.8D));
+        double dashDistance = Math.max(0.0D, distance - 0.8D);
+        Vec3 end = TameAbilityEvents.resolveDashEndpoint(level, tame, start, dir, dashDistance);
         AABB sweep = new AABB(start, end).inflate(1.1D, 0.8D, 1.1D);
         float damage = TameAbilityEvents.offensiveAbilityCastDamage(data, "dash", levelValue);
 
@@ -229,7 +230,7 @@ public final class OwnerProtectionAbilityModule {
         }
 
         tame.teleportTo(end.x, Math.max(level.getMinBuildHeight() + 1, end.y), end.z);
-        tame.setDeltaMovement(dir.x * 0.9D, 0.10D, dir.z * 0.9D);
+        tame.setDeltaMovement(Vec3.ZERO);
         tame.hurtMarked = true;
         TameCommands.queueClientReloadForTame(tame);
         level.sendParticles(ParticleTypes.SWEEP_ATTACK, tame.getX(), tame.getY(0.6D), tame.getZ(), 6, 0.25D, 0.1D, 0.25D, 0.0D);
