@@ -151,6 +151,11 @@ public final class TameGoalSupport {
         if (target != null) tame.setTarget(target);
     }
 
+    static LivingEntity nearestHunterHostile(ServerLevel level, TamableAnimal tame, double huntRadius) {
+        if (level == null || tame == null) return null;
+        return findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);
+    }
+
     static void setAggressiveTarget(ServerLevel level, TamableAnimal tame, double huntRadius) {
         LivingEntity current = tame.getTarget();
         if (current != null && current.isAlive()) {
@@ -256,6 +261,10 @@ public final class TameGoalSupport {
         if (!(living instanceof Enemy)) return false;
         if (living instanceof TamableAnimal tame && tame.isTame()) return false;
         return !(living instanceof net.minecraft.world.entity.player.Player);
+    }
+
+    static boolean isHunterHostile(LivingEntity living) {
+        return isHostileTarget(living);
     }
 
     private static BossTargetKey bossTargetKey(ServerLevel level, TamableAnimal tame, ServerPlayer owner) {
