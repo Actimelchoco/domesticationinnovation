@@ -42,6 +42,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.*;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -53,6 +54,7 @@ import org.joml.Matrix4f;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.stream.Collectors;
 
 @OnlyIn(Dist.CLIENT)
@@ -60,7 +62,7 @@ import java.util.stream.Collectors;
 public class ClientProxy extends CommonProxy {
 
     public static final Map<Integer, DiscJockeySound> DISC_JOCKEY_SOUND_MAP = new HashMap<>();
-    public static Map<Entity, int[]> shadowPunchRenderData = new HashMap<>();
+    public static final Map<Entity, int[]> shadowPunchRenderData = new WeakHashMap<>();
     private static int lockedSpyglassTameId = -1;
 
     @SubscribeEvent
@@ -196,6 +198,20 @@ public class ClientProxy extends CommonProxy {
         if (!(locked instanceof TamableAnimal tame) || !tame.isAlive()) {
             lockedSpyglassTameId = -1;
         }
+    }
+
+    @SubscribeEvent
+    public void onClientLevelUnload(LevelEvent.Unload event) {
+        if (!event.getLevel().isClientSide()) {
+            return;
+        }
+        shadowPunchRenderData.clear();
+        Minecraft minecraft = Minecraft.getInstance();
+        for (DiscJockeySound sound : List.copyOf(DISC_JOCKEY_SOUND_MAP.values())) {
+            minecraft.getSoundManager().stop(sound);
+        }
+        DISC_JOCKEY_SOUND_MAP.clear();
+        lockedSpyglassTameId = -1;
     }
 
     @SubscribeEvent
