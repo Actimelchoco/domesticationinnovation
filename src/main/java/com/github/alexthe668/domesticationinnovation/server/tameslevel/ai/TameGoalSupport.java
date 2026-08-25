@@ -284,6 +284,14 @@ public final class TameGoalSupport {
         return ownerUuid != null && ASSASIN_TARGETS.remove(ownerUuid) != null;
     }
 
+    public static boolean isAssasinTarget(UUID ownerUuid, LivingEntity target) {
+        if (ownerUuid == null || target == null || !target.isAlive() || target.isRemoved()) return false;
+        AssasinTarget marked = ASSASIN_TARGETS.get(ownerUuid);
+        return marked != null
+                && marked.entityUuid.equals(target.getUUID())
+                && marked.dimensionId.equals(target.level().dimension().location().toString());
+    }
+
     public static LivingEntity assasinTarget(ServerLevel level, UUID ownerUuid) {
         if (level == null || ownerUuid == null) return null;
         AssasinTarget marked = ASSASIN_TARGETS.get(ownerUuid);

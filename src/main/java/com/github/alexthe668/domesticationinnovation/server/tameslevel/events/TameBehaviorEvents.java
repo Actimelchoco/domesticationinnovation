@@ -22,6 +22,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
+import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -29,6 +30,19 @@ import net.minecraftforge.registries.ForgeRegistries;
 import java.lang.reflect.Method;
 
 public class TameBehaviorEvents {
+    @SubscribeEvent
+    public static void onTameTargetChange(LivingChangeTargetEvent event) {
+        if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
+        if (tame.level().isClientSide) return;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null || TameMode.byId(data.mode) != TameMode.ASSASIN) return;
+
+        LivingEntity newTarget = event.getNewTarget();
+        if (newTarget != null && !TameGoalSupport.isAssasinTarget(data.ownerUUID, newTarget)) {
+            event.setNewTarget(null);
+        }
+    }
+
     @SubscribeEvent
     public static void onTameTick(LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
@@ -45,6 +59,12 @@ public class TameBehaviorEvents {
         if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
+        if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
+                && tame.getTarget() != null
+                && !TameGoalSupport.isAssasinTarget(activeData.ownerUUID, tame.getTarget())) {
+            tame.setTarget(null);
+            tame.getNavigation().stop();
+        }
         if (hasInvalidTarget(tame)) {
             tame.setTarget(null);
         }
