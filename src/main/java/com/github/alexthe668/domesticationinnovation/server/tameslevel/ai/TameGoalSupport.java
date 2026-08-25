@@ -149,7 +149,7 @@ public final class TameGoalSupport {
 
     static void setHunterTarget(ServerLevel level, TamableAnimal tame, double huntRadius) {
         LivingEntity current = tame.getTarget();
-        if (current != null && current.isAlive()) {
+        if (current != null && current.isAlive() && !current.isRemoved() && level.getEntity(current.getUUID()) == current) {
             return;
         }
         LivingEntity target = findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);

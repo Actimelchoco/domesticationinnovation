@@ -53,10 +53,13 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
         }
 
         LivingEntity current = tame.getTarget();
-        if (trackedLivingTarget != null && (current == null || !current.isAlive())) {
+        boolean currentUnloaded = current != null
+                && (current.isRemoved() || level.getEntity(current.getUUID()) != current);
+        if (trackedLivingTarget != null && (current == null || !current.isAlive() || currentUnloaded)) {
             trackedLivingTarget = null;
             scanTicks = 0;
             combatRescanTicks = 0;
+            if (currentUnloaded) tame.setTarget(null);
             tickMode(level, data);
             LivingEntity replacement = tame.getTarget();
             if (replacement != null && replacement.isAlive()) {
