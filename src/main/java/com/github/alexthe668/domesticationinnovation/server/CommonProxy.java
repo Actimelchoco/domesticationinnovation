@@ -966,8 +966,28 @@ public class CommonProxy {
         if (!TameableUtils.isTamed(event.getEntity())) {
             return;
         }
-        // Protection is now represented as direct armor/armor_toughness scaling on collar tags.
-        // Keep vanilla armor formula as the single source of truth and avoid extra EPF-style reduction.
+        // Physical collar protection is represented by armor/armor_toughness. Magic-like
+        // damage commonly bypasses armor, so reduce tagged magic damage separately.
+        if (!event.getSource().is(DamageTypeTags.WITCH_RESISTANT_TO)
+                || event.getSource().is(DamageTypeTags.BYPASSES_ENCHANTMENTS)) {
+            return;
+        }
+        int protectionLevel = TameableUtils.hasCollar(event.getEntity())
+                ? TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION)
+                : 0;
+        TameData data = TameRegistry.get(event.getEntity().getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(event.getEntity());
+            data = tlId == null ? null : TameRegistry.getByTlId(tlId);
+        }
+        int knockbackResistanceUpgrades = data == null
+                ? 0
+                : Math.max(0, (int) Math.floor((data.bonusKnockbackResist + 1.0E-6D) / 0.05D));
+        if (protectionLevel <= 0 && knockbackResistanceUpgrades <= 0) {
+            return;
+        }
+        float reduction = Math.min(0.80F, protectionLevel * 0.10F + knockbackResistanceUpgrades * 0.03F);
+        event.setAmount(event.getAmount() * (1.0F - reduction));
     }
 
     @SubscribeEvent
