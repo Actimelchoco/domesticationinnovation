@@ -2535,6 +2535,24 @@ public class TameCommands {
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "selection")
                                                 ))))
+                                .then(Commands.literal("clearDeploys")
+                                        .then(Commands.literal("all")
+                                                .executes(ctx -> guardianClearDeploys(ctx.getSource(), "all")))
+                                        .then(Commands.argument("name", StringArgumentType.string())
+                                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                                .executes(ctx -> guardianClearDeploys(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))
+                                        .then(Commands.literal("group")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
+                                                        .executes(ctx -> guardianClearDeploys(ctx.getSource(), "group " + StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.literal("type")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                        .executes(ctx -> guardianClearDeploys(ctx.getSource(), "type " + StringArgumentType.getString(ctx, "name")))))
+                                        .then(Commands.literal("state")
+                                                .then(Commands.argument("name", StringArgumentType.word())
+                                                        .suggests((ctx, b) -> suggestMovementStates(b))
+                                                        .executes(ctx -> guardianClearDeploys(ctx.getSource(), "state " + StringArgumentType.getString(ctx, "name"))))))
                                 .then(Commands.literal("addCurrentToGroup")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
@@ -9867,6 +9885,36 @@ public class TameCommands {
             return error(player, "No living owned tames matched '" + selectionRaw + "'.");
         }
         return guardianDeployCurrent(source, player, selected, "selection '" + selectionRaw + "'");
+    }
+
+    private static int guardianClearDeploys(CommandSourceStack source, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return error(player, "No living owned tames matched '" + selectionRaw + "'.");
+        }
+        int cleared = 0;
+        for (TameData data : selected) {
+            if (data == null || !data.hasHome) continue;
+            LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            if (loaded != null && loaded.isAlive()) {
+                applyLivingMovementOverride(loaded, data, MovementOrder.FOLLOW);
+                if (loaded instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
+            } else {
+                clearGuardianAnchor(data);
+                data.movementOrder = 0;
+            }
+            if (data.tlId != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.tlId);
+            if (data.uuid != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.uuid);
+            cleared++;
+        }
+        if (cleared <= 0) {
+            return error(player, "None of the selected tames currently have Guardian deploys.");
+        }
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Cleared current Guardian deploys for " + cleared + " tame(s); loaded tames now follow.")
+                .withStyle(ChatFormatting.GREEN));
+        return cleared;
     }
 
     private static int guardianDeployCurrentGroup(CommandSourceStack source, String group) {
