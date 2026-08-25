@@ -18,5 +18,5 @@ final class AssasinModeGoal extends AbstractModeGoal {
     }
 
     @Override protected boolean retainLiveTarget() { return false; }
-    @Override protected int tickInterval() { return 1; }
+    @Override protected int tickInterval() { return 10; }
 }

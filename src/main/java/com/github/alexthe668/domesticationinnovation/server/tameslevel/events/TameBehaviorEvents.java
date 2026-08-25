@@ -65,7 +65,8 @@ public class TameBehaviorEvents {
 
         if (!(tame instanceof TamableAnimal)
                 && tame.tickCount % 10 == 0
-                && TameMode.byId(activeData.mode) == TameMode.MONSTER_HUNTER) {
+                && (TameMode.byId(activeData.mode) == TameMode.MONSTER_HUNTER
+                    || TameMode.byId(activeData.mode) == TameMode.ASSASIN)) {
             TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
         }
 
@@ -73,7 +74,9 @@ public class TameBehaviorEvents {
         if (tame.tickCount % scanInterval != 0) return;
         if (TameEntityAdapter.isStayingStill(tame)) return;
 
-        if (!(tame instanceof TamableAnimal) && TameMode.byId(activeData.mode) != TameMode.MONSTER_HUNTER) {
+        if (!(tame instanceof TamableAnimal)
+                && TameMode.byId(activeData.mode) != TameMode.MONSTER_HUNTER
+                && TameMode.byId(activeData.mode) != TameMode.ASSASIN) {
             TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
         }
 
