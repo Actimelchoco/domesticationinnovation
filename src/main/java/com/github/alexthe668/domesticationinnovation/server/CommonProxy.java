@@ -596,7 +596,9 @@ public class CommonProxy {
                 TameableUtils.absorbExpOrbs(event.getEntity(), rejuvenationLevel);
             }
             int voidCloudLevel = getDiEffectLevel(event.getEntity(), "void_cloud");
-            if (voidCloudLevel > 0 && !event.getEntity().isInWaterOrBubble() && event.getEntity().fallDistance > 3.0F && !event.getEntity().onGround()) {
+            if (voidCloudLevel > 0
+                    && TameRegistry.isVoidCloudEnabled(TameableUtils.getOwnerUUIDOf(event.getEntity()))
+                    && !event.getEntity().isInWaterOrBubble() && event.getEntity().fallDistance > 3.0F && !event.getEntity().onGround()) {
                 Entity owner = TameableUtils.getOwnerOf(event.getEntity());
                 boolean shouldMoveToOwnerXZ = owner != null && Math.abs(owner.getY() - event.getEntity().getY()) < 1;
                 double targetX = shouldMoveToOwnerXZ ? owner.getX() : event.getEntity().getX();
@@ -816,7 +818,9 @@ public class CommonProxy {
                 event.setCanceled(true);
                 flag = true;
             }
-            if (!flag && (event.getSource().is(DamageTypes.FALL) || event.getSource().is(DamageTypes.FELL_OUT_OF_WORLD)) && getDiEffectLevel(event.getEntity(), "void_cloud") > 0) {
+            if (!flag && (event.getSource().is(DamageTypes.FALL) || event.getSource().is(DamageTypes.FELL_OUT_OF_WORLD))
+                    && getDiEffectLevel(event.getEntity(), "void_cloud") > 0
+                    && TameRegistry.isVoidCloudEnabled(TameableUtils.getOwnerUUIDOf(event.getEntity()))) {
                 event.setCanceled(true);
                 flag = true;
             }

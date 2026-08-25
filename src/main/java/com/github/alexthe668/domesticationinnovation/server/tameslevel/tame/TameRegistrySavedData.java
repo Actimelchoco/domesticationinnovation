@@ -27,6 +27,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Map<UUID, Set<String>> doNotAttackTypes = new HashMap<>();
     private final Map<UUID, Boolean> doNotAttackAnimals = new HashMap<>();
     private final Map<UUID, Boolean> healthSiphon = new HashMap<>();
+    private final Map<UUID, Boolean> voidCloud = new HashMap<>();
     private final Map<UUID, Boolean> enterPortalsByThemselves = new HashMap<>();
     private final Map<UUID, Set<String>> ownerGroups = new HashMap<>();
     private final Map<UUID, Set<String>> removeFromAllExclusions = new HashMap<>();
@@ -184,6 +185,17 @@ public class TameRegistrySavedData extends SavedData {
                 }
                 this.invertedCallOrderTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
             }
+        }
+    }
+
+    public Map<UUID, Boolean> getVoidCloud() {
+        return voidCloud;
+    }
+
+    public void setVoidCloud(Map<UUID, Boolean> voidCloud) {
+        this.voidCloud.clear();
+        if (voidCloud != null) {
+            this.voidCloud.putAll(voidCloud);
         }
     }
 
@@ -459,6 +471,17 @@ public class TameRegistrySavedData extends SavedData {
             healthSiphonTag.add(row);
         }
         tag.put("healthSiphon", healthSiphonTag);
+        ListTag voidCloudTag = new ListTag();
+        for (Map.Entry<UUID, Boolean> entry : voidCloud.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            CompoundTag row = new CompoundTag();
+            row.putUUID("ownerUUID", entry.getKey());
+            row.putBoolean("enabled", entry.getValue());
+            voidCloudTag.add(row);
+        }
+        tag.put("voidCloud", voidCloudTag);
         ListTag enterPortalsTag = new ListTag();
         for (Map.Entry<UUID, Boolean> entry : enterPortalsByThemselves.entrySet()) {
             if (entry.getKey() == null || !Boolean.TRUE.equals(entry.getValue())) {
@@ -722,6 +745,15 @@ public class TameRegistrySavedData extends SavedData {
                 if (!groups.isEmpty()) {
                     data.ownerGroups.put(row.getUUID("ownerUUID"), groups);
                 }
+            }
+        }
+        if (tag.contains("voidCloud", Tag.TAG_LIST)) {
+            ListTag voidCloudList = tag.getList("voidCloud", Tag.TAG_COMPOUND);
+            for (Tag entry : voidCloudList) {
+                if (!(entry instanceof CompoundTag row) || !row.hasUUID("ownerUUID")) {
+                    continue;
+                }
+                data.voidCloud.put(row.getUUID("ownerUUID"), row.getBoolean("enabled"));
             }
         }
         if (tag.contains("removeFromAllExclusions", Tag.TAG_LIST)) {

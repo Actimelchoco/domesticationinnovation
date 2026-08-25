@@ -989,6 +989,9 @@ public class TameCommands {
                 .then(Commands.literal("healthSiphon")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setHealthSiphonEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("enableVoidCloud")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setVoidCloudEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -5948,6 +5951,17 @@ public class TameCommands {
         boolean removed = TameRegistry.removeRemoveFromAllExclusion(player.getUUID(), kind, value);
         player.sendSystemMessage(Component.literal((removed ? "Removed" : "Not present") + " excludeFromAll rule: " + rule + ".")
                 .withStyle(removed ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    static int setVoidCloudEnabled(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            return 0;
+        }
+        TameRegistry.setVoidCloudEnabled(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Void Cloud " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
 

@@ -37,6 +37,7 @@ public class TameRegistry {
     private static final Map<UUID, Set<String>> OWNER_DO_NOT_ATTACK_TYPES = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_DO_NOT_ATTACK_ANIMALS = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_HEALTH_SIPHON = new HashMap<>();
+    private static final Map<UUID, Boolean> OWNER_VOID_CLOUD = new HashMap<>();
     private static final Map<UUID, Boolean> OWNER_ENTER_PORTALS_BY_THEMSELVES = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_GROUPS = new HashMap<>();
     private static final Map<UUID, Set<String>> OWNER_REMOVE_FROM_ALL_EXCLUSIONS = new HashMap<>();
@@ -108,6 +109,8 @@ public class TameRegistry {
         OWNER_DO_NOT_ATTACK_ANIMALS.putAll(savedData.getDoNotAttackAnimals());
         OWNER_HEALTH_SIPHON.clear();
         OWNER_HEALTH_SIPHON.putAll(savedData.getHealthSiphon());
+        OWNER_VOID_CLOUD.clear();
+        OWNER_VOID_CLOUD.putAll(savedData.getVoidCloud());
         OWNER_ENTER_PORTALS_BY_THEMSELVES.clear();
         OWNER_ENTER_PORTALS_BY_THEMSELVES.putAll(savedData.getEnterPortalsByThemselves());
         OWNER_GROUPS.clear();
@@ -291,6 +294,7 @@ public class TameRegistry {
         savedData.setDoNotAttackTypes(OWNER_DO_NOT_ATTACK_TYPES);
         savedData.setDoNotAttackAnimals(OWNER_DO_NOT_ATTACK_ANIMALS);
         savedData.setHealthSiphon(OWNER_HEALTH_SIPHON);
+        savedData.setVoidCloud(OWNER_VOID_CLOUD);
         savedData.setEnterPortalsByThemselves(OWNER_ENTER_PORTALS_BY_THEMSELVES);
         savedData.setOwnerGroups(OWNER_GROUPS);
         savedData.setRemoveFromAllExclusions(OWNER_REMOVE_FROM_ALL_EXCLUSIONS);
@@ -933,6 +937,22 @@ public class TameRegistry {
             OWNER_HEALTH_SIPHON.remove(ownerUuid);
         } else {
             OWNER_HEALTH_SIPHON.put(ownerUuid, false);
+        }
+        markDirty();
+    }
+
+    public static boolean isVoidCloudEnabled(UUID ownerUuid) {
+        return ownerUuid == null || OWNER_VOID_CLOUD.getOrDefault(ownerUuid, true);
+    }
+
+    public static void setVoidCloudEnabled(UUID ownerUuid, boolean enabled) {
+        if (ownerUuid == null) {
+            return;
+        }
+        if (enabled) {
+            OWNER_VOID_CLOUD.remove(ownerUuid);
+        } else {
+            OWNER_VOID_CLOUD.put(ownerUuid, false);
         }
         markDirty();
     }
