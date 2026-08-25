@@ -2688,7 +2688,7 @@ private static void applyWardenScreamPush(LivingEntity tame, LivingEntity target
             case MONSTER_HUNTER, BOSS -> target instanceof Enemy;
             case ARENA -> !(target instanceof Player) && !TameEntityAdapter.isTame(target);
             case BODYGUARD -> (target instanceof Enemy) || isOwnerCombatPriorityTarget(tame, target);
-            case DEFAULT_PLUS, AGGRESSIVE -> true;
+            case DEFAULT_PLUS, AGGRESSIVE, ASSASIN -> true;
         };
     }
 

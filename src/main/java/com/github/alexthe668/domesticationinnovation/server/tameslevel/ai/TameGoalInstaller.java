@@ -16,6 +16,7 @@ public final class TameGoalInstaller {
         addTargetIfMissing(tame, MonsterHunterModeGoal.class, 2, new MonsterHunterModeGoal(tame));
         addTargetIfMissing(tame, ArenaModeGoal.class, 2, new ArenaModeGoal(tame));
         addTargetIfMissing(tame, AggressiveModeGoal.class, 2, new AggressiveModeGoal(tame));
+        addTargetIfMissing(tame, AssasinModeGoal.class, 2, new AssasinModeGoal(tame));
     }
 
     private static void addTargetIfMissing(TamableAnimal tame, Class<? extends Goal> goalType, int priority, Goal goal) {

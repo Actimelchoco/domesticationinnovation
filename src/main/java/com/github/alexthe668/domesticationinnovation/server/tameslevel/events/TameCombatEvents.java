@@ -32,6 +32,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.SwordItem;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
@@ -72,6 +74,9 @@ public class TameCombatEvents {
         if (!(event.getEntity() instanceof LivingEntity)) return;
         LivingEntity mob = event.getEntity();
         if (event.getAmount() <= 0.0F) return;
+        if (event.getSource().getEntity() instanceof ServerPlayer player) {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport.setAssasinTarget(player, mob);
+        }
         UUID victimParticipantId = resolveDuelParticipantUuid(mob);
         UUID attackerParticipantId = resolveDuelParticipantUuid(event.getSource());
         if (attackerParticipantId != null && victimParticipantId != null) {
@@ -106,6 +111,24 @@ public class TameCombatEvents {
 
         if (event.getSource().getEntity() instanceof ServerPlayer player) {
             LevelSystem.trackOwnerDamage(mob, player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onAssasinClearTarget(PlayerInteractEvent.RightClickItem event) {
+        clearAssasinTarget(event);
+    }
+
+    @SubscribeEvent
+    public static void onAssasinClearTargetBlock(PlayerInteractEvent.RightClickBlock event) {
+        clearAssasinTarget(event);
+    }
+
+    private static void clearAssasinTarget(PlayerInteractEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !player.isShiftKeyDown()) return;
+        if (!(event.getItemStack().getItem() instanceof SwordItem)) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalSupport.clearAssasinTarget(player.getUUID())) {
+            player.sendSystemMessage(Component.literal("Assasin target cleared.").withStyle(ChatFormatting.GRAY));
         }
     }
 

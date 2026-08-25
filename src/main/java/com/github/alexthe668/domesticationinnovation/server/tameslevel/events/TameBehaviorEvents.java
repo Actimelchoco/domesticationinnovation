@@ -279,8 +279,14 @@ public class TameBehaviorEvents {
     }
 
     private static void handleInterfaceModeTargeting(PathfinderMob tame, TameData data) {
-        if (tame == null || data == null || tame.getTarget() != null) return;
+        if (tame == null || data == null) return;
         TameMode mode = TameMode.byId(data.mode);
+        if (mode == TameMode.ASSASIN && tame.level() instanceof ServerLevel level) {
+            LivingEntity marked = TameGoalSupport.assasinTarget(level, data.ownerUUID);
+            if (tame.getTarget() != marked) tame.setTarget(marked);
+            return;
+        }
+        if (tame.getTarget() != null) return;
         if (mode == TameMode.DEFAULT || mode == TameMode.DEFAULT_PLUS || mode == TameMode.PASSIVE) return;
         LivingEntity owner = TameEntityAdapter.owner(tame);
         LivingEntity priority = owner == null ? null : owner.getLastHurtByMob();

@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.ai;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,6 +20,10 @@ import java.util.UUID;
 
 public final class TameGoalSupport {
     private static final Map<BossTargetKey, UUID> SHARED_BOSS_TARGETS = new HashMap<>();
+    private static final Map<UUID, AssasinTarget> ASSASIN_TARGETS = new HashMap<>();
+
+    private record AssasinTarget(UUID entityUuid, String dimensionId) {
+    }
 
     private record BossTargetKey(UUID ownerUuid, String dimensionId) {
     }
@@ -265,6 +270,41 @@ public final class TameGoalSupport {
 
     static boolean isHunterHostile(LivingEntity living) {
         return isHostileTarget(living);
+    }
+
+    public static boolean setAssasinTarget(ServerPlayer owner, LivingEntity target) {
+        if (owner == null || target == null || !target.isAlive() || !(target instanceof net.minecraft.world.entity.Mob)) return false;
+        if (TameRegistry.isProtectedAttackTarget(owner.getUUID(), target)) return false;
+        if (TameEntityAdapter.isTame(target) && owner.getUUID().equals(TameEntityAdapter.ownerUuid(target))) return false;
+        ASSASIN_TARGETS.put(owner.getUUID(), new AssasinTarget(target.getUUID(), target.level().dimension().location().toString()));
+        return true;
+    }
+
+    public static boolean clearAssasinTarget(UUID ownerUuid) {
+        return ownerUuid != null && ASSASIN_TARGETS.remove(ownerUuid) != null;
+    }
+
+    public static LivingEntity assasinTarget(ServerLevel level, UUID ownerUuid) {
+        if (level == null || ownerUuid == null) return null;
+        AssasinTarget marked = ASSASIN_TARGETS.get(ownerUuid);
+        if (marked == null) return null;
+        ServerLevel targetLevel = null;
+        for (ServerLevel candidate : level.getServer().getAllLevels()) {
+            if (candidate.dimension().location().toString().equals(marked.dimensionId)) {
+                targetLevel = candidate;
+                break;
+            }
+        }
+        if (targetLevel == null) {
+            ASSASIN_TARGETS.remove(ownerUuid);
+            return null;
+        }
+        Entity entity = targetLevel.getEntity(marked.entityUuid);
+        if (!(entity instanceof LivingEntity living) || !living.isAlive()) {
+            ASSASIN_TARGETS.remove(ownerUuid);
+            return null;
+        }
+        return living.level() == level ? living : null;
     }
 
     private static BossTargetKey bossTargetKey(ServerLevel level, TamableAnimal tame, ServerPlayer owner) {

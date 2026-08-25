@@ -4864,7 +4864,7 @@ public class TameCommands {
             sendInfoPage(p, "Mode",
                     "/tames mode <pet> <mode>",
                     "/tames mode <all|group|type|state> ... <mode>",
-                    "Current modes: default, default_plus, bodyguard, boss, monster_hunter, arena, aggressive, passive.",
+                    "Current modes: default, default_plus, bodyguard, boss, monster_hunter, arena, aggressive, assasin, passive.",
                     "Modes control combat retargeting. They are separate from movement state and movement profile."
             );
         }

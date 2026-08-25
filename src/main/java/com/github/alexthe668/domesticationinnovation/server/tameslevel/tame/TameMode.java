@@ -8,7 +8,8 @@ public enum TameMode {
     ARENA(4),
     PASSIVE(6),
     AGGRESSIVE(8),
-    DEFAULT_PLUS(9);
+    DEFAULT_PLUS(9),
+    ASSASIN(10);
 
     private final int id;
 
@@ -30,6 +31,7 @@ public enum TameMode {
             case 6 -> PASSIVE;
             case 8 -> AGGRESSIVE;
             case 9 -> DEFAULT_PLUS;
+            case 10 -> ASSASIN;
             // legacy removed modes map to default_plus
             case 5, 7 -> DEFAULT_PLUS;
             default -> DEFAULT;
