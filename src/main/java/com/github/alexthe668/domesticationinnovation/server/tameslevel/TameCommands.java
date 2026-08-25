@@ -2486,22 +2486,20 @@ public class TameCommands {
                                 .then(Commands.literal("deployGroup")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
-                                                .executes(ctx -> guardianDeploySet(ctx.getSource(), StringArgumentType.getString(ctx, "setName")))))
+                                                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                        .executes(ctx -> guardianDeploySetSelection(
+                                                                ctx.getSource(),
+                                                                StringArgumentType.getString(ctx, "setName"),
+                                                                StringArgumentType.getString(ctx, "selection")
+                                                        )))))
                                 .then(Commands.literal("deploy")
-                                        .then(Commands.literal("all")
-                                                .executes(ctx -> guardianDeployCurrentAll(ctx.getSource())))
-                                        .then(Commands.literal("group")
-                                                .then(Commands.argument("name", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestOwnedGroups(ctx.getSource(), b))
-                                                        .executes(ctx -> guardianDeployCurrentGroup(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                        .then(Commands.literal("type")
-                                                .then(Commands.argument("name", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
-                                                        .executes(ctx -> guardianDeployCurrentType(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                        .then(Commands.literal("state")
-                                                .then(Commands.argument("name", StringArgumentType.word())
-                                                        .suggests((ctx, b) -> suggestMovementStates(b))
-                                                        .executes(ctx -> guardianDeployCurrentState(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> guardianDeployCurrentSelection(
+                                                        ctx.getSource(),
+                                                        StringArgumentType.getString(ctx, "selection")
+                                                ))))
                                 .then(Commands.literal("addCurrentToGroup")
                                         .then(Commands.argument("setName", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedGuardianSetNames(ctx.getSource(), b))
@@ -9741,10 +9739,29 @@ public class TameCommands {
 
     private static int guardianDeploySet(CommandSourceStack source, String setName) {
         ServerPlayer player = source.getPlayer();
+        return guardianDeploySet(source, setName, ownedGuardianSetMembers(player.getUUID(), normalizeGuardianSetName(setName)));
+    }
+
+    private static int guardianDeploySetSelection(CommandSourceStack source, String setName, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        String normalizedSet = normalizeGuardianSetName(setName);
+        if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return error(player, "No living owned tames matched '" + selectionRaw + "'.");
+        }
+        selected.removeIf(data -> getGuardianSetAnchor(data, normalizedSet) == null);
+        if (selected.isEmpty()) {
+            return error(player, "None of the selected tames are part of deployment group '" + normalizedSet + "'.");
+        }
+        return guardianDeploySet(source, normalizedSet, selected);
+    }
+
+    private static int guardianDeploySet(CommandSourceStack source, String setName, List<TameData> members) {
+        ServerPlayer player = source.getPlayer();
         String normalizedSet = normalizeGuardianSetName(setName);
         if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
 
-        List<TameData> members = ownedGuardianSetMembers(player.getUUID(), normalizedSet);
         if (members.isEmpty()) {
             return error(player, "No tames are part of deployment group '" + normalizedSet + "'.");
         }
@@ -9795,6 +9812,15 @@ public class TameCommands {
     private static int guardianDeployCurrentAll(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         return guardianDeployCurrent(source, player, ownedTamesForAllCommands(player.getUUID()), "all current guardian anchors");
+    }
+
+    private static int guardianDeployCurrentSelection(CommandSourceStack source, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) {
+            return error(player, "No living owned tames matched '" + selectionRaw + "'.");
+        }
+        return guardianDeployCurrent(source, player, selected, "selection '" + selectionRaw + "'");
     }
 
     private static int guardianDeployCurrentGroup(CommandSourceStack source, String group) {
