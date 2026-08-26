@@ -16,6 +16,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGo
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TimedTameArrow;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TimedTameDragonFireball;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TimedTameLlamaSpit;
@@ -21940,8 +21941,8 @@ public class TameCommands {
             return false;
         }
         MenuProvider provider = new SimpleMenuProvider(
-                (containerId, inventory, openedBy) -> new ChestMenu(MenuType.GENERIC_9x2, containerId, inventory, new HungerFoodContainer(data, tame), 2),
-                Component.literal(tameDisplayName(data) + " Food")
+                (containerId, inventory, openedBy) -> new ChestMenu(MenuType.GENERIC_9x3, containerId, inventory, new HungerFoodContainer(data, tame), 3),
+                Component.literal(tameDisplayName(data) + " Armor & Food")
         );
         player.openMenu(provider);
         return true;
@@ -22254,18 +22255,30 @@ public class TameCommands {
         private Player lastViewer;
 
         private HungerFoodContainer(TameData data, TamableAnimal tame) {
-            super(18);
+            super(27);
             this.data = data;
             this.tame = tame;
+            for (int i = 0; i < 4; i++) {
+                setItem(i, i < data.armorInventory.size() ? data.armorInventory.get(i).copy() : ItemStack.EMPTY);
+            }
             for (int i = 0; i < Math.min(TAME_HUNGER_MAX_STACKS, data.hungerInventory.size()); i++) {
-                setItem(i, data.hungerInventory.get(i).copy());
+                setItem(9 + i, data.hungerInventory.get(i).copy());
             }
             this.loading = false;
         }
 
         @Override
         public boolean canPlaceItem(int slot, ItemStack stack) {
-            return slot >= 0 && slot < TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0;
+            if (slot >= 0 && slot < 4) {
+                EquipmentSlot expected = switch (slot) {
+                    case 0 -> EquipmentSlot.HEAD;
+                    case 1 -> EquipmentSlot.CHEST;
+                    case 2 -> EquipmentSlot.LEGS;
+                    default -> EquipmentSlot.FEET;
+                };
+                return LivingEntity.getEquipmentSlotForItem(stack) == expected;
+            }
+            return slot >= 9 && slot < 9 + TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0;
         }
 
         @Override
@@ -22304,16 +22317,21 @@ public class TameCommands {
             loading = true;
             try {
                 data.hungerInventory.clear();
-                for (int i = 0; i < getContainerSize(); i++) {
+                data.armorInventory.clear();
+                for (int i = 0; i < 4; i++) {
                     ItemStack stack = getItem(i);
+                    data.armorInventory.add(stack.isEmpty() ? ItemStack.EMPTY : stack.copy());
+                }
+                for (int i = 0; i < TAME_HUNGER_MAX_STACKS; i++) {
+                    ItemStack stack = getItem(9 + i);
                     if (stack.isEmpty()) {
                         continue;
                     }
-                    if (i < TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0) {
+                    if (hungerFoodPoints(stack, data, tame) > 0) {
                         data.hungerInventory.add(stack.copy());
                     } else {
                         dropRejectedHungerInventoryItem(stack.copy());
-                        super.setItem(i, ItemStack.EMPTY);
+                        super.setItem(9 + i, ItemStack.EMPTY);
                     }
                 }
             } finally {
@@ -22325,6 +22343,7 @@ public class TameCommands {
                 data.hungerEmptyNotified = data.hungerSaturation <= 0 && data.hungerEmptyNotified;
             }
             TameRegistry.markDirty();
+            if (tame != null) TameStoredArmorEvents.sync(tame, data);
         }
 
         private void dropRejectedHungerInventoryItem(ItemStack stack) {

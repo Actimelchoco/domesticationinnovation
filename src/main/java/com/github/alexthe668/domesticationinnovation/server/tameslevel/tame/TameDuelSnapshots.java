@@ -78,5 +78,9 @@ public final class TameDuelSnapshots {
                 into.hungerInventory.add(stack.copy());
             }
         }
+        into.armorInventory.clear();
+        for (ItemStack stack : from.armorInventory) {
+            into.armorInventory.add(stack == null ? ItemStack.EMPTY : stack.copy());
+        }
     }
 }

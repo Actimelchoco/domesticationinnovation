@@ -124,6 +124,7 @@ public class TameData {
     public CompoundTag entitySnapshot = new CompoundTag();
     public int hungerSaturation = 1000;
     public final List<ItemStack> hungerInventory = new ArrayList<>();
+    public final List<ItemStack> armorInventory = new ArrayList<>();
     public boolean hungerEmptyNotified = false;
     public boolean hungerLowNotified = false;
     public boolean hungerLastFoodNotified = false;
@@ -338,6 +339,12 @@ public class TameData {
             }
         }
         tag.put("hungerInventory", hungerInventoryTag);
+        ListTag armorInventoryTag = new ListTag();
+        for (int i = 0; i < 4; i++) {
+            ItemStack stack = i < armorInventory.size() ? armorInventory.get(i) : ItemStack.EMPTY;
+            armorInventoryTag.add(stack.save(new CompoundTag()));
+        }
+        tag.put("armorInventory", armorInventoryTag);
 
         tag.putBoolean("hasSavedProgress", hasSavedProgress);
         tag.putInt("savedProgressCost", savedProgressCost);
@@ -548,6 +555,13 @@ public class TameData {
                     data.hungerInventory.add(stack);
                 }
             }
+        }
+        data.armorInventory.clear();
+        ListTag armorInventoryTag = tag.contains("armorInventory", Tag.TAG_LIST)
+                ? tag.getList("armorInventory", Tag.TAG_COMPOUND) : new ListTag();
+        for (int i = 0; i < 4; i++) {
+            data.armorInventory.add(i < armorInventoryTag.size()
+                    ? ItemStack.of(armorInventoryTag.getCompound(i)) : ItemStack.EMPTY);
         }
 
         data.hasSavedProgress = tag.getBoolean("hasSavedProgress");

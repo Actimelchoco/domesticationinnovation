@@ -15,6 +15,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCrittersEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
@@ -170,6 +171,7 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);
+        MinecraftForge.EVENT_BUS.register(TameStoredArmorEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePersistenceEvents.class);
         MinecraftForge.EVENT_BUS.register(TameRenameEvents.class);
         MinecraftForge.EVENT_BUS.register(TameSpawnEvents.class);
