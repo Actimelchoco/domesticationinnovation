@@ -994,6 +994,9 @@ public class TameCommands {
                 .then(Commands.literal("enableVoidCloud")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setVoidCloudEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("enableMending")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setMendingEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -2984,6 +2987,7 @@ public class TameCommands {
                                 .requires(source -> source.hasPermission(2))
 
                                 .then(buildCanEatAdminCommand())
+                                .then(buildAdminInventoryCommand())
 
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
@@ -4319,6 +4323,27 @@ public class TameCommands {
                                                 .executes(ctx -> adminCanEatAllow(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "food"), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
                 .then(buildCanEatDisallowCommand("disallow"))
                 .then(buildCanEatDisallowCommand("dissallow"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildAdminInventoryCommand() {
+        return Commands.literal("inventory")
+                .then(buildAdminArmorCommand("amor"))
+                .then(buildAdminArmorCommand("armor"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildAdminArmorCommand(String literal) {
+        return Commands.literal(literal)
+                .then(buildForbidArmorEnchantmentCommand("vorbidEnchantment"))
+                .then(buildForbidArmorEnchantmentCommand("forbidEnchantment"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildForbidArmorEnchantmentCommand(String literal) {
+        return Commands.literal(literal)
+                .then(Commands.argument("enchantment", StringArgumentType.word())
+                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(
+                                ForgeRegistries.ENCHANTMENTS.getKeys().stream().map(ResourceLocation::toString), b))
+                        .executes(ctx -> adminForbidArmorEnchantment(
+                                ctx.getSource(), StringArgumentType.getString(ctx, "enchantment"))));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatDisallowCommand(String literal) {
@@ -6053,6 +6078,15 @@ public class TameCommands {
         }
         TameRegistry.setVoidCloudEnabled(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Void Cloud " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    static int setMendingEnabled(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        PlayerDebugSettings.setEnableMending(player.getUUID(), enabled);
+        player.sendSystemMessage(Component.literal("Stored armor Mending " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -22170,6 +22204,15 @@ public class TameCommands {
         int removed = TameFoodManager.clearCustom(source.getServer(), type);
         source.sendSuccess(() -> Component.literal("Cleared " + removed + " custom food allow(s) for " + type + "."), true);
         return removed;
+    }
+
+    private static int adminForbidArmorEnchantment(CommandSourceStack source, String enchantment) {
+        if (!TameStoredArmorEvents.forbidEnchantment(source.getServer(), enchantment)) {
+            source.sendFailure(Component.literal("Unknown enchantment or it is already forbidden: " + enchantment));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Forbidden " + enchantment + " on stored tame armor."), true);
+        return 1;
     }
 
     private static int adminCanEatAllow(CommandSourceStack source, String type, String food, int foodPoints) {

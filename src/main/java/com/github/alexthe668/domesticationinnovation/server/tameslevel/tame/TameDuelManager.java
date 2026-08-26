@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -2128,7 +2129,7 @@ public final class TameDuelManager {
             LevelSystem.grantXP(loadedTame, tame, xpReward);
             return;
         }
-        tame.xp = Math.max(0, tame.xp + xpReward);
+        tame.xp = Math.max(0, tame.xp + TameStoredArmorEvents.repairWithMending(server, null, tame, xpReward));
         tame.xpToNext = Math.max(1, LevelSystem.xpRequiredForLevel(Math.max(1, tame.level)));
         TameRegistry.markDirty();
     }

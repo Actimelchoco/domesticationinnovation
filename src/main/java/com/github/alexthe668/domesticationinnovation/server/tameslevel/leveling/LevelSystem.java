@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
@@ -361,11 +362,12 @@ public class LevelSystem {
                 gainedXP = assisterShareXp;
             }
 
-            if (gainedXP > 0.0D) {
-                data.xp += scaleRecoveryXpGain(data, gainedXP);
-            }
-
             Entity entity = dead.level() instanceof ServerLevel serverLevel ? serverLevel.getEntity(tameId) : null;
+            if (gainedXP > 0.0D) {
+                int adjustedXp = scaleRecoveryXpGain(data, gainedXP);
+                data.xp += TameStoredArmorEvents.repairWithMending(
+                        entity instanceof LivingEntity living ? living : null, data, adjustedXp);
+            }
             if (entity instanceof LivingEntity tame) {
                 checkLevelUp(tame, data);
             }
@@ -549,6 +551,7 @@ public class LevelSystem {
             return;
         }
         int adjusted = amount > 0 ? scaleRecoveryXpGain(data, amount) : amount;
+        if (adjusted > 0) adjusted = TameStoredArmorEvents.repairWithMending(tame, data, adjusted);
         data.xp = Math.max(0, data.xp + adjusted);
         checkLevelUp(tame, data);
         TameRegistry.markDirty();

@@ -49,6 +49,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> DUELS_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
+    private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -82,11 +83,16 @@ public final class PlayerDebugSettings {
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
             new BooleanSetting("duelsGlow", DUELS_GLOW, true),
             new BooleanSetting("rankedGlow", RANKED_GLOW, true),
-            new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false)
+            new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
+            new BooleanSetting("enableMending", ENABLE_MENDING, true)
     );
 
     public static boolean enemyKilled(UUID player) {
         return getBoolean(ENEMY_KILLED, player, false);
+    }
+
+    public static boolean enableMending(UUID player) {
+        return getBoolean(ENABLE_MENDING, player, true);
     }
 
     public static boolean combatAssists(UUID player) {
@@ -258,6 +264,10 @@ public final class PlayerDebugSettings {
 
     public static void setShadowHands(UUID player, boolean enabled) {
         setBoolean(SHADOW_HANDS, player, enabled, false);
+    }
+
+    public static void setEnableMending(UUID player, boolean enabled) {
+        setBoolean(ENABLE_MENDING, player, enabled, true);
     }
 
     public static void setInventoryLowOnFood(UUID player, boolean enabled) {
