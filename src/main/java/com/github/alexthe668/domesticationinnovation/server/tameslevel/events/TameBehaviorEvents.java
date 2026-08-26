@@ -9,6 +9,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameFoodManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
@@ -58,6 +59,7 @@ public class TameBehaviorEvents {
         }
         if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
+        TameFoodManager.tick(tame, activeData);
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
                 && tame.getTarget() != null

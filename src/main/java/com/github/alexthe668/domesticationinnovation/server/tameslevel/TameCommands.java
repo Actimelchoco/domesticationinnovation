@@ -36,6 +36,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelSnapshots;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameFoodManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
@@ -2162,6 +2163,11 @@ public class TameCommands {
 
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
+                                .then(Commands.literal("canEat")
+                                        .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), ""))
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("give")
                                         .executes(ctx -> hungerInventoryGive(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -2975,6 +2981,8 @@ public class TameCommands {
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
+
+                                .then(buildCanEatAdminCommand())
 
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
@@ -4293,6 +4301,39 @@ public class TameCommands {
             return Math.max(1, saturatingMultiply(baseCost, 5));
         }
         return baseCost;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatAdminCommand() {
+        return Commands.literal("canEat")
+                .then(Commands.literal("clearCustomFoodAllows")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                                .executes(ctx -> adminCanEatClear(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
+                .then(Commands.literal("allow")
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                                .then(Commands.argument("food", StringArgumentType.word())
+                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
+                                        .then(Commands.argument("foodpoints", IntegerArgumentType.integer(1, 1_000_000))
+                                                .executes(ctx -> adminCanEatAllow(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "food"), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
+                .then(buildCanEatDisallowCommand("disallow"))
+                .then(buildCanEatDisallowCommand("dissallow"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatDisallowCommand(String literal) {
+        LiteralArgumentBuilder<CommandSourceStack> direct = Commands.literal(literal)
+                .then(Commands.argument("type", StringArgumentType.word())
+                        .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                        .then(Commands.argument("food", StringArgumentType.word())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
+                                .executes(ctx -> adminCanEatChange(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "food"), false))));
+        // Also accept the originally requested spelling: "dissallow allow <type> <food>".
+        return direct.then(Commands.literal("allow")
+                .then(Commands.argument("type2", StringArgumentType.word())
+                        .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                        .then(Commands.argument("food2", StringArgumentType.word())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
+                                .executes(ctx -> adminCanEatChange(ctx.getSource(), StringArgumentType.getString(ctx, "type2"), StringArgumentType.getString(ctx, "food2"), false)))));
     }
 
     private static int ariseUsesToday(ServerPlayer player) {
@@ -21543,8 +21584,9 @@ public class TameCommands {
                 data.hungerInventory.remove(i--);
                 continue;
             }
+            int foodSaturation = hungerFoodSaturation(stack, data, tame);
             stack.shrink(1);
-            data.hungerSaturation = Math.max(0, data.hungerSaturation + foodPoints * TAME_HUNGER_SATURATION_PER_FOOD_POINT);
+            data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);
             if (stack.isEmpty()) {
                 data.hungerInventory.remove(i);
             }
@@ -21560,20 +21602,30 @@ public class TameCommands {
     }
 
     private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {
+        int saturation = hungerFoodSaturation(stack, data, tame);
+        return saturation <= 0 ? 0 : Math.max(1, (saturation + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT);
+    }
+
+    private static int hungerFoodSaturation(ItemStack stack, TameData data, LivingEntity tame) {
         if (stack == null || stack.isEmpty()) {
             return 0;
         }
-        if (stack.is(Items.BREAD)) {
-            return 3;
+        int customPoints = TameFoodManager.customFoodPoints(stack, data, tame);
+        if (customPoints > 0) {
+            return (int) Math.min(Integer.MAX_VALUE, (long) customPoints * TAME_HUNGER_SATURATION_PER_FOOD_POINT);
         }
         if (!stack.getItem().isEdible() || stack.getItem().getFoodProperties() == null) {
             return 0;
         }
         int points = Math.max(1, stack.getItem().getFoodProperties().getNutrition());
-        if (data != null && data.level >= 30 && isPreferredHungerFood(stack, data, tame)) {
+        boolean normalFood = TameFoodManager.accepts(stack, data, tame);
+        boolean gluttonous = data != null && data.attributeLevels.getOrDefault("gluttonous", 0) > 0;
+        if (!normalFood && !gluttonous) return 0;
+        if (normalFood && data != null && data.level >= 30 && isPreferredHungerFood(stack, data, tame)) {
             points *= 2;
         }
-        return points;
+        int saturation = points * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
+        return normalFood ? saturation : Math.max(1, saturation / 10);
     }
 
     private static boolean isPreferredHungerFood(ItemStack stack, TameData data, LivingEntity tame) {
@@ -21595,9 +21647,9 @@ public class TameCommands {
         }
         int total = 0;
         for (ItemStack stack : data.hungerInventory) {
-            total += Math.max(0, hungerFoodPoints(stack, data, null)) * Math.max(0, stack.getCount());
+            total += Math.max(0, hungerFoodSaturation(stack, data, null)) * Math.max(0, stack.getCount());
         }
-        return total;
+        return total <= 0 ? 0 : (total + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT;
     }
 
     private static void notifyOwnerHungerEmpty(MinecraftServer server, TameData data) {
@@ -22090,6 +22142,54 @@ public class TameCommands {
         }
         player.sendSystemMessage(Component.literal("Food taste for " + type + ": edible foods are accepted; bread counts half. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
+    }
+
+    private static int hungerInventoryCanEat(CommandSourceStack source, String selectionRaw) {
+        ServerPlayer player = source.getPlayer();
+        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        if (selected.isEmpty()) return hungerMessage(player, "No tames matched that selection.");
+        Map<String, List<String>> namesByType = new LinkedHashMap<>();
+        for (TameData data : selected) {
+            String type = TameFoodManager.typeId(null, data);
+            namesByType.computeIfAbsent(type, ignored -> new ArrayList<>()).add(tameDisplayName(data));
+        }
+        namesByType.forEach((type, names) -> {
+            List<String> foods = TameFoodManager.foodsFor(source.getServer(), type);
+            String list = foods.isEmpty() ? "still learning/no known foods" : String.join(", ", foods);
+            player.sendSystemMessage(Component.literal(String.join(", ", names) + " [" + type + "]: " + list)
+                    .withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        });
+        player.sendSystemMessage(Component.literal("#meat/#fish/#fruit/#vegetable are custom food categories. Gluttonous tames can also eat any edible item at 10% value.")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        return selected.size();
+    }
+
+    private static int adminCanEatClear(CommandSourceStack source, String type) {
+        int removed = TameFoodManager.clearCustom(source.getServer(), type);
+        source.sendSuccess(() -> Component.literal("Cleared " + removed + " custom food allow(s) for " + type + "."), true);
+        return removed;
+    }
+
+    private static int adminCanEatAllow(CommandSourceStack source, String type, String food, int foodPoints) {
+        boolean changed = TameFoodManager.addCustom(source.getServer(), type, food, foodPoints);
+        if (!changed) {
+            source.sendFailure(Component.literal("Nothing changed. Check the entity type/item id, or that the same value is already configured."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Allowed " + food + " on " + type + " for " + foodPoints + " food point(s)."), true);
+        return 1;
+    }
+
+    private static int adminCanEatChange(CommandSourceStack source, String type, String food, boolean allow) {
+        boolean changed = !allow && TameFoodManager.removeCustom(source.getServer(), type, food);
+        if (!changed) {
+            source.sendFailure(Component.literal(allow
+                    ? "Nothing changed."
+                    : "That custom allow was not present."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Removed allow for " + food + " on " + type + "."), true);
+        return 1;
     }
 
     private static void sendHungerInventoryLine(ServerPlayer player, TameData data) {
