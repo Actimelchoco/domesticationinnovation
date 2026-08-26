@@ -358,25 +358,8 @@ public class TameableUtils {
     }
 
     private static float[] mapProtectionToArmorStats(int protectionLevel) {
-        if (protectionLevel <= 0) {
-            // Leather-equivalent baseline for wearing any collar tag.
-            return new float[]{7.0F, 0.0F};
-        }
-        if (protectionLevel == 1) {
-            // Chainmail-equivalent.
-            return new float[]{12.0F, 0.0F};
-        }
-        if (protectionLevel == 2) {
-            // Iron-equivalent.
-            return new float[]{15.0F, 0.0F};
-        }
-        if (protectionLevel == 3) {
-            // Diamond-equivalent.
-            return new float[]{20.0F, 2.0F};
-        }
-        // Protection IV and above starts at netherite-equivalent and scales further.
-        float extra = protectionLevel - 4.0F;
-        return new float[]{20.0F + extra, 3.0F + (extra * 0.5F)};
+        // Protection tiers now unlock stored armor slots instead of increasing collar stats.
+        return new float[]{7.0F, 0.0F};
     }
 
     private static boolean isWaterCreature(LivingEntity enchanted) {

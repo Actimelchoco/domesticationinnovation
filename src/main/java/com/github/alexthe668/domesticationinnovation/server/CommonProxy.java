@@ -977,9 +977,6 @@ public class CommonProxy {
                 || event.getSource().is(DamageTypeTags.BYPASSES_ENCHANTMENTS)) {
             return;
         }
-        int protectionLevel = TameableUtils.hasCollar(event.getEntity())
-                ? TameableUtils.getEnchantLevel(event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION)
-                : 0;
         TameData data = TameRegistry.get(event.getEntity().getUUID());
         if (data == null) {
             UUID tlId = TameData.getTlId(event.getEntity());
@@ -988,10 +985,10 @@ public class CommonProxy {
         int knockbackResistanceUpgrades = data == null
                 ? 0
                 : Math.max(0, (int) Math.floor((data.bonusKnockbackResist + 1.0E-6D) / 0.05D));
-        if (protectionLevel <= 0 && knockbackResistanceUpgrades <= 0) {
+        if (knockbackResistanceUpgrades <= 0) {
             return;
         }
-        float reduction = Math.min(0.80F, protectionLevel * 0.10F + knockbackResistanceUpgrades * 0.03F);
+        float reduction = Math.min(0.80F, knockbackResistanceUpgrades * 0.03F);
         event.setAmount(event.getAmount() * (1.0F - reduction));
     }
 

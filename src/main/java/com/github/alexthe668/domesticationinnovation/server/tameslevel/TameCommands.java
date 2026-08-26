@@ -21477,7 +21477,8 @@ public class TameCommands {
             remainingLevels -= levelsInBand;
             bandWeight *= 2.0D;
         }
-        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D)));
+        double armorMultiplier = 1.0D + TameStoredArmorEvents.wornPieceCount(data) * 0.5D;
+        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D) * armorMultiplier));
     }
 
     private static boolean ensureHungerSaturation(TameData data, LivingEntity tame, int required) {
@@ -22270,6 +22271,7 @@ public class TameCommands {
         @Override
         public boolean canPlaceItem(int slot, ItemStack stack) {
             if (slot >= 0 && slot < 4) {
+                if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, slot)) return false;
                 EquipmentSlot expected = switch (slot) {
                     case 0 -> EquipmentSlot.HEAD;
                     case 1 -> EquipmentSlot.CHEST;
