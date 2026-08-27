@@ -108,6 +108,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -1459,7 +1460,6 @@ public class TameCommands {
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(TameCollarCommands.build())
-                        .then(TameCollarCommands.buildCollarTag())
                         .then(TameHistoryCommands.graveyard())
                         .then(TameSearchCommands.build())
                         .then(Commands.literal("_deathsOld").requires(source -> false))
@@ -2174,6 +2174,10 @@ public class TameCommands {
 
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
+                                .then(Commands.literal("amorSystem")
+                                        .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
+                                .then(Commands.literal("armorSystem")
+                                        .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("canEat")
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
@@ -5232,7 +5236,8 @@ public class TameCommands {
             sendInfoPage(p, "Collar",
                     "/tames collar",
                     "/tames collar notag",
-                    "/tames collarTag compatibleAmorEnchantments",
+                    "/tames collar compatibleArmorEnchantments (hold enchanted armor)",
+                    "/tames collar amorSystem",
                     "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
             );
         }
@@ -6757,28 +6762,28 @@ public class TameCommands {
     static int compatibleArmorEnchantments(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
-        Set<String> forbidden = TameStoredArmorEvents.forbiddenEnchantments(source.getServer());
-        List<ItemStack> armorSamples = ForgeRegistries.ITEMS.getValues().stream()
-                .filter(item -> item instanceof net.minecraft.world.item.ArmorItem)
-                .map(ItemStack::new)
-                .toList();
-        List<String> names = ForgeRegistries.ENCHANTMENTS.getValues().stream()
-                .filter(enchantment -> {
-                    ResourceLocation id = ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
-                    return id != null && !forbidden.contains(id.toString())
-                            && armorSamples.stream().anyMatch(enchantment::canEnchant);
-                })
-                .map(enchantment -> Component.translatable(enchantment.getDescriptionId()).getString())
-                .distinct()
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .toList();
-        if (names.isEmpty()) return error(player, "No normally armor-compatible enchantments were found.");
-        player.sendSystemMessage(Component.literal("Compatible armor enchantments:").withStyle(ChatFormatting.GOLD));
-        for (int start = 0; start < names.size(); start += 12) {
-            player.sendSystemMessage(Component.literal(String.join(", ", names.subList(start, Math.min(names.size(), start + 12))))
-                    .withStyle(ChatFormatting.WHITE));
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof net.minecraft.world.item.ArmorItem)) {
+            return error(player, "Hold an enchanted armor piece in your main hand.");
         }
-        return names.size();
+        Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(held);
+        if (enchantments.isEmpty()) return error(player, "The held armor piece has no enchantments.");
+        Set<String> forbidden = TameStoredArmorEvents.forbiddenEnchantments(source.getServer());
+        List<String> working = new ArrayList<>();
+        List<String> incompatible = new ArrayList<>();
+        enchantments.keySet().forEach(enchantment -> {
+            ResourceLocation id = ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
+            String name = Component.translatable(enchantment.getDescriptionId()).getString();
+            if (id != null && !forbidden.contains(id.toString()) && enchantment.canEnchant(held)) working.add(name);
+            else incompatible.add(name);
+        });
+        working.sort(String.CASE_INSENSITIVE_ORDER);
+        incompatible.sort(String.CASE_INSENSITIVE_ORDER);
+        player.sendSystemMessage(Component.literal("Works: ").withStyle(ChatFormatting.GREEN)
+                .append(Component.literal(working.isEmpty() ? "None" : String.join(", ", working)).withStyle(ChatFormatting.WHITE)));
+        player.sendSystemMessage(Component.literal("Does not work: ").withStyle(ChatFormatting.RED)
+                .append(Component.literal(incompatible.isEmpty() ? "None" : String.join(", ", incompatible)).withStyle(ChatFormatting.WHITE)));
+        return working.size();
     }
 
     private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose) {

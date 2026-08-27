@@ -144,14 +144,16 @@ dependencies {
     implementation fg.deobf("curse.maven:citadel-331936:4848887")
     def localWaystonesJar = fileTree('C:/Users/bruns/Documents/linggango server/mods') {
         include 'waystones-forge-1.20.1-*.jar'
-    }.singleFile
+        include 'waystones-forge-1.20.1*.jar'
+    }.files.find()
     def localBalmJar = fileTree('C:/Users/bruns/Documents/linggango server/mods') {
         include 'balm-forge-1.20.1-*-all.jar'
-    }.singleFile
-    if (localWaystonesJar.exists()) {
+        include 'balm-forge-1.20.1-*.jar'
+    }.files.find()
+    if (localWaystonesJar != null && localWaystonesJar.exists()) {
         compileOnly files(localWaystonesJar)
     }
-    if (localBalmJar.exists()) {
+    if (localBalmJar != null && localBalmJar.exists()) {
         compileOnly files(localBalmJar)
     }
 
