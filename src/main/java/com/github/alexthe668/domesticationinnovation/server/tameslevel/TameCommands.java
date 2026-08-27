@@ -15201,15 +15201,22 @@ public class TameCommands {
             return;
         }
         // Keep the historical invisibility repair, but only for players already tracked by
-        // vanilla. The old implementation replayed every attribute and equipment entry to
-        // every player in the dimension, which created severe client packet pressure.
+        // vanilla or close enough that the tracker should have picked them up after the move.
+        // This includes newly-nearby viewers if tracking failed, without returning to a
+        // dimension-wide resend.
         if (strongRefresh) {
-            level.getChunkSource().broadcastAndSend(tame, new ClientboundRemoveEntitiesPacket(tame.getId()));
-            level.getChunkSource().broadcastAndSend(tame, tame.getAddEntityPacket());
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
-            if (values != null && !values.isEmpty()) {
-                level.getChunkSource().broadcastAndSend(tame, new ClientboundSetEntityDataPacket(tame.getId(), values));
+            for (ServerPlayer viewer : level.players()) {
+                if (viewer == null || viewer.connection == null || viewer.isRemoved()
+                        || viewer.distanceToSqr(tame) > 192.0D * 192.0D) continue;
+                sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
+                sendClientPacket(viewer, tame.getAddEntityPacket());
+                if (values != null && !values.isEmpty()) {
+                    sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
+                }
+                sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
             }
+            return;
         }
         level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
     }

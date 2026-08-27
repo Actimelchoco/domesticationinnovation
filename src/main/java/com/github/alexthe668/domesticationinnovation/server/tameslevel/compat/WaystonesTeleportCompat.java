@@ -199,13 +199,17 @@ public final class WaystonesTeleportCompat {
             return;
         }
         if (tame.level() instanceof ServerLevel level) {
-            level.getChunkSource().broadcastAndSend(tame, new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(tame.getId()));
-            level.getChunkSource().broadcastAndSend(tame, tame.getAddEntityPacket());
             List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
-            if (values != null && !values.isEmpty()) {
-                level.getChunkSource().broadcastAndSend(tame, new ClientboundSetEntityDataPacket(tame.getId(), values));
+            for (ServerPlayer viewer : level.players()) {
+                if (viewer == null || viewer.connection == null || viewer.isRemoved()
+                        || viewer.distanceToSqr(tame) > 192.0D * 192.0D) continue;
+                sendClientPacket(viewer, new net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket(tame.getId()));
+                sendClientPacket(viewer, tame.getAddEntityPacket());
+                if (values != null && !values.isEmpty()) {
+                    sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
+                }
+                sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
             }
-            level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
         }
     }
 
