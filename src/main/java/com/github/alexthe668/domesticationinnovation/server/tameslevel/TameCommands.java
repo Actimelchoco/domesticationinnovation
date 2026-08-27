@@ -2180,7 +2180,7 @@ public class TameCommands {
                                         .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("armorSystem")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
-                                .then(Commands.literal("canEat")
+                                .then(Commands.literal("prefferedFood")
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
@@ -4321,7 +4321,7 @@ public class TameCommands {
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatAdminCommand() {
-        return Commands.literal("canEat")
+        return Commands.literal("prefferedFood")
                 .then(buildCanEatLowPreferredFoodCommand("lowPrefferedFood"))
                 .then(buildCanEatLowPreferredFoodCommand("lowPreferredFood"))
                 .then(Commands.literal("superfoodAdd")
@@ -5046,7 +5046,7 @@ public class TameCommands {
         else if (key.equals("inventory") || key.equals("hunger") || key.equals("food")) {
             sendInfoPage(p, "Inventory",
                     "/tames inventory",
-                    "/tames inventory canEat <owned tame type>",
+                    "/tames inventory prefferedFood <owned tame type>",
                     "/tames inventory superfood",
                     "/tames inventory give [<selection>]",
                     "/tames inventory open <name>",
@@ -5057,7 +5057,7 @@ public class TameCommands {
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
                     "Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.",
-                    "canEat reports the learned and configured foods for one owned tame type, using readable item and food-category names.",
+                    "prefferedFood reports the learned and configured preferred foods for one owned tame type, using readable item and food-category names.",
                     "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
@@ -5065,7 +5065,7 @@ public class TameCommands {
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
                     "Register a container above your drum with /tames settings chestxDrumRange <range> <height>. It refills loaded hungry tames to green.",
-                    "Bread is universal fallback food. If it is not part of the tame's preferred/native diet, it gives only 10% value. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
+                    "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
         else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
@@ -21825,11 +21825,11 @@ public class TameCommands {
         if (customPercentage > 0 && stack.getItem().getFoodProperties() != null) {
             long base = (long) Math.max(1, stack.getItem().getFoodProperties().getNutrition())
                     * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
-            return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.round(base * customPercentage / 100.0D)));
+            return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.round(base * 2.0D * customPercentage / 100.0D)));
         }
         int customPoints = TameFoodManager.customFoodPoints(stack, data, tame);
         if (customPoints > 0) {
-            return (int) Math.min(Integer.MAX_VALUE, (long) customPoints * TAME_HUNGER_SATURATION_PER_FOOD_POINT);
+            return (int) Math.min(Integer.MAX_VALUE, (long) customPoints * TAME_HUNGER_SATURATION_PER_FOOD_POINT * 2L);
         }
         if (!stack.getItem().isEdible() || stack.getItem().getFoodProperties() == null) {
             return 0;
@@ -21839,24 +21839,10 @@ public class TameCommands {
         boolean gluttonous = data != null && data.attributeLevels.getOrDefault("gluttonous", 0) > 0;
         boolean breadFallback = stack.is(Items.BREAD);
         if (!normalFood && !gluttonous && !breadFallback) return 0;
-        if (normalFood && data != null && data.level >= 30 && isPreferredHungerFood(stack, data, tame)) {
-            points *= 2;
-        }
         int saturation = points * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
-        return normalFood ? saturation : Math.max(1, saturation / 10);
-    }
-
-    private static boolean isPreferredHungerFood(ItemStack stack, TameData data, LivingEntity tame) {
-        if (stack == null || stack.isEmpty()) {
-            return false;
-        }
-        if (stack.is(Items.BREAD)) {
-            return false;
-        }
-        String type = data == null || data.type == null ? "" : data.type.toLowerCase(Locale.ROOT);
-        String itemId = ForgeRegistries.ITEMS.getKey(stack.getItem()) == null ? "" : ForgeRegistries.ITEMS.getKey(stack.getItem()).toString().toLowerCase(Locale.ROOT);
-        return !type.isBlank() && (itemId.contains("meat") || itemId.contains("fish") || itemId.contains("beef") || itemId.contains("chicken") || itemId.contains("pork") || itemId.contains("mutton"))
-                && (type.contains("wolf") || type.contains("cat") || type.contains("fox") || type.contains("raptor"));
+        if (normalFood) return (int) Math.min(Integer.MAX_VALUE, (long) saturation * 2L);
+        if (gluttonous) return Math.max(1, saturation / 2);
+        return Math.max(1, saturation / 10);
     }
 
     private static int totalHungerFoodPoints(TameData data) {
@@ -22386,7 +22372,7 @@ public class TameCommands {
         if (selected.isEmpty()) {
             return hungerMessage(player, "No selected tames matched type '" + type + "'.");
         }
-        player.sendSystemMessage(Component.literal("Food taste for " + type + ": native foods are accepted; non-native bread gives 10% value. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        player.sendSystemMessage(Component.literal("Food taste for " + type + ": preferred foods give 200% saturation. Gluttonous non-preferred food gives 50%; non-preferred fallback bread gives 10% without Gluttonous.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
     }
 
