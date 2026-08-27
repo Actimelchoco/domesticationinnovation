@@ -4871,7 +4871,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: stat, inspect, search, leaderboard, duelleaderboard, group, inventory, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: selection, settings, stat, inspect, search, leaderboard, duelleaderboard, group, inventory, armor, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -4883,7 +4883,33 @@ public class TameCommands {
         if (key.length() >= 2 && key.startsWith("\"") && key.endsWith("\"")) {
             key = key.substring(1, key.length() - 1).trim();
         }
-        if (key.equals("leaderboard")) {
+        if (key.equals("selection") || key.equals("selections") || key.equals("selector")) {
+            sendInfoPage(p, "Tame Selection",
+                    "<selection> = all | <tame name> | name <tame name> | group <group> | type <type> | state <state>",
+                    "follow, sit, and wander are shortcuts for state follow, state sit, and state wander.",
+                    "Commands using a greedy <selection> accept tame names containing spaces; 'name <tame name>' is the clearest form.",
+                    "Some commands additionally support unloaded or dimension filters. Their own info page lists those additions.",
+                    "Dead-tame commands use all, name, group, and type because a loaded movement-state selection is not applicable."
+            );
+        }
+        else if (key.equals("settings")) {
+            sendInfoPage(p, "Settings",
+                    "/tames settings doNotAttack [remove] <mobtype>",
+                    "/tames settings doNotAttackAnimals <true|false>",
+                    "/tames settings enterPortalsByThemselves <true|false>",
+                    "/tames settings healthSiphon <true|false>",
+                    "/tames settings enableVoidCloud <true|false>",
+                    "/tames settings enableMending <true|false>",
+                    "/tames settings noAutoSetBed <true|false>",
+                    "/tames settings chestxDrumRange [<range> <height>]",
+                    "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
+                    "/tames settings orescenting <tame> <ore id>",
+                    "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
+                    "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
+                    "enableMending controls Mending repairs on armor stored in tame inventories."
+            );
+        }
+        else if (key.equals("leaderboard")) {
             sendInfoPage(p, "Leaderboard",
                     "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|all|everytame]",
                     "/tames leaderboard type <typeName> [<number>|all|everytame]",
@@ -4946,21 +4972,35 @@ public class TameCommands {
         else if (key.equals("inventory") || key.equals("hunger") || key.equals("food")) {
             sendInfoPage(p, "Inventory",
                     "/tames inventory",
-                    "/tames inventory give [<all|group <group>|type <type>|follow|sit|wander|name>]",
+                    "/tames inventory canEat [<selection>]",
+                    "/tames inventory give [<selection>]",
                     "/tames inventory open <name>",
-                    "/tames inventory info [<all|group <group>|type <type>|follow|sit|wander|unloaded|name>]",
+                    "/tames inventory info [<selection>]",
                     "/tames inventory autopickup <true|false> [<selection>]",
                     "/tames inventory autopickup info",
                     "/tames inventory distribute [<selection>]",
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
+                    "Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.",
+                    "canEat reports known vanilla/modded food and configured custom food values for the selected tame types.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
                     "Register a container above your drum with /tames settings chestxDrumRange <range> <height>. It refills loaded hungry tames to green.",
-                    "Bread works as simple default food but counts for half points. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
+                    "Bread is universal fallback food. If it is not part of the tame's preferred/native diet, it gives only 10% value. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
+            );
+        }
+        else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
+            sendInfoPage(p, "Tame Armor",
+                    "/tames inventory open <name>",
+                    "/tames settings enableMending <true|false>",
+                    "Armor is stored in four separated slots above the tame's food inventory; it does not need to render on the entity.",
+                    "Protection collar tier 1 unlocks boots, tier 2 helmet, tier 3 leggings, and tier 4 chestplate.",
+                    "Each worn armor piece increases saturation use by 50%.",
+                    "Applicable vanilla and modded armor enchantments work through their normal effects when supported. Server admins can forbid problematic enchantments.",
+                    "When enableMending is true, stored equipped armor with Mending can consume XP collected by the tame to repair itself."
             );
         }
         else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
@@ -4997,13 +5037,16 @@ public class TameCommands {
         else if (key.equals("guardian")) {
             sendInfoPage(p, "Guardian",
                     "/tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>",
-                    "/tames guardian deploy <all|group <group>|type <type>|state <follow|wander|sit>>",
+                    "/tames guardian deploy <selection>",
+                    "/tames guardian deployGroup <guardianGroup> <selection>",
+                    "/tames guardian clearDeploys <selection>",
                     "/tames guardian addCurrentToGroup <guardianGroup>",
                     "/tames guardian addToGroup <guardianGroup> <tame selection>",
                     "A guardian anchor is a return point. After combat, the tame paths back there.",
                     "If it still has not returned after about 60 seconds, it is teleported back.",
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
                     "'deploy' activates the current guardian locations for the selected tames.",
+                    "deployGroup activates the saved locations from one guardian group; clearDeploys removes active guardian deployments from selected tames.",
                     "Guardian groups store per-tame guardian positions under a shared name."
             );
         }
@@ -5051,7 +5094,8 @@ public class TameCommands {
         }
         else if (key.equals("tp")) {
             sendInfoPage(p, "TP",
-                    "/tames tp <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>",
+                    "/tames tp <name|all|follow|sit|wander|group <group>|type <type>|unloaded>",
+                    "/tames tp dim <dimension> | /tames tp all dim <dimension>",
                     "/tames reload",
                     "Teleports tames to the player.",
                     "Reload resends loaded tame entity data to clients without moving them.",
@@ -5063,7 +5107,8 @@ public class TameCommands {
         else if (key.equals("tphome")) {
             sendInfoPage(p, "TPHome",
                     "/tames tphome",
-                    "/tames tphome <name|all|follow|sit|wander|state <follow|wander|sit>|group <group>|type <type>>",
+                    "/tames tphome <name|all|follow|sit|wander|group <group>|type <type>|unloaded>",
+                    "/tames tphome dim <dimension> | /tames tphome all dim <dimension>",
                     "Without a selection, TPHome sends loaded owned tames within 32 blocks home.",
                     "Teleports tames to the same target the respawn system would use.",
                     "Target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.",
@@ -21655,7 +21700,8 @@ public class TameCommands {
         int points = Math.max(1, stack.getItem().getFoodProperties().getNutrition());
         boolean normalFood = TameFoodManager.accepts(stack, data, tame);
         boolean gluttonous = data != null && data.attributeLevels.getOrDefault("gluttonous", 0) > 0;
-        if (!normalFood && !gluttonous) return 0;
+        boolean breadFallback = stack.is(Items.BREAD);
+        if (!normalFood && !gluttonous && !breadFallback) return 0;
         if (normalFood && data != null && data.level >= 30 && isPreferredHungerFood(stack, data, tame)) {
             points *= 2;
         }
@@ -22175,7 +22221,7 @@ public class TameCommands {
         if (selected.isEmpty()) {
             return hungerMessage(player, "No selected tames matched type '" + type + "'.");
         }
-        player.sendSystemMessage(Component.literal("Food taste for " + type + ": edible foods are accepted; bread counts half. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        player.sendSystemMessage(Component.literal("Food taste for " + type + ": native foods are accepted; non-native bread gives 10% value. Level 30+ carnivore-like tames prefer meat/fish for double points.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return selected.size();
     }
 
@@ -27817,12 +27863,12 @@ public class TameCommands {
 
     static CompletableFuture<Suggestions> suggestInfoTopics(SuggestionsBuilder b) {
         for (String topic : List.of(
-                "leaderboard", "duelleaderboard", "deaths", "loaded", "stat", "group",
-                "inventory", "inventory system", "mode", "follow", "sit", "wander", "guardian",
+                "selection", "settings", "leaderboard", "duelleaderboard", "deaths", "loaded", "stat", "group",
+                "inventory", "inventory system", "armor", "mode", "follow", "sit", "wander", "guardian",
                 "guardian_arrow", "movement", "tp", "tphome", "bed", "respawn", "arise",
                 "ariseReincarnated", "graveyard", "reincarnate", "healthSiphon",
                 "enterPortalsByThemselves", "sitOnChairs", "collar", "inspect", "search", "arena",
-                "ranked", "duel", "duel duel", "duel accept", "duel decline", "duel ff",
+                "ranked", "duel", "duelSession", "duelSessionFFA", "duel duel", "duel accept", "duel decline", "duel ff",
                 "duel duelleaderboard", "debug", "attribute", "ability", "class")) {
             suggestInfoTopic(b, topic);
         }
