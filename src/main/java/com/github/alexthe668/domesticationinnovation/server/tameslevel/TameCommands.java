@@ -15200,8 +15200,17 @@ public class TameCommands {
         if (tame == null || !(tame.level() instanceof ServerLevel level)) {
             return;
         }
-        // Vanilla's tracker already owns spawn/removal, metadata, attributes and equipment.
-        // Manually replaying the full entity to every player created unbounded client packet pressure.
+        // Keep the historical invisibility repair, but only for players already tracked by
+        // vanilla. The old implementation replayed every attribute and equipment entry to
+        // every player in the dimension, which created severe client packet pressure.
+        if (strongRefresh) {
+            level.getChunkSource().broadcastAndSend(tame, new ClientboundRemoveEntitiesPacket(tame.getId()));
+            level.getChunkSource().broadcastAndSend(tame, tame.getAddEntityPacket());
+            List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
+            if (values != null && !values.isEmpty()) {
+                level.getChunkSource().broadcastAndSend(tame, new ClientboundSetEntityDataPacket(tame.getId(), values));
+            }
+        }
         level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
     }
 
