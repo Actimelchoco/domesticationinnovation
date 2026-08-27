@@ -4327,6 +4327,24 @@ public class TameCommands {
                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
                                         .then(Commands.argument("foodpoints", IntegerArgumentType.integer(1, 1_000_000))
                                                 .executes(ctx -> adminCanEatAllow(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString(), ResourceLocationArgument.getId(ctx, "food").toString(), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
+                .then(Commands.literal("allowType")
+                        .then(Commands.argument("tameType", ResourceLocationArgument.id())
+                                .suggests((ctx, b) -> suggestKnownTameTypes(b))
+                                .then(Commands.argument("foodType", StringArgumentType.word())
+                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(List.of("meat", "fish", "fruit", "vegetable"), b))
+                                        .executes(ctx -> adminCanEatAllowType(
+                                                ctx.getSource(),
+                                                ResourceLocationArgument.getId(ctx, "tameType").toString(),
+                                                StringArgumentType.getString(ctx, "foodType"),
+                                                100
+                                        ))
+                                        .then(Commands.argument("percentage", IntegerArgumentType.integer(1, 1_000_000))
+                                                .executes(ctx -> adminCanEatAllowType(
+                                                        ctx.getSource(),
+                                                        ResourceLocationArgument.getId(ctx, "tameType").toString(),
+                                                        StringArgumentType.getString(ctx, "foodType"),
+                                                        IntegerArgumentType.getInteger(ctx, "percentage")
+                                                ))))))
                 .then(buildCanEatDisallowCommand("disallow"))
                 .then(buildCanEatDisallowCommand("dissallow"));
     }
@@ -21712,6 +21730,8 @@ public class TameCommands {
         if (data == null || data.hungerInventory.isEmpty()) {
             return false;
         }
+        int firstUsable = -1;
+        int preferred = -1;
         for (int i = 0; i < data.hungerInventory.size(); i++) {
             ItemStack stack = data.hungerInventory.get(i);
             int foodPoints = hungerFoodPoints(stack, data, tame);
@@ -21719,21 +21739,26 @@ public class TameCommands {
                 data.hungerInventory.remove(i--);
                 continue;
             }
-            int foodSaturation = hungerFoodSaturation(stack, data, tame);
-            stack.shrink(1);
-            data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);
-            if (stack.isEmpty()) {
-                data.hungerInventory.remove(i);
+            if (firstUsable < 0) firstUsable = i;
+            if (isPreferredDistributionFood(stack, data, tame)) {
+                preferred = i;
+                break;
             }
-            int remainingFoodPoints = totalHungerFoodPoints(data);
-            if (remainingFoodPoints <= 0) {
-                notifyOwnerHungerLastFood(tame == null ? null : tame.getServer(), data);
-            } else if (remainingFoodPoints < TAME_HUNGER_LOW_FOOD_POINTS) {
-                notifyOwnerHungerLowAfterEating(tame == null ? null : tame.getServer(), data, remainingFoodPoints);
-            }
-            return true;
         }
-        return false;
+        int selected = preferred >= 0 ? preferred : firstUsable;
+        if (selected < 0) return false;
+        ItemStack stack = data.hungerInventory.get(selected);
+        int foodSaturation = hungerFoodSaturation(stack, data, tame);
+        stack.shrink(1);
+        data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);
+        if (stack.isEmpty()) data.hungerInventory.remove(selected);
+        int remainingFoodPoints = totalHungerFoodPoints(data);
+        if (remainingFoodPoints <= 0) {
+            notifyOwnerHungerLastFood(tame == null ? null : tame.getServer(), data);
+        } else if (remainingFoodPoints < TAME_HUNGER_LOW_FOOD_POINTS) {
+            notifyOwnerHungerLowAfterEating(tame == null ? null : tame.getServer(), data, remainingFoodPoints);
+        }
+        return true;
     }
 
     private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {
@@ -21744,6 +21769,12 @@ public class TameCommands {
     private static int hungerFoodSaturation(ItemStack stack, TameData data, LivingEntity tame) {
         if (stack == null || stack.isEmpty()) {
             return 0;
+        }
+        int customPercentage = TameFoodManager.customFoodPercentage(stack, data, tame);
+        if (customPercentage > 0 && stack.getItem().getFoodProperties() != null) {
+            long base = (long) Math.max(1, stack.getItem().getFoodProperties().getNutrition())
+                    * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
+            return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.round(base * customPercentage / 100.0D)));
         }
         int customPoints = TameFoodManager.customFoodPoints(stack, data, tame);
         if (customPoints > 0) {
@@ -22354,6 +22385,21 @@ public class TameCommands {
             return 0;
         }
         source.sendSuccess(() -> Component.literal("Allowed " + food + " on " + type + " for " + foodPoints + " food point(s)."), true);
+        return 1;
+    }
+
+    private static int adminCanEatAllowType(CommandSourceStack source, String tameType, String foodType, int percentage) {
+        String normalized = foodType == null ? "" : foodType.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("meat", "fish", "fruit", "vegetable").contains(normalized)) {
+            source.sendFailure(Component.literal("Unknown food type. Use meat, fish, fruit, or vegetable."));
+            return 0;
+        }
+        boolean changed = TameFoodManager.addCustom(source.getServer(), tameType, normalized, percentage);
+        if (!changed) {
+            source.sendFailure(Component.literal("Nothing changed. That food type percentage may already be configured."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Allowed food type " + normalized + " on " + tameType + " at " + percentage + "% of normal food value."), true);
         return 1;
     }
 

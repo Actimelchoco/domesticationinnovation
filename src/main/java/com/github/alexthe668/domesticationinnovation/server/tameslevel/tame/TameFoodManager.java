@@ -160,7 +160,25 @@ public final class TameFoodManager {
         String type = typeId(tame, data);
         for (String rule : CUSTOM.getOrDefault(type, Set.of())) {
             if (matchesRule(stack, rule)) {
-                return Math.max(1, CUSTOM_POINTS.getOrDefault(type, Map.of()).getOrDefault(rule, 1));
+                int configured = Math.max(1, CUSTOM_POINTS.getOrDefault(type, Map.of()).getOrDefault(rule, 1));
+                if (rule.startsWith("#")) {
+                    int nutrition = stack.getItem().getFoodProperties() == null
+                            ? 0 : Math.max(0, stack.getItem().getFoodProperties().getNutrition());
+                    if (nutrition <= 0) return 0;
+                    return Math.max(1, (int) Math.round(nutrition * configured / 100.0D));
+                }
+                return configured;
+            }
+        }
+        return 0;
+    }
+
+    public static int customFoodPercentage(ItemStack stack, TameData data, LivingEntity tame) {
+        if (stack == null || stack.isEmpty() || data == null) return 0;
+        String type = typeId(tame, data);
+        for (String rule : CUSTOM.getOrDefault(type, Set.of())) {
+            if (rule.startsWith("#") && matchesRule(stack, rule)) {
+                return Math.max(1, CUSTOM_POINTS.getOrDefault(type, Map.of()).getOrDefault(rule, 100));
             }
         }
         return 0;
