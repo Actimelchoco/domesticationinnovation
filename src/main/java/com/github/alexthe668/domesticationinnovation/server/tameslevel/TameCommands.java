@@ -19687,6 +19687,7 @@ public class TameCommands {
             }
         }
 
+        TameRegistry.trimDeathHistory();
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal(
                 "TL import (" + file.getFileName() + "): imported " + imported

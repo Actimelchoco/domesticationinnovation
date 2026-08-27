@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 
 public class TameRegistry {
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
+    private static final int MAX_DEATH_HISTORY_PER_TAME = 16;
 
     public static final Map<UUID, TameData> TAMES = new HashMap<>();
     private static final Map<UUID, TameData> TL_IDS = new HashMap<>();
@@ -95,6 +96,11 @@ public class TameRegistry {
         LAST_DEATHS.putAll(savedData.getLastDeaths());
         DEATH_HISTORY.clear();
         DEATH_HISTORY.addAll(savedData.getDeathHistory());
+        int loadedDeathHistorySize = DEATH_HISTORY.size();
+        trimDeathHistory();
+        if (DEATH_HISTORY.size() != loadedDeathHistorySize) {
+            changed = true;
+        }
         APPROVED_REINCARNATE_ITEMS.clear();
         APPROVED_REINCARNATE_ITEMS.addAll(savedData.getApprovedReincarnateItems());
         CHEAP_APPROVED_REINCARNATE_ITEMS.clear();
@@ -272,7 +278,27 @@ public class TameRegistry {
         }
         LAST_DEATHS.put(record.uuid, record);
         DEATH_HISTORY.add(record);
+        trimDeathHistory();
         markDirty();
+    }
+
+    /** Keeps full-NBT reincarnation snapshots from growing without bound. */
+    public static void trimDeathHistory() {
+        Map<UUID, Integer> retainedPerTame = new HashMap<>();
+        for (int i = DEATH_HISTORY.size() - 1; i >= 0; i--) {
+            TameDeathRecord record = DEATH_HISTORY.get(i);
+            UUID identity = record == null ? null : (record.tlId != null ? record.tlId : record.uuid);
+            if (identity == null) {
+                DEATH_HISTORY.remove(i);
+                continue;
+            }
+            int retained = retainedPerTame.getOrDefault(identity, 0);
+            if (retained >= MAX_DEATH_HISTORY_PER_TAME) {
+                DEATH_HISTORY.remove(i);
+            } else {
+                retainedPerTame.put(identity, retained + 1);
+            }
+        }
     }
 
     public static void markDirty() {
