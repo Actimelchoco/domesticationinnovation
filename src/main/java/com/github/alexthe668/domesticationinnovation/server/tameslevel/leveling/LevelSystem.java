@@ -277,6 +277,20 @@ public class LevelSystem {
         mobOwnerDamageTracker.computeIfAbsent(mob.getUUID(), k -> new HashSet<>()).add(player.getUUID());
     }
 
+    /**
+     * Releases combat-contribution bookkeeping when a target leaves the world
+     * without passing through the normal death/XP distribution path.  Mobs can
+     * despawn or unload after being hit, so relying on distributeXP alone leaves
+     * their UUIDs retained for the lifetime of the server.
+     */
+    public static void clearDamageTracking(UUID mobId) {
+        if (mobId == null) {
+            return;
+        }
+        mobDamageTracker.remove(mobId);
+        mobOwnerDamageTracker.remove(mobId);
+    }
+
     // ===============================
     // XP DISTRIBUTION
     // ===============================
@@ -374,8 +388,7 @@ public class LevelSystem {
         }
 
         TameRegistry.markDirty();
-        mobDamageTracker.remove(mobId);
-        mobOwnerDamageTracker.remove(mobId);
+        clearDamageTracking(mobId);
     }
 
     // ===============================

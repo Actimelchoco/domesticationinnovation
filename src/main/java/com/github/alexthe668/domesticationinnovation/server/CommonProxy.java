@@ -269,6 +269,9 @@ public class CommonProxy {
         // soon as an entity leaves its level. The common/server proxy is a no-op.
         DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), new int[0]);
         if (event.getEntity() instanceof LivingEntity living) {
+            if (!living.level().isClientSide) {
+                LevelSystem.clearDamageTracking(living.getUUID());
+            }
             if (living.getPersistentData().getBoolean(SKIP_LANTERN_UNLOAD_ONCE_TAG)) {
                 living.getPersistentData().remove(SKIP_LANTERN_UNLOAD_ONCE_TAG);
                 return;
