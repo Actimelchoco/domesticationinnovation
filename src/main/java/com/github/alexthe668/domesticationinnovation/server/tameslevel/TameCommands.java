@@ -15107,6 +15107,10 @@ public class TameCommands {
         }
         MinecraftServer server = tame.level().getServer();
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        CompoundTag persistent = tame.getPersistentData();
+        if (persistent.contains("TLLastClientRefreshQueued")
+                && now - persistent.getLong("TLLastClientRefreshQueued") < 20L) return;
+        persistent.putLong("TLLastClientRefreshQueued", now);
         UUID key = tame.getUUID();
         PENDING_TELEPORT_CLIENT_REFRESH.put(key, new PendingTeleportClientRefresh(
                 tame.getUUID(),
@@ -15125,6 +15129,10 @@ public class TameCommands {
         if (tame == null || tame.level() == null || tame.level().getServer() == null || !TameEntityAdapter.isTame(tame)) return;
         MinecraftServer server = tame.level().getServer();
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        CompoundTag persistent = tame.getPersistentData();
+        if (persistent.contains("TLLastClientRefreshQueued")
+                && now - persistent.getLong("TLLastClientRefreshQueued") < 20L) return;
+        persistent.putLong("TLLastClientRefreshQueued", now);
         PENDING_TELEPORT_CLIENT_REFRESH.put(tame.getUUID(), new PendingTeleportClientRefresh(
                 tame.getUUID(), TameData.getTlId(tame), tame.level().dimension().location().toString(),
                 now + TELEPORT_CLIENT_REFRESH_DELAY_TICKS, strongRefresh));
@@ -15192,34 +15200,9 @@ public class TameCommands {
         if (tame == null || !(tame.level() instanceof ServerLevel level)) {
             return;
         }
-        for (ServerPlayer viewer : level.players()) {
-            if (viewer == null || viewer.connection == null || viewer.isRemoved()) {
-                continue;
-            }
-            if (strongRefresh) {
-                sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
-            }
-            sendClientPacket(viewer, tame.getAddEntityPacket());
-            sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
-            List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
-            if (values != null && !values.isEmpty()) {
-                sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
-            }
-            Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
-            if (!attributes.isEmpty()) {
-                sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
-            }
-            List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
-            for (EquipmentSlot slot : EquipmentSlot.values()) {
-                ItemStack stack = tame.getItemBySlot(slot);
-                if (!stack.isEmpty()) {
-                    equipment.add(Pair.of(slot, stack.copy()));
-                }
-            }
-            if (!equipment.isEmpty()) {
-                sendClientPacket(viewer, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
-            }
-        }
+        // Vanilla's tracker already owns spawn/removal, metadata, attributes and equipment.
+        // Manually replaying the full entity to every player created unbounded client packet pressure.
+        level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
     }
 
     private static void sendClientPacket(ServerPlayer player, Packet<?> packet) {

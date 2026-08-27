@@ -198,25 +198,8 @@ public final class WaystonesTeleportCompat {
         if (owner == null || tame == null || owner.connection == null) {
             return;
         }
-        sendClientPacket(owner, tame.getAddEntityPacket());
-        sendClientPacket(owner, new ClientboundTeleportEntityPacket(tame));
-        List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
-        if (values != null && !values.isEmpty()) {
-            sendClientPacket(owner, new ClientboundSetEntityDataPacket(tame.getId(), values));
-        }
-        Collection<AttributeInstance> attributes = tame.getAttributes().getSyncableAttributes();
-        if (!attributes.isEmpty()) {
-            sendClientPacket(owner, new ClientboundUpdateAttributesPacket(tame.getId(), attributes));
-        }
-        List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemStack stack = tame.getItemBySlot(slot);
-            if (!stack.isEmpty()) {
-                equipment.add(Pair.of(slot, stack.copy()));
-            }
-        }
-        if (!equipment.isEmpty()) {
-            sendClientPacket(owner, new ClientboundSetEquipmentPacket(tame.getId(), equipment));
+        if (tame.level() instanceof ServerLevel level) {
+            level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
         }
     }
 
