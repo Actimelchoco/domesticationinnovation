@@ -50,6 +50,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
+    private static final Map<UUID, Boolean> ENABLE_INVENTORY_DISTRIBUTE_FOOD_PREFERENCES = new HashMap<>();
+    private static final Map<UUID, Boolean> ENABLE_CHEST_DRUM_FOOD_PREFERENCES = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -84,7 +86,9 @@ public final class PlayerDebugSettings {
             new BooleanSetting("duelsGlow", DUELS_GLOW, true),
             new BooleanSetting("rankedGlow", RANKED_GLOW, true),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
-            new BooleanSetting("enableMending", ENABLE_MENDING, true)
+            new BooleanSetting("enableMending", ENABLE_MENDING, true),
+            new BooleanSetting("enableInventoryDistributeFoodPreferences", ENABLE_INVENTORY_DISTRIBUTE_FOOD_PREFERENCES, true),
+            new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
     );
 
     public static boolean enemyKilled(UUID player) {
@@ -93,6 +97,14 @@ public final class PlayerDebugSettings {
 
     public static boolean enableMending(UUID player) {
         return getBoolean(ENABLE_MENDING, player, true);
+    }
+
+    public static boolean enableInventoryDistributeFoodPreferences(UUID player) {
+        return getBoolean(ENABLE_INVENTORY_DISTRIBUTE_FOOD_PREFERENCES, player, true);
+    }
+
+    public static boolean enableChestXDrumFoodPreferences(UUID player) {
+        return getBoolean(ENABLE_CHEST_DRUM_FOOD_PREFERENCES, player, true);
     }
 
     public static boolean combatAssists(UUID player) {
@@ -268,6 +280,14 @@ public final class PlayerDebugSettings {
 
     public static void setEnableMending(UUID player, boolean enabled) {
         setBoolean(ENABLE_MENDING, player, enabled, true);
+    }
+
+    public static void setEnableInventoryDistributeFoodPreferences(UUID player, boolean enabled) {
+        setBoolean(ENABLE_INVENTORY_DISTRIBUTE_FOOD_PREFERENCES, player, enabled, true);
+    }
+
+    public static void setEnableChestXDrumFoodPreferences(UUID player, boolean enabled) {
+        setBoolean(ENABLE_CHEST_DRUM_FOOD_PREFERENCES, player, enabled, true);
     }
 
     public static void setInventoryLowOnFood(UUID player, boolean enabled) {
