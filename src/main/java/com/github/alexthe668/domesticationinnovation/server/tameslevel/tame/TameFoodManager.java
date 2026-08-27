@@ -115,14 +115,44 @@ public final class TameFoodManager {
         return removed == null ? 0 : removed.size();
     }
 
-    public static List<String> foodsFor(MinecraftServer server, String type) {
+    public static List<String> foodsForDisplay(MinecraftServer server, String type) {
         init(server);
         String normalized = normalizeType(type);
-        Set<String> result = new LinkedHashSet<>(LEARNED.getOrDefault(normalized, Set.of()));
-        for (String rule : CUSTOM.getOrDefault(normalized, Set.of())) {
-            result.add(rule + " (" + CUSTOM_POINTS.getOrDefault(normalized, Map.of()).getOrDefault(rule, 1) + " points)");
+        Set<String> foodNames = new LinkedHashSet<>();
+        Set<String> categories = new LinkedHashSet<>();
+        for (String itemId : LEARNED.getOrDefault(normalized, Set.of())) {
+            String displayName = displayItemName(itemId);
+            if (!displayName.isBlank()) foodNames.add(displayName);
         }
-        return result.stream().sorted().toList();
+        for (String rule : CUSTOM.getOrDefault(normalized, Set.of())) {
+            if (rule.startsWith("#")) {
+                categories.add("FoodType: " + titleCase(rule.substring(1)));
+            } else {
+                String displayName = displayItemName(rule);
+                if (!displayName.isBlank()) foodNames.add(displayName);
+            }
+        }
+        List<String> result = foodNames.stream().sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        result.addAll(categories.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList());
+        return result;
+    }
+
+    private static String displayItemName(String itemId) {
+        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
+        return item == null ? titleCase(id == null ? itemId : id.getPath()) : item.getDescription().getString();
+    }
+
+    private static String titleCase(String value) {
+        if (value == null || value.isBlank()) return "";
+        String[] words = value.replace('-', '_').split("_");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (word.isBlank()) continue;
+            if (!result.isEmpty()) result.append(' ');
+            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1).toLowerCase(Locale.ROOT));
+        }
+        return result.toString();
     }
 
     public static int customFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {
@@ -212,6 +242,10 @@ public final class TameFoodManager {
         String rule = value.trim().toLowerCase(Locale.ROOT);
         if (Set.of("meat", "fish", "fruit", "vegetable").contains(rule)) return "#" + rule;
         ResourceLocation id = ResourceLocation.tryParse(rule.contains(":") ? rule : "minecraft:" + rule);
+        if (id != null && "minecraft".equals(id.getNamespace())
+                && Set.of("meat", "fish", "fruit", "vegetable").contains(id.getPath())) {
+            return "#" + id.getPath();
+        }
         return id != null && ForgeRegistries.ITEMS.containsKey(id) ? id.toString() : null;
     }
 

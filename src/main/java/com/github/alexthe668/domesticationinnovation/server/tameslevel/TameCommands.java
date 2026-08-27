@@ -1459,6 +1459,7 @@ public class TameCommands {
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setSitOnChairs(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(TameCollarCommands.build())
+                        .then(TameCollarCommands.buildCollarTag())
                         .then(TameHistoryCommands.graveyard())
                         .then(TameSearchCommands.build())
                         .then(Commands.literal("_deathsOld").requires(source -> false))
@@ -2174,10 +2175,9 @@ public class TameCommands {
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("canEat")
-                                        .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), ""))
-                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                                        .then(Commands.argument("type", StringArgumentType.word())
+                                                .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
+                                                .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                 .then(Commands.literal("give")
                                         .executes(ctx -> hungerInventoryGive(ctx.getSource(), ""))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
@@ -4317,16 +4317,16 @@ public class TameCommands {
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatAdminCommand() {
         return Commands.literal("canEat")
                 .then(Commands.literal("clearCustomFoodAllows")
-                        .then(Commands.argument("type", StringArgumentType.word())
+                        .then(Commands.argument("type", ResourceLocationArgument.id())
                                 .suggests((ctx, b) -> suggestKnownTameTypes(b))
-                                .executes(ctx -> adminCanEatClear(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
+                                .executes(ctx -> adminCanEatClear(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
                 .then(Commands.literal("allow")
-                        .then(Commands.argument("type", StringArgumentType.word())
+                        .then(Commands.argument("type", ResourceLocationArgument.id())
                                 .suggests((ctx, b) -> suggestKnownTameTypes(b))
-                                .then(Commands.argument("food", StringArgumentType.word())
+                                .then(Commands.argument("food", ResourceLocationArgument.id())
                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
                                         .then(Commands.argument("foodpoints", IntegerArgumentType.integer(1, 1_000_000))
-                                                .executes(ctx -> adminCanEatAllow(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "food"), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
+                                                .executes(ctx -> adminCanEatAllow(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString(), ResourceLocationArgument.getId(ctx, "food").toString(), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
                 .then(buildCanEatDisallowCommand("disallow"))
                 .then(buildCanEatDisallowCommand("dissallow"));
     }
@@ -4345,27 +4345,27 @@ public class TameCommands {
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildForbidArmorEnchantmentCommand(String literal) {
         return Commands.literal(literal)
-                .then(Commands.argument("enchantment", StringArgumentType.word())
+                .then(Commands.argument("enchantment", ResourceLocationArgument.id())
                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(
                                 ForgeRegistries.ENCHANTMENTS.getKeys().stream().map(ResourceLocation::toString), b))
                         .executes(ctx -> adminForbidArmorEnchantment(
-                                ctx.getSource(), StringArgumentType.getString(ctx, "enchantment"))));
+                                ctx.getSource(), ResourceLocationArgument.getId(ctx, "enchantment").toString())));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatDisallowCommand(String literal) {
         LiteralArgumentBuilder<CommandSourceStack> direct = Commands.literal(literal)
-                .then(Commands.argument("type", StringArgumentType.word())
+                .then(Commands.argument("type", ResourceLocationArgument.id())
                         .suggests((ctx, b) -> suggestKnownTameTypes(b))
-                        .then(Commands.argument("food", StringArgumentType.word())
+                        .then(Commands.argument("food", ResourceLocationArgument.id())
                                 .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
-                                .executes(ctx -> adminCanEatChange(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "food"), false))));
+                                .executes(ctx -> adminCanEatChange(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString(), ResourceLocationArgument.getId(ctx, "food").toString(), false))));
         // Also accept the originally requested spelling: "dissallow allow <type> <food>".
         return direct.then(Commands.literal("allow")
-                .then(Commands.argument("type2", StringArgumentType.word())
+                .then(Commands.argument("type2", ResourceLocationArgument.id())
                         .suggests((ctx, b) -> suggestKnownTameTypes(b))
-                        .then(Commands.argument("food2", StringArgumentType.word())
+                        .then(Commands.argument("food2", ResourceLocationArgument.id())
                                 .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
-                                .executes(ctx -> adminCanEatChange(ctx.getSource(), StringArgumentType.getString(ctx, "type2"), StringArgumentType.getString(ctx, "food2"), false)))));
+                                .executes(ctx -> adminCanEatChange(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type2").toString(), ResourceLocationArgument.getId(ctx, "food2").toString(), false)))));
     }
 
     private static int ariseUsesToday(ServerPlayer player) {
@@ -4981,7 +4981,7 @@ public class TameCommands {
         else if (key.equals("inventory") || key.equals("hunger") || key.equals("food")) {
             sendInfoPage(p, "Inventory",
                     "/tames inventory",
-                    "/tames inventory canEat [<selection>]",
+                    "/tames inventory canEat <owned tame type>",
                     "/tames inventory give [<selection>]",
                     "/tames inventory open <name>",
                     "/tames inventory info [<selection>]",
@@ -4991,7 +4991,7 @@ public class TameCommands {
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
                     "Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.",
-                    "canEat reports known vanilla/modded food and configured custom food values for the selected tame types.",
+                    "canEat reports the learned and configured foods for one owned tame type, using readable item and food-category names.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
@@ -5214,6 +5214,7 @@ public class TameCommands {
             sendInfoPage(p, "Collar",
                     "/tames collar",
                     "/tames collar notag",
+                    "/tames collarTag compatibleAmorEnchantments",
                     "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
             );
         }
@@ -6733,6 +6734,33 @@ public class TameCommands {
 
     private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, boolean allowXp, String purpose) {
         return tryConsumePayment(player, xpCost, approvedItemCost, 1, allowXp, purpose);
+    }
+
+    static int compatibleArmorEnchantments(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        Set<String> forbidden = TameStoredArmorEvents.forbiddenEnchantments(source.getServer());
+        List<ItemStack> armorSamples = ForgeRegistries.ITEMS.getValues().stream()
+                .filter(item -> item instanceof net.minecraft.world.item.ArmorItem)
+                .map(ItemStack::new)
+                .toList();
+        List<String> names = ForgeRegistries.ENCHANTMENTS.getValues().stream()
+                .filter(enchantment -> {
+                    ResourceLocation id = ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
+                    return id != null && !forbidden.contains(id.toString())
+                            && armorSamples.stream().anyMatch(enchantment::canEnchant);
+                })
+                .map(enchantment -> Component.translatable(enchantment.getDescriptionId()).getString())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+        if (names.isEmpty()) return error(player, "No normally armor-compatible enchantments were found.");
+        player.sendSystemMessage(Component.literal("Compatible armor enchantments:").withStyle(ChatFormatting.GOLD));
+        for (int start = 0; start < names.size(); start += 12) {
+            player.sendSystemMessage(Component.literal(String.join(", ", names.subList(start, Math.min(names.size(), start + 12))))
+                    .withStyle(ChatFormatting.WHITE));
+        }
+        return names.size();
     }
 
     private static PaymentResult tryConsumePayment(ServerPlayer player, int xpCost, int approvedItemCost, int totemCost, boolean allowXp, String purpose) {
@@ -22280,24 +22308,28 @@ public class TameCommands {
         return selected.size();
     }
 
-    private static int hungerInventoryCanEat(CommandSourceStack source, String selectionRaw) {
+    private static int hungerInventoryCanEat(CommandSourceStack source, String typeFilter) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
-        if (selected.isEmpty()) return hungerMessage(player, "No tames matched that selection.");
-        Map<String, List<String>> namesByType = new LinkedHashMap<>();
-        for (TameData data : selected) {
-            String type = TameFoodManager.typeId(null, data);
-            namesByType.computeIfAbsent(type, ignored -> new ArrayList<>()).add(tameDisplayName(data));
+        List<TameData> selected = ownedType(player.getUUID(), typeFilter);
+        if (selected.isEmpty()) return hungerMessage(player, "You have no living tame of type '" + typeFilter + "'.");
+        String type = TameFoodManager.typeId(null, selected.get(0));
+        List<String> foods = TameFoodManager.foodsForDisplay(source.getServer(), type);
+        String list = foods.isEmpty() ? "Still learning / no known foods" : String.join(", ", foods);
+        player.sendSystemMessage(Component.literal(readableTypeName(type) + ": ").withStyle(TAME_HUNGER_MESSAGE_COLOR)
+                .append(Component.literal(list).withStyle(ChatFormatting.WHITE)));
+        return 1;
+    }
+
+    private static String readableTypeName(String type) {
+        String path = type == null ? "" : type.substring(type.indexOf(':') + 1);
+        String[] words = path.replace('-', '_').split("_");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (word.isBlank()) continue;
+            if (!result.isEmpty()) result.append(' ');
+            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1).toLowerCase(Locale.ROOT));
         }
-        namesByType.forEach((type, names) -> {
-            List<String> foods = TameFoodManager.foodsFor(source.getServer(), type);
-            String list = foods.isEmpty() ? "still learning/no known foods" : String.join(", ", foods);
-            player.sendSystemMessage(Component.literal(String.join(", ", names) + " [" + type + "]: " + list)
-                    .withStyle(TAME_HUNGER_MESSAGE_COLOR));
-        });
-        player.sendSystemMessage(Component.literal("#meat/#fish/#fruit/#vegetable are custom food categories. Gluttonous tames can also eat any edible item at 10% value.")
-                .withStyle(ChatFormatting.DARK_GRAY));
-        return selected.size();
+        return result.isEmpty() ? "Unknown" : result.toString();
     }
 
     private static int adminCanEatClear(CommandSourceStack source, String type) {
@@ -22413,16 +22445,9 @@ public class TameCommands {
 
         @Override
         public boolean canPlaceItem(int slot, ItemStack stack) {
-            if (slot >= 0 && slot < 4) {
-                if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, slot)) return false;
-                EquipmentSlot expected = switch (slot) {
-                    case 0 -> EquipmentSlot.HEAD;
-                    case 1 -> EquipmentSlot.CHEST;
-                    case 2 -> EquipmentSlot.LEGS;
-                    default -> EquipmentSlot.FEET;
-                };
-                return LivingEntity.getEquipmentSlotForItem(stack) == expected;
-            }
+            // The generic chest screen makes every cell look usable. Accept armor in
+            // any visible cell and normalize it into the proper equipment slot when saved.
+            if (armorInventoryIndex(stack) >= 0) return true;
             return slot >= 9 && slot < 9 + TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0;
         }
 
@@ -22461,23 +22486,40 @@ public class TameCommands {
             }
             loading = true;
             try {
+                ItemStack[] armor = {ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY};
+                List<ItemStack> food = new ArrayList<>();
+                for (int slot = 0; slot < getContainerSize(); slot++) {
+                    ItemStack stack = getItem(slot);
+                    if (stack.isEmpty()) continue;
+                    int armorIndex = armorInventoryIndex(stack);
+                    if (armorIndex >= 0) {
+                        if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, armorIndex)) {
+                            rejectArmor(stack.copy(), "That armor slot is not unlocked by this tame's Protection collar tier.");
+                        } else if (!armor[armorIndex].isEmpty()) {
+                            rejectArmor(stack.copy(), "That tame already has armor equipped in this equipment slot.");
+                        } else {
+                            armor[armorIndex] = stack.copy();
+                        }
+                        continue;
+                    }
+                    if (slot >= 9 && slot < 9 + TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0) {
+                        food.add(stack.copy());
+                    } else {
+                        dropRejectedHungerInventoryItem(stack.copy());
+                    }
+                }
+
                 data.hungerInventory.clear();
                 data.armorInventory.clear();
                 for (int i = 0; i < 4; i++) {
-                    ItemStack stack = getItem(i);
-                    data.armorInventory.add(stack.isEmpty() ? ItemStack.EMPTY : stack.copy());
+                    data.armorInventory.add(armor[i]);
                 }
-                for (int i = 0; i < TAME_HUNGER_MAX_STACKS; i++) {
-                    ItemStack stack = getItem(9 + i);
-                    if (stack.isEmpty()) {
-                        continue;
-                    }
-                    if (hungerFoodPoints(stack, data, tame) > 0) {
-                        data.hungerInventory.add(stack.copy());
-                    } else {
-                        dropRejectedHungerInventoryItem(stack.copy());
-                        super.setItem(9 + i, ItemStack.EMPTY);
-                    }
+                data.hungerInventory.addAll(food);
+
+                for (int slot = 0; slot < getContainerSize(); slot++) super.setItem(slot, ItemStack.EMPTY);
+                for (int i = 0; i < 4; i++) super.setItem(i, armor[i].copy());
+                for (int i = 0; i < Math.min(TAME_HUNGER_MAX_STACKS, food.size()); i++) {
+                    super.setItem(9 + i, food.get(i).copy());
                 }
             } finally {
                 loading = false;
@@ -22489,6 +22531,24 @@ public class TameCommands {
             }
             TameRegistry.markDirty();
             if (tame != null) TameStoredArmorEvents.sync(tame, data);
+        }
+
+        private int armorInventoryIndex(ItemStack stack) {
+            if (stack == null || stack.isEmpty()) return -1;
+            return switch (LivingEntity.getEquipmentSlotForItem(stack)) {
+                case HEAD -> 0;
+                case CHEST -> 1;
+                case LEGS -> 2;
+                case FEET -> 3;
+                default -> -1;
+            };
+        }
+
+        private void rejectArmor(ItemStack stack, String reason) {
+            dropRejectedHungerInventoryItem(stack);
+            if (lastViewer != null) {
+                lastViewer.sendSystemMessage(Component.literal(reason + " The item was dropped.").withStyle(ChatFormatting.RED));
+            }
         }
 
         private void dropRejectedHungerInventoryItem(ItemStack stack) {
