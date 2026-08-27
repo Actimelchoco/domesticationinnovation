@@ -2174,6 +2174,8 @@ public class TameCommands {
 
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
+                                .then(Commands.literal("superfood")
+                                        .executes(ctx -> hungerInventorySuperfood(ctx.getSource())))
                                 .then(Commands.literal("amorSystem")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("armorSystem")
@@ -4320,6 +4322,33 @@ public class TameCommands {
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatAdminCommand() {
         return Commands.literal("canEat")
+                .then(buildCanEatLowPreferredFoodCommand("lowPrefferedFood"))
+                .then(buildCanEatLowPreferredFoodCommand("lowPreferredFood"))
+                .then(Commands.literal("superfoodAdd")
+                        .then(Commands.argument("food", ResourceLocationArgument.id())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
+                                .executes(ctx -> {
+                                    String food = ResourceLocationArgument.getId(ctx, "food").toString();
+                                    return adminCanEatSuperfoodAdd(ctx.getSource(), food, TameFoodManager.defaultFoodPoints(food));
+                                })
+                                .then(Commands.argument("points", IntegerArgumentType.integer(1, 1_000_000))
+                                        .executes(ctx -> adminCanEatSuperfoodAdd(
+                                                ctx.getSource(),
+                                                ResourceLocationArgument.getId(ctx, "food").toString(),
+                                                IntegerArgumentType.getInteger(ctx, "points"))))))
+                .then(Commands.literal("superfoodRemove")
+                        .then(Commands.argument("food", ResourceLocationArgument.id())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
+                                .executes(ctx -> adminCanEatSuperfoodRemove(
+                                        ctx.getSource(), ResourceLocationArgument.getId(ctx, "food").toString()))))
+                .then(buildCanEatRescanCommand("Rescan", false))
+                .then(buildCanEatRescanCommand("rescan", false))
+                .then(buildCanEatRescanCommand("rescanInstant", true))
+                .then(Commands.literal("info")
+                        .then(Commands.argument("type", ResourceLocationArgument.id())
+                                .suggests((ctx, b) -> suggestEverTamedTypes(b))
+                                .executes(ctx -> adminCanEatInfo(
+                                        ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
                 .then(Commands.literal("clearCustomFoodAllows")
                         .then(Commands.argument("type", ResourceLocationArgument.id())
                                 .suggests((ctx, b) -> suggestKnownTameTypes(b))
@@ -4351,6 +4380,20 @@ public class TameCommands {
                                                 ))))))
                 .then(buildCanEatDisallowCommand("disallow"))
                 .then(buildCanEatDisallowCommand("dissallow"));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatLowPreferredFoodCommand(String literal) {
+        return Commands.literal(literal).executes(ctx -> adminCanEatLowPreferredFood(ctx.getSource()));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatRescanCommand(String literal, boolean instant) {
+        return Commands.literal(literal)
+                .then(Commands.literal("all")
+                        .executes(ctx -> adminCanEatRescan(ctx.getSource(), null, instant)))
+                .then(Commands.argument("type", ResourceLocationArgument.id())
+                        .suggests((ctx, b) -> suggestEverTamedTypes(b))
+                        .executes(ctx -> adminCanEatRescan(
+                                ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString(), instant)));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildAdminInventoryCommand() {
@@ -5004,6 +5047,7 @@ public class TameCommands {
             sendInfoPage(p, "Inventory",
                     "/tames inventory",
                     "/tames inventory canEat <owned tame type>",
+                    "/tames inventory superfood",
                     "/tames inventory give [<selection>]",
                     "/tames inventory open <name>",
                     "/tames inventory info [<selection>]",
@@ -5014,6 +5058,7 @@ public class TameCommands {
                     "/tames inventory system",
                     "Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.",
                     "canEat reports the learned and configured foods for one owned tame type, using readable item and food-category names.",
+                    "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
@@ -22350,10 +22395,22 @@ public class TameCommands {
         if (selected.isEmpty()) return hungerMessage(player, "You have no living tame of type '" + typeFilter + "'.");
         String type = TameFoodManager.typeId(null, selected.get(0));
         List<String> foods = TameFoodManager.foodsForDisplay(source.getServer(), type);
-        String list = foods.isEmpty() ? "Still learning / no known foods" : String.join(", ", foods);
+        String list = foods.isEmpty()
+                ? (TameFoodManager.isLearningComplete(source.getServer(), type) ? "No preferred food" : "Still learning")
+                : String.join(", ", foods);
         player.sendSystemMessage(Component.literal(readableTypeName(type) + ": ").withStyle(TAME_HUNGER_MESSAGE_COLOR)
                 .append(Component.literal(list).withStyle(ChatFormatting.WHITE)));
         return 1;
+    }
+
+    private static int hungerInventorySuperfood(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        List<String> superfoods = TameFoodManager.superfoodsForDisplay(source.getServer());
+        if (superfoods.isEmpty()) return hungerMessage(player, "No superfoods have been configured.");
+        player.sendSystemMessage(Component.literal("Superfoods: ").withStyle(TAME_HUNGER_MESSAGE_COLOR)
+                .append(Component.literal(String.join(", ", superfoods)).withStyle(ChatFormatting.WHITE)));
+        return superfoods.size();
     }
 
     private static String readableTypeName(String type) {
@@ -22372,6 +22429,115 @@ public class TameCommands {
         int removed = TameFoodManager.clearCustom(source.getServer(), type);
         source.sendSuccess(() -> Component.literal("Cleared " + removed + " custom food allow(s) for " + type + "."), true);
         return removed;
+    }
+
+    private static int adminCanEatInfo(CommandSourceStack source, String typeFilter) {
+        String requested = normalizeTypeFilter(typeFilter);
+        String matchedType = "";
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || !matchesTypeFilter(data, requested)) continue;
+            matchedType = tameTypeId(data);
+            if (!matchedType.isBlank()) break;
+        }
+        if (matchedType.isBlank()) {
+            source.sendFailure(Component.literal("No tame of type '" + typeFilter + "' has been registered on this server."));
+            return 0;
+        }
+        String resolvedType = matchedType;
+        List<String> foods = TameFoodManager.foodsForDisplay(source.getServer(), resolvedType);
+        String list = foods.isEmpty()
+                ? (TameFoodManager.isLearningComplete(source.getServer(), resolvedType) ? "No preferred food" : "Still learning")
+                : String.join(", ", foods);
+        source.sendSuccess(() -> Component.literal(readableTypeName(resolvedType) + ": ").withStyle(TAME_HUNGER_MESSAGE_COLOR)
+                .append(Component.literal(list).withStyle(ChatFormatting.WHITE)), false);
+        return 1;
+    }
+
+    private static int adminCanEatLowPreferredFood(CommandSourceStack source) {
+        Set<String> types = new LinkedHashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            String type = data == null ? "" : tameTypeId(data);
+            if (!type.isBlank()) types.add(type);
+        }
+        List<String> low = new ArrayList<>();
+        for (String type : types) {
+            int count = TameFoodManager.nativeFoodCount(source.getServer(), type);
+            if (count >= 5) continue;
+            String learning = TameFoodManager.isLearningComplete(source.getServer(), type) ? "" : " (learning)";
+            low.add(readableTypeName(type) + ": " + count + " preferred food" + (count == 1 ? "" : "s") + learning);
+        }
+        low.sort(String.CASE_INSENSITIVE_ORDER);
+        if (low.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("Every registered tame type has at least 5 preferred foods.").withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("Tame types with fewer than 5 preferred foods:").withStyle(ChatFormatting.GOLD), false);
+        for (String line : low) source.sendSuccess(() -> Component.literal(line).withStyle(ChatFormatting.WHITE), false);
+        return low.size();
+    }
+
+    private static int adminCanEatSuperfoodAdd(CommandSourceStack source, String food, int points) {
+        if (!TameFoodManager.addSuperfood(source.getServer(), food, points)) {
+            source.sendFailure(Component.literal("Nothing changed. Check the item/category or configured points."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Added universal superfood " + food + " for " + points + " food point(s)."), true);
+        return 1;
+    }
+
+    private static int adminCanEatSuperfoodRemove(CommandSourceStack source, String food) {
+        if (!TameFoodManager.removeSuperfood(source.getServer(), food)) {
+            source.sendFailure(Component.literal("That superfood was not configured."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Removed universal superfood " + food + "."), true);
+        return 1;
+    }
+
+    private static int adminCanEatRescan(CommandSourceStack source, String typeFilter, boolean instant) {
+        Map<String, TameData> known = new LinkedHashMap<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data == null || (typeFilter != null && !matchesTypeFilter(data, typeFilter))) continue;
+            String type = tameTypeId(data);
+            if (!type.isBlank()) known.putIfAbsent(type, data);
+        }
+        if (known.isEmpty()) {
+            source.sendFailure(Component.literal(typeFilter == null
+                    ? "No tame types have been registered on this server."
+                    : "No registered tame type matched '" + typeFilter + "'."));
+            return 0;
+        }
+        if (!instant) {
+            TameFoodManager.resetLearning(source.getServer(), known.keySet());
+            source.sendSuccess(() -> Component.literal("Queued gradual food rescans for " + known.size() + " tame type(s). They scan while that type is loaded."), true);
+            return known.size();
+        }
+
+        int rescanned = 0;
+        int unavailable = 0;
+        for (Map.Entry<String, TameData> entry : known.entrySet()) {
+            TameData data = entry.getValue();
+            LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            Animal probe = loaded instanceof Animal animal ? animal : null;
+            Entity created = null;
+            if (probe == null) {
+                ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+                EntityType<?> entityType = id == null ? null : ForgeRegistries.ENTITY_TYPES.getValue(id);
+                created = entityType == null ? null : entityType.create(source.getServer().overworld());
+                if (created instanceof Animal animal) probe = animal;
+            }
+            if (probe == null) {
+                unavailable++;
+            } else if (TameFoodManager.rescanInstant(source.getServer(), entry.getKey(), probe) >= 0) {
+                rescanned++;
+            }
+            if (created != null) created.discard();
+        }
+        int finalUnavailable = unavailable;
+        int finalRescanned = rescanned;
+        source.sendSuccess(() -> Component.literal("Instantly rescanned " + finalRescanned + " tame type(s)."
+                + (finalUnavailable > 0 ? " Could not create/test " + finalUnavailable + " type(s)." : "")), true);
+        return rescanned;
     }
 
     private static int adminForbidArmorEnchantment(CommandSourceStack source, String enchantment) {
@@ -27577,6 +27743,16 @@ public class TameCommands {
 
     static CompletableFuture<Suggestions> suggestKnownTameTypes(SuggestionsBuilder b) {
         return SharedSuggestionProvider.suggest(knownTameTypeSuggestions(), b);
+    }
+
+    static CompletableFuture<Suggestions> suggestEverTamedTypes(SuggestionsBuilder b) {
+        Set<String> typeIds = new LinkedHashSet<>();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (data != null) addTypeSuggestion(typeIds, tameTypeId(data));
+        }
+        List<String> sorted = new ArrayList<>(typeIds);
+        sorted.sort(String::compareToIgnoreCase);
+        return SharedSuggestionProvider.suggest(sorted, b);
     }
 
     private static List<String> knownTameTypeSuggestions() {

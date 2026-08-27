@@ -34,6 +34,7 @@ public final class TameFoodManager {
     private static final Map<String, Set<String>> LEARNED = new HashMap<>();
     private static final Map<String, Set<String>> CUSTOM = new HashMap<>();
     private static final Map<String, Map<String, Integer>> CUSTOM_POINTS = new HashMap<>();
+    private static final Map<String, Integer> SUPERFOODS = new HashMap<>();
     private static final Map<String, Integer> CURSORS = new HashMap<>();
     private static List<Item> candidates = List.of();
     private static Path configPath;
@@ -79,7 +80,49 @@ public final class TameFoodManager {
         for (String rule : CUSTOM.getOrDefault(type, Set.of())) {
             if (matchesRule(stack, rule)) return true;
         }
+        for (String rule : SUPERFOODS.keySet()) {
+            if (matchesRule(stack, rule)) return true;
+        }
         return false;
+    }
+
+    public static boolean addSuperfood(MinecraftServer server, String food, int foodPoints) {
+        init(server);
+        String rule = normalizeRule(food);
+        if (rule == null || foodPoints <= 0) return false;
+        Integer previous = SUPERFOODS.put(rule, foodPoints);
+        boolean changed = previous == null || previous != foodPoints;
+        if (changed) save();
+        return changed;
+    }
+
+    public static boolean removeSuperfood(MinecraftServer server, String food) {
+        init(server);
+        String rule = normalizeRule(food);
+        boolean changed = rule != null && SUPERFOODS.remove(rule) != null;
+        if (changed) save();
+        return changed;
+    }
+
+    public static int defaultFoodPoints(String food) {
+        String rule = normalizeRule(food);
+        if (rule == null || rule.startsWith("#")) return 1;
+        ResourceLocation id = ResourceLocation.tryParse(rule);
+        Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
+        return item == null || item.getFoodProperties() == null
+                ? 1 : Math.max(1, item.getFoodProperties().getNutrition());
+    }
+
+    public static List<String> superfoodsForDisplay(MinecraftServer server) {
+        init(server);
+        List<String> result = new ArrayList<>();
+        SUPERFOODS.forEach((rule, points) -> {
+            String name = rule.startsWith("#")
+                    ? "FoodType: " + titleCase(rule.substring(1)) : displayItemName(rule);
+            result.add(name + " (" + Math.max(1, points) + " point" + (points == 1 ? "" : "s") + ")");
+        });
+        result.sort(String.CASE_INSENSITIVE_ORDER);
+        return result;
     }
 
     public static boolean addCustom(MinecraftServer server, String type, String food, int foodPoints) {
@@ -132,6 +175,13 @@ public final class TameFoodManager {
                 if (!displayName.isBlank()) foodNames.add(displayName);
             }
         }
+        for (String rule : SUPERFOODS.keySet()) {
+            if (rule.startsWith("#")) categories.add("FoodType: " + titleCase(rule.substring(1)));
+            else {
+                String displayName = displayItemName(rule);
+                if (!displayName.isBlank()) foodNames.add(displayName);
+            }
+        }
         List<String> result = foodNames.stream().sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         result.addAll(categories.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList());
         return result;
@@ -170,7 +220,52 @@ public final class TameFoodManager {
                 return configured;
             }
         }
+        for (Map.Entry<String, Integer> entry : SUPERFOODS.entrySet()) {
+            if (matchesRule(stack, entry.getKey())) return Math.max(1, entry.getValue());
+        }
         return 0;
+    }
+
+    public static boolean isLearningComplete(MinecraftServer server, String type) {
+        init(server);
+        return CURSORS.getOrDefault(normalizeType(type), 0) >= candidates.size();
+    }
+
+    public static int nativeFoodCount(MinecraftServer server, String type) {
+        init(server);
+        return LEARNED.getOrDefault(normalizeType(type), Set.of()).size();
+    }
+
+    public static void resetLearning(MinecraftServer server, Collection<String> types) {
+        init(server);
+        if (types == null) return;
+        for (String type : types) {
+            String normalized = normalizeType(type);
+            if (normalized.isBlank()) continue;
+            LEARNED.remove(normalized);
+            CURSORS.put(normalized, 0);
+        }
+        save();
+    }
+
+    public static int rescanInstant(MinecraftServer server, String type, Animal animal) {
+        init(server);
+        String normalized = normalizeType(type);
+        if (normalized.isBlank() || animal == null) return -1;
+        Set<String> learned = new LinkedHashSet<>();
+        for (Item item : candidates) {
+            try {
+                if (animal.isFood(new ItemStack(item))) {
+                    ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
+                    if (id != null) learned.add(id.toString());
+                }
+            } catch (Throwable ignored) { }
+        }
+        if (learned.isEmpty()) LEARNED.remove(normalized);
+        else LEARNED.put(normalized, learned);
+        CURSORS.put(normalized, candidates.size());
+        save();
+        return learned.size();
     }
 
     public static int customFoodPercentage(ItemStack stack, TameData data, LivingEntity tame) {
@@ -206,7 +301,7 @@ public final class TameFoodManager {
         Path path = server.getWorldPath(LevelResource.ROOT).resolve("serverconfig").resolve("tameslevel-foods.json");
         if (path.equals(configPath)) return;
         configPath = path;
-        LEARNED.clear(); CUSTOM.clear(); CUSTOM_POINTS.clear(); CURSORS.clear();
+        LEARNED.clear(); CUSTOM.clear(); CUSTOM_POINTS.clear(); SUPERFOODS.clear(); CURSORS.clear();
         candidates = ForgeRegistries.ITEMS.getValues().stream()
                 .filter(Item::isEdible)
                 .sorted(Comparator.comparing(item -> String.valueOf(ForgeRegistries.ITEMS.getKey(item))))
@@ -219,6 +314,7 @@ public final class TameFoodManager {
             if (config != null && config.customPoints != null) {
                 config.customPoints.forEach((type, values) -> CUSTOM_POINTS.put(normalizeType(type), new HashMap<>(values)));
             }
+            if (config != null && config.superfoods != null) SUPERFOODS.putAll(config.superfoods);
             if (config != null && config.completedTypes != null) {
                 for (String type : config.completedTypes) CURSORS.put(normalizeType(type), candidates.size());
             }
@@ -238,6 +334,7 @@ public final class TameFoodManager {
             config.learned.putAll(LEARNED);
             config.custom.putAll(CUSTOM);
             config.customPoints.putAll(CUSTOM_POINTS);
+            config.superfoods.putAll(SUPERFOODS);
             CURSORS.forEach((type, cursor) -> { if (cursor >= candidates.size()) config.completedTypes.add(type); });
             try (Writer writer = Files.newBufferedWriter(configPath)) { GSON.toJson(config, CONFIG_TYPE, writer); }
         } catch (Exception ignored) { }
@@ -289,6 +386,7 @@ public final class TameFoodManager {
         Map<String, Set<String>> learned = new HashMap<>();
         Map<String, Set<String>> custom = new HashMap<>();
         Map<String, Map<String, Integer>> customPoints = new HashMap<>();
+        Map<String, Integer> superfoods = new HashMap<>();
         Set<String> completedTypes = new LinkedHashSet<>();
     }
 }
