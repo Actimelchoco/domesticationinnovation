@@ -2115,7 +2115,13 @@ public class TameCommands {
                                         .then(Commands.literal("owned")
                                                 .executes(ctx -> participantsList(ctx.getSource(), true, false)))
                                         .then(Commands.literal("active")
-                                                .executes(ctx -> participantsList(ctx.getSource(), false, true)))))
+                                                .executes(ctx -> participantsList(ctx.getSource(), false, true))))
+                                .then(Commands.literal("leaderboard")
+                                        .executes(ctx -> rankedLeaderboard(ctx.getSource(), false, false))
+                                        .then(Commands.literal("owned")
+                                                .executes(ctx -> rankedLeaderboard(ctx.getSource(), true, false)))
+                                        .then(Commands.literal("active")
+                                                .executes(ctx -> rankedLeaderboard(ctx.getSource(), false, true)))))
                                 .then(Commands.literal("decline")
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
@@ -5349,6 +5355,7 @@ public class TameCommands {
         else if (key.equals("ranked")) {
             sendInfoPage(p, "Ranked",
                     "/tames ranked",
+                    "/tames ranked leaderboard [owned|active]",
                     "/tames ranked feed",
                     "/tames ranked setRankedChest",
                     "/tames ranked add <selection>",
@@ -8248,6 +8255,14 @@ public class TameCommands {
     }
 
     private static int participantsList(CommandSourceStack source, boolean ownedOnly, boolean activeOnly) {
+        return rankedParticipantRanking(source, ownedOnly, activeOnly, "Ranked Participants");
+    }
+
+    private static int rankedLeaderboard(CommandSourceStack source, boolean ownedOnly, boolean activeOnly) {
+        return rankedParticipantRanking(source, ownedOnly, activeOnly, "Ranked Leaderboard");
+    }
+
+    private static int rankedParticipantRanking(CommandSourceStack source, boolean ownedOnly, boolean activeOnly, String title) {
         ServerPlayer player = source == null ? null : source.getPlayer();
         if (player == null) {
             return 0;
@@ -8289,7 +8304,7 @@ public class TameCommands {
         }
         String scope = ownedOnly ? "owned" : activeOnly ? "active" : "all";
         int limit = Math.min(200, entries.size());
-        player.sendSystemMessage(Component.literal("---- Ranked Participants | " + scope + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal("---- " + title + " | " + scope + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         String activeRankBucket = null;
         for (int i = 0; i < limit; i++) {
             RankedParticipantEntry entry = entries.get(i);
@@ -9201,6 +9216,7 @@ public class TameCommands {
             case "warping_bite" -> id + " L" + level + ": base attacks can chorus-teleport enemy targets; level increases proc chance, attempts, and range";
             case "ore_scenting" -> id + " L" + level + ": ore-finding utility; binary effect";
             case "gluttonous" -> id + " L" + level + ": guaranteed milestone utility attribute unlocked at tame level 30";
+            case "spawner_trigger" -> id + " L" + level + ": lets the tame activate nearby mob spawners; guaranteed for DISCO at tame level 50";
             case "tethered_teleport" -> id + " L" + level + ": allows tethered owner-follow teleports and cross-dimension follow recovery";
             case "muffled" -> id + " L" + level + ": sound dampening utility; binary effect";
             case "blazing_protection" -> id + " L" + level + ": reactive flame shield; stored bars block hits, ignite attackers, and recover over time";
@@ -12498,11 +12514,22 @@ public class TameCommands {
             return RespawnResult.fail("stored type is not tamable");
         }
 
+        // Loading a tame snapshot can synchronously fire tame-related Forge events. The
+        // freshly-created entity still has a temporary UUID at this point unless we replace
+        // it first. Such an event used to register/rebind the existing registry row to that
+        // temporary UUID, which produced throwaway class notifications and left ranked's
+        // stable participant UUID invalid (so its scrubber pulled the tame from the pool).
+        // Publish the canonical identity before any snapshot state is applied.
+        respawned.setUUID(data.uuid);
+        TameRegistry.register(data);
+        TameRegistry.bindEntityToData(respawned, data);
+
         CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
         if (!snapshot.isEmpty()) {
             respawned.load(snapshot);
         }
 
+        // Snapshot loading may contain an older entity UUID; canonical registry identity wins.
         respawned.setUUID(data.uuid);
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
@@ -12631,6 +12658,16 @@ public class TameCommands {
         TameData persisted = TameRegistry.get(snapshot.uuid);
         if (persisted == null && snapshot.tlId != null) {
             persisted = TameRegistry.getByTlId(snapshot.tlId);
+        }
+        // A duel recovery can replace the entity and rebind the persisted tame to a new
+        // UUID while the pre-duel snapshot still contains the old UUID. Registering that
+        // stale snapshot would create a second registry entry; addToIndexes would then see
+        // the shared TL-ID as a collision and assign the stale entry a new TL-ID, leaving an
+        // unloaded same-name duplicate behind. Keep the stable registry identity canonical
+        // before the snapshot is registered or used to rebuild the entity.
+        if (persisted != null) {
+            snapshot.uuid = persisted.uuid;
+            snapshot.tlId = persisted.ensureTlId();
         }
         copyPersistentDuelStats(persisted, snapshot);
         snapshot.dead = false;
@@ -12857,6 +12894,11 @@ public class TameCommands {
         respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
         respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
         enforceRecoveredTameOwner(respawned, data.ownerUUID);
+        // addFreshEntity fires EntityJoinLevelEvent synchronously. Bind the stable tame
+        // identity first so the spawn handler resolves this rebuilt duel participant to
+        // its existing registry row instead of briefly registering it as a new tame and
+        // rolling/notifying a throwaway class.
+        TameRegistry.bindEntityToData(respawned, data);
 
         if (!level.addFreshEntity(respawned)) {
             return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
@@ -12868,7 +12910,6 @@ public class TameCommands {
         prepareAutoReincarnationOnRespawn(level.getServer(), data);
         finalizeRecoveredLivingState(respawned, data);
         restoreRecoveredAppearance(respawned, snapshot);
-        TameRegistry.bindEntityToData(respawned, data);
         TameRegistry.register(data);
         return RespawnResult.ok();
     }

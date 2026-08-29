@@ -792,6 +792,11 @@ public class LevelSystem {
             data.attributeLevels.put("gluttonous", 1);
             granted.add("gluttonous I");
         }
+        if (data.level >= 50 && data.tameClass == TameClass.DISCO
+                && data.attributeLevels.getOrDefault("spawner_trigger", 0) <= 0) {
+            data.attributeLevels.put("spawner_trigger", 1);
+            granted.add("spawner_trigger I");
+        }
         if (granted.isEmpty()) {
             return "";
         }
