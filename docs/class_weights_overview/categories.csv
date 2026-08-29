@@ -9,12 +9,13 @@ defuser,90.0,10.0,10.0,30.0,9.0,False
 desmond doss,90.0,10.0,10.0,30.0,9.0,True
 disco,90.0,10.0,10.0,1.0,1.0,True
 dolphin,90.0,10.0,10.0,1.0,1.0,True
-dps,96.0,3.0,1.0,0.0,0.0,True
+dps,96.0,0.3,0.1,0.0,0.0,True
 drowned,90.0,10.0,10.0,30.0,9.0,True
 enderman,90.0,10.0,10.0,1.0,1.0,True
 evoker,85.0,10.0,15.0,1.0,1.0,True
 fisher,90.0,10.0,10.0,0.0,0.0,True
 frost,90.0,10.0,10.0,30.0,9.0,False
+gandalf,0.0,0.0,100.0,1.0,1.0,False
 ghast,85.0,10.0,15.0,1.0,1.0,True
 goofygirl,90.0,10.0,20.0,30.0,9.0,True
 guardian,90.0,10.0,10.0,0.0,0.0,True
@@ -23,7 +24,8 @@ iron_golem,90.0,10.0,10.0,1.0,1.0,True
 knight,90.0,10.0,10.0,0.0,0.0,True
 mage,85.0,10.0,15.0,0.0,0.0,True
 maniac,65.0,5.0,30.0,0.0,0.0,True
-none,90.0,10.0,10.0,1.0,1.0,False
+none,90.0,1.0,1.0,1.0,1.0,False
+ordinary,100.0,0.0,0.0,1.0,1.0,False
 phantom,90.0,10.0,10.0,1.0,1.0,True
 piglin,90.0,10.0,10.0,1.0,1.0,True
 protectedbitch,90.0,5.0,5.0,30.0,9.0,False
@@ -34,9 +36,13 @@ skeleton,90.0,10.0,10.0,0.0,0.0,True
 slime,90.0,10.0,10.0,1.0,1.0,True
 speedster,90.0,10.0,10.0,0.0,0.0,True
 spider,90.0,10.0,10.0,0.0,0.0,True
+sponge,98.0,1.0,1.0,1.0,1.0,False
+striker,98.0,1.0,1.0,1.0,1.0,False
 supporter,85.0,10.0,15.0,0.0,0.0,True
-tanker,90.0,10.0,10.0,0.0,0.0,True
+tanker,90.0,1.0,1.0,0.0,0.0,True
 thor,50.0,25.0,25.0,30.0,9.0,True
+unstable_god,0.0,50.0,50.0,1.0,1.0,False
+vorgottenlunchbox,0.0,100.0,0.0,1.0,1.0,False
 warden,90.0,10.0,10.0,0.0,0.0,True
 witch,85.0,10.0,15.0,1.0,1.0,True
 wither,90.0,10.0,10.0,0.0,0.0,True

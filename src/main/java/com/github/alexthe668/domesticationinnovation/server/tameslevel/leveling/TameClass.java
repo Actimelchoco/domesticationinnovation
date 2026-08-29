@@ -65,6 +65,7 @@ public final class TameClass {
     public static final TameClass SPEEDSTER = registerBuiltin("speedster", Rarity.EPIC);
     public static final TameClass SPIDER = registerBuiltin("spider", Rarity.EPIC);
     public static final TameClass SPONGE = registerBuiltin("sponge", Rarity.EPIC);
+    public static final TameClass VAMPIRE = registerBuiltin("vampire", Rarity.EPIC);
     public static final TameClass WARDEN = registerBuiltin("warden", Rarity.EPIC);
     public static final TameClass WITCH = registerBuiltin("witch", Rarity.EPIC);
     public static final TameClass WITHER = registerBuiltin("wither", Rarity.EPIC);

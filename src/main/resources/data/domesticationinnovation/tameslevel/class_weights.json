@@ -40,6 +40,7 @@
       "speedster",
       "spider",
       "sponge",
+      "vampire",
       "warden",
       "witch",
       "wither",
@@ -1195,6 +1196,35 @@
         "cleanse_touch": 14.0,
         "healing_bottle": 28.0,
         "retaliation_slow": 18.0
+      }
+    },
+    "vampire": {
+      "category": {
+        "base": 89.0,
+        "attribute": 10.0,
+        "ability": 1.0
+      },
+      "preferredAttributeWeightMultiplier": 1.0,
+      "preferredAbilityWeightMultiplier": 1.0,
+      "autoPreferredWeightBalance": false,
+      "baseStats": {
+        "armor": 0.0,
+        "armor_toughness": 0.0,
+        "damage": 5.0,
+        "knockback": 0.0,
+        "knockback_resist": 0.0,
+        "speed": 5.0
+      },
+      "attributes": {
+        "lifesteal": 690.0,
+        "regeneration": 690.0,
+        "victim_siphon": 53.6666666667,
+        "witherfang": 53.6666666667
+      },
+      "abilities": {
+        "battlefield_medic": 1386.0,
+        "dash": 1386.0,
+        "healing_aura": 1386.0
       }
     },
     "wither": {
