@@ -974,6 +974,37 @@ public class TameCommands {
                         .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "selection"))));
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildChestDrumSettingsCommand() {
+        return Commands.literal("chestxdrum")
+                .executes(ctx -> listChestDrumRanges(ctx.getSource()))
+                .then(Commands.literal("set")
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
+                                .then(Commands.argument("height", IntegerArgumentType.integer(0, 10))
+                                        .executes(ctx -> setChestDrumRange(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "radius"),
+                                                IntegerArgumentType.getInteger(ctx, "height"))))))
+                .then(Commands.literal("pullNonPreferredFood")
+                        .executes(ctx -> listChestDrumPullNonPreferred(ctx.getSource()))
+                        .then(Commands.argument("type", StringArgumentType.word())
+                                .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setChestDrumPullNonPreferred(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "type"),
+                                                BoolArgumentType.getBool(ctx, "enabled"))))))
+                .then(Commands.literal("pullPreferredFoodOf")
+                        .executes(ctx -> listChestDrumPullPreferredFoodOf(ctx.getSource()))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("type", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
+                                        .executes(ctx -> setChestDrumPullPreferredFoodOf(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "type"), true))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("type", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
+                                        .executes(ctx -> setChestDrumPullPreferredFoodOf(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "type"), false)))));
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand() {
         return Commands.literal("settings")
                 .then(Commands.literal("doNotAttack")
@@ -1004,19 +1035,10 @@ public class TameCommands {
                 .then(Commands.literal("enableInventoryDistributeFoodPreferences")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setInventoryDistributeFoodPreferences(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("enableChestXDrumFoodPreferences")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setChestXDrumFoodPreferences(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("chestxDrumRange")
-                        .executes(ctx -> listChestDrumRanges(ctx.getSource()))
-                        .then(Commands.argument("blockRangeNumber", IntegerArgumentType.integer(1, 50))
-                                .then(Commands.argument("heightNumber", IntegerArgumentType.integer(0, 10))
-                                        .executes(ctx -> setChestDrumRange(ctx.getSource(),
-                                                IntegerArgumentType.getInteger(ctx, "blockRangeNumber"),
-                                                IntegerArgumentType.getInteger(ctx, "heightNumber"))))))
+                .then(buildChestDrumSettingsCommand())
                 .then(Commands.literal("duelsGlow")
                         .executes(ctx -> duelGlowStatus(ctx.getSource(), false))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -5060,15 +5082,18 @@ public class TameCommands {
                     "/tames settings enableVoidCloud <true|false>",
                     "/tames settings enableMending <true|false>",
                     "/tames settings enableInventoryDistributeFoodPreferences <true|false>",
-                    "/tames settings enableChestXDrumFoodPreferences <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
-                    "/tames settings chestxDrumRange [<range> <height>]",
+                    "/tames settings chestxdrum",
+                    "/tames settings chestxdrum set <radius> <height>",
+                    "/tames settings chestxdrum pullNonPreferredFood [<owned type> <true|false>]",
+                    "/tames settings chestxdrum pullPreferredFoodOf [add|remove] <owned type>",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
                     "enableMending controls Mending repairs on armor stored in tame inventories.",
-                    "The two food-preference settings default to true. They prioritize each tame type's native/configured foods over fallback foods during manual distribution or chest x drum refill."
+                    "Manual inventory distribution prioritizes native/configured foods when its preference setting is enabled.",
+                    "Chest x drum refill always gives tames only their preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
         }
         else if (key.equals("leaderboard")) {
@@ -5150,7 +5175,7 @@ public class TameCommands {
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
-                    "Register a container above your drum with /tames settings chestxDrumRange <range> <height>. It refills loaded hungry tames to green.",
+                    "Register a container above your drum with /tames settings chestxdrum set <radius> <height>. It refills loaded hungry tames to green.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -5166,8 +5191,10 @@ public class TameCommands {
                     "=== Using armor ===",
                     "/tames inventory open <name>",
                     "/tames collar openArmorSlots <name>",
+                    "/tames collar dropArmor <name>",
                     "/tames settings enableMending <true|false>",
                     "Food and armor use separate inventories. The armor inventory accepts armor in any cell and equips it in the matching body slot.",
+                    "Sneak-right-click a tame while holding armor to equip it directly. Existing armor in that body slot is replaced and dropped.",
                     "Stored armor works even when it is not rendered on the tame.",
                     "Each equipped armor piece increases saturation use by 50%.",
                     "Supported vanilla and modded armor enchantments apply their normal effects. Admins can forbid problematic enchantments.",
@@ -5193,7 +5220,7 @@ public class TameCommands {
                     "Each equipped armor piece increases saturation use by 50%.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "Drum refill: stand on the container above the drum, then use /tames settings chestxDrumRange <range> <height>.",
+                    "Drum refill: stand on the container above the drum, then use /tames settings chestxdrum set <radius> <height>.",
                     "Larger refill areas run less frequently.",
                     "=== Notifications ===",
                     "/tames debug inventory lowOnFood|noFood|sum <true|false>",
@@ -5390,6 +5417,7 @@ public class TameCommands {
                     "/tames collar notag",
                     "/tames collar compatibleArmorEnchantments (hold enchanted armor)",
                     "/tames collar openArmorSlots <name>",
+                    "/tames collar dropArmor <name>",
                     "/tames collar armorSystem",
                     "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
             );
@@ -13656,13 +13684,68 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
         List<PlayerDebugSettings.ChestDrumRange> ranges = validChestDrumRanges(source.getServer(), player.getUUID());
-        if (ranges.isEmpty()) return error(player, "You have no configured chest x drum locations.");
         player.sendSystemMessage(Component.literal("Chest x drum locations:").withStyle(ChatFormatting.GOLD));
+        if (ranges.isEmpty()) {
+            player.sendSystemMessage(Component.literal("<none>").withStyle(ChatFormatting.GRAY));
+            return 1;
+        }
         for (PlayerDebugSettings.ChestDrumRange range : ranges) {
             player.sendSystemMessage(Component.literal("- " + formatBlockLocation(range.dimension(), new BlockPos(range.x(), range.y(), range.z()))
                     + ": range " + range.blockRange() + ", height " + range.height()).withStyle(ChatFormatting.YELLOW));
         }
         return ranges.size();
+    }
+
+    private static int setChestDrumPullNonPreferred(CommandSourceStack source, String requestedType, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        String type = ownedCanonicalType(player.getUUID(), requestedType);
+        if (type == null) return error(player, "You do not own a living tame of type '" + requestedType + "'.");
+        PlayerDebugSettings.setChestDrumPullNonPreferred(player.getUUID(), type, enabled);
+        player.sendSystemMessage(Component.literal("Chest x drum pull non-preferred food for " + shortEntityTypeName(type)
+                + ": " + enabled + ".").withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int listChestDrumPullNonPreferred(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        Set<String> types = PlayerDebugSettings.chestDrumPullNonPreferredTypes(player.getUUID());
+        player.sendSystemMessage(Component.literal("Chest x drum types that pull non-preferred food (default false):").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal(types.isEmpty() ? "<none>" : types.stream()
+                .map(TameCommands::shortEntityTypeName).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.joining(", ")))
+                .withStyle(ChatFormatting.GRAY));
+        return 1;
+    }
+
+    private static int setChestDrumPullPreferredFoodOf(CommandSourceStack source, String requestedType, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        String type = ownedCanonicalType(player.getUUID(), requestedType);
+        if (type == null) return error(player, "You do not own a living tame of type '" + requestedType + "'.");
+        PlayerDebugSettings.setChestDrumPullPreferredFoodOf(player.getUUID(), type, enabled);
+        player.sendSystemMessage(Component.literal((enabled ? "Added " : "Removed ") + shortEntityTypeName(type)
+                + (enabled ? " to" : " from") + " chest x drum pullPreferredFoodOf.")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int listChestDrumPullPreferredFoodOf(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        Set<String> types = PlayerDebugSettings.chestDrumPullPreferredFoodOfTypes(player.getUUID());
+        player.sendSystemMessage(Component.literal("Chest x drum pulls preferred foods for these types:").withStyle(ChatFormatting.GOLD));
+        player.sendSystemMessage(Component.literal(types.isEmpty() ? "<none>" : types.stream()
+                .map(TameCommands::shortEntityTypeName).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.joining(", ")))
+                .withStyle(ChatFormatting.GRAY));
+        return 1;
+    }
+
+    private static String ownedCanonicalType(UUID owner, String requestedType) {
+        for (TameData data : ownedTames(owner)) {
+            if (matchesTypeFilter(data, requestedType)) return tameTypeId(data);
+        }
+        return null;
     }
 
     private static int duelGlowStatus(CommandSourceStack source, boolean ranked) {
@@ -21815,6 +21898,7 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
+            changed |= pullHungerFoodIntoNearbyDrumChest(tame, data, now);
             if (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                 changed |= refillHungerFromNearbyDrumChest(tame, data, now);
             }
@@ -22201,13 +22285,10 @@ public class TameCommands {
             boolean changed = false;
             List<Integer> slotOrder = new ArrayList<>();
             for (int slot = 0; slot < handler.getSlots(); slot++) slotOrder.add(slot);
-            if (PlayerDebugSettings.enableChestXDrumFoodPreferences(ownerUuid)) {
-                slotOrder.sort(Comparator.comparingInt(slot ->
-                        isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
-            }
+            slotOrder.sort(Comparator.comparingInt(slot ->
+                    isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
             for (int slot : slotOrder) {
-                if (PlayerDebugSettings.enableChestXDrumFoodPreferences(ownerUuid)
-                        && !isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
+                if (!isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
                 if (totalHungerFoodPoints(data) >= TAME_HUNGER_GREEN_FOOD_POINTS) break;
                 while (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                     ItemStack simulated = handler.extractItem(slot, 1, true);
@@ -22226,6 +22307,66 @@ public class TameCommands {
             }
         }
         return false;
+    }
+
+    private static boolean pullHungerFoodIntoNearbyDrumChest(LivingEntity tame, TameData data, long now) {
+        if (tame == null || data == null || data.hungerInventory.isEmpty() || !(tame.level() instanceof ServerLevel level)) return false;
+        UUID ownerUuid = data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
+        Set<String> nonPreferredTypes = PlayerDebugSettings.chestDrumPullNonPreferredTypes(ownerUuid);
+        Set<String> preferredFoodTypes = PlayerDebugSettings.chestDrumPullPreferredFoodOfTypes(ownerUuid);
+        if (nonPreferredTypes.isEmpty() && preferredFoodTypes.isEmpty()) return false;
+        BlockPos center = tame.blockPosition();
+        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(level.getServer(), ownerUuid)) {
+            if (!level.dimension().location().toString().equals(range.dimension())) continue;
+            BlockPos pos = new BlockPos(range.x(), range.y(), range.z());
+            if (Math.abs(center.getX() - pos.getX()) > range.blockRange()
+                    || Math.abs(center.getZ() - pos.getZ()) > range.blockRange()
+                    || Math.abs(center.getY() - pos.getY()) > range.height()) continue;
+            if (now % chestDrumFeedIntervalTicks(range) != 0L) continue;
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity == null) continue;
+            IItemHandler handler = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+            if (handler == null) continue;
+            boolean changed = false;
+            for (int i = 0; i < data.hungerInventory.size(); i++) {
+                ItemStack stored = data.hungerInventory.get(i);
+                if (stored == null || stored.isEmpty() || !shouldPullTameFood(stored, data, tame, ownerUuid,
+                        nonPreferredTypes, preferredFoodTypes)) continue;
+                ItemStack remainder = insertIntoHandler(handler, stored.copy());
+                int moved = stored.getCount() - remainder.getCount();
+                if (moved <= 0) continue;
+                stored.shrink(moved);
+                if (stored.isEmpty()) data.hungerInventory.remove(i--);
+                changed = true;
+            }
+            if (changed) {
+                blockEntity.setChanged();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean shouldPullTameFood(ItemStack stack, TameData sourceData, LivingEntity sourceTame, UUID ownerUuid,
+                                              Set<String> nonPreferredTypes, Set<String> preferredFoodTypes) {
+        boolean preferredBySource = isPreferredDistributionFood(stack, sourceData, sourceTame);
+        String sourceType = tameTypeId(sourceData);
+        if (nonPreferredTypes.contains(sourceType) && !preferredBySource) return true;
+        if (preferredFoodTypes.isEmpty()) return false;
+        if (preferredFoodTypes.contains(sourceType) && preferredBySource) return false;
+        for (TameData candidate : ownedTames(ownerUuid)) {
+            if (candidate == null || !preferredFoodTypes.contains(tameTypeId(candidate))) continue;
+            if (isPreferredDistributionFood(stack, candidate, null)) return true;
+        }
+        return false;
+    }
+
+    private static ItemStack insertIntoHandler(IItemHandler handler, ItemStack stack) {
+        ItemStack remainder = stack;
+        for (int slot = 0; slot < handler.getSlots() && !remainder.isEmpty(); slot++) {
+            remainder = handler.insertItem(slot, remainder, false);
+        }
+        return remainder;
     }
 
     private static long chestDrumFeedIntervalTicks(PlayerDebugSettings.ChestDrumRange range) {
@@ -22371,6 +22512,57 @@ public class TameCommands {
         }
         TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
         return openArmorInventory(player, data, tame) ? 1 : 0;
+    }
+
+    static int dropArmor(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), name);
+        if (data == null) return error(player, "You do not own a living tame named '" + name + "'.");
+        int dropped = 0;
+        for (int i = 0; i < data.armorInventory.size(); i++) {
+            ItemStack stack = data.armorInventory.get(i);
+            if (stack == null || stack.isEmpty()) continue;
+            player.drop(stack.copy(), false);
+            data.armorInventory.set(i, ItemStack.EMPTY);
+            dropped++;
+        }
+        while (data.armorInventory.size() < 4) data.armorInventory.add(ItemStack.EMPTY);
+        TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        if (tame != null) TameStoredArmorEvents.sync(tame, data);
+        if (dropped > 0) TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal(dropped > 0
+                ? "Dropped " + dropped + " armor piece(s) from " + tameDisplayName(data) + "."
+                : tameDisplayName(data) + " is not wearing armor.")
+                .withStyle(dropped > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    public static boolean equipHeldArmor(ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        if (data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) return false;
+        ItemStack held = player.getMainHandItem();
+        int armorIndex = armorInventoryIndex(held);
+        if (armorIndex < 0) return false;
+        if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, armorIndex)) {
+            player.sendSystemMessage(Component.literal("That armor slot is not unlocked by this tame's Protection collar tier.")
+                    .withStyle(ChatFormatting.RED));
+            return true;
+        }
+        while (data.armorInventory.size() < 4) data.armorInventory.add(ItemStack.EMPTY);
+        ItemStack replaced = data.armorInventory.get(armorIndex);
+        ItemStack equipped = held.copy();
+        equipped.setCount(1);
+        data.armorInventory.set(armorIndex, equipped);
+        if (!player.isCreative()) held.shrink(1);
+        if (replaced != null && !replaced.isEmpty()) player.drop(replaced.copy(), false);
+        TameStoredArmorEvents.sync(tame, data);
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Equipped " + equipped.getHoverName().getString() + " on " + tameDisplayName(data)
+                + (replaced == null || replaced.isEmpty() ? "." : " and dropped the replaced armor."))
+                .withStyle(ChatFormatting.GREEN));
+        return true;
     }
 
     public static boolean openArmorInventory(ServerPlayer player, TamableAnimal tame) {

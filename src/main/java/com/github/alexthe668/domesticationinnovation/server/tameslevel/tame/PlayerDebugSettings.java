@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 public final class PlayerDebugSettings {
@@ -33,6 +35,8 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> INVENTORY_SUMMARY = new HashMap<>();
     private static final Map<UUID, Integer> INVENTORY_SUMMARY_MINUTES = new HashMap<>();
     private static final Map<UUID, List<ChestDrumRange>> CHEST_DRUM_RANGES = new HashMap<>();
+    private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_NON_PREFERRED_TYPES = new HashMap<>();
+    private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -168,6 +172,22 @@ public final class PlayerDebugSettings {
 
     public static List<ChestDrumRange> chestDrumRanges(UUID player) {
         return player == null ? List.of() : List.copyOf(CHEST_DRUM_RANGES.getOrDefault(player, List.of()));
+    }
+
+    public static Set<String> chestDrumPullNonPreferredTypes(UUID player) {
+        return player == null ? Set.of() : Set.copyOf(CHEST_DRUM_PULL_NON_PREFERRED_TYPES.getOrDefault(player, Set.of()));
+    }
+
+    public static Set<String> chestDrumPullPreferredFoodOfTypes(UUID player) {
+        return player == null ? Set.of() : Set.copyOf(CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES.getOrDefault(player, Set.of()));
+    }
+
+    public static void setChestDrumPullNonPreferred(UUID player, String type, boolean enabled) {
+        setTypeRule(CHEST_DRUM_PULL_NON_PREFERRED_TYPES, player, type, enabled);
+    }
+
+    public static void setChestDrumPullPreferredFoodOf(UUID player, String type, boolean enabled) {
+        setTypeRule(CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES, player, type, enabled);
     }
 
     public static boolean duelAssistMessages(UUID player) {
@@ -467,6 +487,8 @@ public final class PlayerDebugSettings {
             }
             out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("chestDrumRanges", list);
         }
+        saveTypeRules(out, "chestDrumPullNonPreferredTypes", CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
+        saveTypeRules(out, "chestDrumPullPreferredFoodOfTypes", CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
         return out;
     }
 
@@ -499,6 +521,8 @@ public final class PlayerDebugSettings {
                 }
                 if (!ranges.isEmpty()) CHEST_DRUM_RANGES.put(player, ranges);
             }
+            loadTypeRules(tag, "chestDrumPullNonPreferredTypes", player, CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
+            loadTypeRules(tag, "chestDrumPullPreferredFoodOfTypes", player, CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
         }
     }
 
@@ -524,6 +548,42 @@ public final class PlayerDebugSettings {
         }
         INVENTORY_SUMMARY_MINUTES.clear();
         CHEST_DRUM_RANGES.clear();
+        CHEST_DRUM_PULL_NON_PREFERRED_TYPES.clear();
+        CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES.clear();
+    }
+
+    private static void setTypeRule(Map<UUID, Set<String>> rules, UUID player, String type, boolean enabled) {
+        if (player == null || type == null || type.isBlank()) return;
+        String normalized = type.trim().toLowerCase(java.util.Locale.ROOT);
+        Set<String> values = rules.computeIfAbsent(player, ignored -> new LinkedHashSet<>());
+        if (enabled) values.add(normalized);
+        else values.remove(normalized);
+        if (values.isEmpty()) rules.remove(player);
+        markDirty();
+    }
+
+    private static void saveTypeRules(Map<UUID, CompoundTag> out, String key, Map<UUID, Set<String>> rules) {
+        for (Map.Entry<UUID, Set<String>> entry : rules.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
+            ListTag list = new ListTag();
+            for (String type : entry.getValue()) {
+                CompoundTag value = new CompoundTag();
+                value.putString("type", type);
+                list.add(value);
+            }
+            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put(key, list);
+        }
+    }
+
+    private static void loadTypeRules(CompoundTag tag, String key, UUID player, Map<UUID, Set<String>> rules) {
+        if (!tag.contains(key, Tag.TAG_LIST)) return;
+        ListTag list = tag.getList(key, Tag.TAG_COMPOUND);
+        Set<String> values = new LinkedHashSet<>();
+        for (int i = 0; i < list.size(); i++) {
+            String type = list.getCompound(i).getString("type").trim().toLowerCase(java.util.Locale.ROOT);
+            if (!type.isBlank()) values.add(type);
+        }
+        if (!values.isEmpty()) rules.put(player, values);
     }
 
     private static void markDirty() {

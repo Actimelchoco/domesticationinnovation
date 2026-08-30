@@ -1351,7 +1351,7 @@ public class CommonProxy {
         }
         if (!player.getMainHandItem().isEmpty()) {
             if (TameCommands.isArmorInventoryItem(player.getMainHandItem())) {
-                if (!TameCommands.openArmorInventory(serverPlayer, tame)) {
+                if (!TameCommands.equipHeldArmor(serverPlayer, tame)) {
                     return false;
                 }
                 event.setCanceled(true);

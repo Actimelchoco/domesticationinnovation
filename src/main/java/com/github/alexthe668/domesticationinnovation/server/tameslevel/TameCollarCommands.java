@@ -21,6 +21,11 @@ final class TameCollarCommands {
                                 .suggests((ctx, builder) -> TameCommands.suggestOwnedPetNamesAll(ctx.getSource(), builder))
                                 .executes(ctx -> TameCommands.armorInventoryOpen(
                                         ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("dropArmor")
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .suggests((ctx, builder) -> TameCommands.suggestOwnedPetNamesAll(ctx.getSource(), builder))
+                                .executes(ctx -> TameCommands.dropArmor(
+                                        ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                 .then(Commands.literal("armorSystem")
                         .executes(ctx -> TameCommands.infoDetail(ctx.getSource(), "armor")));
     }
