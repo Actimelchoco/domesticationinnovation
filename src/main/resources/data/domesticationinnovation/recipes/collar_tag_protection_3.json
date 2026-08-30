@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "MMM",
+    "MCM",
+    "MMM"
+  ],
+  "key": {
+    "M": {
+      "item": "minecraft:gold_ingot"
+    },
+    "C": {
+      "item": "domesticationinnovation:collar_tag"
+    }
+  },
+  "result": {
+    "item": "domesticationinnovation:collar_tag",
+    "count": 1,
+    "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:3s}]}"
+  }
+}

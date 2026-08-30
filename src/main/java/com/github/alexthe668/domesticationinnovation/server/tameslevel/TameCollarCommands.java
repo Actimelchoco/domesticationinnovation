@@ -14,19 +14,6 @@ final class TameCollarCommands {
                 .executes(ctx -> TameCommands.collarList(ctx.getSource(), false))
                 .then(Commands.literal("notag")
                         .executes(ctx -> TameCommands.collarList(ctx.getSource(), true)))
-                .then(Commands.literal("compatibleArmorEnchantments")
-                        .executes(ctx -> TameCommands.compatibleArmorEnchantments(ctx.getSource())))
-                .then(Commands.literal("openArmorSlots")
-                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                .suggests((ctx, builder) -> TameCommands.suggestOwnedPetNamesAll(ctx.getSource(), builder))
-                                .executes(ctx -> TameCommands.armorInventoryOpen(
-                                        ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                .then(Commands.literal("dropArmor")
-                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                .suggests((ctx, builder) -> TameCommands.suggestOwnedPetNamesAll(ctx.getSource(), builder))
-                                .executes(ctx -> TameCommands.dropArmor(
-                                        ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                .then(Commands.literal("armorSystem")
-                        .executes(ctx -> TameCommands.infoDetail(ctx.getSource(), "armor")));
+                ;
     }
 }

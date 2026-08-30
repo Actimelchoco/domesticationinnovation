@@ -60,7 +60,7 @@ public class TameBehaviorEvents {
         if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
         TameFoodManager.tick(tame, activeData);
-        if (tame.tickCount % 10 == 0) TameStoredArmorEvents.sync(tame, activeData);
+        if (tame.tickCount % 10 == 0) TameStoredArmorEvents.retireLegacyArmor(tame, activeData);
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
                 && tame.getTarget() != null

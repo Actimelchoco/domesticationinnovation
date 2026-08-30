@@ -357,9 +357,17 @@ public class TameableUtils {
         }
     }
 
+    /** Recomputes collar-owned attributes after migrating away from collar armor points. */
+    public static void refreshCollarAttributes(LivingEntity tame) {
+        if (tame != null && !tame.level().isClientSide) {
+            onUpdateEnchants(null, tame);
+        }
+    }
+
     private static float[] mapProtectionToArmorStats(int protectionLevel) {
-        // Protection tiers now unlock stored armor slots instead of increasing collar stats.
-        return new float[]{7.0F, 0.0F};
+        // Collar Protection is applied after the tame's native armor and toughness have
+        // reduced a hit. It must not inflate either of those attributes.
+        return new float[]{0.0F, 0.0F};
     }
 
     private static boolean isWaterCreature(LivingEntity enchanted) {

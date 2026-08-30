@@ -2231,8 +2231,6 @@ public class TameCommands {
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("superfood")
                                         .executes(ctx -> hungerInventorySuperfood(ctx.getSource())))
-                                .then(Commands.literal("armorSystem")
-                                        .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("prefferedFood")
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
@@ -5202,27 +5200,13 @@ public class TameCommands {
             );
         }
         else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
-            sendInfoPage(p, "Collar Tag & Tame Armor",
-                    "=== Collar tiers ===",
-                    "Add Protection to a collar tag to raise its tier. The Protection level is the collar tier.",
-                    "Tier 1: boots slot",
-                    "Tier 2: helmet slot",
-                    "Tier 3: leggings slot",
-                    "Tier 4: chestplate slot",
-                    "Higher tiers keep every slot unlocked by earlier tiers.",
-                    "=== Using armor ===",
-                    "/tames collar openArmorSlots <name>",
-                    "/tames collar dropArmor <name>",
-                    "/tames settings enableMending <true|false>",
-                    "Food and armor use separate inventories. The armor inventory accepts armor in any cell and equips it in the matching body slot.",
-                    "Sneak-right-click a tame while holding armor to equip it directly. Existing armor in that body slot is replaced and dropped.",
-                    "Armor for a body slot not unlocked by the current collar tier is rejected. Invalid or duplicate armor placed through the armor inventory is dropped.",
-                    "Replacing an existing collar tag drops all equipped armor, regardless of the replacement collar's tier.",
-                    "Stored armor works even when it is not rendered on the tame.",
-                    "Each equipped armor piece increases saturation use by 50%.",
-                    "Equipped armor contributes its armor, armor-toughness, and knockback-resistance attributes. Allowed protection enchantments contribute through the stored-armor damage calculation.",
-                    "Other enchantment behavior applies only when the stored-armor handler supports it. Admin-forbidden enchantments are ignored by its calculations.",
-                    "With enableMending active, equipped Mending armor uses XP collected by the tame to repair itself."
+            sendInfoPage(p, "Collar Protection",
+                    "Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.",
+                    "Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.",
+                    "Craft a collar in the center with eight matching materials around it:",
+                    "I copper, II iron, III gold, IV emerald, V diamond, VI netherite scrap.",
+                    "VII copper blocks, VIII iron blocks, IX gold blocks, X emerald blocks, XI diamond blocks, XII netherite ingots.",
+                    "The separate tame armor inventory has been removed. Legacy stored armor is returned beside the tame when it next loads."
             );
         }
         else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
@@ -5461,11 +5445,9 @@ public class TameCommands {
             sendInfoPage(p, "Collar",
                     "/tames collar",
                     "/tames collar notag",
-                    "/tames collar compatibleArmorEnchantments (hold enchanted armor)",
-                    "/tames collar openArmorSlots <name>",
-                    "/tames collar dropArmor <name>",
-                    "/tames collar armorSystem",
-                    "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
+                    "Lists your tames with collar tags (or without via notag), including their Protection tier.",
+                    "Protection I-XII is crafted by surrounding a collar tag with the tier material.",
+                    "Each level reduces post-armor damage by 4%."
             );
         }
         else if (key.equals("inspect")) {
@@ -22262,8 +22244,7 @@ public class TameCommands {
             remainingLevels -= levelsInBand;
             bandWeight *= 2.0D;
         }
-        double armorMultiplier = 1.0D + TameStoredArmorEvents.wornPieceCount(data) * 0.5D;
-        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D) * armorMultiplier));
+        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D)));
     }
 
     private static boolean ensureHungerSaturation(TameData data, LivingEntity tame, int required) {

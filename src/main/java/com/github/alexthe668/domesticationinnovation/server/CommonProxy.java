@@ -15,7 +15,6 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameComma
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAutoFollowEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameBehaviorEvents;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCrittersEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.GuardianToolEvents;
@@ -176,7 +175,6 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAutoFollowEvents.class);
         MinecraftForge.EVENT_BUS.register(TameBehaviorEvents.class);
-        MinecraftForge.EVENT_BUS.register(TameStoredArmorEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePersistenceEvents.class);
         MinecraftForge.EVENT_BUS.register(TameRenameEvents.class);
         MinecraftForge.EVENT_BUS.register(TameSpawnEvents.class);
@@ -969,6 +967,16 @@ public class CommonProxy {
     @SubscribeEvent
     public void onLivingDamage(LivingDamageEvent event) {
         debugShadowHandsDamageEvent(event);
+        if (TameableUtils.isTamed(event.getEntity())
+                && !event.getSource().is(DamageTypeTags.BYPASSES_ENCHANTMENTS)) {
+            int protection = Mth.clamp(TameableUtils.getEnchantLevel(
+                    event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION), 0, 12);
+            if (protection > 0) {
+                // LivingDamageEvent runs after armor/toughness absorption. Match vanilla
+                // Protection's four percent per effective protection point on what remains.
+                event.setAmount(event.getAmount() * (1.0F - protection * 0.04F));
+            }
+        }
         if (event.getSource().getEntity() instanceof LivingEntity && TameableUtils.isTamed(event.getSource().getEntity())) {
             LivingEntity pet = (LivingEntity) event.getSource().getEntity();
             if (TameableUtils.hasEnchant(pet, DIEnchantmentRegistry.IMMATURITY_CURSE)) {
@@ -1309,7 +1317,6 @@ public class CommonProxy {
                     }
                     blockCollarTick(living);
                     if (TameableUtils.hasCollar(living)) {
-                        TameCommands.dropArmorForCollarReplacement(living);
                         ItemStack collarFrom = new ItemStack(DIItemRegistry.COLLAR_TAG.get());
                         if (entityEnchantments != null) {
                             collarFrom.getOrCreateTag();
@@ -1398,25 +1405,7 @@ public class CommonProxy {
         }
         CompoundTag playerData = player.getPersistentData();
         long interactionTick = player.level().getGameTime();
-        if (playerData.getLong(ARMOR_SHORTCUT_TICK_TAG) == interactionTick
-                && playerData.hasUUID(ARMOR_SHORTCUT_TARGET_TAG)
-                && target.getUUID().equals(playerData.getUUID(ARMOR_SHORTCUT_TARGET_TAG))) {
-            // Forge may fire both EntityInteractSpecific and EntityInteract for one click.
-            // The first event can consume the held armor, making the second look like an
-            // empty-hand shortcut and incorrectly opening the food inventory.
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.SUCCESS);
-            return true;
-        }
         if (!player.getMainHandItem().isEmpty()) {
-            if (TameCommands.isArmorInventoryItem(player.getMainHandItem())) {
-                playerData.putLong(ARMOR_SHORTCUT_TICK_TAG, interactionTick);
-                playerData.putUUID(ARMOR_SHORTCUT_TARGET_TAG, target.getUUID());
-                boolean equipped = TameCommands.equipHeldArmor(serverPlayer, tame);
-                event.setCanceled(true);
-                event.setCancellationResult(equipped ? InteractionResult.SUCCESS : InteractionResult.FAIL);
-                return true;
-            }
             if (!TameCommands.depositHeldHungerFood(serverPlayer, tame)) {
                 return false;
             }

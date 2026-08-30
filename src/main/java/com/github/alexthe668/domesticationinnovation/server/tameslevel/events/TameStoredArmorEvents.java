@@ -46,6 +46,27 @@ public final class TameStoredArmorEvents {
 
     private TameStoredArmorEvents() { }
 
+    /** Returns equipment from the removed armor inventory and clears its old modifiers. */
+    public static void retireLegacyArmor(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || tame.level().isClientSide) return;
+        if (tame.getPersistentData().getBoolean("TLArmorSystemRetired") && data.armorInventory.isEmpty()) return;
+        TameableUtils.refreshCollarAttributes(tame);
+        apply(tame, Attributes.ARMOR, ARMOR_ID, 0.0D);
+        apply(tame, Attributes.ARMOR_TOUGHNESS, TOUGHNESS_ID, 0.0D);
+        apply(tame, Attributes.KNOCKBACK_RESISTANCE, KNOCKBACK_ID, 0.0D);
+        boolean changed = false;
+        for (ItemStack stack : data.armorInventory) {
+            if (stack == null || stack.isEmpty()) continue;
+            tame.spawnAtLocation(stack.copy());
+            changed = true;
+        }
+        if (changed || !data.armorInventory.isEmpty()) {
+            data.armorInventory.clear();
+            TameRegistry.markDirty();
+        }
+        tame.getPersistentData().putBoolean("TLArmorSystemRetired", true);
+    }
+
     public static void sync(LivingEntity tame, TameData data) {
         if (tame == null || data == null || tame.level().isClientSide) return;
         init(tame.getServer());
