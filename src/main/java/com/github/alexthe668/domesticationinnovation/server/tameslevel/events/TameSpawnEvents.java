@@ -66,6 +66,24 @@ public class TameSpawnEvents {
     private static final Map<UUID, PendingNewTameNotification> PENDING_NEW_TAME_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Long> PENDING_RANDOM_TAME_NAMES = new HashMap<>();
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
+    private static final ThreadLocal<Integer> TAME_RECONSTRUCTION_DEPTH = ThreadLocal.withInitial(() -> 0);
+
+    public static void beginTameReconstruction() {
+        TAME_RECONSTRUCTION_DEPTH.set(TAME_RECONSTRUCTION_DEPTH.get() + 1);
+    }
+
+    public static void endTameReconstruction() {
+        int depth = TAME_RECONSTRUCTION_DEPTH.get() - 1;
+        if (depth <= 0) {
+            TAME_RECONSTRUCTION_DEPTH.remove();
+        } else {
+            TAME_RECONSTRUCTION_DEPTH.set(depth);
+        }
+    }
+
+    private static boolean isTameReconstructionSuppressed() {
+        return TAME_RECONSTRUCTION_DEPTH.get() > 0;
+    }
 
     @SubscribeEvent
     public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
@@ -127,6 +145,7 @@ public class TameSpawnEvents {
 
     @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
+        if (isTameReconstructionSuppressed()) return;
 
         if (event.getEntity() instanceof LivingEntity living
                 && living instanceof ModifedToBeTameable modified
@@ -217,6 +236,7 @@ public class TameSpawnEvents {
 
     @SubscribeEvent
     public static void onTamed(AnimalTameEvent event) {
+        if (isTameReconstructionSuppressed()) return;
         if (!(event.getAnimal() instanceof TamableAnimal tame)) return;
         if (!tame.hasCustomName()) {
             // Forge can fire AnimalTameEvent before isTame() reflects the new state.

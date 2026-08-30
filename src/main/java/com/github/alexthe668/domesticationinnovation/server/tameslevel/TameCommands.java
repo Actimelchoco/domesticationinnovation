@@ -12508,11 +12508,13 @@ public class TameCommands {
         EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
         if (entityType == null) return RespawnResult.fail("unknown entity type '" + typeId + "'");
 
-        Entity spawned = entityType.create(level);
-        if (!(spawned instanceof LivingEntity respawned)
-                || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
-            return RespawnResult.fail("stored type is not tamable");
-        }
+        TameSpawnEvents.beginTameReconstruction();
+        try {
+            Entity spawned = entityType.create(level);
+            if (!(spawned instanceof LivingEntity respawned)
+                    || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
+                return RespawnResult.fail("stored type is not tamable");
+            }
 
         // Loading a tame snapshot can synchronously fire tame-related Forge events. The
         // freshly-created entity still has a temporary UUID at this point unless we replace
@@ -12524,10 +12526,10 @@ public class TameCommands {
         TameRegistry.register(data);
         TameRegistry.bindEntityToData(respawned, data);
 
-        CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
-        if (!snapshot.isEmpty()) {
-            respawned.load(snapshot);
-        }
+            CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
+            if (!snapshot.isEmpty()) {
+                respawned.load(snapshot);
+            }
 
         // Snapshot loading may contain an older entity UUID; canonical registry identity wins.
         respawned.setUUID(data.uuid);
@@ -12554,6 +12556,9 @@ public class TameCommands {
         TameRegistry.register(data);
         TameRegistry.markDirty();
         return RespawnResult.ok();
+        } finally {
+            TameSpawnEvents.endTameReconstruction();
+        }
     }
 
     public static boolean respawnDeadTameForDuel(MinecraftServer server, UUID tameUuid) {
@@ -12879,39 +12884,50 @@ public class TameCommands {
         EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(id);
         if (entityType == null) return RespawnResult.fail("unknown entity type '" + typeId + "'");
 
-        Entity spawned = entityType.create(level);
-        if (!(spawned instanceof LivingEntity respawned)
-                || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
-            return RespawnResult.fail("stored type is not tamable");
-        }
+        TameSpawnEvents.beginTameReconstruction();
+        try {
+            Entity spawned = entityType.create(level);
+            if (!(spawned instanceof LivingEntity respawned)
+                    || (!(respawned instanceof TamableAnimal) && !(respawned instanceof ModifedToBeTameable))) {
+                return RespawnResult.fail("stored type is not tamable");
+            }
 
-        CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
-        if (!snapshot.isEmpty()) {
-            respawned.load(snapshot);
-        }
+            // Snapshot loading can fire tame events, so expose the canonical registry
+            // identity before applying any saved entity state.
+            respawned.setUUID(data.uuid);
+            TameRegistry.register(data);
+            TameRegistry.bindEntityToData(respawned, data);
 
-        respawned.setUUID(data.uuid);
-        respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
-        respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
-        enforceRecoveredTameOwner(respawned, data.ownerUUID);
+            CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
+            if (!snapshot.isEmpty()) {
+                respawned.load(snapshot);
+            }
+
+            respawned.setUUID(data.uuid);
+            respawned.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
+            respawned.setDeltaMovement(0.0D, 0.0D, 0.0D);
+            enforceRecoveredTameOwner(respawned, data.ownerUUID);
         // addFreshEntity fires EntityJoinLevelEvent synchronously. Bind the stable tame
         // identity first so the spawn handler resolves this rebuilt duel participant to
         // its existing registry row instead of briefly registering it as a new tame and
         // rolling/notifying a throwaway class.
-        TameRegistry.bindEntityToData(respawned, data);
+            TameRegistry.bindEntityToData(respawned, data);
 
-        if (!level.addFreshEntity(respawned)) {
-            return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
+            if (!level.addFreshEntity(respawned)) {
+                return RespawnResult.fail("spawn failed (UUID conflict or invalid state)");
+            }
+            clearAdminCloneTags(respawned);
+
+            LevelSystem.reapplyTypeBasePlusBonuses(respawned, data);
+            respawned.setHealth(respawned.getMaxHealth());
+            prepareAutoReincarnationOnRespawn(level.getServer(), data);
+            finalizeRecoveredLivingState(respawned, data);
+            restoreRecoveredAppearance(respawned, snapshot);
+            TameRegistry.register(data);
+            return RespawnResult.ok();
+        } finally {
+            TameSpawnEvents.endTameReconstruction();
         }
-        clearAdminCloneTags(respawned);
-
-        LevelSystem.reapplyTypeBasePlusBonuses(respawned, data);
-        respawned.setHealth(respawned.getMaxHealth());
-        prepareAutoReincarnationOnRespawn(level.getServer(), data);
-        finalizeRecoveredLivingState(respawned, data);
-        restoreRecoveredAppearance(respawned, snapshot);
-        TameRegistry.register(data);
-        return RespawnResult.ok();
     }
 
     private static SpawnTarget spawnTargetFromSnapshot(MinecraftServer server, TameData data) {
