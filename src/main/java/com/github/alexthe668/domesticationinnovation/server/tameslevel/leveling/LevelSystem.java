@@ -975,17 +975,14 @@ public class LevelSystem {
                             + ", Knockback Resistance +" + formatDouble(fixedHealthKnockbackResistAmount(amount))
             );
         }
-        trackBonus(data, reward, amount);
-        boolean reapplied = false;
-        addToAttribute(tame, reward.attribute, amount);
+        double previousTrackedBonus = trackedBonus(data, reward);
+        applyTrackedBaseStatReward(tame, data, reward, amount, previousTrackedBonus);
         if (reward == BaseStatReward.HP) {
             if (amount >= 0.0D) {
                 tame.setHealth(tame.getMaxHealth());
             } else {
                 tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
             }
-        } else if (reapplied && tame != null) {
-            tame.setHealth(Math.min(tame.getHealth(), tame.getMaxHealth()));
         }
         TameRegistry.markDirty();
         return new LevelRewardResult(RewardCategory.BASE_STAT, reward.name(), amount, reward.display + " +" + formatDouble(amount));
@@ -1508,12 +1505,36 @@ public class LevelSystem {
         entity.setCustomNameVisible(true);
     }
 
-    private static void addToAttribute(LivingEntity entity, Attribute attribute, double amount) {
-        AttributeInstance instance = entity.getAttribute(attribute);
+    private static void applyTrackedBaseStatReward(LivingEntity tame, TameData data, BaseStatReward reward,
+                                                   double amount, double previousTrackedBonus) {
+        AttributeInstance instance = tame == null ? null : tame.getAttribute(reward.attribute);
+        boolean managedLegendaryModifier = data != null && isLegendaryMonstersType(data.type)
+                && (reward == BaseStatReward.HP || reward == BaseStatReward.DAMAGE);
+        double unmodifiedBase = instance == null
+                ? reward.attribute.getDefaultValue()
+                : instance.getBaseValue() - (managedLegendaryModifier ? 0.0D : previousTrackedBonus);
+
+        trackBonus(data, reward, amount);
+        double totalTrackedBonus = trackedBonus(data, reward);
         if (instance == null) {
             return;
         }
-        instance.setBaseValue(instance.getBaseValue() + amount);
+        instance.setBaseValue(clampAttributeBaseValue(reward.attribute,
+                unmodifiedBase + (managedLegendaryModifier ? 0.0D : totalTrackedBonus)));
+        if (managedLegendaryModifier) {
+            UUID modifierId = reward == BaseStatReward.HP
+                    ? LEGENDARY_MONSTERS_HEALTH_BONUS_UUID
+                    : LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID;
+            applyManagedAdditionModifier(tame, reward.attribute, modifierId, totalTrackedBonus,
+                    reward == BaseStatReward.HP ? "tl_legendary_bonus_health" : "tl_legendary_bonus_damage");
+        }
+    }
+
+    private static void addToAttribute(LivingEntity entity, Attribute attribute, double amount) {
+        AttributeInstance instance = entity.getAttribute(attribute);
+        if (instance != null) {
+            instance.setBaseValue(clampAttributeBaseValue(attribute, instance.getBaseValue() + amount));
+        }
     }
 
     public static boolean reapplyTypeBasePlusBonuses(LivingEntity tame, TameData data) {
@@ -1580,6 +1601,14 @@ public class LevelSystem {
         }
         Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus);
         if (snapshotBase != null) {
+            double templateBase = readBaseOrDefault(template, attribute);
+            // Repair snapshots produced while the reward existed both in the live base and in
+            // the tracked total. In that broken state, subtracting the tracked total once still
+            // leaves exactly one additional copy above the entity type's real base.
+            if (Math.abs(trackedBonus) > 1.0E-6D
+                    && Math.abs(snapshotBase - templateBase - trackedBonus) <= 1.0E-6D) {
+                return templateBase;
+            }
             return snapshotBase;
         }
         return readBaseOrDefault(template, attribute);
@@ -1773,6 +1802,21 @@ public class LevelSystem {
             case KNOCKBACK -> data.bonusKnockback += amount;
             case KNOCKBACK_RESIST -> data.bonusKnockbackResist += amount;
         }
+    }
+
+    private static double trackedBonus(TameData data, BaseStatReward reward) {
+        if (data == null) {
+            return 0.0D;
+        }
+        return switch (reward) {
+            case HP -> data.bonusHealth;
+            case DAMAGE -> data.bonusDamage;
+            case SPEED -> data.bonusSpeed;
+            case ARMOR -> data.bonusArmor;
+            case ARMOR_TOUGHNESS -> data.bonusArmorToughness;
+            case KNOCKBACK -> data.bonusKnockback;
+            case KNOCKBACK_RESIST -> data.bonusKnockbackResist;
+        };
     }
 
     public static int estimateInvestedXp(TameData data) {
