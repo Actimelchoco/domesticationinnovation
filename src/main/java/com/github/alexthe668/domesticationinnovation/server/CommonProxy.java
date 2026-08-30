@@ -1350,6 +1350,14 @@ public class CommonProxy {
             return false;
         }
         if (!player.getMainHandItem().isEmpty()) {
+            if (TameCommands.isArmorInventoryItem(player.getMainHandItem())) {
+                if (!TameCommands.openArmorInventory(serverPlayer, tame)) {
+                    return false;
+                }
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+                return true;
+            }
             if (!TameCommands.depositHeldHungerFood(serverPlayer, tame)) {
                 return false;
             }

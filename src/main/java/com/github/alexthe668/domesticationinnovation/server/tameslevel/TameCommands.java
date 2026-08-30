@@ -178,7 +178,7 @@ public class TameCommands {
     private static final int RANKED_SATURATION_PER_FOOD_POINT = 100;
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
-    private static final int TAME_HUNGER_MAX_STACKS = 10;
+    private static final int TAME_HUNGER_MAX_STACKS = 18;
     private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 4;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
@@ -2182,8 +2182,6 @@ public class TameCommands {
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("superfood")
                                         .executes(ctx -> hungerInventorySuperfood(ctx.getSource())))
-                                .then(Commands.literal("amorSystem")
-                                        .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("armorSystem")
                                         .executes(ctx -> infoDetail(ctx.getSource(), "armor")))
                                 .then(Commands.literal("prefferedFood")
@@ -5066,7 +5064,7 @@ public class TameCommands {
                     "prefferedFood reports the learned and configured preferred foods for one owned tame type, using readable item and food-category names.",
                     "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
-                    "Tames keep up to 10 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
+                    "Tames keep up to 18 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
@@ -5075,29 +5073,50 @@ public class TameCommands {
             );
         }
         else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
-            sendInfoPage(p, "Tame Armor",
+            sendInfoPage(p, "Collar Tag & Tame Armor",
+                    "=== Collar tiers ===",
+                    "Add Protection to a collar tag to raise its tier. The Protection level is the collar tier.",
+                    "Tier 1: boots slot",
+                    "Tier 2: helmet slot",
+                    "Tier 3: leggings slot",
+                    "Tier 4: chestplate slot",
+                    "Higher tiers keep every slot unlocked by earlier tiers.",
+                    "=== Using armor ===",
                     "/tames inventory open <name>",
+                    "/tames collar openArmorSlots <name>",
                     "/tames settings enableMending <true|false>",
-                    "Armor is stored in four separated slots above the tame's food inventory; it does not need to render on the entity.",
-                    "Protection collar tier 1 unlocks boots, tier 2 helmet, tier 3 leggings, and tier 4 chestplate.",
-                    "Each worn armor piece increases saturation use by 50%.",
-                    "Applicable vanilla and modded armor enchantments work through their normal effects when supported. Server admins can forbid problematic enchantments.",
-                    "When enableMending is true, stored equipped armor with Mending can consume XP collected by the tame to repair itself."
+                    "Food and armor use separate inventories. The armor inventory accepts armor in any cell and equips it in the matching body slot.",
+                    "Stored armor works even when it is not rendered on the tame.",
+                    "Each equipped armor piece increases saturation use by 50%.",
+                    "Supported vanilla and modded armor enchantments apply their normal effects. Admins can forbid problematic enchantments.",
+                    "With enableMending active, equipped Mending armor uses XP collected by the tame to repair itself."
             );
         }
         else if ((key.equals("inventory system") || key.equals("hunger system") || key.equals("food system"))) {
-            sendInfoPage(p, "Inventory System",
-                    "Saturation is the tame's ready-to-use food buffer. One food point restores 100 saturation.",
-                    "Following drains 2 saturation per second, wandering or guarding drains 1, and fighting with a live target drains 4.",
-                    "During duels and ranked, movement state does not matter: drain is fixed at 1 saturation every 4 seconds.",
-                    "Outside duels and ranked, all saturation costs scale by tame level. The per-level increase doubles after every 50 levels.",
-                    "Natural regeneration also consumes saturation. Command teleports do not consume saturation.",
-                    "If saturation is too low, the tame eats one stored food item and converts it into saturation.",
-                    "If saturation reaches 0 and no stored food remains, follow/wander commands are ignored, abilities stop, and the tame sits.",
+            sendInfoPage(p, "Food System",
+                    "=== Food value ===",
+                    "Preferred food: 200% of its base saturation.",
+                    "Gluttonous non-preferred edible food: 50% of base saturation.",
+                    "Preferred food therefore provides 4x the saturation of Gluttonous non-preferred food with the same nutrition.",
+                    "Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected.",
+                    "One displayed food point equals 100 saturation.",
+                    "=== How feeding works ===",
+                    "Tames store up to 18 food stacks. When their saturation buffer is too low, they eat one stored item.",
+                    "At 0 saturation with no usable stored food, the tame sits, stops using abilities, and ignores follow/wander commands.",
+                    "=== Saturation drain ===",
+                    "Following: 2 per second | Wandering/guarding: 1 per second | Fighting a live target: 4 per second",
+                    "Duels/ranked: fixed at 1 every 4 seconds, regardless of movement state.",
+                    "Outside duels/ranked, costs scale with tame level; the per-level increase doubles every 50 levels.",
+                    "Natural regeneration costs saturation. Command teleports do not.",
+                    "Each equipped armor piece increases saturation use by 50%.",
+                    "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "/tames debug inventory lowOnFood|noFood|sum <true|false> and /tames debug inventory sumMin <minutes> control hunger notifications.",
-                    "Drum refill: stand on a container directly above your drum and use /tames settings chestxDrumRange <range> <height>. Larger configured volumes have longer feed intervals.",
-                    "Owners get low-food, last-food, and configurable low/no-food digest notifications."
+                    "Drum refill: stand on the container above the drum, then use /tames settings chestxDrumRange <range> <height>.",
+                    "Larger refill areas run less frequently.",
+                    "=== Notifications ===",
+                    "/tames debug inventory lowOnFood|noFood|sum <true|false>",
+                    "/tames debug inventory sumMin <minutes>",
+                    "These control low-food, no-food, and digest notifications."
             );
         }
         else if (key.equals("mode")) {
@@ -5288,7 +5307,8 @@ public class TameCommands {
                     "/tames collar",
                     "/tames collar notag",
                     "/tames collar compatibleArmorEnchantments (hold enchanted armor)",
-                    "/tames collar amorSystem",
+                    "/tames collar openArmorSlots <name>",
+                    "/tames collar armorSystem",
                     "Lists your tames with collar tags (or without via notag), including stored collar tier in registry."
             );
         }
@@ -5464,7 +5484,9 @@ public class TameCommands {
             if (line == null || line.isBlank()) {
                 continue;
             }
-            ChatFormatting style = line.startsWith("/tames ") ? ChatFormatting.GOLD : ChatFormatting.GRAY;
+            ChatFormatting style = line.startsWith("/tames ")
+                    ? ChatFormatting.GOLD
+                    : line.startsWith("=== ") ? ChatFormatting.YELLOW : ChatFormatting.GRAY;
             player.sendSystemMessage(Component.literal(line).withStyle(style));
         }
     }
@@ -6307,16 +6329,23 @@ public class TameCommands {
         if (matches.isEmpty()) {
             return error(player, noTagOnly ? "All your living tames are wearing collar tags." : "No tames with collar tags found.");
         }
-        matches.sort(Comparator
-                .comparingInt((TameData data) -> statusOrder(data, source.getServer()))
-                .thenComparing(data -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT)));
-        player.sendSystemMessage(Component.literal(noTagOnly ? "=== Tames without collar tag ===" : "=== Tames with collar tag ===").withStyle(ChatFormatting.GOLD));
+        matches.sort(noTagOnly
+                ? Comparator.comparingInt((TameData data) -> statusOrder(data, source.getServer()))
+                        .thenComparing(data -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT))
+                : Comparator.comparingInt((TameData data) -> Math.max(0, data.collarTagTier))
+                        .thenComparingInt(data -> statusOrder(data, source.getServer()))
+                        .thenComparing(data -> data.name == null ? "" : data.name.toLowerCase(Locale.ROOT)));
+        player.sendSystemMessage(Component.literal(noTagOnly ? "=== Tames without collar tag ===" : "=== Tames by collar tier ===").withStyle(ChatFormatting.GOLD));
+        int currentTier = -1;
         int index = 1;
         for (TameData data : matches) {
-            String suffix = noTagOnly ? "" : " (" + collarTierLabel(data.hasCollarTag, data.collarTagTier) + ")";
-            player.sendSystemMessage(Component.literal(index + ". " + tameDisplayName(data) + " [" + statusLabel(data, source.getServer()) + "]" + suffix)
+            if (!noTagOnly && currentTier != Math.max(0, data.collarTagTier)) {
+                currentTier = Math.max(0, data.collarTagTier);
+                player.sendSystemMessage(Component.literal("----- Tier " + currentTier + " -----").withStyle(ChatFormatting.YELLOW));
+            }
+            String prefix = noTagOnly ? index++ + ". " : "";
+            player.sendSystemMessage(Component.literal(prefix + tameDisplayName(data) + " [" + statusLabel(data, source.getServer()) + "]")
                     .withStyle(statusColor(data, isLoadedAnywhere(source.getServer(), data.uuid))));
-            index++;
         }
         return matches.size();
     }
@@ -8259,7 +8288,22 @@ public class TameCommands {
     }
 
     private static int rankedLeaderboard(CommandSourceStack source, boolean ownedOnly, boolean activeOnly) {
-        return rankedParticipantRanking(source, ownedOnly, activeOnly, "Ranked Leaderboard");
+        LinkedHashSet<UUID> participantIds = collectRankedParticipantIds();
+        if (activeOnly) {
+            participantIds.removeIf(id -> id == null || !TameDuelManager.isEntityInDuel(id));
+        }
+        return duelLeaderboard(
+                source,
+                "mmr",
+                !ownedOnly,
+                null,
+                null,
+                10,
+                false,
+                participantIds,
+                "Ranked Duel Leaderboard",
+                false
+        );
     }
 
     private static int rankedParticipantRanking(CommandSourceStack source, boolean ownedOnly, boolean activeOnly, String title) {
@@ -12652,6 +12696,8 @@ public class TameCommands {
         if (server == null || tameSnapshotTag == null || tameSnapshotTag.isEmpty()) {
             return false;
         }
+        TameSpawnEvents.beginTameReconstruction();
+        try {
         TameData snapshot = TameData.fromTag(tameSnapshotTag.copy());
         if (snapshot.uuid == null) {
             return false;
@@ -12748,12 +12794,17 @@ public class TameCommands {
         } finally {
             loadChunksAround(target.level, returnTicket, returnPos, false);
         }
+        } finally {
+            TameSpawnEvents.endTameReconstruction();
+        }
     }
 
     public static boolean ensureDuelParticipantRestored(MinecraftServer server, UUID participantId, CompoundTag tameSnapshotTag) {
         if (server == null || tameSnapshotTag == null || tameSnapshotTag.isEmpty()) {
             return participantId != null && resetDuelCombatState(server, participantId);
         }
+        TameSpawnEvents.beginTameReconstruction();
+        try {
         if (restoreDuelParticipantSnapshot(server, tameSnapshotTag.copy())) {
             return true;
         }
@@ -12805,6 +12856,9 @@ public class TameCommands {
             }
         }
         return participantId != null && resetDuelCombatState(server, participantId);
+        } finally {
+            TameSpawnEvents.endTameReconstruction();
+        }
     }
 
     public static boolean restoreDuelPlayerSnapshot(MinecraftServer server, UUID playerUuid, CompoundTag playerSnapshot) {
@@ -15570,11 +15624,21 @@ public class TameCommands {
     }
 
     private static int duelLeaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter, String typeFilter, int requestedLimit, boolean longForm) {
+        return duelLeaderboard(source, mode, includeAll, groupFilter, typeFilter, requestedLimit, longForm,
+                null, "Duel Leaderboard", true);
+    }
+
+    private static int duelLeaderboard(CommandSourceStack source, String mode, boolean includeAll, String groupFilter,
+                                       String typeFilter, int requestedLimit, boolean longForm,
+                                       Set<UUID> participantFilter, String title, boolean includePlayers) {
         ServerPlayer p = source.getPlayer();
         String m = mode == null ? "mmr" : mode.trim().toLowerCase(Locale.ROOT);
         List<DuelLeaderboardEntry> entries = new ArrayList<>();
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || !hasRecordedDuelStats(data)) continue;
+            if (participantFilter != null
+                    && !participantFilter.contains(data.uuid)
+                    && (data.tlId == null || !participantFilter.contains(data.tlId))) continue;
             if (!includeAll && !p.getUUID().equals(data.ownerUUID)) continue;
             if (groupFilter != null && !isInGroup(data, groupFilter)) continue;
             if (typeFilter != null && !matchesTypeFilter(data, typeFilter)) continue;
@@ -15596,7 +15660,7 @@ public class TameCommands {
                     Math.max(0.0D, data.duelPoints)
             ));
         }
-        for (Map.Entry<UUID, PlayerDuelStats> entry : TameRegistry.getPlayerDuelStats().entrySet()) {
+        if (includePlayers) for (Map.Entry<UUID, PlayerDuelStats> entry : TameRegistry.getPlayerDuelStats().entrySet()) {
             UUID playerId = entry.getKey();
             PlayerDuelStats stats = entry.getValue();
             if (playerId == null || stats == null || !hasRecordedDuelStats(stats)) continue;
@@ -15624,10 +15688,10 @@ public class TameCommands {
         sortDuelLeaderboardEntries(entries, m);
         if (entries.isEmpty()) return error(p, "No duel leaderboard entries found.");
         int limit = Math.min(Math.max(1, requestedLimit), entries.size());
-        String scope = includeAll ? "all players" : "owned";
+        String scope = includeAll ? (includePlayers ? "all players" : "all participating tames") : "owned";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
         String typeText = (typeFilter == null || typeFilter.isBlank()) ? "" : (" | type: " + normalizeTypeFilter(typeFilter));
-        p.sendSystemMessage(Component.literal("---- Duel Leaderboard | " + scope + " | " + (longForm ? "long" : "short") + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
+        p.sendSystemMessage(Component.literal("---- " + title + " | " + scope + " | " + (longForm ? "long" : "short") + groupText + typeText + " | showing " + limit + "/" + entries.size() + " ----").withStyle(ChatFormatting.GOLD));
         if (longForm) {
             p.sendSystemMessage(Component.literal("wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
         }
@@ -22060,6 +22124,8 @@ public class TameCommands {
                         isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
             }
             for (int slot : slotOrder) {
+                if (PlayerDebugSettings.enableChestXDrumFoodPreferences(ownerUuid)
+                        && !isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
                 if (totalHungerFoodPoints(data) >= TAME_HUNGER_GREEN_FOOD_POINTS) break;
                 while (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                     ItemStack simulated = handler.extractItem(slot, 1, true);
@@ -22208,11 +22274,43 @@ public class TameCommands {
             return false;
         }
         MenuProvider provider = new SimpleMenuProvider(
-                (containerId, inventory, openedBy) -> new ChestMenu(MenuType.GENERIC_9x3, containerId, inventory, new HungerFoodContainer(data, tame), 3),
-                Component.literal(tameDisplayName(data) + " Armor & Food")
+                (containerId, inventory, openedBy) -> new ChestMenu(MenuType.GENERIC_9x2, containerId, inventory, new HungerFoodContainer(data, tame), 2),
+                Component.literal(tameDisplayName(data) + " Food")
         );
         player.openMenu(provider);
         return true;
+    }
+
+    static int armorInventoryOpen(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), name);
+        if (data == null) {
+            return error(player, "You do not own a living tame named '" + name + "'.");
+        }
+        TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        return openArmorInventory(player, data, tame) ? 1 : 0;
+    }
+
+    public static boolean openArmorInventory(ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) return false;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        return openArmorInventory(player, data, tame);
+    }
+
+    private static boolean openArmorInventory(ServerPlayer player, TameData data, TamableAnimal tame) {
+        if (player == null || data == null || data.dead || data.stored
+                || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) return false;
+        MenuProvider provider = new SimpleMenuProvider(
+                (containerId, inventory, openedBy) -> new ChestMenu(MenuType.GENERIC_9x2, containerId, inventory, new TameArmorContainer(data, tame), 2),
+                Component.literal(tameDisplayName(data) + " Armor")
+        );
+        player.openMenu(provider);
+        return true;
+    }
+
+    public static boolean isArmorInventoryItem(ItemStack stack) {
+        return armorInventoryIndex(stack) >= 0;
     }
 
     private static int hungerInventoryList(CommandSourceStack source) {
@@ -22692,24 +22790,18 @@ public class TameCommands {
         private Player lastViewer;
 
         private HungerFoodContainer(TameData data, TamableAnimal tame) {
-            super(27);
+            super(18);
             this.data = data;
             this.tame = tame;
-            for (int i = 0; i < 4; i++) {
-                setItem(i, i < data.armorInventory.size() ? data.armorInventory.get(i).copy() : ItemStack.EMPTY);
-            }
             for (int i = 0; i < Math.min(TAME_HUNGER_MAX_STACKS, data.hungerInventory.size()); i++) {
-                setItem(9 + i, data.hungerInventory.get(i).copy());
+                setItem(i, data.hungerInventory.get(i).copy());
             }
             this.loading = false;
         }
 
         @Override
         public boolean canPlaceItem(int slot, ItemStack stack) {
-            // The generic chest screen makes every cell look usable. Accept armor in
-            // any visible cell and normalize it into the proper equipment slot when saved.
-            if (armorInventoryIndex(stack) >= 0) return true;
-            return slot >= 9 && slot < 9 + TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0;
+            return slot >= 0 && slot < TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0;
         }
 
         @Override
@@ -22747,23 +22839,11 @@ public class TameCommands {
             }
             loading = true;
             try {
-                ItemStack[] armor = {ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY};
                 List<ItemStack> food = new ArrayList<>();
                 for (int slot = 0; slot < getContainerSize(); slot++) {
                     ItemStack stack = getItem(slot);
                     if (stack.isEmpty()) continue;
-                    int armorIndex = armorInventoryIndex(stack);
-                    if (armorIndex >= 0) {
-                        if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, armorIndex)) {
-                            rejectArmor(stack.copy(), "That armor slot is not unlocked by this tame's Protection collar tier.");
-                        } else if (!armor[armorIndex].isEmpty()) {
-                            rejectArmor(stack.copy(), "That tame already has armor equipped in this equipment slot.");
-                        } else {
-                            armor[armorIndex] = stack.copy();
-                        }
-                        continue;
-                    }
-                    if (slot >= 9 && slot < 9 + TAME_HUNGER_MAX_STACKS && hungerFoodPoints(stack, data, tame) > 0) {
+                    if (hungerFoodPoints(stack, data, tame) > 0) {
                         food.add(stack.copy());
                     } else {
                         dropRejectedHungerInventoryItem(stack.copy());
@@ -22771,16 +22851,11 @@ public class TameCommands {
                 }
 
                 data.hungerInventory.clear();
-                data.armorInventory.clear();
-                for (int i = 0; i < 4; i++) {
-                    data.armorInventory.add(armor[i]);
-                }
                 data.hungerInventory.addAll(food);
 
                 for (int slot = 0; slot < getContainerSize(); slot++) super.setItem(slot, ItemStack.EMPTY);
-                for (int i = 0; i < 4; i++) super.setItem(i, armor[i].copy());
                 for (int i = 0; i < Math.min(TAME_HUNGER_MAX_STACKS, food.size()); i++) {
-                    super.setItem(9 + i, food.get(i).copy());
+                    super.setItem(i, food.get(i).copy());
                 }
             } finally {
                 loading = false;
@@ -22791,25 +22866,6 @@ public class TameCommands {
                 data.hungerEmptyNotified = data.hungerSaturation <= 0 && data.hungerEmptyNotified;
             }
             TameRegistry.markDirty();
-            if (tame != null) TameStoredArmorEvents.sync(tame, data);
-        }
-
-        private int armorInventoryIndex(ItemStack stack) {
-            if (stack == null || stack.isEmpty()) return -1;
-            return switch (LivingEntity.getEquipmentSlotForItem(stack)) {
-                case HEAD -> 0;
-                case CHEST -> 1;
-                case LEGS -> 2;
-                case FEET -> 3;
-                default -> -1;
-            };
-        }
-
-        private void rejectArmor(ItemStack stack, String reason) {
-            dropRejectedHungerInventoryItem(stack);
-            if (lastViewer != null) {
-                lastViewer.sendSystemMessage(Component.literal(reason + " The item was dropped.").withStyle(ChatFormatting.RED));
-            }
         }
 
         private void dropRejectedHungerInventoryItem(ItemStack stack) {
@@ -22822,6 +22878,97 @@ public class TameCommands {
                 tame.spawnAtLocation(stack);
             }
         }
+    }
+
+    private static final class TameArmorContainer extends SimpleContainer {
+        private final TameData data;
+        private final TamableAnimal tame;
+        private boolean loading = true;
+        private Player lastViewer;
+
+        private TameArmorContainer(TameData data, TamableAnimal tame) {
+            super(18);
+            this.data = data;
+            this.tame = tame;
+            for (int i = 0; i < Math.min(4, data.armorInventory.size()); i++) {
+                setItem(i, data.armorInventory.get(i).copy());
+            }
+            loading = false;
+        }
+
+        @Override
+        public boolean canPlaceItem(int slot, ItemStack stack) {
+            return isArmorInventoryItem(stack);
+        }
+
+        @Override
+        public void startOpen(Player player) {
+            super.startOpen(player);
+            lastViewer = player;
+        }
+
+        @Override
+        public void setChanged() {
+            super.setChanged();
+            if (!loading) saveToData();
+        }
+
+        @Override
+        public void stopOpen(Player player) {
+            super.stopOpen(player);
+            lastViewer = player;
+            saveToData();
+        }
+
+        private void saveToData() {
+            if (loading) return;
+            loading = true;
+            try {
+                ItemStack[] equipped = {ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY};
+                for (int slot = 0; slot < getContainerSize(); slot++) {
+                    ItemStack stack = getItem(slot);
+                    if (stack.isEmpty()) continue;
+                    int armorIndex = armorInventoryIndex(stack);
+                    if (armorIndex < 0) {
+                        reject(stack.copy(), "Only armor can be stored in this inventory.");
+                    } else if (!TameStoredArmorEvents.isSlotUnlocked(data, tame, armorIndex)) {
+                        reject(stack.copy(), "That armor slot is not unlocked by this tame's Protection collar tier.");
+                    } else if (!equipped[armorIndex].isEmpty()) {
+                        reject(stack.copy(), "That tame already has armor for this body slot.");
+                    } else {
+                        equipped[armorIndex] = stack.copy();
+                    }
+                }
+                data.armorInventory.clear();
+                for (ItemStack stack : equipped) data.armorInventory.add(stack);
+                for (int slot = 0; slot < getContainerSize(); slot++) super.setItem(slot, ItemStack.EMPTY);
+                for (int i = 0; i < equipped.length; i++) super.setItem(i, equipped[i].copy());
+            } finally {
+                loading = false;
+            }
+            TameRegistry.markDirty();
+            if (tame != null) TameStoredArmorEvents.sync(tame, data);
+        }
+
+        private void reject(ItemStack stack, String reason) {
+            if (stack == null || stack.isEmpty()) return;
+            if (lastViewer != null) lastViewer.drop(stack, false);
+            else if (tame != null) tame.spawnAtLocation(stack);
+            if (lastViewer != null) {
+                lastViewer.sendSystemMessage(Component.literal(reason + " The item was dropped.").withStyle(ChatFormatting.RED));
+            }
+        }
+    }
+
+    private static int armorInventoryIndex(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return -1;
+        return switch (LivingEntity.getEquipmentSlotForItem(stack)) {
+            case HEAD -> 0;
+            case CHEST -> 1;
+            case LEGS -> 2;
+            case FEET -> 3;
+            default -> -1;
+        };
     }
 
     private static List<TameData> resolveHungerSelection(MinecraftServer server, UUID owner, String raw) {
@@ -27549,7 +27696,7 @@ public class TameCommands {
         return b.buildFuture();
     }
 
-    private static CompletableFuture<Suggestions> suggestOwnedPetNamesAll(CommandSourceStack source, SuggestionsBuilder b) {
+    static CompletableFuture<Suggestions> suggestOwnedPetNamesAll(CommandSourceStack source, SuggestionsBuilder b) {
         ServerPlayer p = source.getPlayer();
         if (p == null) return b.buildFuture();
         for (TameData d : TameRegistry.TAMES.values()) {

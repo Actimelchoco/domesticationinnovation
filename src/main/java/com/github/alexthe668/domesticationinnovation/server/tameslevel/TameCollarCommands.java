@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 
@@ -15,8 +16,11 @@ final class TameCollarCommands {
                         .executes(ctx -> TameCommands.collarList(ctx.getSource(), true)))
                 .then(Commands.literal("compatibleArmorEnchantments")
                         .executes(ctx -> TameCommands.compatibleArmorEnchantments(ctx.getSource())))
-                .then(Commands.literal("amorSystem")
-                        .executes(ctx -> TameCommands.infoDetail(ctx.getSource(), "armor")))
+                .then(Commands.literal("openArmorSlots")
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .suggests((ctx, builder) -> TameCommands.suggestOwnedPetNamesAll(ctx.getSource(), builder))
+                                .executes(ctx -> TameCommands.armorInventoryOpen(
+                                        ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                 .then(Commands.literal("armorSystem")
                         .executes(ctx -> TameCommands.infoDetail(ctx.getSource(), "armor")));
     }

@@ -193,7 +193,10 @@ public class TameCombatEvents {
         });
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
+    // Clean up the original dead entity before the normal-priority elimination listener can
+    // synchronously finish the duel and rebuild it. Running this at LOWEST meant the cleanup
+    // acted on the registry after restoration, invalidating the replacement's ranked identity.
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onTameDeath(LivingDeathEvent event) {
         if (event.isCanceled()) return;
 

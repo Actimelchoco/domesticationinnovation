@@ -549,7 +549,7 @@ public class TameData {
         data.hungerInventory.clear();
         if (tag.contains("hungerInventory", Tag.TAG_LIST)) {
             ListTag hungerInventoryTag = tag.getList("hungerInventory", Tag.TAG_COMPOUND);
-            for (int i = 0; i < hungerInventoryTag.size() && data.hungerInventory.size() < 10; i++) {
+            for (int i = 0; i < hungerInventoryTag.size() && data.hungerInventory.size() < 18; i++) {
                 ItemStack stack = ItemStack.of(hungerInventoryTag.getCompound(i));
                 if (!stack.isEmpty()) {
                     data.hungerInventory.add(stack);
