@@ -1036,9 +1036,6 @@ public class TameCommands {
                 .then(Commands.literal("enableMending")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setMendingEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("enableInventoryDistributeFoodPreferences")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setInventoryDistributeFoodPreferences(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -2234,10 +2231,15 @@ public class TameCommands {
                                                 .executes(ctx -> hungerInventoryInfo(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(buildHungerInventoryAutopickupCommand())
                                 .then(Commands.literal("distribute")
-                                        .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), ""))
+                                        .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), "", false))
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                                                .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), StringArgumentType.getString(ctx, "selection"), false))))
+                                .then(Commands.literal("distributeToTamesThatPreffer")
+                                        .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), "", true))
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                                .executes(ctx -> hungerInventoryDistribute(ctx.getSource(), StringArgumentType.getString(ctx, "selection"), true))))
                                 .then(Commands.literal("taste")
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestLeaderboardTameTypes(b))
@@ -5084,7 +5086,6 @@ public class TameCommands {
                     "/tames settings healthSiphon <true|false>",
                     "/tames settings enableVoidCloud <true|false>",
                     "/tames settings enableMending <true|false>",
-                    "/tames settings enableInventoryDistributeFoodPreferences <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
@@ -5092,7 +5093,7 @@ public class TameCommands {
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
                     "enableMending controls Mending repairs on armor stored in tame inventories.",
-                    "Manual inventory distribution prioritizes native/configured foods when its preference setting is enabled.",
+                    "Manual inventory distribution always prioritizes native/configured preferred foods.",
                     "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
         }
@@ -5164,6 +5165,7 @@ public class TameCommands {
                     "/tames inventory autopickup <true|false> [<selection>]",
                     "/tames inventory autopickup info",
                     "/tames inventory distribute [<selection>]",
+                    "/tames inventory distributeToTamesThatPreffer [<selection>]",
                     "/tames inventory taste <type> [<selection>]",
                     "/tames inventory system",
                     "Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.",
@@ -5171,7 +5173,7 @@ public class TameCommands {
                     "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 18 stacks of accepted food-valued items. Loaded tames consume saturation while following, wandering, or fighting outside duels.",
-                    "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
+                    "Inventory distribute shares compatible food among selected loaded tames. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
                     "Register a container above your drum with /tames chestxdrum set <radius> <height>. On its interval, it refills loaded hungry tames until they reach green.",
@@ -6373,15 +6375,6 @@ public class TameCommands {
         if (player == null) return 0;
         PlayerDebugSettings.setEnableMending(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Stored armor Mending " + (enabled ? "enabled" : "disabled") + ".")
-                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    static int setInventoryDistributeFoodPreferences(CommandSourceStack source, boolean enabled) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        PlayerDebugSettings.setEnableInventoryDistributeFoodPreferences(player.getUUID(), enabled);
-        player.sendSystemMessage(Component.literal("Inventory distribution food preferences " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -8884,7 +8877,7 @@ public class TameCommands {
                 yield order == null ? List.of() : ownedState(ownerId, order);
             }
             case SINGLE -> {
-                TameData data = findOwnedTame(ownerId, selection.value);
+                TameData data = findOwnedTameAny(ownerId, selection.value);
                 yield data == null ? List.of() : List.of(data);
             }
         };
@@ -22459,8 +22452,8 @@ public class TameCommands {
         return openHungerInventory(player, data, tame) ? 1 : 0;
     }
 
-    public static boolean openHungerInventory(ServerPlayer player, TamableAnimal tame) {
-        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) {
+    public static boolean openHungerInventory(ServerPlayer player, LivingEntity tame) {
+        if (player == null || tame == null || !TameEntityAdapter.isTame(tame) || !tame.isAlive()) {
             return false;
         }
         TameData data = TameRegistry.get(tame.getUUID());
@@ -22473,8 +22466,8 @@ public class TameCommands {
         return openHungerInventory(player, data, tame);
     }
 
-    public static boolean depositHeldHungerFood(ServerPlayer player, TamableAnimal tame) {
-        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) {
+    public static boolean depositHeldHungerFood(ServerPlayer player, LivingEntity tame) {
+        if (player == null || tame == null || !TameEntityAdapter.isTame(tame) || !tame.isAlive()) {
             return false;
         }
         TameData data = TameRegistry.get(tame.getUUID());
@@ -22513,7 +22506,7 @@ public class TameCommands {
         return openHungerInventory(player, data, tame);
     }
 
-    private static boolean openHungerInventory(ServerPlayer player, TameData data, TamableAnimal tame) {
+    private static boolean openHungerInventory(ServerPlayer player, TameData data, LivingEntity tame) {
         if (player == null || data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
             return false;
         }
@@ -22577,8 +22570,8 @@ public class TameCommands {
         TameRegistry.markDirty();
     }
 
-    public static boolean equipHeldArmor(ServerPlayer player, TamableAnimal tame) {
-        if (player == null || tame == null || !tame.isTame() || !tame.isAlive()) return false;
+    public static boolean equipHeldArmor(ServerPlayer player, LivingEntity tame) {
+        if (player == null || tame == null || !TameEntityAdapter.isTame(tame) || !tame.isAlive()) return false;
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
         if (data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) return false;
@@ -22697,7 +22690,7 @@ public class TameCommands {
         return selected.size();
     }
 
-    private static int hungerInventoryDistribute(CommandSourceStack source, String selectionRaw) {
+    private static int hungerInventoryDistribute(CommandSourceStack source, String selectionRaw, boolean preferredOnly) {
         ServerPlayer player = source.getPlayer();
         List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
         selected.removeIf(data -> data == null || findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId) == null);
@@ -22707,25 +22700,26 @@ public class TameCommands {
 
         InventoryAccess standingInventory = inventoryBelowPlayer(player);
         if (standingInventory != null) {
-            return distributeHungerFoodFromInventory(player, selected, standingInventory);
+            return distributeHungerFoodFromInventory(player, selected, standingInventory, preferredOnly);
         }
 
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty()) {
             return hungerMessage(player, "Stand on an inventory containing food or hold food to distribute.");
         }
-        selected.removeIf(data -> hungerFoodPoints(held, data, null) <= 0);
+        selected.removeIf(data -> hungerFoodPoints(held, data, null) <= 0
+                || preferredOnly && !isPreferredDistributionFood(held, data,
+                findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId)));
         if (selected.isEmpty()) {
-            return hungerMessage(player, "No selected tames can accept that food.");
+            return hungerMessage(player, preferredOnly
+                    ? "No selected loaded tames prefer that food."
+                    : "No selected tames can accept that food.");
         }
         int available = player.isCreative() ? held.getCount() : held.getCount();
         int moved = 0;
-        boolean preferences = PlayerDebugSettings.enableInventoryDistributeFoodPreferences(player.getUUID());
         while (available > 0) {
             selected.sort(Comparator
-                    .comparingInt((TameData data) -> preferences && isPreferredDistributionFood(held, data,
-                            findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId)) ? 0 : 1)
-                    .thenComparingInt(TameCommands::totalHungerFoodPoints));
+                    .comparingInt(TameCommands::totalHungerFoodPoints));
             TameData target = selected.get(0);
             ItemStack one = held.copy();
             one.setCount(1);
@@ -22778,16 +22772,10 @@ public class TameCommands {
         return null;
     }
 
-    private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory) {
+    private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory, boolean preferredOnly) {
         int moved = 0;
-        boolean preferences = PlayerDebugSettings.enableInventoryDistributeFoodPreferences(player.getUUID());
         List<Integer> slotOrder = new ArrayList<>();
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) slotOrder.add(slot);
-        if (preferences) {
-            slotOrder.sort(Comparator.comparingInt(slot -> selected.stream().anyMatch(data ->
-                    isPreferredDistributionFood(inventory.getItem(slot), data,
-                            findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId))) ? 0 : 1));
-        }
         for (int slot : slotOrder) {
             while (true) {
                 ItemStack sourceStack = inventory.getItem(slot);
@@ -22796,10 +22784,9 @@ public class TameCommands {
                 one.setCount(1);
                 List<TameData> accepting = selected.stream()
                         .filter(data -> canAddHungerFoodStack(data, one))
-                        .sorted(Comparator
-                                .comparingInt((TameData data) -> preferences && isPreferredDistributionFood(one, data,
-                                        findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId)) ? 0 : 1)
-                                .thenComparingInt(TameCommands::totalHungerFoodPoints))
+                        .filter(data -> !preferredOnly || isPreferredDistributionFood(one, data,
+                                findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId)))
+                        .sorted(Comparator.comparingInt(TameCommands::totalHungerFoodPoints))
                         .collect(Collectors.toCollection(ArrayList::new));
                 if (accepting.isEmpty()) break;
                 ItemStack extracted = inventory.remove(slot, 1);
@@ -22813,7 +22800,9 @@ public class TameCommands {
             }
         }
         if (moved <= 0) {
-            return hungerMessage(player, "The inventory below you has no compatible food or selected tames are full.");
+            return hungerMessage(player, preferredOnly
+                    ? "The inventory below you has no food preferred by the selected loaded tames, or their inventories are full."
+                    : "The inventory below you has no compatible food or selected tames are full.");
         }
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) from the inventory to loaded tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
@@ -23099,11 +23088,11 @@ public class TameCommands {
 
     private static final class HungerFoodContainer extends SimpleContainer {
         private final TameData data;
-        private final TamableAnimal tame;
+        private final LivingEntity tame;
         private boolean loading = true;
         private Player lastViewer;
 
-        private HungerFoodContainer(TameData data, TamableAnimal tame) {
+        private HungerFoodContainer(TameData data, LivingEntity tame) {
             super(18);
             this.data = data;
             this.tame = tame;

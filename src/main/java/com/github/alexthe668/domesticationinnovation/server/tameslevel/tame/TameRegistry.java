@@ -968,7 +968,7 @@ public class TameRegistry {
     }
 
     public static boolean isVoidCloudEnabled(UUID ownerUuid) {
-        return ownerUuid == null || OWNER_VOID_CLOUD.getOrDefault(ownerUuid, true);
+        return ownerUuid != null && OWNER_VOID_CLOUD.getOrDefault(ownerUuid, true);
     }
 
     public static void setVoidCloudEnabled(UUID ownerUuid, boolean enabled) {

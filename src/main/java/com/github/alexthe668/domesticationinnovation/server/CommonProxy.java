@@ -30,6 +30,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.TameClass;
@@ -106,6 +107,7 @@ import net.minecraftforge.event.AnvilUpdateEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.*;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.event.entity.item.ItemExpireEvent;
 import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.living.*;
@@ -995,6 +997,43 @@ public class CommonProxy {
         event.setAmount(event.getAmount() * (1.0F - reduction));
     }
 
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onInterfaceTameHunterBeltDamage(LivingHurtEvent event) {
+        Entity attacker = event.getSource().getEntity();
+        if (!(attacker instanceof LivingEntity living)
+                || attacker instanceof TamableAnimal
+                || !(attacker instanceof ModifedToBeTameable)
+                || !TameEntityAdapter.isTame(attacker)) {
+            return;
+        }
+        LivingEntity owner = TameEntityAdapter.owner(attacker);
+        if (!(owner instanceof Player player)) {
+            return;
+        }
+        Item hunterBelt = ForgeRegistries.ITEMS.getValue(new ResourceLocation("relics", "hunter_belt"));
+        if (hunterBelt == null || hunterBelt == Items.AIR) {
+            return;
+        }
+        try {
+            Class<?> entityUtils = Class.forName("it.hurts.sskirillss.relics.utils.EntityUtils");
+            Method findEquipped = entityUtils.getMethod("findEquippedCurio", Entity.class, Item.class);
+            Object equippedResult = findEquipped.invoke(null, player, hunterBelt);
+            if (!(equippedResult instanceof ItemStack equipped) || equipped.isEmpty()) {
+                return;
+            }
+            Object relic = equipped.getItem();
+            Method spreadExperience = relic.getClass().getMethod("spreadExperience", LivingEntity.class, ItemStack.class, int.class);
+            Method getAbilityValue = relic.getClass().getMethod("getAbilityValue", ItemStack.class, String.class, String.class);
+            spreadExperience.invoke(relic, player, equipped, 1);
+            Object value = getAbilityValue.invoke(relic, equipped, "training", "damage");
+            if (value instanceof Number multiplier) {
+                event.setAmount((float) (event.getAmount() * multiplier.doubleValue()));
+            }
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            // Relics is optional, and incompatible versions should leave damage unchanged.
+        }
+    }
+
     @SubscribeEvent
     public void onLivingDie(LivingDeathEvent event) {
         if (TameableUtils.isTamed(event.getEntity()) && !TameableUtils.isZombiePet(event.getEntity())) {
@@ -1347,7 +1386,8 @@ public class CommonProxy {
         if (hand != InteractionHand.MAIN_HAND || player.level().isClientSide || !player.isShiftKeyDown()) {
             return false;
         }
-        if (!(target instanceof TamableAnimal tame) || !(player instanceof ServerPlayer serverPlayer)) {
+        if (!(target instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)
+                || !(player instanceof ServerPlayer serverPlayer)) {
             return false;
         }
         if (!player.getMainHandItem().isEmpty()) {
