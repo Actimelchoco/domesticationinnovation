@@ -188,7 +188,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_GREEN_FOOD_POINTS = 500;
     private static final int TAME_HUNGER_LOW_FOOD_POINTS = 100;
     private static final int TAME_HUNGER_MAX_STACKS = 18;
-    private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 4;
+    private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 100;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
     private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
@@ -1050,7 +1050,7 @@ public class TameCommands {
                 .then(Commands.literal("enableVoidCloud")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setVoidCloudEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("hideLevelinname")
+                .then(Commands.literal("hideLevelInName")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setHideLevelInName(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
@@ -5130,14 +5130,14 @@ public class TameCommands {
                     "/tames settings enterPortalsByThemselves <true|false>",
                     "/tames settings healthSiphon <true|false>",
                     "/tames settings enableVoidCloud <true|false>",
-                    "/tames setting hideLevelinname <true|false>",
+                    "/tames settings hideLevelInName <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
-                    "hideLevelinname defaults false. When true, loaded entity nameplates show only the tame's name.",
+                    "hideLevelInName defaults false. When true, loaded entity nameplates show only the tame's name.",
                     "Manual inventory distribution always prioritizes native/configured preferred foods.",
                     "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
@@ -22384,7 +22384,8 @@ public class TameCommands {
         if (server == null || data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null) {
             return 0;
         }
-        if (TameDuelManager.isEntityInDuel(tame.getUUID()) && now % 200L != 0L) return 0;
+        if (TameDuelManager.isEntityInDuel(tame.getUUID())
+                && now % (20L * DUEL_HUNGER_DRAIN_INTERVAL_SECONDS) != 0L) return 0;
         LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
             return scaleSaturationCost(data, 4);
