@@ -22145,6 +22145,7 @@ public class TameCommands {
         ItemStack stack = data.hungerInventory.get(selected);
         data.lastConsumedFoodPreferred = isPreferredDistributionFood(stack, data, tame);
         int foodSaturation = hungerFoodSaturation(stack, data, tame);
+        applyStoredFoodToNativeHunger(tame, stack, data.lastConsumedFoodPreferred);
         stack.shrink(1);
         data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);
         if (stack.isEmpty()) data.hungerInventory.remove(selected);
@@ -22155,6 +22156,15 @@ public class TameCommands {
             notifyOwnerHungerLowAfterEating(tame == null ? null : tame.getServer(), data, remainingFoodPoints);
         }
         return true;
+    }
+
+    private static void applyStoredFoodToNativeHunger(LivingEntity tame, ItemStack food, boolean preferred) {
+        if (!(tame instanceof com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.SaintsDragonsHungerBridge bridge)) {
+            return;
+        }
+        ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(food.getItem());
+        boolean hearty = itemId != null && itemId.toString().equals("saintsdragons:hearty_dragon_meal");
+        bridge.domesticationinnovation$applyStoredFoodToNativeHunger(hearty ? 20 : preferred ? 10 : 1);
     }
 
     private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {

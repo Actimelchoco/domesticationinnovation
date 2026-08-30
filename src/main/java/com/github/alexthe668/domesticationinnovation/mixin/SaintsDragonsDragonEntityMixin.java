@@ -1,22 +1,35 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.SaintsDragonsHungerBridge;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(targets = "com.leon.saintsdragons.server.entity.base.DragonEntity")
-public abstract class SaintsDragonsDragonEntityMixin extends TamableAnimal {
+public abstract class SaintsDragonsDragonEntityMixin extends TamableAnimal implements SaintsDragonsHungerBridge {
 
     protected SaintsDragonsDragonEntityMixin(EntityType<? extends TamableAnimal> type, Level level) {
         super(type, level);
+    }
+
+    @Shadow(remap = false)
+    public abstract int getHunger();
+
+    @Shadow(remap = false)
+    public abstract void setHunger(int hunger);
+
+    @Override
+    public void domesticationinnovation$applyStoredFoodToNativeHunger(int amount) {
+        setHunger(getHunger() + Math.max(0, amount));
     }
 
     @Inject(method = "isAlly", at = @At("HEAD"), cancellable = true, remap = false)
