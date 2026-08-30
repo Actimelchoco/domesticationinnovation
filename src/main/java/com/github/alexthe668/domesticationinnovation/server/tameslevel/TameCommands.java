@@ -207,6 +207,9 @@ public class TameCommands {
     private static final Map<UUID, UUID> ACTIVE_DUEL_SESSION_BY_PLAYER = new HashMap<>();
     private static final Set<UUID> SUPPRESSED_UNLOADED_TELEPORT_MESSAGES = new HashSet<>();
     private static final Map<UUID, PendingClassReroll> PENDING_CLASS_REROLLS = new HashMap<>();
+    private static final Map<UUID, PendingCatinoConversion> PENDING_CATINO_CONVERSIONS = new HashMap<>();
+    private static final long CATINO_CONFIRM_TICKS = 20L * 60L;
+    private static final ResourceLocation GREAT_ESSENCE_ID = new ResourceLocation("knightlib", "great_essence");
     private static final int UNLOADED_TP_TIMEOUT_TICKS = 1200;
     private static final int MORNING_LANTERN_TIMEOUT_TICKS = 200;
     private static final int MORNING_LANTERN_RADIUS = 64;
@@ -350,6 +353,10 @@ public class TameCommands {
     }
 
     private record PendingGuardianToolConfirm(GuardianToolConfirmAction action, String selectorRaw, String setName, String dimensionId, int x, int y, int z, long expiresAtTick) {
+    }
+
+    private record PendingCatinoConversion(UUID tameUuid, UUID tameTlId, String tameName, String hostType,
+                                           String resultType, String resultName, long expiresAtTick) {
     }
 
     private static final class PendingImmediateChunkTeleport {
@@ -1357,6 +1364,18 @@ public class TameCommands {
                                 .executes(ctx -> list(ctx.getSource())))
                         .then(Commands.literal("loaded")
                                 .executes(ctx -> loadedStatus(ctx.getSource())))
+                        .then(Commands.literal("confirmCantino")
+                                .requires(source -> hasPendingAnimightsConversion(source, "animights:canito"))
+                                .executes(ctx -> confirmAnimightsConversion(ctx.getSource(), "animights:canito")))
+                        .then(Commands.literal("confirmCatwain")
+                                .requires(source -> hasPendingAnimightsConversion(source, "animights:catwain"))
+                                .executes(ctx -> confirmAnimightsConversion(ctx.getSource(), "animights:catwain")))
+                        .then(Commands.literal("confirmLancelotl")
+                                .requires(source -> hasPendingAnimightsConversion(source, "animights:lancelotl"))
+                                .executes(ctx -> confirmAnimightsConversion(ctx.getSource(), "animights:lancelotl")))
+                        .then(Commands.literal("confirmJumpy")
+                                .requires(source -> hasPendingAnimightsConversion(source, "animights:jumpy"))
+                                .executes(ctx -> confirmAnimightsConversion(ctx.getSource(), "animights:jumpy")))
 
                         .then(Commands.literal("_strongestOld")
                                 .requires(source -> false)
@@ -3846,6 +3865,7 @@ public class TameCommands {
         if (server.getTickCount() % 20 == 0) {
             cleanupSimpleDuelState(server, true);
             refreshChangedDuelCommandStates(server);
+            cleanupExpiredCatinoConversions(server);
         }
         if (!PENDING_TELEPORT_CLIENT_REFRESH.isEmpty()) {
             PENDING_TELEPORT_CLIENT_REFRESH.entrySet().removeIf(entry -> processPendingTeleportClientRefresh(server, entry.getKey(), entry.getValue()));
@@ -6357,6 +6377,184 @@ public class TameCommands {
         player.sendSystemMessage(Component.literal((removed ? "Removed" : "Not present") + " excludeFromAll rule: " + rule + ".")
                 .withStyle(removed ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
+    }
+
+    public static void requestAnimightsConversion(ServerPlayer player, LivingEntity host, String resultType, String resultName) {
+        if (player == null || host == null || !host.isAlive() || !TameEntityAdapter.isTame(host)
+                || !player.getUUID().equals(TameEntityAdapter.ownerUuid(host))) {
+            return;
+        }
+        ResourceLocation resultId = ResourceLocation.tryParse(resultType);
+        ResourceLocation hostId = ForgeRegistries.ENTITY_TYPES.getKey(host.getType());
+        if (resultId == null || hostId == null || resultName == null || resultName.isBlank()) return;
+        TameData data = TameRegistry.get(host.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(host);
+            if (tlId != null) data = TameRegistry.getByTlId(tlId);
+        }
+        if (data == null) {
+            player.sendSystemMessage(Component.literal("This wolf is not registered in Tames Level.").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (isDuelLocked(data)) {
+            player.sendSystemMessage(Component.literal(tameDisplayName(data) + " cannot become a " + resultName + " during a duel.").withStyle(ChatFormatting.RED));
+            return;
+        }
+        if (data.level < 18) {
+            PENDING_CATINO_CONVERSIONS.remove(player.getUUID());
+            player.sendSystemMessage(Component.literal(resultName + " conversion requires Level 18: " + tameDisplayName(data) + ".")
+                    .withStyle(ChatFormatting.RED));
+            refreshPlayerCommands(player);
+            return;
+        }
+        long now = player.getServer() == null || player.getServer().overworld() == null
+                ? player.level().getGameTime() : player.getServer().overworld().getGameTime();
+        PENDING_CATINO_CONVERSIONS.put(player.getUUID(), new PendingCatinoConversion(
+                data.uuid, data.tlId, tameDisplayName(data), hostId.toString(), resultId.toString(), resultName,
+                now + CATINO_CONFIRM_TICKS));
+        String command = switch (resultId.getPath()) {
+            case "catwain" -> "/tames confirmCatwain";
+            case "lancelotl" -> "/tames confirmLancelotl";
+            case "jumpy" -> "/tames confirmJumpy";
+            default -> "/tames confirmCantino";
+        };
+        player.sendSystemMessage(Component.literal("Convert " + tameDisplayName(data) + " into a " + resultName
+                + "? Its level and progression will reset to level 1, while its class, leaderboard stats, and ranked stats are kept. Run " + command + " within 1 minute.")
+                .withStyle(ChatFormatting.YELLOW));
+        refreshPlayerCommands(player);
+    }
+
+    private static boolean hasPendingAnimightsConversion(CommandSourceStack source, String resultType) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) return false;
+        PendingCatinoConversion pending = PENDING_CATINO_CONVERSIONS.get(player.getUUID());
+        if (pending == null) return false;
+        long now = source.getServer() == null || source.getServer().overworld() == null
+                ? 0L : source.getServer().overworld().getGameTime();
+        return now <= pending.expiresAtTick() && pending.resultType().equals(resultType);
+    }
+
+    private static int confirmAnimightsConversion(CommandSourceStack source, String expectedResultType) {
+        ServerPlayer player = source.getPlayer();
+        PendingCatinoConversion pending = PENDING_CATINO_CONVERSIONS.remove(player.getUUID());
+        refreshPlayerCommands(player);
+        if (pending == null || !pending.resultType().equals(expectedResultType)) return error(player, "No matching Animights conversion is pending.");
+        long now = source.getServer() == null || source.getServer().overworld() == null
+                ? 0L : source.getServer().overworld().getGameTime();
+        if (now > pending.expiresAtTick()) return error(player, "The " + pending.resultName() + " conversion offer expired.");
+
+        TameData data = pending.tameTlId() == null ? null : TameRegistry.getByTlId(pending.tameTlId());
+        if (data == null) data = TameRegistry.get(pending.tameUuid());
+        if (data == null || !player.getUUID().equals(data.ownerUUID)) {
+            return error(player, "The host for this " + pending.resultName() + " conversion could not be found.");
+        }
+        LivingEntity loaded = TameEntityAdapter.findLoaded(source.getServer(), data.uuid, data.tlId);
+        ResourceLocation loadedType = loaded == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(loaded.getType());
+        if (loaded == null || !loaded.isAlive() || !TameEntityAdapter.isTame(loaded)
+                || !player.getUUID().equals(TameEntityAdapter.ownerUuid(loaded))
+                || loadedType == null || !pending.hostType().equals(loadedType.toString())) {
+            return error(player, "The original host must still be loaded and alive.");
+        }
+        if (data.level < 18) return error(player, tameDisplayName(data) + " is no longer Level 18.");
+        ItemStack essence = findPlayerItem(player, GREAT_ESSENCE_ID);
+        if (essence == null) return error(player, "You need a Great Essence to confirm the Catino conversion.");
+        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(ResourceLocation.tryParse(pending.resultType()));
+        if (type == null || !(loaded.level() instanceof ServerLevel level)) {
+            return error(player, "Animights " + pending.resultName() + " is unavailable.");
+        }
+
+        int keptKills = data.kills;
+        int keptAssists = data.assists;
+        int keptDeaths = data.deaths;
+        int keptSurvivalDays = data.activeSurvivalDays;
+        long keptLastSurvivalDay = data.lastActiveSurvivalDay;
+        TameClass keptClass = data.tameClass;
+        int conversionHealthBonus = Math.max(1, data.level / 10);
+        LevelSystem.resetProgress(loaded, data);
+        clearSavedProgress(data);
+        data.levelRewardHistory.clear();
+        data.kills = keptKills;
+        data.assists = keptAssists;
+        data.deaths = keptDeaths;
+        data.activeSurvivalDays = keptSurvivalDays;
+        data.lastActiveSurvivalDay = keptLastSurvivalDay;
+        data.tameClass = keptClass;
+        data.bonusHealth = conversionHealthBonus;
+
+        Entity created = type.create(level);
+        if (!(created instanceof TamableAnimal catino)) {
+            return error(player, "Animights Catino could not be created.");
+        }
+        catino.moveTo(loaded.getX(), loaded.getY(), loaded.getZ(), loaded.getYRot(), loaded.getXRot());
+        catino.setTame(true);
+        catino.setOwnerUUID(player.getUUID());
+        catino.getPersistentData().putUUID(TameData.TL_ID_TAG, data.ensureTlId());
+        TameSpawnEvents.beginTameReconstruction();
+        boolean spawned;
+        try {
+            spawned = level.addFreshEntity(catino);
+        } finally {
+            TameSpawnEvents.endTameReconstruction();
+        }
+        if (!spawned) return error(player, "Animights Catino could not be spawned.");
+
+        TameRegistry.rebindEntityUuid(data, catino.getUUID());
+        TameRegistry.bindEntityToData(catino, data);
+        data.type = catino.getType().toString();
+        data.lastKnownDimension = level.dimension().location().toString();
+        data.lastKnownX = catino.blockPosition().getX();
+        data.lastKnownY = catino.blockPosition().getY();
+        data.lastKnownZ = catino.blockPosition().getZ();
+        data.level = 1;
+        data.xp = 0;
+        data.xpToNext = LevelSystem.xpRequiredForLevel(1);
+        data.cooldowns.clear();
+        if (!LevelSystem.reapplyTypeBasePlusBonuses(catino, data)) LevelSystem.updateTameName(catino, data);
+        MovementOrder keptOrder = switch (data.movementOrder) {
+            case 1 -> MovementOrder.SIT;
+            case 2 -> MovementOrder.WANDER;
+            case 3 -> MovementOrder.GUARDIAN;
+            default -> MovementOrder.FOLLOW;
+        };
+        applyLivingMovementOverride(catino, data, keptOrder);
+        catino.setHealth(catino.getMaxHealth());
+        CompoundTag snapshot = new CompoundTag();
+        catino.save(snapshot);
+        data.entitySnapshot = snapshot;
+        TameRegistry.markDirty();
+        loaded.discard();
+        if (!player.getAbilities().instabuild) essence.shrink(1);
+        queueClientReloadForTame(catino);
+        player.sendSystemMessage(Component.literal(pending.tameName() + " became a " + pending.resultName()
+                        + " and is now level 1 with +" + conversionHealthBonus + " max HP from its former level.")
+                .withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static ItemStack findPlayerItem(ServerPlayer player, ResourceLocation itemId) {
+        if (player == null || itemId == null) return null;
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (!stack.isEmpty() && itemId.equals(ForgeRegistries.ITEMS.getKey(stack.getItem()))) return stack;
+        }
+        return null;
+    }
+
+    private static void cleanupExpiredCatinoConversions(MinecraftServer server) {
+        if (server == null || server.overworld() == null || PENDING_CATINO_CONVERSIONS.isEmpty()) return;
+        long now = server.overworld().getGameTime();
+        List<UUID> expired = new ArrayList<>();
+        PENDING_CATINO_CONVERSIONS.forEach((owner, pending) -> {
+            if (pending == null || now > pending.expiresAtTick()) expired.add(owner);
+        });
+        for (UUID owner : expired) {
+            PENDING_CATINO_CONVERSIONS.remove(owner);
+            ServerPlayer player = server.getPlayerList().getPlayer(owner);
+            if (player != null) refreshPlayerCommands(player);
+        }
+    }
+
+    private static void refreshPlayerCommands(ServerPlayer player) {
+        if (player != null && player.getServer() != null) player.getServer().getCommands().sendCommands(player);
     }
 
     static int setVoidCloudEnabled(CommandSourceStack source, boolean enabled) {

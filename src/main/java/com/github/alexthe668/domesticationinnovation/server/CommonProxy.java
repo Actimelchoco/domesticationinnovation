@@ -26,6 +26,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.Ta
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameRenameEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameWorldLoadEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.AnimightsCatinoCompat;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
@@ -184,6 +185,9 @@ public class CommonProxy {
         MinecraftForge.EVENT_BUS.register(TameProtectionEvents.class);
         MinecraftForge.EVENT_BUS.register(TamePortalStabilizeEvents.class);
         MinecraftForge.EVENT_BUS.register(TameProjectileTimeoutEvents.class);
+        if (ModList.get().isLoaded("animights")) {
+            MinecraftForge.EVENT_BUS.register(AnimightsCatinoCompat.class);
+        }
         registerOptionalWaystonesCompat();
     }
 
