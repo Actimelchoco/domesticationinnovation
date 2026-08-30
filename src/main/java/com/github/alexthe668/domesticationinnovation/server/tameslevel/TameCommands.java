@@ -5171,11 +5171,12 @@ public class TameCommands {
                     "prefferedFood reports the learned and configured preferred foods for one owned tame type, using readable item and food-category names.",
                     "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
-                    "Tames keep up to 18 stacks of edible food. Loaded tames consume saturation while following, wandering, or fighting.",
+                    "Tames keep up to 18 stacks of accepted food-valued items. Loaded tames consume saturation while following, wandering, or fighting outside duels.",
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
-                    "Register a container above your drum with /tames settings chestxdrum set <radius> <height>. It refills loaded hungry tames to green.",
+                    "Register a container above your drum with /tames settings chestxdrum set <radius> <height>. On its interval, it gives loaded hungry tames only their preferred food until they reach green.",
+                    "Chest x drum reverse-pull rules can return configured non-preferred food or food preferred by selected tame types from tame inventories to the chest.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -5189,16 +5190,17 @@ public class TameCommands {
                     "Tier 4: chestplate slot",
                     "Higher tiers keep every slot unlocked by earlier tiers.",
                     "=== Using armor ===",
-                    "/tames inventory open <name>",
                     "/tames collar openArmorSlots <name>",
                     "/tames collar dropArmor <name>",
                     "/tames settings enableMending <true|false>",
                     "Food and armor use separate inventories. The armor inventory accepts armor in any cell and equips it in the matching body slot.",
                     "Sneak-right-click a tame while holding armor to equip it directly. Existing armor in that body slot is replaced and dropped.",
+                    "Armor for a body slot not unlocked by the current collar tier is rejected. Invalid or duplicate armor placed through the armor inventory is dropped.",
                     "Replacing an existing collar tag drops all equipped armor, regardless of the replacement collar's tier.",
                     "Stored armor works even when it is not rendered on the tame.",
                     "Each equipped armor piece increases saturation use by 50%.",
-                    "Supported vanilla and modded armor enchantments apply their normal effects. Admins can forbid problematic enchantments.",
+                    "Equipped armor contributes its armor, armor-toughness, and knockback-resistance attributes. Allowed protection enchantments contribute through the stored-armor damage calculation.",
+                    "Other enchantment behavior applies only when the stored-armor handler supports it. Admin-forbidden enchantments are ignored by its calculations.",
                     "With enableMending active, equipped Mending armor uses XP collected by the tame to repair itself."
             );
         }
@@ -5208,21 +5210,27 @@ public class TameCommands {
                     "Preferred food: 200% of its base saturation.",
                     "Gluttonous non-preferred edible food: 50% of base saturation.",
                     "Preferred food therefore provides 4x the saturation of Gluttonous non-preferred food with the same nutrition.",
+                    "Superfood always counts as preferred food.",
                     "Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected.",
                     "One displayed food point equals 100 saturation.",
                     "=== How feeding works ===",
-                    "Tames store up to 18 food stacks. When their saturation buffer is too low, they eat one stored item.",
+                    "Tames store up to 18 food stacks. When their saturation buffer cannot cover a cost, they eat stored items until it can.",
                     "At 0 saturation with no usable stored food, the tame sits, stops using abilities, and ignores follow/wander commands.",
                     "=== Saturation drain ===",
                     "Following: 2 per second | Wandering/guarding: 1 per second | Fighting a live target: 4 per second",
-                    "Duels/ranked: fixed at 1 every 4 seconds, regardless of movement state.",
-                    "Outside duels/ranked, costs scale with tame level; the per-level increase doubles every 50 levels.",
+                    "Active duels pause this ordinary per-second tame hunger drain.",
+                    "Ranked rounds charge the owner's separate ranked-saturation balance upfront: 1 saturation per participating tame level.",
+                    "Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.",
                     "Natural regeneration costs saturation. Command teleports do not.",
+                    "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "Each equipped armor piece increases saturation use by 50%.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
                     "Drum refill: stand on the container above the drum, then use /tames settings chestxdrum set <radius> <height>.",
-                    "Larger refill areas run less frequently.",
+                    "Chest x drum refills use only food preferred by each tame and stop when its stored food reaches 500 points (green).",
+                    "/tames settings chestxdrum pullNonPreferredFood <type> <true|false> controls pulling non-preferred food from that tame type back into the chest; default false.",
+                    "/tames settings chestxdrum pullPreferredFoodOf add|remove <type> pulls that type's preferred foods from other tames, but preserves preferred food on tames of the selected type.",
+                    "Larger configured refill areas run less frequently. Bare chestxdrum and pull-rule commands print their current settings.",
                     "=== Notifications ===",
                     "/tames debug inventory lowOnFood|noFood|sum <true|false>",
                     "/tames debug inventory sumMin <minutes>",
@@ -22087,6 +22095,7 @@ public class TameCommands {
         int selected = preferred >= 0 ? preferred : firstUsable;
         if (selected < 0) return false;
         ItemStack stack = data.hungerInventory.get(selected);
+        data.lastConsumedFoodPreferred = isPreferredDistributionFood(stack, data, tame);
         int foodSaturation = hungerFoodSaturation(stack, data, tame);
         stack.shrink(1);
         data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);

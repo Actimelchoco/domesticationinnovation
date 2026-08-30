@@ -72,6 +72,7 @@ public final class TameDuelSnapshots {
         into.hungerLowNotified = from.hungerLowNotified;
         into.hungerLastFoodNotified = from.hungerLastFoodNotified;
         into.hungerAutopickup = from.hungerAutopickup;
+        into.lastConsumedFoodPreferred = from.lastConsumedFoodPreferred;
         into.hungerInventory.clear();
         for (ItemStack stack : from.hungerInventory) {
             if (stack != null && !stack.isEmpty()) {

@@ -129,6 +129,7 @@ public class TameData {
     public boolean hungerLowNotified = false;
     public boolean hungerLastFoodNotified = false;
     public boolean hungerAutopickup = false;
+    public boolean lastConsumedFoodPreferred = true;
 
     public boolean hasSavedProgress = false;
     public int savedProgressCost = 0;
@@ -332,6 +333,7 @@ public class TameData {
         tag.putBoolean("hungerLowNotified", hungerLowNotified);
         tag.putBoolean("hungerLastFoodNotified", hungerLastFoodNotified);
         tag.putBoolean("hungerAutopickup", hungerAutopickup);
+        tag.putBoolean("lastConsumedFoodPreferred", lastConsumedFoodPreferred);
         ListTag hungerInventoryTag = new ListTag();
         for (ItemStack stack : hungerInventory) {
             if (stack != null && !stack.isEmpty()) {
@@ -546,6 +548,8 @@ public class TameData {
         data.hungerLowNotified = tag.getBoolean("hungerLowNotified");
         data.hungerLastFoodNotified = tag.getBoolean("hungerLastFoodNotified");
         data.hungerAutopickup = tag.getBoolean("hungerAutopickup");
+        data.lastConsumedFoodPreferred = !tag.contains("lastConsumedFoodPreferred", Tag.TAG_BYTE)
+                || tag.getBoolean("lastConsumedFoodPreferred");
         data.hungerInventory.clear();
         if (tag.contains("hungerInventory", Tag.TAG_LIST)) {
             ListTag hungerInventoryTag = tag.getList("hungerInventory", Tag.TAG_COMPOUND);
