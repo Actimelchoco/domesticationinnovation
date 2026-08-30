@@ -132,6 +132,8 @@ import java.util.regex.Pattern;
 
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class CommonProxy {
+    private static final String ARMOR_SHORTCUT_TICK_TAG = "TLArmorShortcutTick";
+    private static final String ARMOR_SHORTCUT_TARGET_TAG = "TLArmorShortcutTarget";
 
     public static final String SKIP_LANTERN_UNLOAD_ONCE_TAG = "diSkipLanternUnloadOnce";
     private static final Pattern NUMERIC_SUFFIX = Pattern.compile("^(.*?)(?:\\s+(\\d+))?$");
@@ -1390,13 +1392,25 @@ public class CommonProxy {
                 || !(player instanceof ServerPlayer serverPlayer)) {
             return false;
         }
+        CompoundTag playerData = player.getPersistentData();
+        long interactionTick = player.level().getGameTime();
+        if (playerData.getLong(ARMOR_SHORTCUT_TICK_TAG) == interactionTick
+                && playerData.hasUUID(ARMOR_SHORTCUT_TARGET_TAG)
+                && target.getUUID().equals(playerData.getUUID(ARMOR_SHORTCUT_TARGET_TAG))) {
+            // Forge may fire both EntityInteractSpecific and EntityInteract for one click.
+            // The first event can consume the held armor, making the second look like an
+            // empty-hand shortcut and incorrectly opening the food inventory.
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return true;
+        }
         if (!player.getMainHandItem().isEmpty()) {
             if (TameCommands.isArmorInventoryItem(player.getMainHandItem())) {
-                if (!TameCommands.equipHeldArmor(serverPlayer, tame)) {
-                    return false;
-                }
+                playerData.putLong(ARMOR_SHORTCUT_TICK_TAG, interactionTick);
+                playerData.putUUID(ARMOR_SHORTCUT_TARGET_TAG, target.getUUID());
+                boolean equipped = TameCommands.equipHeldArmor(serverPlayer, tame);
                 event.setCanceled(true);
-                event.setCancellationResult(InteractionResult.SUCCESS);
+                event.setCancellationResult(equipped ? InteractionResult.SUCCESS : InteractionResult.FAIL);
                 return true;
             }
             if (!TameCommands.depositHeldHungerFood(serverPlayer, tame)) {

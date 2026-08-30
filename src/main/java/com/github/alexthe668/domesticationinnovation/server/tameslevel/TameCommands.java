@@ -15004,6 +15004,7 @@ public class TameCommands {
         int queued = 0;
         int crossDimension = 0;
         int skippedDuel = 0;
+        int skippedUnloadedHorses = 0;
         List<String> failedNames = new ArrayList<>();
         for (TameData d : requested) {
             if (d == null || d.dead) {
@@ -15016,6 +15017,14 @@ public class TameCommands {
             TamableAnimal ta = findLoadedOwnedTameByUuid(source, p.getUUID(), d.uuid);
             if (ta == null) {
                 if (!matchesMovementOrderSnapshot(d, order)) {
+                    continue;
+                }
+                // Horses are live-only tames and cannot be rebuilt from registry data.
+                // Batch movement selectors must therefore ignore an unloaded horse
+                // instead of attempting the unloaded teleport path and reporting it as
+                // a red command failure.
+                if (d.horseType) {
+                    skippedUnloadedHorses++;
                     continue;
                 }
                 String queueError = validateUnloadedTeleportForPlayer(source, p, d);
@@ -15060,6 +15069,11 @@ public class TameCommands {
         }
         sendTeleportNames(p, loadedTargets, unloadedTargets);
         sendDuelCommandSkipNotice(p, skippedDuel, "tp");
+        if (skippedUnloadedHorses > 0) {
+            p.sendSystemMessage(Component.literal("Skipped " + skippedUnloadedHorses
+                    + " unloaded horse" + (skippedUnloadedHorses == 1 ? "" : "s") + ".")
+                    .withStyle(ChatFormatting.GRAY));
+        }
         if (!failedNames.isEmpty()) {
             p.sendSystemMessage(Component.literal("TP " + movementLabel(order) + " failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
         }
@@ -25944,16 +25958,16 @@ public class TameCommands {
         }
         captureRankedRoundPlayerReturnTargets(server, session, round.teamA, round.teamB);
         teleportDuelSessionIdleTamesHome(server, session, round.teamA, round.teamB);
-        teleportDuelSessionParticipants(server, round.teamA, session.spawnA);
-        teleportDuelSessionParticipants(server, round.teamB, session.spawnB);
-        prepareTeamForDuel(resolveLoadedRoundTames(server, round.teamA));
-        prepareTeamForDuel(resolveLoadedRoundTames(server, round.teamB));
-        assignInitialDuelTargets(resolveLoadedRoundTames(server, round.teamA), resolveLoadedRoundMembers(server, round.teamB));
-        assignInitialDuelTargets(resolveLoadedRoundTames(server, round.teamB), resolveLoadedRoundMembers(server, round.teamA));
         LinkedHashSet<UUID> spectators = new LinkedHashSet<>(session.sessionPlayers);
         spectators.remove(session.ownerA);
         spectators.remove(session.ownerB);
+        // Register the battle before stored participants are recreated. Entity-add hooks and
+        // interface-tame AI can otherwise observe their saved sit/follow state for a short window.
         TameDuelManager.startTeamDuel(server, session.ownerA, round.teamA, session.ownerB, round.teamB, spectators, false, session.ranked);
+        teleportDuelSessionParticipants(server, round.teamA, session.spawnA);
+        teleportDuelSessionParticipants(server, round.teamB, session.spawnB);
+        refreshSpawnedDuelParticipants(server, round.teamA);
+        refreshSpawnedDuelParticipants(server, round.teamB);
         queueDuelSessionRoundClientRefresh(server, round.teamA, round.teamB);
         session.currentRoundA = Set.copyOf(round.teamA);
         session.currentRoundB = Set.copyOf(round.teamB);
@@ -25961,6 +25975,16 @@ public class TameCommands {
         session.nextRoundAtTick = -1L;
         notifyDuelSessionOwners(server, session, duelStartedComponent(server, round.teamA, round.teamB));
         return true;
+    }
+
+    private static void refreshSpawnedDuelParticipants(MinecraftServer server, Set<UUID> participants) {
+        if (server == null || participants == null) return;
+        for (UUID participantId : participants) {
+            LivingEntity living = findLoadedLivingParticipant(server, participantId);
+            if (living != null && !(living instanceof ServerPlayer)) {
+                TameDuelManager.refreshLoadedDuelParticipant(server, living);
+            }
+        }
     }
 
     private static boolean chargeRankedRoundSaturation(MinecraftServer server, ActiveDuelSession session, DuelSessionRound round) {
