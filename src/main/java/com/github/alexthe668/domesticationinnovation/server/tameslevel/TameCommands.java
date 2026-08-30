@@ -5229,6 +5229,7 @@ public class TameCommands {
         else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
             sendInfoPage(p, "Collar Protection",
                     "Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.",
+                    "Every collar tag also grants 5 armor points, regardless of Protection level.",
                     "Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.",
                     "Craft a collar in the center with eight matching materials around it:",
                     "Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.",

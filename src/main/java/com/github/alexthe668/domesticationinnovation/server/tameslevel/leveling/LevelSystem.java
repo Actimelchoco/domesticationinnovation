@@ -1515,8 +1515,8 @@ public class LevelSystem {
     private static void applyTrackedBaseStatReward(LivingEntity tame, TameData data, BaseStatReward reward,
                                                    double amount, double previousTrackedBonus) {
         AttributeInstance instance = tame == null ? null : tame.getAttribute(reward.attribute);
-        boolean managedLegendaryModifier = data != null && isLegendaryMonstersType(data.type)
-                && (reward == BaseStatReward.HP || reward == BaseStatReward.DAMAGE);
+        boolean managedLegendaryModifier = reward == BaseStatReward.HP
+                || (data != null && isLegendaryMonstersType(data.type) && reward == BaseStatReward.DAMAGE);
         double unmodifiedBase = instance == null
                 ? reward.attribute.getDefaultValue()
                 : instance.getBaseValue() - (managedLegendaryModifier ? 0.0D : previousTrackedBonus);
@@ -1562,24 +1562,24 @@ public class LevelSystem {
         scrubLegacyManagedModifiers(tame);
         Double forcedMaxHealth = resolveForcedTypeBaseValue(data, Attributes.MAX_HEALTH);
         boolean legendaryMonsters = isLegendaryMonstersType(data.type);
-        boolean addBonusHealthOnForcedBase = forcedMaxHealth != null && isDragonflyType(data.type);
         double maxHealthBase = forcedMaxHealth != null
-                ? forcedMaxHealth + (addBonusHealthOnForcedBase ? data.bonusHealth : 0.0D)
-                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth) + data.bonusHealth;
+                ? forcedMaxHealth
+                : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth);
         if (legendaryMonsters) {
-            setAttributeBaseValue(tame, Attributes.MAX_HEALTH, forcedMaxHealth != null ? forcedMaxHealth : resolveBaseValue(data, template, Attributes.MAX_HEALTH, data.bonusHealth));
+            setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
             setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage));
-            applyManagedAdditionModifier(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID, data.bonusHealth, "tl_legendary_bonus_health");
             applyManagedAdditionModifier(tame, Attributes.ATTACK_DAMAGE, LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID, data.bonusDamage, "tl_legendary_bonus_damage");
         } else {
             setAttributeBaseValue(tame, Attributes.MAX_HEALTH, maxHealthBase);
             setAttributeBaseValue(tame, Attributes.ATTACK_DAMAGE, resolveBaseValue(data, template, Attributes.ATTACK_DAMAGE, data.bonusDamage) + data.bonusDamage);
         }
+        applyManagedAdditionModifier(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID, data.bonusHealth, "tl_bonus_health");
         setAttributeBaseValue(tame, Attributes.MOVEMENT_SPEED, resolveBaseValue(data, template, Attributes.MOVEMENT_SPEED, data.bonusSpeed) + data.bonusSpeed);
         setAttributeBaseValue(tame, Attributes.ARMOR, resolveBaseValue(data, template, Attributes.ARMOR, data.bonusArmor) + data.bonusArmor);
         setAttributeBaseValue(tame, Attributes.ARMOR_TOUGHNESS, resolveBaseValue(data, template, Attributes.ARMOR_TOUGHNESS, data.bonusArmorToughness) + data.bonusArmorToughness);
         setAttributeBaseValue(tame, Attributes.ATTACK_KNOCKBACK, clampAttributeBaseValue(Attributes.ATTACK_KNOCKBACK, resolveBaseValue(data, template, Attributes.ATTACK_KNOCKBACK, data.bonusKnockback) + data.bonusKnockback));
         setAttributeBaseValue(tame, Attributes.KNOCKBACK_RESISTANCE, clampAttributeBaseValue(Attributes.KNOCKBACK_RESISTANCE, resolveBaseValue(data, template, Attributes.KNOCKBACK_RESISTANCE, data.bonusKnockbackResist) + data.bonusKnockbackResist));
+        TameableUtils.refreshCollarAttributes(tame);
 
         updateTameName(tame, data);
         tame.setHealth((float) Mth.clamp(tame.getHealth(), 1.0D, tame.getMaxHealth()));
@@ -1606,7 +1606,12 @@ public class LevelSystem {
         if (forcedBase != null) {
             return forcedBase;
         }
-        Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus);
+        UUID managedBonusId = attribute == Attributes.MAX_HEALTH
+                ? LEGENDARY_MONSTERS_HEALTH_BONUS_UUID
+                : data != null && isLegendaryMonstersType(data.type) && attribute == Attributes.ATTACK_DAMAGE
+                ? LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID
+                : null;
+        Double snapshotBase = readBaseFromSnapshot(data == null ? null : data.entitySnapshot, attribute, trackedBonus, managedBonusId);
         if (snapshotBase != null) {
             double templateBase = readBaseOrDefault(template, attribute);
             // Repair snapshots produced while the reward existed both in the live base and in
@@ -1709,7 +1714,7 @@ public class LevelSystem {
         return healthAmount * 0.5D * BaseStatReward.KNOCKBACK_RESIST.amount;
     }
 
-    private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus) {
+    private static Double readBaseFromSnapshot(CompoundTag snapshot, Attribute attribute, double trackedBonus, UUID managedBonusId) {
         if (snapshot == null || snapshot.isEmpty() || attribute == null) {
             return null;
         }
@@ -1730,7 +1735,7 @@ public class LevelSystem {
                 continue;
             }
             double base = entry.getDouble("Base");
-            double normalized = base - trackedBonus;
+            double normalized = snapshotAttributeHasModifier(entry, managedBonusId) ? base : base - trackedBonus;
             double defaultValue = attribute.getDefaultValue();
             // Some old saves store the raw entity base in the snapshot instead of "base + tracked bonus".
             // In that case subtracting the tracked bonus produces nonsense and would erase all TL bonuses.
@@ -1740,6 +1745,20 @@ public class LevelSystem {
             return normalized;
         }
         return null;
+    }
+
+    private static boolean snapshotAttributeHasModifier(CompoundTag attributeEntry, UUID modifierId) {
+        if (attributeEntry == null || modifierId == null || !attributeEntry.contains("Modifiers", Tag.TAG_LIST)) {
+            return false;
+        }
+        ListTag modifiers = attributeEntry.getList("Modifiers", Tag.TAG_COMPOUND);
+        for (int i = 0; i < modifiers.size(); i++) {
+            CompoundTag modifier = modifiers.getCompound(i);
+            if (modifier.hasUUID("UUID") && modifierId.equals(modifier.getUUID("UUID"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void setAttributeBaseValue(LivingEntity tame, Attribute attribute, double value) {

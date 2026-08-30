@@ -365,9 +365,9 @@ public class TameableUtils {
     }
 
     private static float[] mapProtectionToArmorStats(int protectionLevel) {
-        // Collar Protection is applied after the tame's native armor and toughness have
-        // reduced a hit. It must not inflate either of those attributes.
-        return new float[]{0.0F, 0.0F};
+        // Every collar supplies its flat base armor. Protection remains a separate
+        // post-armor damage reduction and does not add armor toughness.
+        return new float[]{5.0F, 0.0F};
     }
 
     private static boolean isWaterCreature(LivingEntity enchanted) {
