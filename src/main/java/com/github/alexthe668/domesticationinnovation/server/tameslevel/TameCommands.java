@@ -1040,9 +1040,6 @@ public class TameCommands {
                 .then(Commands.literal("enableVoidCloud")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setVoidCloudEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("enableMending")
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setMendingEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -3052,7 +3049,6 @@ public class TameCommands {
                                 .requires(source -> source.hasPermission(2))
 
                                 .then(buildCanEatAdminCommand())
-                                .then(buildAdminInventoryCommand())
 
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
@@ -5103,14 +5099,12 @@ public class TameCommands {
                     "/tames settings enterPortalsByThemselves <true|false>",
                     "/tames settings healthSiphon <true|false>",
                     "/tames settings enableVoidCloud <true|false>",
-                    "/tames settings enableMending <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
-                    "enableMending controls Mending repairs on armor stored in tame inventories.",
                     "Manual inventory distribution always prioritizes native/configured preferred foods.",
                     "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
@@ -5204,7 +5198,8 @@ public class TameCommands {
                     "Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.",
                     "Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.",
                     "Craft a collar in the center with eight matching materials around it:",
-                    "I copper, II iron, III gold, IV emerald, V diamond, VI netherite scrap.",
+                    "Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.",
+                    "I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.",
                     "VII copper blocks, VIII iron blocks, IX gold blocks, X emerald blocks, XI diamond blocks, XII netherite ingots.",
                     "The separate tame armor inventory has been removed. Legacy stored armor is returned beside the tame when it next loads."
             );
@@ -5445,8 +5440,10 @@ public class TameCommands {
             sendInfoPage(p, "Collar",
                     "/tames collar",
                     "/tames collar notag",
+                    "/tames collar system",
                     "Lists your tames with collar tags (or without via notag), including their Protection tier.",
                     "Protection I-XII is crafted by surrounding a collar tag with the tier material.",
+                    "Protection II-XII must be upgraded sequentially from the previous tier.",
                     "Each level reduces post-armor damage by 4%."
             );
         }

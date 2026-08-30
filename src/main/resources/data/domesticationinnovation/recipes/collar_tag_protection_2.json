@@ -7,10 +7,12 @@
   ],
   "key": {
     "M": {
-      "item": "minecraft:iron_ingot"
+      "item": "create:iron_sheet"
     },
     "C": {
-      "item": "domesticationinnovation:collar_tag"
+      "type": "forge:nbt",
+      "item": "domesticationinnovation:collar_tag",
+      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:1s}]}"
     }
   },
   "result": {

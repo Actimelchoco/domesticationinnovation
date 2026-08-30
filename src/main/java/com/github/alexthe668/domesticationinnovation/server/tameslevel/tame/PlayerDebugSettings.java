@@ -89,7 +89,6 @@ public final class PlayerDebugSettings {
             new BooleanSetting("duelsGlow", DUELS_GLOW, true),
             new BooleanSetting("rankedGlow", RANKED_GLOW, true),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
-            new BooleanSetting("enableMending", ENABLE_MENDING, true),
             new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
     );
 

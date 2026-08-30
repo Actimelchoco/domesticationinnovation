@@ -7,10 +7,12 @@
   ],
   "key": {
     "M": {
-      "item": "minecraft:gold_ingot"
+      "item": "create:golden_sheet"
     },
     "C": {
-      "item": "domesticationinnovation:collar_tag"
+      "type": "forge:nbt",
+      "item": "domesticationinnovation:collar_tag",
+      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:2s}]}"
     }
   },
   "result": {

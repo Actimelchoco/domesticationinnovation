@@ -10,7 +10,9 @@
       "item": "minecraft:emerald_block"
     },
     "C": {
-      "item": "domesticationinnovation:collar_tag"
+      "type": "forge:nbt",
+      "item": "domesticationinnovation:collar_tag",
+      "nbt": "{Enchantments:[{id:\"minecraft:protection\",lvl:9s}]}"
     }
   },
   "result": {
