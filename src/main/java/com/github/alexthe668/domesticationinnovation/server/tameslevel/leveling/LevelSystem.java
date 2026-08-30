@@ -1501,7 +1501,9 @@ public class LevelSystem {
     // ===============================
 
     public static void updateTameName(LivingEntity entity, TameData data) {
-        String name = "[Lvl " + data.level + "] " + data.name;
+        String name = PlayerDebugSettings.hideLevelInName(data.ownerUUID)
+                ? data.name
+                : "[Lvl " + data.level + "] " + data.name;
         entity.setCustomName(Component.literal(name));
         entity.setCustomNameVisible(true);
     }

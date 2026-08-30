@@ -53,6 +53,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> DUELS_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
+    private static final Map<UUID, Boolean> HIDE_LEVEL_IN_NAME = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_CHEST_DRUM_FOOD_PREFERENCES = new HashMap<>();
 
@@ -89,6 +90,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("duelsGlow", DUELS_GLOW, true),
             new BooleanSetting("rankedGlow", RANKED_GLOW, true),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
+            new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false),
             new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
     );
 
@@ -251,6 +253,10 @@ public final class PlayerDebugSettings {
         return getBoolean(FRIENDLY_FIRE, player, false);
     }
 
+    public static boolean hideLevelInName(UUID player) {
+        return getBoolean(HIDE_LEVEL_IN_NAME, player, false);
+    }
+
     public static void setEnemyKilled(UUID player, boolean enabled) {
         setBoolean(ENEMY_KILLED, player, enabled, false);
     }
@@ -289,6 +295,10 @@ public final class PlayerDebugSettings {
 
     public static void setShadowHands(UUID player, boolean enabled) {
         setBoolean(SHADOW_HANDS, player, enabled, false);
+    }
+
+    public static void setHideLevelInName(UUID player, boolean enabled) {
+        setBoolean(HIDE_LEVEL_IN_NAME, player, enabled, false);
     }
 
     public static void setEnableMending(UUID player, boolean enabled) {

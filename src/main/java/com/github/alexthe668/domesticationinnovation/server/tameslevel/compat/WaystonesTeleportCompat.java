@@ -208,6 +208,8 @@ public final class WaystonesTeleportCompat {
                 if (values != null && !values.isEmpty()) {
                     sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
                 }
+                sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(
+                        tame.getId(), tame.getAttributes().getSyncableAttributes()));
                 sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
             }
         }

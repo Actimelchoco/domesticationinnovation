@@ -1023,7 +1023,11 @@ public class TameCommands {
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand() {
-        return Commands.literal("settings")
+        return buildSettingsCommand("settings");
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand(String literal) {
+        return Commands.literal(literal)
                 .then(Commands.literal("doNotAttack")
                         .executes(ctx -> listDoNotAttack(ctx.getSource()))
                         .then(Commands.literal("remove")
@@ -1046,6 +1050,9 @@ public class TameCommands {
                 .then(Commands.literal("enableVoidCloud")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setVoidCloudEnabled(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("hideLevelinname")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setHideLevelInName(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -1484,6 +1491,7 @@ public class TameCommands {
                                 .requires(source -> false)
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                         .then(buildSettingsCommand())
+                        .then(buildSettingsCommand("setting"))
                         .then(buildChestDrumSettingsCommand())
                         .then(TameBedCommands.build())
                         .then(Commands.literal("_doNotAttackAnimalsOld")
@@ -5108,12 +5116,14 @@ public class TameCommands {
                     "/tames settings enterPortalsByThemselves <true|false>",
                     "/tames settings healthSiphon <true|false>",
                     "/tames settings enableVoidCloud <true|false>",
+                    "/tames setting hideLevelinname <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
+                    "hideLevelinname defaults false. When true, loaded entity nameplates show only the tame's name.",
                     "Manual inventory distribution always prioritizes native/configured preferred foods.",
                     "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
@@ -6567,6 +6577,27 @@ public class TameCommands {
         TameRegistry.setVoidCloudEnabled(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Void Cloud " + (enabled ? "enabled" : "disabled") + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    static int setHideLevelInName(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        PlayerDebugSettings.setHideLevelInName(player.getUUID(), enabled);
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) continue;
+                TameData data = TameRegistry.get(tame.getUUID());
+                if (data == null) {
+                    UUID tlId = TameData.getTlId(tame);
+                    data = tlId == null ? null : TameRegistry.getByTlId(tlId);
+                }
+                if (data == null || !player.getUUID().equals(data.ownerUUID)) continue;
+                LevelSystem.updateTameName(tame, data);
+            }
+        }
+        player.sendSystemMessage(Component.literal("Level in tame names " + (enabled ? "hidden." : "shown."))
+                .withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
@@ -15924,6 +15955,8 @@ public class TameCommands {
                 if (values != null && !values.isEmpty()) {
                     sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
                 }
+                sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(
+                        tame.getId(), tame.getAttributes().getSyncableAttributes()));
                 sendClientPacket(viewer, createEquipmentPacket(tame));
                 sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
             }
