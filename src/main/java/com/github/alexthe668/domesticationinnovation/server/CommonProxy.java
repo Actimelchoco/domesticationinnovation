@@ -1264,6 +1264,7 @@ public class CommonProxy {
                     }
                     blockCollarTick(living);
                     if (TameableUtils.hasCollar(living)) {
+                        TameCommands.dropArmorForCollarReplacement(living);
                         ItemStack collarFrom = new ItemStack(DIItemRegistry.COLLAR_TAG.get());
                         if (entityEnchantments != null) {
                             collarFrom.getOrCreateTag();

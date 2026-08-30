@@ -5195,6 +5195,7 @@ public class TameCommands {
                     "/tames settings enableMending <true|false>",
                     "Food and armor use separate inventories. The armor inventory accepts armor in any cell and equips it in the matching body slot.",
                     "Sneak-right-click a tame while holding armor to equip it directly. Existing armor in that body slot is replaced and dropped.",
+                    "Replacing an existing collar tag drops all equipped armor, regardless of the replacement collar's tier.",
                     "Stored armor works even when it is not rendered on the tame.",
                     "Each equipped armor piece increases saturation use by 50%.",
                     "Supported vanilla and modded armor enchantments apply their normal effects. Admins can forbid problematic enchantments.",
@@ -22535,6 +22536,25 @@ public class TameCommands {
                 : tameDisplayName(data) + " is not wearing armor.")
                 .withStyle(dropped > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
+    }
+
+    public static void dropArmorForCollarReplacement(LivingEntity tame) {
+        if (tame == null || tame.level().isClientSide) return;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        if (data == null || data.armorInventory.isEmpty()) return;
+        boolean changed = false;
+        for (int i = 0; i < data.armorInventory.size(); i++) {
+            ItemStack stack = data.armorInventory.get(i);
+            if (stack == null || stack.isEmpty()) continue;
+            tame.spawnAtLocation(stack.copy());
+            data.armorInventory.set(i, ItemStack.EMPTY);
+            changed = true;
+        }
+        while (data.armorInventory.size() < 4) data.armorInventory.add(ItemStack.EMPTY);
+        if (!changed) return;
+        TameStoredArmorEvents.sync(tame, data);
+        TameRegistry.markDirty();
     }
 
     public static boolean equipHeldArmor(ServerPlayer player, TamableAnimal tame) {
