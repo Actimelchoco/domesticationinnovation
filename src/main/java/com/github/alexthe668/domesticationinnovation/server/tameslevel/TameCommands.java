@@ -6407,6 +6407,15 @@ public class TameCommands {
             refreshPlayerCommands(player);
             return;
         }
+        long survivalDays = daysAlive(player.createCommandSourceStack(), data);
+        if (survivalDays < 60L) {
+            PENDING_CATINO_CONVERSIONS.remove(player.getUUID());
+            player.sendSystemMessage(Component.literal(resultName + " conversion requires 60 days alive without dying: "
+                            + tameDisplayName(data) + " has " + survivalDays + "/60 days (" + (60L - survivalDays) + " remaining).")
+                    .withStyle(ChatFormatting.RED));
+            refreshPlayerCommands(player);
+            return;
+        }
         long now = player.getServer() == null || player.getServer().overworld() == null
                 ? player.level().getGameTime() : player.getServer().overworld().getGameTime();
         PENDING_CATINO_CONVERSIONS.put(player.getUUID(), new PendingCatinoConversion(
@@ -6455,6 +6464,11 @@ public class TameCommands {
             return error(player, "The original host must still be loaded and alive.");
         }
         if (data.level < 18) return error(player, tameDisplayName(data) + " is no longer Level 18.");
+        long survivalDays = daysAlive(source, data);
+        if (survivalDays < 60L) {
+            return error(player, tameDisplayName(data) + " no longer has the required 60-day survival streak ("
+                    + survivalDays + "/60 days).");
+        }
         ItemStack essence = findPlayerItem(player, GREAT_ESSENCE_ID);
         if (essence == null) return error(player, "You need a Great Essence to confirm the Catino conversion.");
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(ResourceLocation.tryParse(pending.resultType()));
