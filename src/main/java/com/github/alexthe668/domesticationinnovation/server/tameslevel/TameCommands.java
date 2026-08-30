@@ -18431,6 +18431,17 @@ public class TameCommands {
         if (tame == null || selected == null || selectedGroupKey == null || selectedGroupKey.isBlank()) {
             return false;
         }
+        // Prefer stable identity over the legacy display-name/type grouping. Older
+        // third-party tames (notably pre-integration Animights companions) can have a
+        // randomized registry name that was never applied to the loaded entity. In that
+        // case the old grouping check removed the registry row but left the exact tame.
+        if (selected.uuid != null && selected.uuid.equals(tame.getUUID())) {
+            return true;
+        }
+        UUID liveTlId = TameData.getTlId(tame);
+        if (selected.tlId != null && selected.tlId.equals(liveTlId)) {
+            return true;
+        }
         TameData liveData = TameRegistry.get(tame.getUUID());
         if (liveData == null) {
             String liveKey = duplicateGroupKeyForLoadedTame(tame);

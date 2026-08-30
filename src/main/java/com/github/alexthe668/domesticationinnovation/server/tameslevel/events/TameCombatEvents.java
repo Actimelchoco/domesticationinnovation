@@ -12,6 +12,8 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -155,6 +157,7 @@ public class TameCombatEvents {
             return;
         }
         LivingEntity tame = event.getEntity();
+        removeAnimightEquipmentDrops(tame, event.getDrops());
         List<ItemStack> allowed = collectRetainedDeathItems(tame);
         event.getDrops().removeIf(drop -> !shouldKeepDrop(drop, allowed));
     }
@@ -523,6 +526,61 @@ public class TameCombatEvents {
             }
         }
         return allowed;
+    }
+
+    /**
+     * Animights normally ejects and clears every equipped item while a companion dies.
+     * Tames Level restores a dead tame from the pre-drop entity snapshot, so letting any
+     * equipped item also enter the world would duplicate it. Retain all hand and armor
+     * equipment for every Animight in that snapshot instead.
+     */
+    private static void removeAnimightEquipmentDrops(LivingEntity tame, java.util.Collection<ItemEntity> drops) {
+        ResourceLocation typeId = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (typeId == null || !"animights".equals(typeId.getNamespace())) {
+            return;
+        }
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(tame);
+            data = tlId == null ? null : TameRegistry.getByTlId(tlId);
+        }
+        CompoundTag snapshot = data == null ? null : data.entitySnapshot;
+        if (snapshot == null) {
+            return;
+        }
+        removeSnapshotEquipmentDrops(snapshot, "HandItems", drops);
+        removeSnapshotEquipmentDrops(snapshot, "ArmorItems", drops);
+    }
+
+    private static void removeSnapshotEquipmentDrops(CompoundTag snapshot, String nbtKey,
+                                                     java.util.Collection<ItemEntity> drops) {
+        if (!snapshot.contains(nbtKey, Tag.TAG_LIST)) {
+            return;
+        }
+        ListTag equipment = snapshot.getList(nbtKey, Tag.TAG_COMPOUND);
+        for (int slot = 0; slot < equipment.size(); slot++) {
+            removeMatchingDrop(ItemStack.of(equipment.getCompound(slot)), drops);
+        }
+    }
+
+    private static void removeMatchingDrop(ItemStack retained, java.util.Collection<ItemEntity> drops) {
+        if (retained.isEmpty()) return;
+        int remaining = retained.getCount();
+        var iterator = drops.iterator();
+        while (iterator.hasNext() && remaining > 0) {
+            ItemEntity drop = iterator.next();
+            ItemStack dropped = drop.getItem();
+            if (!ItemStack.isSameItemSameTags(retained, dropped)) {
+                continue;
+            }
+            if (dropped.getCount() <= remaining) {
+                remaining -= dropped.getCount();
+                iterator.remove();
+            } else {
+                dropped.shrink(remaining);
+                remaining = 0;
+            }
+        }
     }
 
     private static boolean shouldKeepDrop(ItemEntity drop, List<ItemStack> allowed) {
