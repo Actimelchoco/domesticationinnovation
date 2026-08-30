@@ -943,12 +943,12 @@ public class TameSpawnEvents {
         TameData tracked = TameRegistry.get(living.getUUID());
         UUID tlId = TameData.getTlId(living);
         if (tracked == null && tlId != null) tracked = TameRegistry.getByTlId(tlId);
-        boolean wasManaged = tracked != null || living.getPersistentData().hasUUID(TameData.TL_ID_TAG);
         if (tracked != null) {
+            if (tracked.name != null && !tracked.name.isBlank()) living.setCustomName(Component.literal(tracked.name));
             TameRegistry.removeDeathsForIdentity(tracked.uuid, tracked.tlId);
             TameRegistry.remove(tracked.uuid);
         }
-        if (wasManaged) living.discard();
+        living.getPersistentData().remove(TameData.TL_ID_TAG);
         return true;
     }
 

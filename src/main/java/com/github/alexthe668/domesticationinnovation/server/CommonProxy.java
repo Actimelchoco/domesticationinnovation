@@ -2026,6 +2026,9 @@ public class CommonProxy {
         if (tame.level().isClientSide || !TameableUtils.couldBeTamed(tame) || !TameableUtils.isTamed(tame)) {
             return;
         }
+        if (TameRegistry.isSummonType(tame)) {
+            return;
+        }
         DITameProgressData table = DITameProgressData.get(tame.level());
         if (table == null) {
             return;
@@ -2062,9 +2065,9 @@ public class CommonProxy {
         if (ownerUUID != null && tame.level().getServer() != null) {
             ServerPlayer owner = tame.level().getServer().getPlayerList().getPlayer(ownerUUID);
             if (owner != null) {
-                owner.sendSystemMessage(Component.literal(
-                        "§b" + tameName(payload) + " class assigned: §e" + payload.getString("tameClass")
-                ));
+                owner.sendSystemMessage(Component.literal(tameName(payload)).withStyle(ChatFormatting.AQUA)
+                        .append(Component.literal(" class assigned: ").withStyle(ChatFormatting.AQUA))
+                        .append(Component.literal(payload.getString("tameClass")).withStyle(ChatFormatting.YELLOW)));
             }
         }
     }

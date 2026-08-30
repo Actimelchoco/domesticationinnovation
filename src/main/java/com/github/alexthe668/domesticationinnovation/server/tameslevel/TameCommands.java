@@ -17222,15 +17222,24 @@ public class TameCommands {
         if (id == null || !ForgeRegistries.ENTITY_TYPES.containsKey(id)) return adminError(source, "Unknown entity type: " + typeId + ".");
         if (!TameRegistry.addSummonType(id.toString())) return adminError(source, "Entity type is already marked as a summon: " + id + ".");
 
-        int loadedRemoved = 0;
+        int loadedDetached = 0;
         for (ServerLevel level : source.getServer().getAllLevels()) {
-            List<Entity> matches = new ArrayList<>();
             for (Entity entity : level.getAllEntities()) {
                 ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
-                if (id.equals(entityId)) matches.add(entity);
+                if (!id.equals(entityId) || !(entity instanceof LivingEntity living)) continue;
+                TameData data = TameRegistry.get(living.getUUID());
+                if (data == null) {
+                    UUID tlId = TameData.getTlId(living);
+                    data = tlId == null ? null : TameRegistry.getByTlId(tlId);
+                }
+                if (data != null) {
+                    if (data.name != null && !data.name.isBlank()) living.setCustomName(Component.literal(data.name));
+                    TameRegistry.removeDeathsForIdentity(data.uuid, data.tlId);
+                    TameRegistry.remove(data.uuid);
+                    loadedDetached++;
+                }
+                living.getPersistentData().remove(TameData.TL_ID_TAG);
             }
-            loadedRemoved += matches.size();
-            matches.forEach(Entity::discard);
         }
 
         List<TameData> registered = new ArrayList<>(TameRegistry.TAMES.values());
@@ -17241,10 +17250,10 @@ public class TameCommands {
             TameRegistry.remove(data.uuid);
             registryRemoved++;
         }
-        int finalLoadedRemoved = loadedRemoved;
+        int finalLoadedDetached = loadedDetached;
         int finalRegistryRemoved = registryRemoved;
-        source.sendSuccess(() -> Component.literal("Marked " + id + " as a summon type. Removed "
-                + finalLoadedRemoved + " loaded entities and " + finalRegistryRemoved + " registry entries.")
+        source.sendSuccess(() -> Component.literal("Marked " + id + " as a summon type. Detached "
+                + finalLoadedDetached + " loaded entities and removed " + finalRegistryRemoved + " unloaded registry entries. No entities were terminated.")
                 .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
