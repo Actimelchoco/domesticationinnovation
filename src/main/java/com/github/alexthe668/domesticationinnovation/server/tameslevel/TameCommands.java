@@ -15936,11 +15936,20 @@ public class TameCommands {
                 if (values != null && !values.isEmpty()) {
                     sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
                 }
+                sendClientPacket(viewer, createEquipmentPacket(tame));
                 sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
             }
             return;
         }
         level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
+    }
+
+    private static ClientboundSetEquipmentPacket createEquipmentPacket(LivingEntity tame) {
+        List<Pair<EquipmentSlot, ItemStack>> equipment = new ArrayList<>();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            equipment.add(Pair.of(slot, tame.getItemBySlot(slot).copy()));
+        }
+        return new ClientboundSetEquipmentPacket(tame.getId(), equipment);
     }
 
     private static void sendClientPacket(ServerPlayer player, Packet<?> packet) {
