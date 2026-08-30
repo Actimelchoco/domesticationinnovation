@@ -2113,11 +2113,23 @@ public final class TameDuelManager {
     }
 
     private static void grantDuelXp(MinecraftServer server, UUID participantId, TameData tame, int mmrDelta, int poolMagnitude, boolean won, boolean ranked) {
-        if (participantId == null || tame == null || !won) {
+        if (participantId == null || tame == null) {
             return;
         }
+        boolean dailyBonus = false;
+        if (ranked && server != null && server.overworld() != null) {
+            long day = server.overworld().getGameTime() / 24000L;
+            if (tame.rankedDailyBonusDay != day) {
+                tame.rankedDailyBonusDay = day;
+                tame.rankedDailyMatches = 0;
+            }
+            dailyBonus = tame.rankedDailyMatches < 3;
+            tame.rankedDailyMatches++;
+            TameRegistry.markDirty();
+        }
+        if (!won && !dailyBonus) return;
         int xpReward = duelXpReward(mmrDelta, poolMagnitude);
-        if (ranked) {
+        if (ranked && !dailyBonus) {
             int rankedTameCount = TameRegistry.getRankedParticipants().size();
             xpReward = Math.min(xpReward, Math.min(rankedTameCount, Math.max(1, tame.level)));
         }

@@ -951,9 +951,6 @@ public class TameCommands {
                 .then(Commands.literal("cancel")
                         .requires(TameCommands::isPreparingDuelSource)
                         .executes(ctx -> simpleDuelStop(ctx.getSource(), "Duel selection stopped.")))
-                .then(Commands.literal("startAgain")
-                        .requires(TameCommands::isDuelFundingRetrySource)
-                        .executes(ctx -> simpleDuelStartAgain(ctx.getSource())))
                 .then(Commands.literal("ff")
                         .requires(TameCommands::isActiveDuelSource)
                         .executes(ctx -> duelForfeit(ctx.getSource())))
@@ -977,6 +974,13 @@ public class TameCommands {
     private static LiteralArgumentBuilder<CommandSourceStack> buildChestDrumSettingsCommand() {
         return Commands.literal("chestxdrum")
                 .executes(ctx -> listChestDrumRanges(ctx.getSource()))
+                .then(Commands.literal("system")
+                        .executes(ctx -> infoDetail(ctx.getSource(), "chestxdrum system")))
+                .then(Commands.literal("foodPreferences")
+                        .executes(ctx -> chestDrumFoodPreferencesStatus(ctx.getSource()))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setChestXDrumFoodPreferences(
+                                        ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("set")
                         .then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
                                 .then(Commands.argument("height", IntegerArgumentType.integer(0, 10))
@@ -1038,7 +1042,6 @@ public class TameCommands {
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(buildChestDrumSettingsCommand())
                 .then(Commands.literal("duelsGlow")
                         .executes(ctx -> duelGlowStatus(ctx.getSource(), false))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -1462,6 +1465,7 @@ public class TameCommands {
                                 .requires(source -> false)
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                         .then(buildSettingsCommand())
+                        .then(buildChestDrumSettingsCommand())
                         .then(TameBedCommands.build())
                         .then(Commands.literal("_doNotAttackAnimalsOld")
                                 .requires(source -> false)
@@ -2095,10 +2099,14 @@ public class TameCommands {
                                         ))))
                         .then(Commands.literal("ranked")
                                 .executes(ctx -> rankedStatus(ctx.getSource()))
-                                .then(Commands.literal("feed")
-                                        .executes(ctx -> rankedFeed(ctx.getSource())))
-                                .then(Commands.literal("setRankedChest")
-                                        .executes(ctx -> setRankedChest(ctx.getSource())))
+                                .then(Commands.literal("system")
+                                        .executes(ctx -> infoDetail(ctx.getSource(), "ranked")))
+                                .then(Commands.literal("dailyBonus")
+                                        .executes(ctx -> rankedDailyBonus(ctx.getSource(), null))
+                                        .then(Commands.literal("done")
+                                                .executes(ctx -> rankedDailyBonus(ctx.getSource(), true)))
+                                        .then(Commands.literal("hasntdone")
+                                                .executes(ctx -> rankedDailyBonus(ctx.getSource(), false))))
                                 .then(Commands.literal("add")
                                         .then(Commands.literal("all")
                                                 .executes(ctx -> rankedAddSelection(ctx.getSource(), "all")))
@@ -2213,11 +2221,6 @@ public class TameCommands {
                                         .then(Commands.argument("type", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestOwnedTypes(ctx.getSource(), b))
                                                 .executes(ctx -> hungerInventoryCanEat(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
-                                .then(Commands.literal("give")
-                                        .executes(ctx -> hungerInventoryGive(ctx.getSource(), ""))
-                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                                                .executes(ctx -> hungerInventoryGive(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("open")
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
@@ -5052,7 +5055,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: selection, settings, stat, inspect, search, leaderboard, duelleaderboard, group, inventory, armor, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: selection, settings, chestxdrum, stat, inspect, search, leaderboard, duelleaderboard, group, inventory, armor, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -5083,17 +5086,14 @@ public class TameCommands {
                     "/tames settings enableMending <true|false>",
                     "/tames settings enableInventoryDistributeFoodPreferences <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
-                    "/tames settings chestxdrum",
-                    "/tames settings chestxdrum set <radius> <height>",
-                    "/tames settings chestxdrum pullNonPreferredFood [<owned type> <true|false>]",
-                    "/tames settings chestxdrum pullPreferredFoodOf [add|remove] <owned type>",
+                    "/tames chestxdrum system",
                     "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
                     "enableMending controls Mending repairs on armor stored in tame inventories.",
                     "Manual inventory distribution prioritizes native/configured foods when its preference setting is enabled.",
-                    "Chest x drum refill always gives tames only their preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
+                    "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
             );
         }
         else if (key.equals("leaderboard")) {
@@ -5159,7 +5159,6 @@ public class TameCommands {
                     "/tames inventory",
                     "/tames inventory prefferedFood <owned tame type>",
                     "/tames inventory superfood",
-                    "/tames inventory give [<selection>]",
                     "/tames inventory open <name>",
                     "/tames inventory info [<selection>]",
                     "/tames inventory autopickup <true|false> [<selection>]",
@@ -5175,7 +5174,7 @@ public class TameCommands {
                     "Inventory distribute uses the inventory directly below the player and shares its compatible food among selected loaded tames. Without a container it uses held food.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
-                    "Register a container above your drum with /tames settings chestxdrum set <radius> <height>. On its interval, it gives loaded hungry tames only their preferred food until they reach green.",
+                    "Register a container above your drum with /tames chestxdrum set <radius> <height>. On its interval, it refills loaded hungry tames until they reach green.",
                     "Chest x drum reverse-pull rules can return configured non-preferred food or food preferred by selected tame types from tame inventories to the chest.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
@@ -5218,23 +5217,39 @@ public class TameCommands {
                     "At 0 saturation with no usable stored food, the tame sits, stops using abilities, and ignores follow/wander commands.",
                     "=== Saturation drain ===",
                     "Following: 2 per second | Wandering/guarding: 1 per second | Fighting a live target: 4 per second",
-                    "Active duels pause this ordinary per-second tame hunger drain.",
-                    "Ranked rounds charge the owner's separate ranked-saturation balance upfront: 1 saturation per participating tame level.",
+                    "During duel and ranked rounds, this ordinary activity drain runs at one tenth of its normal frequency.",
+                    "Duels and ranked have no separate food entry payment.",
                     "Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.",
                     "Natural regeneration costs saturation. Command teleports do not.",
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "Each equipped armor piece increases saturation use by 50%.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "Drum refill: stand on the container above the drum, then use /tames settings chestxdrum set <radius> <height>.",
-                    "Chest x drum refills use only food preferred by each tame and stop when its stored food reaches 500 points (green).",
-                    "/tames settings chestxdrum pullNonPreferredFood <type> <true|false> controls pulling non-preferred food from that tame type back into the chest; default false.",
-                    "/tames settings chestxdrum pullPreferredFoodOf add|remove <type> pulls that type's preferred foods from other tames, but preserves preferred food on tames of the selected type.",
+                    "Drum refill: stand on the container above the drum, then use /tames chestxdrum set <radius> <height>.",
+                    "With chestxdrum foodPreferences true, refill uses only preferred food. With false, compatible fallback food is also allowed. Refill stops at 500 stored food points (green).",
+                    "/tames chestxdrum pullNonPreferredFood <type> <true|false> controls pulling non-preferred food from that tame type back into the chest; default false.",
+                    "/tames chestxdrum pullPreferredFoodOf add|remove <type> pulls that type's preferred foods from other tames, but preserves preferred food on tames of the selected type.",
                     "Larger configured refill areas run less frequently. Bare chestxdrum and pull-rule commands print their current settings.",
                     "=== Notifications ===",
                     "/tames debug inventory lowOnFood|noFood|sum <true|false>",
                     "/tames debug inventory sumMin <minutes>",
                     "These control low-food, no-food, and digest notifications."
+            );
+        }
+        else if (key.equals("chestxdrum") || key.equals("chestxdrum system")) {
+            sendInfoPage(p, "Chest x Drum System",
+                    "/tames chestxdrum",
+                    "/tames chestxdrum set <radius> <height>",
+                    "/tames chestxdrum foodPreferences [<true|false>]",
+                    "/tames chestxdrum pullNonPreferredFood [<owned type> <true|false>]",
+                    "/tames chestxdrum pullPreferredFoodOf [add|remove] <owned type>",
+                    "Stand on a container with your drum directly below it, then use set to register that location's radius and height.",
+                    "Bare chestxdrum lists every valid registered location. Larger areas run at longer intervals.",
+                    "On each interval, loaded hungry tames refill until their stored food reaches 500 points.",
+                    "foodPreferences defaults true: true restricts refill to preferred food; false also permits compatible fallback food.",
+                    "pullNonPreferredFood defaults false per type and moves that type's non-preferred stored food back into the chest.",
+                    "pullPreferredFoodOf moves an added type's preferred foods from other tames, while preserving preferred food on tames of the added type.",
+                    "Reverse pulling runs before refill, transfers only what the chest accepts, and persists per owner."
             );
         }
         else if (key.equals("mode")) {
@@ -5494,18 +5509,19 @@ public class TameCommands {
         else if (key.equals("ranked")) {
             sendInfoPage(p, "Ranked",
                     "/tames ranked",
+                    "/tames ranked system",
                     "/tames ranked leaderboard [owned|active]",
-                    "/tames ranked feed",
-                    "/tames ranked setRankedChest",
                     "/tames ranked add <selection>",
                     "/tames ranked pull <selection>",
+                    "/tames ranked dailyBonus [done|hasntdone]",
                     "/tames admin ranked setArena <arenaName>",
                     "/tames admin ranked pullAllParticipants",
                     "/tames admin ranked setA|setB|setWaitingA|setWaitingB",
                     "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
-                    "feed consumes the edible main-hand stack and saves 100 ranked saturation per food point.",
-                    "setRankedChest stores the inventory beneath you; the newest location replaces the previous ranked chest.",
-                    "Each selected tame costs its level in ranked saturation per round. Saturation persists across logout and restart.",
+                    "Tames must be level 10 or higher. Rejected selections print Not Level 10 followed by names.",
+                    "There is no duel or ranked entry payment. During rounds, tames consume ordinary food at one tenth of their normal rate.",
+                    "Each tame's first three ranked matches per Minecraft day grant uncapped normal duel XP, even on a loss. Later ranked XP is win-only and capped normally.",
+                    "dailyBonus reports owned tames that have or have not completed those three matches.",
                     "Only tames whose owners are online are selected into rounds.",
                     "Offline-owner tames stay idle at waiting until their owner is online again.",
                     "The ranked arena is reserved and cannot be used through /tames duel arena."
@@ -5518,9 +5534,8 @@ public class TameCommands {
                     "/tames duel <selection>",
                     "/tames duel nearby [radius]",
                     "/tames duel cancel",
-                    "/tames duel startAgain",
                     "Selections support comma-separated tame names, groups, types, and movement states.",
-                    "If food funding fails, startAgain retries and cancel ends the preparation.",
+                    "Duels have no entry payment; participating tames consume food at one tenth of their normal rate.",
                     "After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20."
             );
         }
@@ -6376,6 +6391,15 @@ public class TameCommands {
         if (player == null) return 0;
         PlayerDebugSettings.setEnableChestXDrumFoodPreferences(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Chest x drum food preferences " + (enabled ? "enabled" : "disabled") + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int chestDrumFoodPreferencesStatus(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        boolean enabled = PlayerDebugSettings.enableChestXDrumFoodPreferences(player.getUUID());
+        player.sendSystemMessage(Component.literal("Chest x drum food preferences: " + enabled + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -8384,8 +8408,6 @@ public class TameCommands {
             }
         }
         player.sendSystemMessage(Component.literal("Ranked arena: " + arenaName + ". Pool size: " + RANKED_POOL.size() + ". Active in duel: " + active + ".").withStyle(ChatFormatting.AQUA));
-        PlayerDuelStats playerStats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-        player.sendSystemMessage(Component.literal("Ranked saturation: " + playerStats.rankedSaturation + ".").withStyle(ChatFormatting.GREEN));
         ActiveDuelSession session = RANKED_DUEL_SESSION;
         if (session != null && !session.currentRoundA.isEmpty() && !session.currentRoundB.isEmpty()) {
             List<LivingEntity> teamA = resolveLoadedRoundMembers(source.getServer(), session.currentRoundA);
@@ -8657,15 +8679,12 @@ public class TameCommands {
                     ? "No loaded/alive ranked participants matched that selection."
                     : "No ranked participants matched that selection.");
         }
-        if (add && !depositHeldRankedFood(player)) {
-            return error(player, "Hold edible food in your main hand to add ranked tames.");
-        }
-
         ActiveDuelSession session = RANKED_DUEL_SESSION;
         int changed = 0;
         int blockedActive = 0;
         int forbiddenType = 0;
         int skipped = 0;
+        List<String> belowLevel = new ArrayList<>();
 
         for (UUID participantId : selectedIds) {
             if (participantId == null) {
@@ -8673,6 +8692,10 @@ public class TameCommands {
             }
             if (add) {
                 TameData participantData = rankedTameDataForParticipant(participantId);
+                if (participantData != null && participantData.level < 10) {
+                    belowLevel.add(tameDisplayName(participantData));
+                    continue;
+                }
                 if (participantData != null && TameRegistry.isRankedTameTypeForbidden(tameTypeId(participantData))) {
                     forbiddenType++;
                     continue;
@@ -8741,6 +8764,10 @@ public class TameCommands {
             message.append(" ").append(skipped).append(" unchanged.");
         }
         player.sendSystemMessage(Component.literal(message.toString()).withStyle(changed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        if (!belowLevel.isEmpty()) {
+            belowLevel.sort(String.CASE_INSENSITIVE_ORDER);
+            player.sendSystemMessage(Component.literal("Not Level 10: " + String.join(", ", belowLevel)).withStyle(ChatFormatting.RED));
+        }
         return changed > 0 ? 1 : 0;
     }
 
@@ -13713,6 +13740,29 @@ public class TameCommands {
         PlayerDebugSettings.setChestDrumPullNonPreferred(player.getUUID(), type, enabled);
         player.sendSystemMessage(Component.literal("Chest x drum pull non-preferred food for " + shortEntityTypeName(type)
                 + ": " + enabled + ".").withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int rankedDailyBonus(CommandSourceStack source, Boolean doneFilter) {
+        ServerPlayer player = source == null ? null : source.getPlayer();
+        if (player == null) return 0;
+        long day = source.getServer().overworld().getGameTime() / 24000L;
+        List<String> done = new ArrayList<>();
+        List<String> notDone = new ArrayList<>();
+        for (TameData data : ownedTames(player.getUUID())) {
+            boolean hasDaily = data.rankedDailyBonusDay == day && data.rankedDailyMatches >= 3;
+            (hasDaily ? done : notDone).add(tameDisplayName(data));
+        }
+        done.sort(String.CASE_INSENSITIVE_ORDER);
+        notDone.sort(String.CASE_INSENSITIVE_ORDER);
+        if (doneFilter == null || doneFilter) {
+            player.sendSystemMessage(Component.literal("Has Daily: " + (done.isEmpty() ? "<none>" : String.join(", ", done)))
+                    .withStyle(ChatFormatting.GREEN));
+        }
+        if (doneFilter == null || !doneFilter) {
+            player.sendSystemMessage(Component.literal("No Daily: " + (notDone.isEmpty() ? "<none>" : String.join(", ", notDone)))
+                    .withStyle(ChatFormatting.YELLOW));
+        }
         return 1;
     }
 
@@ -21948,9 +21998,7 @@ public class TameCommands {
         if (server == null || data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null) {
             return 0;
         }
-        if (TameDuelManager.isEntityInDuel(tame.getUUID())) {
-            return 0;
-        }
+        if (TameDuelManager.isEntityInDuel(tame.getUUID()) && now % 200L != 0L) return 0;
         LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
             return scaleSaturationCost(data, 4);
@@ -22295,10 +22343,13 @@ public class TameCommands {
             boolean changed = false;
             List<Integer> slotOrder = new ArrayList<>();
             for (int slot = 0; slot < handler.getSlots(); slot++) slotOrder.add(slot);
-            slotOrder.sort(Comparator.comparingInt(slot ->
-                    isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
+            boolean foodPreferences = PlayerDebugSettings.enableChestXDrumFoodPreferences(ownerUuid);
+            if (foodPreferences) {
+                slotOrder.sort(Comparator.comparingInt(slot ->
+                        isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
+            }
             for (int slot : slotOrder) {
-                if (!isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
+                if (foodPreferences && !isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
                 if (totalHungerFoodPoints(data) >= TAME_HUNGER_GREEN_FOOD_POINTS) break;
                 while (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                     ItemStack simulated = handler.extractItem(slot, 1, true);
@@ -22386,56 +22437,6 @@ public class TameCommands {
                 * (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_HEIGHT + 1L);
         long multiplier = Math.max(1L, (configuredVolume + defaultVolume - 1L) / defaultVolume);
         return TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS * multiplier;
-    }
-
-    private static int hungerInventoryGive(CommandSourceStack source, String selectionRaw) {
-        ServerPlayer player = source.getPlayer();
-        ItemStack held = player.getMainHandItem();
-        if (held.isEmpty()) {
-            return hungerMessage(player, "Hold edible food. Bread is accepted as simple default food.");
-        }
-        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
-        if (selected.isEmpty()) {
-            return hungerMessage(player, hungerSelectionEmptyMessage(selectionRaw));
-        }
-        int moved = 0;
-        int skippedFood = 0;
-        int skippedFull = 0;
-        String itemName = held.getHoverName().getString();
-        for (TameData data : selected) {
-            if (held.isEmpty() && !player.isCreative()) {
-                break;
-            }
-            int points = hungerFoodPoints(held, data, null);
-            if (points <= 0) {
-                skippedFood++;
-                continue;
-            }
-            ItemStack one = held.copy();
-            one.setCount(1);
-            if (!addHungerFoodStack(data, one)) {
-                skippedFull++;
-                continue;
-            }
-            if (!player.isCreative()) {
-                held.shrink(1);
-            }
-            resetHungerFoodNotifications(data);
-            moved++;
-        }
-        if (moved <= 0) {
-            if (skippedFull > 0) {
-                return hungerMessage(player, "Selected tame food inventories are full.");
-            }
-            return hungerMessage(player, "Selected tames cannot accept that food.");
-        }
-        TameRegistry.markDirty();
-        String skipped = "";
-        if (skippedFood > 0 || skippedFull > 0) {
-            skipped = " Skipped " + (skippedFood + skippedFull) + ".";
-        }
-        player.sendSystemMessage(Component.literal("Gave " + itemName + " to " + moved + " selected tame(s)." + skipped).withStyle(TAME_HUNGER_MESSAGE_COLOR));
-        return moved;
     }
 
     private static int hungerInventoryOpen(CommandSourceStack source, String name) {
@@ -24383,17 +24384,6 @@ public class TameCommands {
         Set<UUID> secondIds = collectLivingEntityIds(secondTeam.members);
         secondIds.removeAll(firstIds);
         if (firstIds.isEmpty() || secondIds.isEmpty()) return error(source.getPlayer(), "Both duel teams must contain eligible loaded participants.");
-        int firstCost = duelTeamLevelCost(firstTeam.tames, first.getUUID());
-        int secondCost = duelTeamLevelCost(secondTeam.tames, second.getUUID());
-        if (!canPayHeldFood(first, firstCost) || !canPayHeldFood(second, secondCost)) {
-            preparation.fundingFailed = true;
-            notifyDuelFundingFailure(first, firstCost);
-            notifyDuelFundingFailure(second, secondCost);
-            refreshDuelCommands(first, second);
-            return 0;
-        }
-        consumeHeldFoodPoints(first, firstCost);
-        consumeHeldFoodPoints(second, secondCost);
         prepareTeamForDuel(firstTeam.tames);
         prepareTeamForDuel(secondTeam.tames);
         assignInitialDuelTargets(firstTeam.tames, secondTeam.members);
@@ -25953,9 +25943,6 @@ public class TameCommands {
         if (round == null || round.teamA.isEmpty() || round.teamB.isEmpty()) {
             return false;
         }
-        if (session.ranked && !chargeRankedRoundSaturation(server, session, round)) {
-            return false;
-        }
         captureRankedRoundPlayerReturnTargets(server, session, round.teamA, round.teamB);
         teleportDuelSessionIdleTamesHome(server, session, round.teamA, round.teamB);
         teleportDuelSessionParticipants(server, round.teamA, session.spawnA);
@@ -27283,7 +27270,7 @@ public class TameCommands {
         }
         TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
-            return data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
+            return data.level >= 10 && data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
         }
         if (TameRegistry.getPlayerDuelStats().containsKey(participantId)) {
             return true;

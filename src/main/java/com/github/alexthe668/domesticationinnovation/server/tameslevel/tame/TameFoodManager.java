@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -161,30 +162,47 @@ public final class TameFoodManager {
     public static List<String> foodsForDisplay(MinecraftServer server, String type) {
         init(server);
         String normalized = normalizeType(type);
-        Set<String> foodNames = new LinkedHashSet<>();
-        Set<String> categories = new LinkedHashSet<>();
+        Map<String, String> foodNames = new LinkedHashMap<>();
+        Map<String, String> categories = new LinkedHashMap<>();
         for (String itemId : LEARNED.getOrDefault(normalized, Set.of())) {
             String displayName = displayItemName(itemId);
-            if (!displayName.isBlank()) foodNames.add(displayName);
+            if (!displayName.isBlank()) foodNames.put(displayName.toLowerCase(Locale.ROOT), displayName);
         }
         for (String rule : CUSTOM.getOrDefault(normalized, Set.of())) {
             if (rule.startsWith("#")) {
-                categories.add("FoodType: " + titleCase(rule.substring(1)));
+                int percentage = Math.max(1, CUSTOM_POINTS.getOrDefault(normalized, Map.of()).getOrDefault(rule, 100));
+                String name = "FoodType: " + titleCase(rule.substring(1));
+                categories.put(name.toLowerCase(Locale.ROOT), name + (percentage == 100 ? "" : " (" + percentage + "%)"));
             } else {
                 String displayName = displayItemName(rule);
-                if (!displayName.isBlank()) foodNames.add(displayName);
+                int points = Math.max(1, CUSTOM_POINTS.getOrDefault(normalized, Map.of()).getOrDefault(rule, 1));
+                if (!displayName.isBlank()) foodNames.put(displayName.toLowerCase(Locale.ROOT), configuredItemDisplay(rule, displayName, points));
             }
         }
-        for (String rule : SUPERFOODS.keySet()) {
-            if (rule.startsWith("#")) categories.add("FoodType: " + titleCase(rule.substring(1)));
+        for (Map.Entry<String, Integer> entry : SUPERFOODS.entrySet()) {
+            String rule = entry.getKey();
+            int points = Math.max(1, entry.getValue());
+            if (rule.startsWith("#")) {
+                String name = "FoodType: " + titleCase(rule.substring(1));
+                categories.put(name.toLowerCase(Locale.ROOT), name + " (" + points + " food point" + (points == 1 ? "" : "s") + ")");
+            }
             else {
                 String displayName = displayItemName(rule);
-                if (!displayName.isBlank()) foodNames.add(displayName);
+                if (!displayName.isBlank()) foodNames.put(displayName.toLowerCase(Locale.ROOT), configuredItemDisplay(rule, displayName, points));
             }
         }
-        List<String> result = foodNames.stream().sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        result.addAll(categories.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList());
+        List<String> result = foodNames.values().stream().sorted(String.CASE_INSENSITIVE_ORDER).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        result.addAll(categories.values().stream().sorted(String.CASE_INSENSITIVE_ORDER).toList());
         return result;
+    }
+
+    private static String configuredItemDisplay(String rule, String displayName, int points) {
+        ResourceLocation id = ResourceLocation.tryParse(rule);
+        Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
+        int nativePoints = item == null || item.getFoodProperties() == null
+                ? 0 : Math.max(0, item.getFoodProperties().getNutrition());
+        if (nativePoints > 0 && nativePoints == points) return displayName;
+        return displayName + " (" + points + " food point" + (points == 1 ? "" : "s") + ")";
     }
 
     private static String displayItemName(String itemId) {
