@@ -3963,14 +3963,14 @@ public class TameCommands {
             if (pending.chunksReadyTick < 0L) {
                 pending.chunksReadyTick = now;
             }
-            TamableAnimal tame = findLoadedTameByIdentity(server, pending.tameUuid, pending.tlId);
+            LivingEntity tame = TameEntityAdapter.findLoaded(server, pending.tameUuid, pending.tlId);
             if (tame != null && tame.isAlive()) {
                 ServerPlayer owner = pending.ownerUuid == null ? null : server.getPlayerList().getPlayer(pending.ownerUuid);
                 debugTeleport(owner, "unloaded chunk path found live entity " + pending.tameName + " in " + tame.level().dimension().location());
                 TameData liveData = pendingTeleportData(pending);
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
-                teleportTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
+                teleportLivingTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
                 resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
                 if (liveData != null && liveData.movementOrder == 1) {
                     applyLivingMovementOverride(tame, liveData, MovementOrder.SIT);
@@ -14719,12 +14719,12 @@ public class TameCommands {
                 sourceLevel.getChunk(sourceChunk.x + dx, sourceChunk.z + dz);
             }
         }
-        TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, data.uuid, data.tlId);
+        LivingEntity tame = TameEntityAdapter.findLoaded(source.getServer(), data.uuid, data.tlId);
         if (tame != null && tame.isAlive()) {
             logRebuildTrace("tryImmediateChunkLoadTeleport.liveInSourceLevel", data,
                     "sourceDim=" + sourceLevel.dimension().location() + " targetDim=" + target.level.dimension().location() + " targetPos=" + target.pos);
             try {
-                teleportTameToLocation(tame, target, isAssignedBedTarget(data, target));
+                teleportLivingTameToLocation(tame, target, isAssignedBedTarget(data, target));
                 if (data.movementOrder == 1) {
                     applyMovementOrderCode(tame, 1);
                 }
@@ -14828,10 +14828,10 @@ public class TameCommands {
                 sourceLevel.getChunk(sourceChunk.x + dx, sourceChunk.z + dz);
             }
         }
-        TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, data.uuid, data.tlId);
+        LivingEntity tame = TameEntityAdapter.findLoaded(source.getServer(), data.uuid, data.tlId);
         if (tame != null && tame.isAlive()) {
             try {
-                teleportTameToLocation(tame, target);
+                teleportLivingTameToLocation(tame, target, false);
                 return UnloadedTpResult.queued();
             } finally {
                 loadChunksAround(sourceLevel, ticketId, sourcePos, false);
@@ -14892,10 +14892,10 @@ public class TameCommands {
                 sourceLevel.getChunk(sourceChunk.x + dx, sourceChunk.z + dz);
             }
         }
-        TamableAnimal tame = findLoadedTameByIdentity(sourceLevel, data.uuid, data.tlId);
+        LivingEntity tame = TameEntityAdapter.findLoaded(source.getServer(), data.uuid, data.tlId);
         if (tame != null && tame.isAlive()) {
             try {
-                teleportTameToLocation(tame, target);
+                teleportLivingTameToLocation(tame, target, false);
                 clearAutoFollowRetryState(data);
                 return UnloadedTpResult.queued();
             } finally {

@@ -1021,7 +1021,12 @@ public class CommonProxy {
             return;
         }
         LivingEntity owner = TameEntityAdapter.owner(attacker);
-        if (!(owner instanceof Player player)) {
+        Player player = owner instanceof Player found ? found : null;
+        if (player == null && living.getServer() != null) {
+            UUID ownerId = TameEntityAdapter.ownerUuid(attacker);
+            if (ownerId != null) player = living.getServer().getPlayerList().getPlayer(ownerId);
+        }
+        if (player == null) {
             return;
         }
         Item hunterBelt = ForgeRegistries.ITEMS.getValue(new ResourceLocation("relics", "hunter_belt"));
@@ -1036,12 +1041,18 @@ public class CommonProxy {
                 return;
             }
             Object relic = equipped.getItem();
-            Method spreadExperience = relic.getClass().getMethod("spreadExperience", LivingEntity.class, ItemStack.class, int.class);
-            Method getAbilityValue = relic.getClass().getMethod("getAbilityValue", ItemStack.class, String.class, String.class);
-            spreadExperience.invoke(relic, player, equipped, 1);
+            Class<?> relicInterface = Class.forName("it.hurts.sskirillss.relics.items.relics.base.IRelicItem");
+            if (!relicInterface.isInstance(relic)) return;
+            Method getAbilityValue = relicInterface.getMethod("getAbilityValue", ItemStack.class, String.class, String.class);
             Object value = getAbilityValue.invoke(relic, equipped, "training", "damage");
             if (value instanceof Number multiplier) {
                 event.setAmount((float) (event.getAmount() * multiplier.doubleValue()));
+            }
+            try {
+                Method spreadExperience = relicInterface.getMethod("spreadExperience", LivingEntity.class, ItemStack.class, int.class);
+                spreadExperience.invoke(relic, player, equipped, 1);
+            } catch (ReflectiveOperationException | LinkageError ignored) {
+                // Belt damage must still work if optional Relics XP bookkeeping changes.
             }
         } catch (ReflectiveOperationException | LinkageError ignored) {
             // Relics is optional, and incompatible versions should leave damage unchanged.
