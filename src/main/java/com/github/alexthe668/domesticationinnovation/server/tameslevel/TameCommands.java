@@ -92,6 +92,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -115,6 +116,11 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.feature.EndPodiumFeature;
+import net.minecraft.world.level.levelgen.feature.Feature;
+import net.minecraft.world.level.levelgen.feature.SpikeFeature;
+import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+import net.minecraft.world.level.levelgen.feature.configurations.SpikeConfiguration;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -3049,6 +3055,9 @@ public class TameCommands {
                                 .requires(source -> source.hasPermission(2))
 
                                 .then(buildCanEatAdminCommand())
+
+                                .then(Commands.literal("rebuildEnderDragonArena")
+                                        .executes(ctx -> adminRebuildEnderDragonArena(ctx.getSource())))
 
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
@@ -17148,6 +17157,52 @@ public class TameCommands {
         final int loadedCount = resetLoaded;
         final int dataCount = resetData;
         source.sendSuccess(() -> Component.literal("Reset wolf base stats for " + loadedCount + " loaded wolves; reset progress data for " + dataCount + " wolf entries."), true);
+        return 1;
+    }
+
+    private static int adminRebuildEnderDragonArena(CommandSourceStack source) {
+        ServerLevel end = source.getServer().getLevel(Level.END);
+        if (end == null) {
+            return error(source.getPlayer(), "The End dimension is unavailable.");
+        }
+
+        List<SpikeFeature.EndSpike> spikes = SpikeFeature.getSpikesForLevel(end);
+        int removedCrystals = 0;
+        for (SpikeFeature.EndSpike spike : spikes) {
+            List<EndCrystal> existing = end.getEntitiesOfClass(EndCrystal.class, spike.getTopBoundingBox());
+            removedCrystals += existing.size();
+            existing.forEach(Entity::discard);
+
+            BlockPos origin = new BlockPos(spike.getCenterX(), 64, spike.getCenterZ());
+            end.getChunkAt(origin);
+            Feature.END_SPIKE.place(
+                    new SpikeConfiguration(false, List.of(spike), null),
+                    end,
+                    end.getChunkSource().getGenerator(),
+                    end.random,
+                    origin
+            );
+        }
+
+        boolean activePortal = end.getDragons().isEmpty();
+        BlockPos podium = new BlockPos(0, 64, 0);
+        end.getChunkAt(podium);
+        new EndPodiumFeature(activePortal).place(
+                FeatureConfiguration.NONE,
+                end,
+                end.getChunkSource().getGenerator(),
+                end.random,
+                podium
+        );
+        if (end.getDragonFight() != null) {
+            end.getDragonFight().resetSpikeCrystals();
+        }
+
+        int finalRemovedCrystals = removedCrystals;
+        source.sendSuccess(() -> Component.literal("Rebuilt the Ender Dragon arena: 10 spikes, crystals, cages, and central podium. Replaced "
+                + finalRemovedCrystals + " existing spike crystal" + (finalRemovedCrystals == 1 ? "." : "s.")
+                + (activePortal ? " Exit portal is active." : " Exit portal remains inactive while the dragon is alive."))
+                .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
 

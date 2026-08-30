@@ -7,6 +7,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -766,11 +767,14 @@ public class LevelSystem {
             updateTameName(tame, data);
 
             if (!regainingLevels && TameableUtils.getOwnerOf(tame) instanceof Player owner && PlayerDebugSettings.levelUp(owner.getUUID())) {
-                owner.sendSystemMessage(Component.literal(
-                        "§6Your pet §e" + data.name + " §6leveled up to §eLevel " + data.level + "§6."
-                ));
+                owner.sendSystemMessage(Component.literal("Your pet ").withStyle(ChatFormatting.GOLD)
+                        .append(Component.literal(data.name).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(" leveled up to ").withStyle(ChatFormatting.GOLD))
+                        .append(Component.literal("Level " + data.level).withStyle(ChatFormatting.YELLOW))
+                        .append(Component.literal(".").withStyle(ChatFormatting.GOLD)));
                 if (!rewardSummary.isEmpty()) {
-                    owner.sendSystemMessage(Component.literal("§7Reward: §f" + rewardSummary));
+                    owner.sendSystemMessage(Component.literal("Reward: ").withStyle(ChatFormatting.GRAY)
+                            .append(Component.literal(rewardSummary).withStyle(ChatFormatting.WHITE)));
                 }
             }
         }
