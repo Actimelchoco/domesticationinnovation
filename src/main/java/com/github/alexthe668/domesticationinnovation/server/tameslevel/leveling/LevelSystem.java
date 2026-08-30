@@ -728,6 +728,13 @@ public class LevelSystem {
         if (!notifyOwner) {
             return;
         }
+        notifyAssignedClass(tame, data);
+    }
+
+    public static void notifyAssignedClass(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || data.tameClass == null) {
+            return;
+        }
         if (tame.getPersistentData().getBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG)) {
             return;
         }

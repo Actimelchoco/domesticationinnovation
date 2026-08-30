@@ -64,6 +64,7 @@ public class TameSpawnEvents {
     );
     private static final Map<UUID, Long> PENDING_DEFERRED_STAT_REFRESH = new HashMap<>();
     private static final Map<UUID, PendingNewTameNotification> PENDING_NEW_TAME_NOTIFICATIONS = new HashMap<>();
+    private static final Map<UUID, Long> PENDING_CLASS_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Long> PENDING_RANDOM_TAME_NAMES = new HashMap<>();
     private static final long DEFERRED_STAT_REFRESH_DELAY_TICKS = 1200L;
     private static final ThreadLocal<Integer> TAME_RECONSTRUCTION_DEPTH = ThreadLocal.withInitial(() -> 0);
@@ -277,7 +278,7 @@ public class TameSpawnEvents {
         if (changed) {
             TameRegistry.markDirty();
         }
-        LevelSystem.ensureClassAssigned(tame, data, true);
+        LevelSystem.ensureClassAssigned(tame, data, false);
         TameGoalInstaller.installIfMissing(tame);
     }
 
@@ -381,7 +382,7 @@ public class TameSpawnEvents {
         TameRegistry.register(data);
         TameRegistry.bindEntityToData(tame, data);
         notifyNewTameFound(tame, data);
-        LevelSystem.ensureClassAssigned(tame, data, true);
+        assignClassAfterRegistration(tame, data, notifyClassIfNew);
         LevelSystem.reapplyTypeBasePlusBonuses(tame, data);
         queueDeferredStatRefresh(tame, data, DEFERRED_STAT_REFRESH_DELAY_TICKS);
         System.out.println("[TamesLevel] Registered tame: " + data.name);
@@ -397,9 +398,45 @@ public class TameSpawnEvents {
         if (!PENDING_NEW_TAME_NOTIFICATIONS.isEmpty()) {
             PENDING_NEW_TAME_NOTIFICATIONS.entrySet().removeIf(entry -> trySendPendingNewTameNotification(server, entry.getKey(), entry.getValue()));
         }
+        if (!PENDING_CLASS_NOTIFICATIONS.isEmpty()) {
+            PENDING_CLASS_NOTIFICATIONS.entrySet().removeIf(entry -> trySendPendingClassNotification(server, entry.getKey(), entry.getValue()));
+        }
         if (!PENDING_RANDOM_TAME_NAMES.isEmpty()) {
             processPendingRandomTameNames(server);
         }
+    }
+
+    private static void assignClassAfterRegistration(LivingEntity tame, TameData data, boolean notifyOwner) {
+        if (tame == null || data == null) return;
+        boolean newlyAssigned = data.tameClass == null;
+        LevelSystem.ensureClassAssigned(tame, data, false);
+        if (newlyAssigned && notifyOwner && data.tameClass != null) {
+            PENDING_CLASS_NOTIFICATIONS.put(tame.getUUID(), tame.level().getGameTime() + 1L);
+        }
+    }
+
+    private static boolean trySendPendingClassNotification(MinecraftServer server, UUID entityId, long dueTick) {
+        if (server == null || server.overworld().getGameTime() < dueTick) return false;
+        LivingEntity living = null;
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(entityId);
+            if (entity instanceof LivingEntity found) {
+                living = found;
+                break;
+            }
+        }
+        if (living == null || living.isRemoved() || !living.isAlive()
+                || TameRegistry.isSummonType(living) || TameRegistry.isTameTypeDisabled(living)) {
+            return true;
+        }
+        TameData data = TameRegistry.get(living.getUUID());
+        UUID tlId = TameData.getTlId(living);
+        if (data == null && tlId != null) data = TameRegistry.getByTlId(tlId);
+        if (data == null || data.dead || data.stored || data.tameClass == null) {
+            return true;
+        }
+        LevelSystem.notifyAssignedClass(living, data);
+        return true;
     }
 
     private static void processPendingRandomTameNames(MinecraftServer server) {
@@ -932,7 +969,7 @@ public class TameSpawnEvents {
         data.lastKnownY = living.blockPosition().getY();
         data.lastKnownZ = living.blockPosition().getZ();
         TameRegistry.bindEntityToData(living, data);
-        LevelSystem.ensureClassAssigned(living, data, true);
+        assignClassAfterRegistration(living, data, true);
         LevelSystem.reapplyTypeBasePlusBonuses(living, data);
         LevelSystem.updateTameName(living, data);
         TameRegistry.markDirty();
