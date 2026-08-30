@@ -34,6 +34,7 @@ public class TameRegistrySavedData extends SavedData {
     private final Set<String> invertedCallOrderTypeIds = new LinkedHashSet<>();
     private final Map<String, int[]> customCallOrders = new HashMap<>();
     private final Set<String> disabledTameTypeIds = new LinkedHashSet<>(Set.of("minecraft:horse"));
+    private final Set<String> summonTypeIds = new LinkedHashSet<>();
     private final Map<UUID, PlayerDuelStats> playerDuelStats = new HashMap<>();
     private final Map<UUID, Integer> ownerTeleportApprovedCredits = new HashMap<>();
     private final Map<UUID, CompoundTag> playerDebugSettings = new HashMap<>();
@@ -253,6 +254,18 @@ public class TameRegistrySavedData extends SavedData {
                 this.disabledTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
+    }
+
+    public Set<String> getSummonTypeIds() {
+        return summonTypeIds;
+    }
+
+    public void setSummonTypeIds(Set<String> summonTypeIds) {
+        this.summonTypeIds.clear();
+        if (summonTypeIds != null) summonTypeIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .map(id -> id.trim().toLowerCase(java.util.Locale.ROOT))
+                .forEach(this.summonTypeIds::add);
     }
 
     public Map<UUID, PlayerDuelStats> getPlayerDuelStats() {
@@ -554,6 +567,9 @@ public class TameRegistrySavedData extends SavedData {
             disabledTameTypesTag.add(net.minecraft.nbt.StringTag.valueOf(id));
         }
         tag.put("disabledTameTypeIds", disabledTameTypesTag);
+        ListTag summonTypesTag = new ListTag();
+        for (String id : summonTypeIds) summonTypesTag.add(net.minecraft.nbt.StringTag.valueOf(id));
+        tag.put("summonTypeIds", summonTypesTag);
         ListTag playerDuelStatsTag = new ListTag();
         for (PlayerDuelStats stats : playerDuelStats.values()) {
             if (stats == null || stats.playerUuid == null) {
@@ -808,6 +824,14 @@ public class TameRegistrySavedData extends SavedData {
                         data.disabledTameTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
                     }
                 }
+            }
+        }
+        if (tag.contains("summonTypeIds", Tag.TAG_LIST)) {
+            data.summonTypeIds.clear();
+            ListTag summonTypesTag = tag.getList("summonTypeIds", Tag.TAG_STRING);
+            for (Tag entry : summonTypesTag) {
+                String id = entry.getAsString();
+                if (!id.isBlank()) data.summonTypeIds.add(id.trim().toLowerCase(java.util.Locale.ROOT));
             }
         }
         if (tag.contains("playerDuelStats", Tag.TAG_LIST)) {

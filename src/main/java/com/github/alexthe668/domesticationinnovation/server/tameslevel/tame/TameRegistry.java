@@ -45,6 +45,7 @@ public class TameRegistry {
     private static final Set<String> INVERTED_CALL_ORDER_TYPE_IDS = new HashSet<>();
     private static final Map<String, int[]> CUSTOM_CALL_ORDERS = new HashMap<>();
     private static final Set<String> DISABLED_TAME_TYPE_IDS = new LinkedHashSet<>(Set.of("minecraft:horse"));
+    private static final Set<String> SUMMON_TYPE_IDS = new LinkedHashSet<>();
     private static final Map<UUID, PlayerDuelStats> PLAYER_DUEL_STATS = new HashMap<>();
     private static final Map<UUID, Integer> OWNER_TELEPORT_APPROVED_CREDITS = new HashMap<>();
     private static String RANKED_ARENA_NAME = "";
@@ -129,6 +130,8 @@ public class TameRegistry {
         savedData.getCustomCallOrders().forEach((id, values) -> CUSTOM_CALL_ORDERS.put(id, values.clone()));
         DISABLED_TAME_TYPE_IDS.clear();
         DISABLED_TAME_TYPE_IDS.addAll(savedData.getDisabledTameTypeIds());
+        SUMMON_TYPE_IDS.clear();
+        SUMMON_TYPE_IDS.addAll(savedData.getSummonTypeIds());
         PLAYER_DUEL_STATS.clear();
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         OWNER_TELEPORT_APPROVED_CREDITS.clear();
@@ -327,6 +330,7 @@ public class TameRegistry {
         savedData.setInvertedCallOrderTypeIds(INVERTED_CALL_ORDER_TYPE_IDS);
         savedData.setCustomCallOrders(CUSTOM_CALL_ORDERS);
         savedData.setDisabledTameTypeIds(DISABLED_TAME_TYPE_IDS);
+        savedData.setSummonTypeIds(SUMMON_TYPE_IDS);
         savedData.setPlayerDuelStats(PLAYER_DUEL_STATS);
         savedData.setOwnerTeleportApprovedCredits(OWNER_TELEPORT_APPROVED_CREDITS);
         savedData.setPlayerDebugSettings(PlayerDebugSettings.saveAll());
@@ -755,6 +759,32 @@ public class TameRegistry {
 
     public static Set<String> getDisabledTameTypes() {
         return Set.copyOf(DISABLED_TAME_TYPE_IDS);
+    }
+
+    public static Set<String> getSummonTypes() { return Set.copyOf(SUMMON_TYPE_IDS); }
+
+    public static boolean isSummonType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        return normalized != null && SUMMON_TYPE_IDS.contains(normalized);
+    }
+
+    public static boolean isSummonType(LivingEntity entity) {
+        ResourceLocation key = entity == null ? null : ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+        return key != null && isSummonType(key.toString());
+    }
+
+    public static boolean addSummonType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || !SUMMON_TYPE_IDS.add(normalized)) return false;
+        markDirty();
+        return true;
+    }
+
+    public static boolean removeSummonType(String typeId) {
+        String normalized = normalizeTameTypeId(typeId);
+        if (normalized == null || !SUMMON_TYPE_IDS.remove(normalized)) return false;
+        markDirty();
+        return true;
     }
 
     public static boolean isTameTypeDisabled(LivingEntity tame) {

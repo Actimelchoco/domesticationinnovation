@@ -732,9 +732,9 @@ public class LevelSystem {
             return;
         }
         if (TameableUtils.getOwnerOf(tame) instanceof Player owner) {
-            owner.sendSystemMessage(Component.literal(
-                    "§b" + data.name + " class assigned: §e" + data.tameClass.id()
-            ));
+            owner.sendSystemMessage(Component.literal(data.name).withStyle(ChatFormatting.AQUA)
+                    .append(Component.literal(" class assigned: ").withStyle(ChatFormatting.AQUA))
+                    .append(Component.literal(data.tameClass.id()).withStyle(ChatFormatting.YELLOW)));
         }
     }
 

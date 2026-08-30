@@ -88,6 +88,7 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
         LivingEntity living = event.getEntity();
+        if (ignoreOrTerminateConfiguredSummon(living)) return;
         if (!living.level().isClientSide && living instanceof TamableAnimal tame) {
             // Bred offspring can receive their owner after EntityJoinLevelEvent and do not
             // necessarily fire AnimalTameEvent. Pick them up once ownership is established.
@@ -146,6 +147,7 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
         if (isTameReconstructionSuppressed()) return;
+        if (event.getEntity() instanceof LivingEntity living && ignoreOrTerminateConfiguredSummon(living)) return;
 
         if (event.getEntity() instanceof LivingEntity living
                 && living instanceof ModifedToBeTameable modified
@@ -934,6 +936,20 @@ public class TameSpawnEvents {
         LevelSystem.reapplyTypeBasePlusBonuses(living, data);
         LevelSystem.updateTameName(living, data);
         TameRegistry.markDirty();
+    }
+
+    private static boolean ignoreOrTerminateConfiguredSummon(LivingEntity living) {
+        if (living == null || living.level().isClientSide || !TameRegistry.isSummonType(living)) return false;
+        TameData tracked = TameRegistry.get(living.getUUID());
+        UUID tlId = TameData.getTlId(living);
+        if (tracked == null && tlId != null) tracked = TameRegistry.getByTlId(tlId);
+        boolean wasManaged = tracked != null || living.getPersistentData().hasUUID(TameData.TL_ID_TAG);
+        if (tracked != null) {
+            TameRegistry.removeDeathsForIdentity(tracked.uuid, tracked.tlId);
+            TameRegistry.remove(tracked.uuid);
+        }
+        if (wasManaged) living.discard();
+        return true;
     }
 
     public static boolean hasServerNameConflict(LivingEntity self, String requestedName) {

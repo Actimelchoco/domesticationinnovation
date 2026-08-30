@@ -3064,6 +3064,20 @@ public class TameCommands {
 
                                 .then(buildCanEatAdminCommand())
 
+                                .then(Commands.literal("isSummon")
+                                        .executes(ctx -> adminListSummonTypes(ctx.getSource()))
+                                        .then(Commands.literal("add")
+                                                .then(Commands.argument("type", ResourceLocationArgument.id())
+                                                        .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                        .executes(ctx -> adminAddSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
+                                        .then(Commands.literal("remove")
+                                                .then(Commands.argument("type", ResourceLocationArgument.id())
+                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameRegistry.getSummonTypes(), b))
+                                                        .executes(ctx -> adminRemoveSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
+                                        .then(Commands.argument("type", ResourceLocationArgument.id())
+                                                .suggests((ctx, b) -> suggestEntityTypes(b))
+                                                .executes(ctx -> adminAddSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
+
                                 .then(Commands.literal("rebuildEnderDragonArena")
                                         .executes(ctx -> adminRebuildEnderDragonArena(ctx.getSource())))
 
@@ -13548,6 +13562,8 @@ public class TameCommands {
         TameRegistry.bindEntityToData(tame, data);
         tame.save(refreshedSnapshot);
         data.entitySnapshot = refreshedSnapshot;
+        tame.getPersistentData().remove("TLLastClientRefreshQueued");
+        queueClientReloadForTame(tame, true);
         logRebuildTrace("finalizeRespawnState.end", data,
                 "entityUuid=" + tame.getUUID() + " entityTlId=" + TameData.getTlId(tame) + " dim=" + tame.level().dimension().location());
     }
@@ -17191,6 +17207,59 @@ public class TameCommands {
         final int dataCount = resetData;
         source.sendSuccess(() -> Component.literal("Reset wolf base stats for " + loadedCount + " loaded wolves; reset progress data for " + dataCount + " wolf entries."), true);
         return 1;
+    }
+
+    private static int adminListSummonTypes(CommandSourceStack source) {
+        List<String> types = new ArrayList<>(TameRegistry.getSummonTypes());
+        types.sort(String::compareToIgnoreCase);
+        source.sendSuccess(() -> Component.literal("Summon entity types: "
+                + (types.isEmpty() ? "none" : String.join(", ", types))).withStyle(ChatFormatting.YELLOW), false);
+        return 1;
+    }
+
+    private static int adminAddSummonType(CommandSourceStack source, String typeId) {
+        ResourceLocation id = ResourceLocation.tryParse(typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT));
+        if (id == null || !ForgeRegistries.ENTITY_TYPES.containsKey(id)) return adminError(source, "Unknown entity type: " + typeId + ".");
+        if (!TameRegistry.addSummonType(id.toString())) return adminError(source, "Entity type is already marked as a summon: " + id + ".");
+
+        int loadedRemoved = 0;
+        for (ServerLevel level : source.getServer().getAllLevels()) {
+            List<Entity> matches = new ArrayList<>();
+            for (Entity entity : level.getAllEntities()) {
+                ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+                if (id.equals(entityId)) matches.add(entity);
+            }
+            loadedRemoved += matches.size();
+            matches.forEach(Entity::discard);
+        }
+
+        List<TameData> registered = new ArrayList<>(TameRegistry.TAMES.values());
+        int registryRemoved = 0;
+        for (TameData data : registered) {
+            if (data == null || data.uuid == null || !id.toString().equals(normalizedStoredType(data.type))) continue;
+            TameRegistry.removeDeathsForIdentity(data.uuid, data.tlId);
+            TameRegistry.remove(data.uuid);
+            registryRemoved++;
+        }
+        int finalLoadedRemoved = loadedRemoved;
+        int finalRegistryRemoved = registryRemoved;
+        source.sendSuccess(() -> Component.literal("Marked " + id + " as a summon type. Removed "
+                + finalLoadedRemoved + " loaded entities and " + finalRegistryRemoved + " registry entries.")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static int adminRemoveSummonType(CommandSourceStack source, String typeId) {
+        if (!TameRegistry.removeSummonType(typeId)) return adminError(source, "Entity type is not marked as a summon: " + typeId + ".");
+        source.sendSuccess(() -> Component.literal("Removed summon classification from " + typeId + ".")
+                .withStyle(ChatFormatting.GREEN), true);
+        return 1;
+    }
+
+    private static String normalizedStoredType(String typeId) {
+        if (typeId == null) return "";
+        String normalized = typeId.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("entity.") ? normalized.substring("entity.".length()) : normalized;
     }
 
     private static int adminRebuildEnderDragonArena(CommandSourceStack source) {
@@ -20974,6 +21043,8 @@ public class TameCommands {
         tame.setDeltaMovement(Vec3.ZERO);
         TameRegistry.bindEntityToData(tame, data);
         LevelSystem.updateTameName(tame, data);
+        tame.getPersistentData().remove("TLLastClientRefreshQueued");
+        queueClientReloadForTame(tame, true);
     }
 
     private static void markRegistryTameDead(MinecraftServer server, TameData data, String deathMessage) {
