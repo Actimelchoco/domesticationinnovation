@@ -45,6 +45,9 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.mojang.authlib.GameProfile;
 import com.mojang.datafixers.util.Pair;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -2218,7 +2221,9 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
 
-                        .then(Commands.literal("leaderboard")
+                        .then(buildOrganizedLeaderboardCommand())
+                        .then(Commands.literal("_leaderboardOld")
+                                .requires(source -> false)
                                 .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1))
                                         .executes(ctx -> leaderboard(ctx.getSource(), "mix", true, null, null, IntegerArgumentType.getInteger(ctx, "limit"))))
@@ -4324,6 +4329,85 @@ public class TameCommands {
         return baseCost;
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildOrganizedLeaderboardCommand() {
+        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("leaderboard");
+        addLeaderboardOptions(root, true, null, null);
+
+        LiteralArgumentBuilder<CommandSourceStack> owned = Commands.literal("owned");
+        addLeaderboardOptions(owned, false, null, null);
+        RequiredArgumentBuilder<CommandSourceStack, String> ownedType = Commands.argument("ownedType", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder));
+        addLeaderboardOptions(ownedType, false, null, "ownedType");
+        owned.then(Commands.literal("type").then(ownedType));
+        root.then(owned);
+
+        RequiredArgumentBuilder<CommandSourceStack, String> type = Commands.argument("leaderboardType", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestLeaderboardTameTypes(builder));
+        addLeaderboardOptions(type, true, null, "leaderboardType");
+        LiteralArgumentBuilder<CommandSourceStack> typeOwned = Commands.literal("owned");
+        addLeaderboardOptions(typeOwned, false, null, "leaderboardType");
+        type.then(typeOwned);
+        root.then(Commands.literal("type").then(type));
+
+        RequiredArgumentBuilder<CommandSourceStack, String> group = Commands.argument("leaderboardGroup", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestOwnedGroups(ctx.getSource(), builder));
+        addLeaderboardOptions(group, false, "leaderboardGroup", null);
+        root.then(Commands.literal("group").then(group));
+        return root;
+    }
+
+    private static <T extends ArgumentBuilder<CommandSourceStack, T>> T addLeaderboardOptions(
+            T node, boolean includeAllOwners, String groupArgument, String typeArgument) {
+        node.executes(ctx -> runOrganizedLeaderboard(ctx, "mix", false, includeAllOwners, groupArgument, typeArgument, 10));
+        node.then(Commands.argument("limit", IntegerArgumentType.integer(1))
+                .executes(ctx -> runOrganizedLeaderboard(ctx, "mix", false, includeAllOwners, groupArgument, typeArgument,
+                        IntegerArgumentType.getInteger(ctx, "limit"))));
+        node.then(Commands.literal("all")
+                .executes(ctx -> runOrganizedLeaderboard(ctx, "mix", false, includeAllOwners, groupArgument, typeArgument, Integer.MAX_VALUE)));
+
+        RequiredArgumentBuilder<CommandSourceStack, String> sort = Commands.argument("leaderboardSort", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestLeaderboardModes(builder))
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"), false,
+                        includeAllOwners, groupArgument, typeArgument, 10));
+        sort.then(Commands.argument("sortedLimit", IntegerArgumentType.integer(1))
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"), false,
+                        includeAllOwners, groupArgument, typeArgument, IntegerArgumentType.getInteger(ctx, "sortedLimit"))));
+        sort.then(Commands.literal("all")
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"), false,
+                        includeAllOwners, groupArgument, typeArgument, Integer.MAX_VALUE)));
+
+        RequiredArgumentBuilder<CommandSourceStack, String> order = Commands.argument("leaderboardOrder", StringArgumentType.word())
+                .suggests((ctx, builder) -> suggestSortOrders(builder))
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"),
+                        leaderboardAscending(ctx), includeAllOwners, groupArgument, typeArgument, 10));
+        order.then(Commands.argument("orderedLimit", IntegerArgumentType.integer(1))
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"),
+                        leaderboardAscending(ctx), includeAllOwners, groupArgument, typeArgument,
+                        IntegerArgumentType.getInteger(ctx, "orderedLimit"))));
+        order.then(Commands.literal("all")
+                .executes(ctx -> runOrganizedLeaderboard(ctx, StringArgumentType.getString(ctx, "leaderboardSort"),
+                        leaderboardAscending(ctx), includeAllOwners, groupArgument, typeArgument, Integer.MAX_VALUE)));
+        sort.then(order);
+        node.then(sort);
+        return node;
+    }
+
+    private static int runOrganizedLeaderboard(CommandContext<CommandSourceStack> ctx, String sort, boolean ascending,
+                                                boolean includeAllOwners, String groupArgument, String typeArgument,
+                                                int limit) {
+        String group = groupArgument == null ? null : StringArgumentType.getString(ctx, groupArgument);
+        String type = typeArgument == null ? null : StringArgumentType.getString(ctx, typeArgument);
+        return leaderboard(ctx.getSource(), sort, includeAllOwners, group, type, limit, ascending);
+    }
+
+    private static boolean leaderboardAscending(CommandContext<CommandSourceStack> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        String order = StringArgumentType.getString(ctx, "leaderboardOrder");
+        if (order.equalsIgnoreCase("asc")) return true;
+        if (order.equalsIgnoreCase("desc")) return false;
+        throw new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
+                Component.literal("Sort direction must be asc or desc.")).create();
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildCanEatAdminCommand() {
         return Commands.literal("prefferedFood")
                 .then(buildCanEatLowPreferredFoodCommand("lowPrefferedFood"))
@@ -4989,16 +5073,14 @@ public class TameCommands {
         }
         else if (key.equals("leaderboard")) {
             sendInfoPage(p, "Leaderboard",
-                    "/tames leaderboard [mix|kills|deaths|assists|lvl|days] [<number>|all|everytame]",
-                    "/tames leaderboard type <typeName> [<number>|all|everytame]",
-                    "/tames leaderboard owned [mix|kills|deaths|assists|lvl|days|type <typeName>] [<number>|all|everytame]",
-                    "/tames leaderboard all <daysAlive|deaths|kills|assists|level|mmr> [asc]",
-                    "/tames leaderboard group <name> <sort> [asc]",
-                    "/tames leaderboard owned <sort> [asc]",
-                    "/tames leaderboard type <name> <sort> [asc]",
+                    "/tames leaderboard [<sort> [asc|desc]] [<number>|all]",
+                    "/tames leaderboard owned [<sort> [asc|desc]] [<number>|all]",
+                    "/tames leaderboard type <typeName> [owned] [<sort> [asc|desc]] [<number>|all]",
+                    "/tames leaderboard group <groupName> [<sort> [asc|desc]] [<number>|all]",
                     "Modes sort by weighted combat score, kills, deaths, assists, level, or days since last death.",
-                    "Sort order defaults to descending. MMR sorting includes rank-division headers without duel-stat detail lines.",
-                    "Leaderboard shows all owners by default, but only includes tames with invested XP above 0. Use 'owned' or 'type <typeName>' to filter it.",
+                    "Sort order defaults to descending. Every path defaults to 10 results; finish with a number or 'all' to change the limit.",
+                    "Leaderboard includes all owners by default. Use 'owned' to restrict results to your tames, and 'type <typeName>' to filter by tame type.",
+                    "Only tames with invested XP above 0 are included. MMR sorting adds rank-division headers.",
                     "'days' means days since last death, or born day if the tame never died."
             );
         }
