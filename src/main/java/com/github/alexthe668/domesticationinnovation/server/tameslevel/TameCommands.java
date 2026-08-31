@@ -21833,7 +21833,12 @@ public class TameCommands {
             tamable.setInSittingPose(!hasTarget);
             return;
         }
-        if (tame instanceof IComandableMob commandable) {
+        // DI interface tames use the fixed trinary contract: roam=0, sit=1,
+        // follow=2. Do not run these through external-mod call-order mappings;
+        // a learned/custom mapping can otherwise leave every interface tame sitting.
+        if (tame instanceof ModifedToBeTameable && tame instanceof IComandableMob commandable) {
+            commandable.setCommand(hasTarget ? 0 : 1);
+        } else if (tame instanceof IComandableMob commandable) {
             ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
             String typeId = key == null ? tame.getType().toString() : key.toString();
             boolean inverted = usesInvertedGenericCallOrder(typeId);

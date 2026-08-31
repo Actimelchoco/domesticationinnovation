@@ -4,6 +4,7 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -42,6 +43,10 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canUse(CallbackInfoReturnable<Boolean> cir){
+        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+            cir.setReturnValue(false);
+            return;
+        }
         if(tamable instanceof IComandableMob commandableMob && commandableMob.getCommand() != 2 && DomesticationMod.CONFIG.trinaryCommandSystem.get()){
             cir.setReturnValue(false);
         }
@@ -54,6 +59,10 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canContinueToUse(CallbackInfoReturnable<Boolean> cir){
+        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+            cir.setReturnValue(false);
+            return;
+        }
         if(tamable instanceof IComandableMob commandableMob && commandableMob.getCommand() != 2 && DomesticationMod.CONFIG.trinaryCommandSystem.get()){
             cir.setReturnValue(false);
         }
@@ -78,6 +87,11 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_tick(CallbackInfo ci) {
+        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+            tamable.getNavigation().stop();
+            ci.cancel();
+            return;
+        }
         if(TameableUtils.hasEnchant(tamable, DIEnchantmentRegistry.AMPHIBIOUS) && tamable.isInWaterOrBubble() && this.tamable.distanceToSqr(this.owner) < 144.0D){
             tamable.getNavigation().moveTo(owner, speedModifier);
             ci.cancel();

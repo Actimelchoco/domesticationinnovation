@@ -124,6 +124,7 @@ public final class TameDuelManager {
     private static final Map<UUID, Set<String>> BLUE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, Set<String>> ORANGE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, List<GoalSnapshotEntry>> MOSSY_GOLEM_TARGET_GOAL_BACKUPS = new HashMap<>();
+    private static final Map<UUID, List<GoalSnapshotEntry>> DUEL_FOLLOW_GOAL_BACKUPS = new HashMap<>();
 
     private static final class GoalSnapshotEntry {
         private final int priority;
@@ -615,6 +616,7 @@ public final class TameDuelManager {
             return;
         }
         if (tame instanceof TamableAnimal tamable) ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
+        suppressOwnerFollowGoals(tame);
         if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = TameEntityAdapter.target(tame);
@@ -719,6 +721,7 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
+        suppressOwnerFollowGoals(tame);
         applyDuelFollowRangeBoost(tame);
         if (tame instanceof TamableAnimal tamable) {
             ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
@@ -1127,7 +1130,42 @@ public final class TameDuelManager {
         if (tame == null) return;
         clearDuelCombatTarget(tame);
         removeDuelFollowRangeBoost(tame);
+        restoreOwnerFollowGoals(tame);
         if (tame instanceof TamableAnimal tamable) restoreMossyGolemTargetGoalsIfNeeded(tamable);
+    }
+
+    private static void suppressOwnerFollowGoals(LivingEntity tame) {
+        if (!(tame instanceof net.minecraft.world.entity.Mob mob)
+                || DUEL_FOLLOW_GOAL_BACKUPS.containsKey(tame.getUUID())) {
+            return;
+        }
+        List<GoalSnapshotEntry> removed = new ArrayList<>();
+        for (WrappedGoal wrapped : new ArrayList<>(mob.goalSelector.getAvailableGoals())) {
+            Goal goal = wrapped.getGoal();
+            if (goal == null || !isOwnerFollowGoal(goal)) continue;
+            removed.add(new GoalSnapshotEntry(wrapped.getPriority(), goal));
+            mob.goalSelector.removeGoal(goal);
+        }
+        if (!removed.isEmpty()) {
+            DUEL_FOLLOW_GOAL_BACKUPS.put(tame.getUUID(), removed);
+        }
+    }
+
+    private static void restoreOwnerFollowGoals(LivingEntity tame) {
+        if (!(tame instanceof net.minecraft.world.entity.Mob mob)) return;
+        List<GoalSnapshotEntry> removed = DUEL_FOLLOW_GOAL_BACKUPS.remove(tame.getUUID());
+        if (removed == null) return;
+        for (GoalSnapshotEntry entry : removed) {
+            if (entry != null && entry.goal != null) {
+                mob.goalSelector.addGoal(Math.max(0, entry.priority), entry.goal);
+            }
+        }
+    }
+
+    private static boolean isOwnerFollowGoal(Goal goal) {
+        String name = goal.getClass().getName().toLowerCase(java.util.Locale.ROOT)
+                .replace("_", "").replace("$", "");
+        return name.contains("followowner") || name.contains("ownerfollow");
     }
 
     private static void setDuelCombatTarget(LivingEntity tame, LivingEntity target) {
