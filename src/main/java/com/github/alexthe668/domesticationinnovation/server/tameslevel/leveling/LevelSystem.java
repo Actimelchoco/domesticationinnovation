@@ -1649,13 +1649,31 @@ public class LevelSystem {
     }
 
     private static Double resolveForcedTypeBaseValue(TameData data, Attribute attribute) {
-        if (data == null || attribute != Attributes.MAX_HEALTH || data.type == null) {
+        if (data == null || data.type == null) {
             return resolveForcedClassBaseValue(data, attribute);
         }
-        if (isDragonflyType(data.type)) {
+        if (attribute == Attributes.MAX_HEALTH && isDragonflyType(data.type)) {
             return 4.0D;
         }
+        // Rabbit.Variant.EVIL applies these bases from setVariant. A freshly created
+        // rabbit template is the normal variant, so generic stat restoration would
+        // otherwise collapse an evil tame back to ordinary rabbit stats after respawn.
+        if (isEvilRabbit(data)) {
+            if (attribute == Attributes.MAX_HEALTH) return 30.0D;
+            if (attribute == Attributes.ARMOR) return 8.0D;
+        }
         return resolveForcedClassBaseValue(data, attribute);
+    }
+
+    private static boolean isEvilRabbit(TameData data) {
+        if (data == null || data.type == null || data.entitySnapshot == null) {
+            return false;
+        }
+        String normalized = data.type.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean rabbit = "minecraft:rabbit".equals(normalized)
+                || "entity.minecraft.rabbit".equals(normalized);
+        return rabbit && data.entitySnapshot.contains("RabbitType", net.minecraft.nbt.Tag.TAG_INT)
+                && data.entitySnapshot.getInt("RabbitType") == 99;
     }
 
     private static boolean isDragonflyType(String typeId) {

@@ -524,10 +524,12 @@ public final class TameDuelManager {
 
     private static void clearTeamOneGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
-        // teamA shrinks when combatants are eliminated. The immutable roster is needed
-        // here so disabled/finished duels also clear outlines from former participants.
+        // The tracking set is transient and can be lost across a restart while Glowing
+        // remains in an entity snapshot. Clear every original Team 1 participant based
+        // on persistent battle membership, not only entries remembered by that set.
         for (UUID participantId : battle.roster) {
-            if (!TEAM_ONE_GLOWED_ENTITIES.remove(participantId)) continue;
+            TEAM_ONE_GLOWED_ENTITIES.remove(participantId);
+            if (!battle.originalTeamA.contains(participantId)) continue;
             LivingEntity participant = findLoadedLivingParticipant(server, participantId);
             if (participant != null) {
                 participant.removeEffect(MobEffects.GLOWING);
