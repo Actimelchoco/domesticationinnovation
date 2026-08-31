@@ -513,7 +513,9 @@ public final class TameDuelManager {
     private static void maintainTeamOneGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
         if (!teamOneGlowEnabled(battle)) return;
-        for (UUID participantId : battle.teamA) {
+        // Both teams need the vanilla glowing flag. Their private client-side
+        // scoreboard teams decide which outline color is rendered.
+        for (UUID participantId : battle.roster) {
             LivingEntity participant = findLoadedLivingParticipant(server, participantId);
             if (participant != null && participant.isAlive()) {
                 participant.addEffect(new MobEffectInstance(MobEffects.GLOWING, DUEL_GLOW_DURATION_TICKS, 0, false, false, false));
@@ -525,11 +527,9 @@ public final class TameDuelManager {
     private static void clearTeamOneGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
         // The tracking set is transient and can be lost across a restart while Glowing
-        // remains in an entity snapshot. Clear every original Team 1 participant based
-        // on persistent battle membership, not only entries remembered by that set.
+        // remains in an entity snapshot. Clear every duel participant.
         for (UUID participantId : battle.roster) {
             TEAM_ONE_GLOWED_ENTITIES.remove(participantId);
-            if (!battle.originalTeamA.contains(participantId)) continue;
             LivingEntity participant = findLoadedLivingParticipant(server, participantId);
             if (participant != null) {
                 participant.removeEffect(MobEffects.GLOWING);
@@ -985,10 +985,9 @@ public final class TameDuelManager {
             }
         }
         for (UUID viewerId : viewers) {
-            boolean viewerOnTeamA = battle.teamA.contains(viewerId);
-            Set<UUID> enemyTeam = viewerOnTeamA ? battle.teamB : battle.teamA;
-            Set<UUID> allyTeam = viewerOnTeamA ? battle.teamA : battle.teamB;
-            syncViewerTeamGlow(server, viewerId, allyTeam, enemyTeam);
+            // Colors are absolute: Team A is blue and Team B is red, regardless
+            // of which side the viewing player belongs to.
+            syncViewerTeamGlow(server, viewerId, battle.teamA, battle.teamB);
         }
     }
 
@@ -1092,7 +1091,7 @@ public final class TameDuelManager {
     private static PlayerTeam duelGlowTeam(UUID viewerId, boolean teamA) {
         Scoreboard scoreboard = new Scoreboard();
         PlayerTeam team = new PlayerTeam(scoreboard, duelGlowTeamName(viewerId, teamA));
-        team.setColor(teamA ? ChatFormatting.BLUE : ChatFormatting.GOLD);
+        team.setColor(teamA ? ChatFormatting.BLUE : ChatFormatting.RED);
         team.setAllowFriendlyFire(true);
         return team;
     }

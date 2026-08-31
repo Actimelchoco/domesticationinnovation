@@ -21,6 +21,7 @@ import net.minecraft.client.renderer.block.model.ItemTransforms;
 import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -143,6 +144,12 @@ public class ClientProxy extends CommonProxy {
 
     @SubscribeEvent
     public void renderNametagEvent(RenderNameTagEvent event) {
+        if (event.getEntity().getTeam() != null
+                && event.getEntity().getTeam().getName().startsWith("tldg")) {
+            // Scoreboard team color controls the glowing outline, but duel name
+            // tags should remain neutral instead of inheriting that color.
+            event.setContent(Component.literal(event.getContent().getString()).withStyle(ChatFormatting.WHITE));
+        }
         renderNametagEnchantments(event.getEntity(), event.getContent(), event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight());
     }
 
