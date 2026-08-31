@@ -208,6 +208,7 @@ public final class TameDuelManager {
         // Ensure participants have a valid target immediately after duel-start prep.
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
+        applyThreatTickMovementState(server, battle);
         maintainTeamOneGlow(server, battle);
     }
 
@@ -491,12 +492,35 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
+            applyThreatTickMovementState(server, battle);
             if (teamOneGlowEnabled(battle)) {
                 maintainTeamOneGlow(server, battle);
                 syncPlayerEnemyGlow(server, battle);
             } else {
                 clearTeamOneGlow(server, battle);
                 clearBattleViewerGlow(server, battle);
+            }
+        }
+    }
+
+    private static void applyThreatTickMovementState(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) {
+            return;
+        }
+        for (UUID participantId : battle.roster) {
+            LivingEntity tame = findLoadedTame(server, participantId);
+            if (tame == null || !tame.isAlive()) {
+                continue;
+            }
+            LivingEntity target = TameEntityAdapter.target(tame);
+            boolean hasTarget = isUsableCurrentDuelTarget(tame, target);
+            TameCommands.applyMovementOrderCode(tame, hasTarget ? 2 : 1);
+            if (hasTarget) {
+                // Applying a movement order clears targets for several vanilla and interface
+                // tame implementations, so restore the validated duel target afterwards.
+                setDuelCombatTarget(tame, target);
+            } else if (tame instanceof net.minecraft.world.entity.Mob mob) {
+                mob.getNavigation().stop();
             }
         }
     }
