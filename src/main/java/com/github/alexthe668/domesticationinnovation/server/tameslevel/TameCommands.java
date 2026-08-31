@@ -9118,11 +9118,38 @@ public class TameCommands {
         if (owner == null || !owner.isAlive()) {
             return;
         }
-        // Ranked pulls use the exact same validated loaded/unloaded path as
-        // /tames tphome. Active-round pulls are queued by the caller and reach
-        // this method only after the duel movement lock has been removed.
-        teleportHomeBatch(owner.createCommandSourceStack(), owner, List.of(data),
-                "Ranked pull TPHome", 0);
+        CommandSourceStack source = owner.createCommandSourceStack();
+        SpawnTarget target = resolveRespawnTarget(source, owner, data, false);
+        if (target == null || target.level == null || target.pos == null) {
+            owner.sendSystemMessage(Component.literal("Could not send " + tameDisplayName(data)
+                    + " home after pulling it from ranked: invalid respawn home.").withStyle(ChatFormatting.RED));
+            return;
+        }
+
+        // A hidden ranked participant has deliberately been discarded after its
+        // snapshot was saved. Sending that entry through the normal unloaded
+        // TPHome path only queues a chunk lookup for an entity that no longer
+        // exists, which eventually leaves the owner with a recovery notification.
+        // Ranked pull is lifecycle cleanup, so restore the snapshot directly at
+        // the same destination TPHome resolves instead.
+        cancelPendingImmediateChunkTeleport(server, data);
+        LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
+        if (tame == null || !tame.isAlive()) {
+            RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
+            tame = recovered.entity;
+            if (tame == null || !tame.isAlive()) {
+                owner.sendSystemMessage(Component.literal("Could not send " + tameDisplayName(data)
+                        + " home after pulling it from ranked: " + recovered.error + ".").withStyle(ChatFormatting.RED));
+                return;
+            }
+        } else {
+            teleportLivingTameToLocation(tame, target, true);
+        }
+        applyLivingMovementOverride(tame, data, MovementOrder.SIT);
+        if (data.movementOrder != 1) {
+            data.movementOrder = 1;
+            TameRegistry.markDirty();
+        }
     }
 
     private static Set<UUID> resolveOwnedRankedParticipantsFromSelection(MinecraftServer server, ServerPlayer owner, TeamSelection selection) {
