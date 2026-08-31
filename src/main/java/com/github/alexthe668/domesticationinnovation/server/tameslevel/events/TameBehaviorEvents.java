@@ -19,18 +19,31 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
+import net.minecraft.world.entity.ai.util.DefaultRandomPos;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 
 public class TameBehaviorEvents {
+    private record RemovedGoal(int priority, Goal goal) {}
+    private static final Map<UUID, List<RemovedGoal>> ARTIFICIAL_MOVEMENT_FOLLOW_GOALS = new HashMap<>();
+
     @SubscribeEvent
     public static void onTameTargetChange(LivingChangeTargetEvent event) {
         if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
@@ -73,8 +86,19 @@ public class TameBehaviorEvents {
         }
 
         if (tame.tickCount % 10 == 0) {
-            if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameCommands.syncLiveMovementStateFor(tamable);
+            // Wander/guardian may be artificial when the underlying mod exposes no matching
+            // command. Do not let its unchanged native "follow" state overwrite the selected
+            // registry order on the next synchronization pass.
+            if (activeData.movementOrder != 2 && activeData.movementOrder != 3
+                    && tame instanceof net.minecraft.world.entity.TamableAnimal tamable) {
+                TameCommands.syncLiveMovementStateFor(tamable);
+            }
+            syncArtificialMovementFollowGoals(tame, activeData);
             TamePerformanceProfiler.run("behavior.boss_movement_override", () -> handleBossMovementOverride(tame, activeData));
+        }
+
+        if (activeData.movementOrder == 2 && (tame.tickCount + Math.floorMod(tame.getUUID().hashCode(), 80)) % 80 == 0) {
+            TamePerformanceProfiler.run("behavior.artificial_wander", () -> handleArtificialWander(tame, activeData));
         }
 
         if (activeData.closeMovement && tame.tickCount % 10 == 0) {
@@ -111,6 +135,59 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
+    }
+
+    @SubscribeEvent
+    public static void onTameLeaveLevel(EntityLeaveLevelEvent event) {
+        if (event.getEntity() != null) {
+            ARTIFICIAL_MOVEMENT_FOLLOW_GOALS.remove(event.getEntity().getUUID());
+        }
+    }
+
+    private static void handleArtificialWander(PathfinderMob tame, TameData data) {
+        if (tame == null || data == null || data.movementOrder != 2
+                || TameEntityAdapter.isStayingStill(tame)
+                || tame.isPassenger() || tame.isLeashed()
+                || (tame.getTarget() != null && tame.getTarget().isAlive())
+                || !tame.getNavigation().isDone()) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 destination = DefaultRandomPos.getPos(tame, 10, 5);
+        if (destination != null) {
+            tame.getNavigation().moveTo(destination.x, destination.y, destination.z, 0.9D);
+        }
+    }
+
+    private static void syncArtificialMovementFollowGoals(PathfinderMob tame, TameData data) {
+        if (tame == null || data == null) return;
+        boolean artificialMovement = data.movementOrder == 2 || data.movementOrder == 3;
+        UUID id = tame.getUUID();
+        if (!artificialMovement) {
+            List<RemovedGoal> removed = ARTIFICIAL_MOVEMENT_FOLLOW_GOALS.remove(id);
+            if (removed != null) {
+                for (RemovedGoal entry : removed) {
+                    if (entry != null && entry.goal() != null) {
+                        tame.goalSelector.addGoal(Math.max(0, entry.priority()), entry.goal());
+                    }
+                }
+            }
+            return;
+        }
+        if (ARTIFICIAL_MOVEMENT_FOLLOW_GOALS.containsKey(id)) return;
+        List<RemovedGoal> removed = new ArrayList<>();
+        for (WrappedGoal wrapped : new ArrayList<>(tame.goalSelector.getAvailableGoals())) {
+            Goal goal = wrapped.getGoal();
+            if (goal == null || !isOwnerFollowGoal(goal)) continue;
+            removed.add(new RemovedGoal(wrapped.getPriority(), goal));
+            tame.goalSelector.removeGoal(goal);
+        }
+        if (!removed.isEmpty()) ARTIFICIAL_MOVEMENT_FOLLOW_GOALS.put(id, removed);
+    }
+
+    private static boolean isOwnerFollowGoal(Goal goal) {
+        String name = goal.getClass().getName().toLowerCase(Locale.ROOT)
+                .replace("_", "").replace("$", "");
+        return name.contains("followowner") || name.contains("ownerfollow");
     }
 
     @SubscribeEvent
