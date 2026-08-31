@@ -50,8 +50,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> NEW_TAME_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> AUTO_RESPAWN_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
-    private static final Map<UUID, Boolean> DUELS_GLOW = new HashMap<>();
-    private static final Map<UUID, Boolean> RANKED_GLOW = new HashMap<>();
+    private static final Map<UUID, Boolean> DUEL_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
     private static final Map<UUID, Boolean> HIDE_LEVEL_IN_NAME = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
@@ -87,8 +86,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
-            new BooleanSetting("duelsGlow", DUELS_GLOW, true),
-            new BooleanSetting("rankedGlow", RANKED_GLOW, true),
+            new BooleanSetting("duelGlow", DUEL_GLOW, true),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
             new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false),
             new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
@@ -241,12 +239,8 @@ public final class PlayerDebugSettings {
         return getBoolean(NO_AUTO_SET_BED, player, false);
     }
 
-    public static boolean duelsGlow(UUID player) {
-        return getBoolean(DUELS_GLOW, player, true);
-    }
-
-    public static boolean rankedGlow(UUID player) {
-        return getBoolean(RANKED_GLOW, player, true);
+    public static boolean duelGlow(UUID player) {
+        return getBoolean(DUEL_GLOW, player, true);
     }
 
     public static boolean friendlyFire(UUID player) {
@@ -435,12 +429,8 @@ public final class PlayerDebugSettings {
         setBoolean(NO_AUTO_SET_BED, player, enabled, false);
     }
 
-    public static void setDuelsGlow(UUID player, boolean enabled) {
-        setBoolean(DUELS_GLOW, player, enabled, true);
-    }
-
-    public static void setRankedGlow(UUID player, boolean enabled) {
-        setBoolean(RANKED_GLOW, player, enabled, true);
+    public static void setDuelGlow(UUID player, boolean enabled) {
+        setBoolean(DUEL_GLOW, player, enabled, true);
     }
 
     public static void setFriendlyFire(UUID player, boolean enabled) {
@@ -501,6 +491,14 @@ public final class PlayerDebugSettings {
             CompoundTag tag = entry.getValue();
             if (player == null || tag == null) {
                 continue;
+            }
+            // Migrate the former separate duel/ranked glow settings. A previous
+            // false value wins so an opted-out player is never silently re-enabled.
+            if (!tag.contains("duelGlow", Tag.TAG_BYTE)
+                    && (tag.contains("duelsGlow", Tag.TAG_BYTE) || tag.contains("rankedGlow", Tag.TAG_BYTE))) {
+                boolean migrated = (!tag.contains("duelsGlow", Tag.TAG_BYTE) || tag.getBoolean("duelsGlow"))
+                        && (!tag.contains("rankedGlow", Tag.TAG_BYTE) || tag.getBoolean("rankedGlow"));
+                if (!migrated) DUEL_GLOW.put(player, false);
             }
             for (BooleanSetting setting : BOOLEAN_SETTINGS) {
                 if (tag.contains(setting.key(), Tag.TAG_BYTE)) {

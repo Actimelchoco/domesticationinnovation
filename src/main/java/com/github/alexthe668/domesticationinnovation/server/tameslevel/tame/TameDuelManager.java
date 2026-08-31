@@ -521,7 +521,9 @@ public final class TameDuelManager {
 
     private static void clearTeamOneGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
-        for (UUID participantId : battle.teamA) {
+        // teamA shrinks when combatants are eliminated. The immutable roster is needed
+        // here so disabled/finished duels also clear outlines from former participants.
+        for (UUID participantId : battle.roster) {
             if (!TEAM_ONE_GLOWED_ENTITIES.remove(participantId)) continue;
             LivingEntity participant = findLoadedLivingParticipant(server, participantId);
             if (participant != null) {
@@ -546,9 +548,8 @@ public final class TameDuelManager {
         // The vanilla glowing flag is global, not viewer-specific. Require both owners to
         // opt in so a player on Team 2 cannot have their false setting ignored merely because
         // Team 1 owns the entity effect.
-        return battle.ranked
-                ? PlayerDebugSettings.rankedGlow(battle.ownerA) && PlayerDebugSettings.rankedGlow(battle.ownerB)
-                : PlayerDebugSettings.duelsGlow(battle.ownerA) && PlayerDebugSettings.duelsGlow(battle.ownerB);
+        return PlayerDebugSettings.duelGlow(battle.ownerA)
+                && PlayerDebugSettings.duelGlow(battle.ownerB);
     }
 
     public static synchronized void refreshGlowSettings(MinecraftServer server) {

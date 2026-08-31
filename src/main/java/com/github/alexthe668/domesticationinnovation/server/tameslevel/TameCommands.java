@@ -1062,14 +1062,10 @@ public class TameCommands {
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelsGlow")
-                        .executes(ctx -> duelGlowStatus(ctx.getSource(), false))
+                .then(Commands.literal("duelGlow")
+                        .executes(ctx -> duelGlowStatus(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelGlow(ctx.getSource(), false, BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("rankedGlow")
-                        .executes(ctx -> duelGlowStatus(ctx.getSource(), true))
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelGlow(ctx.getSource(), true, BoolArgumentType.getBool(ctx, "enabled")))))
+                                .executes(ctx -> setDuelGlow(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("friendlyFire")
                         .executes(ctx -> playerFriendlyFireStatus(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -5139,7 +5135,7 @@ public class TameCommands {
                     "/tames settings hideLevelInName <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
-                    "/tames settings duelsGlow|rankedGlow|friendlyFire <true|false>",
+                    "/tames settings duelGlow|friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
@@ -14130,23 +14126,22 @@ public class TameCommands {
         return null;
     }
 
-    private static int duelGlowStatus(CommandSourceStack source, boolean ranked) {
+    private static int duelGlowStatus(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
-        boolean enabled = ranked ? PlayerDebugSettings.rankedGlow(player.getUUID()) : PlayerDebugSettings.duelsGlow(player.getUUID());
-        player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow is " + (enabled ? "enabled." : "disabled."))
+        boolean enabled = PlayerDebugSettings.duelGlow(player.getUUID());
+        player.sendSystemMessage(Component.literal("Duel Team 1 glow is " + (enabled ? "enabled." : "disabled."))
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
 
-    private static int setDuelGlow(CommandSourceStack source, boolean ranked, boolean enabled) {
+    private static int setDuelGlow(CommandSourceStack source, boolean enabled) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
         UUID playerId = player.getUUID();
-        if (ranked) PlayerDebugSettings.setRankedGlow(playerId, enabled);
-        else PlayerDebugSettings.setDuelsGlow(playerId, enabled);
+        PlayerDebugSettings.setDuelGlow(playerId, enabled);
         TameDuelManager.refreshGlowSettings(source.getServer());
-        player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow " + (enabled ? "enabled." : "disabled."))
+        player.sendSystemMessage(Component.literal("Duel Team 1 glow " + (enabled ? "enabled." : "disabled."))
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
