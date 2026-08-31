@@ -210,6 +210,7 @@ public final class TameDuelManager {
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
         maintainTeamOneGlow(server, battle);
+        syncPlayerEnemyGlow(server, battle);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -499,11 +500,13 @@ public final class TameDuelManager {
             maintainTargets(server, battle.teamB, battle.teamA);
             if (teamOneGlowEnabled(battle)) {
                 maintainTeamOneGlow(server, battle);
-                syncPlayerEnemyGlow(server, battle);
             } else {
                 clearTeamOneGlow(server, battle);
-                clearBattleViewerGlow(server, battle);
             }
+            // Player clients also use these private team assignments to distinguish an
+            // opposing owned tame from a normal pet. Keep them synced even when the
+            // optional visual glow is disabled.
+            syncPlayerEnemyGlow(server, battle);
         }
     }
 
@@ -558,11 +561,10 @@ public final class TameDuelManager {
             if (battle == null) continue;
             if (teamOneGlowEnabled(battle)) {
                 maintainTeamOneGlow(server, battle);
-                syncPlayerEnemyGlow(server, battle);
             } else {
                 clearTeamOneGlow(server, battle);
-                clearBattleViewerGlow(server, battle);
             }
+            syncPlayerEnemyGlow(server, battle);
         }
     }
 
@@ -1056,7 +1058,10 @@ public final class TameDuelManager {
             if (living == null || !living.isAlive()) {
                 continue;
             }
-            desired.add(id.toString());
+            // Players use their profile name as the scoreboard entry; non-player
+            // entities use their UUID. Asking the entity avoids a team that exists
+            // client-side but never actually contains player participants.
+            desired.add(living.getScoreboardName());
         }
         return desired;
     }

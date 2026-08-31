@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,6 +20,9 @@ public class PlayerMixin {
             )
     )
     private boolean di_onSweepAttack_isAlliedTo(Player player, Entity entity) {
+        if (TameDuelManager.areDuelOpponents(player.getUUID(), entity.getUUID())) {
+            return false;
+        }
         return TameableUtils.isPetOf(player, entity) || player.isAlliedTo(entity);
     }
 }

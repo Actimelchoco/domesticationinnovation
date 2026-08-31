@@ -148,7 +148,8 @@ public class ClientProxy extends CommonProxy {
 
     @SubscribeEvent
     public void onAttackEntityFromClientEvent(InputEvent.InteractionKeyMappingTriggered event) {
-        if (event.isAttack() && DomesticationMod.CONFIG.swingThroughPets.get() && !Minecraft.getInstance().player.isShiftKeyDown() && Minecraft.getInstance().hitResult instanceof EntityHitResult && TameableUtils.isPetOf(Minecraft.getInstance().player, ((EntityHitResult) Minecraft.getInstance().hitResult).getEntity())) {
+        if (event.isAttack() && DomesticationMod.CONFIG.swingThroughPets.get() && !Minecraft.getInstance().player.isShiftKeyDown() && Minecraft.getInstance().hitResult instanceof EntityHitResult && TameableUtils.isPetOf(Minecraft.getInstance().player, ((EntityHitResult) Minecraft.getInstance().hitResult).getEntity())
+                && !isClientDuelOpponent(Minecraft.getInstance().player, ((EntityHitResult) Minecraft.getInstance().hitResult).getEntity())) {
             event.setCanceled(true);
             event.setSwingHand(true);
             Player player = Minecraft.getInstance().player;
@@ -165,6 +166,17 @@ public class ClientProxy extends CommonProxy {
                 Minecraft.getInstance().gameMode.attack(player, entityhitresult.getEntity());
             }
         }
+    }
+
+    private static boolean isClientDuelOpponent(Player player, Entity target) {
+        if (player == null || target == null || player.getTeam() == null || target.getTeam() == null) {
+            return false;
+        }
+        String playerTeam = player.getTeam().getName();
+        String targetTeam = target.getTeam().getName();
+        return playerTeam != null && targetTeam != null
+                && playerTeam.startsWith("tldg") && targetTeam.startsWith("tldg")
+                && !playerTeam.equals(targetTeam);
     }
 
     @SubscribeEvent
