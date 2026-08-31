@@ -542,9 +542,27 @@ public final class TameDuelManager {
     }
 
     private static boolean teamOneGlowEnabled(DuelBattle battle) {
-        return battle != null && (battle.ranked
-                ? PlayerDebugSettings.rankedGlow(battle.ownerA)
-                : PlayerDebugSettings.duelsGlow(battle.ownerA));
+        if (battle == null) return false;
+        // The vanilla glowing flag is global, not viewer-specific. Require both owners to
+        // opt in so a player on Team 2 cannot have their false setting ignored merely because
+        // Team 1 owns the entity effect.
+        return battle.ranked
+                ? PlayerDebugSettings.rankedGlow(battle.ownerA) && PlayerDebugSettings.rankedGlow(battle.ownerB)
+                : PlayerDebugSettings.duelsGlow(battle.ownerA) && PlayerDebugSettings.duelsGlow(battle.ownerB);
+    }
+
+    public static synchronized void refreshGlowSettings(MinecraftServer server) {
+        if (server == null) return;
+        for (DuelBattle battle : BATTLE_BY_ID.values()) {
+            if (battle == null) continue;
+            if (teamOneGlowEnabled(battle)) {
+                maintainTeamOneGlow(server, battle);
+                syncPlayerEnemyGlow(server, battle);
+            } else {
+                clearTeamOneGlow(server, battle);
+                clearBattleViewerGlow(server, battle);
+            }
+        }
     }
 
     public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, LivingEntity tame) {

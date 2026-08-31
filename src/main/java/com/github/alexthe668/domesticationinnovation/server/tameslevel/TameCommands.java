@@ -1496,7 +1496,6 @@ public class TameCommands {
                                 .requires(source -> false)
                                 .executes(ctx -> listApprovedReincarnationItems(ctx.getSource())))
                         .then(buildSettingsCommand())
-                        .then(buildSettingsCommand("setting"))
                         .then(buildChestDrumSettingsCommand())
                         .then(TameBedCommands.build())
                         .then(Commands.literal("_doNotAttackAnimalsOld")
@@ -9119,20 +9118,11 @@ public class TameCommands {
         if (owner == null || !owner.isAlive()) {
             return;
         }
-        SpawnTarget target = resolveRespawnTarget(owner.createCommandSourceStack(), owner, data, false);
-        if (target == null || target.level == null || target.pos == null) {
-            return;
-        }
-        LivingEntity loaded = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
-        if (loaded != null && loaded.isAlive()) {
-            teleportLivingTameToLocation(loaded, target, false);
-            applyLivingMovementOverride(loaded, data, MovementOrder.SIT);
-            return;
-        }
-        RecoverResult recovered = recoverPetEntityAtLocation(owner, target, data);
-        if (recovered.entity != null && recovered.entity.isAlive()) {
-            applyLivingMovementOverride(recovered.entity, data, MovementOrder.SIT);
-        }
+        // Ranked pulls use the exact same validated loaded/unloaded path as
+        // /tames tphome. Active-round pulls are queued by the caller and reach
+        // this method only after the duel movement lock has been removed.
+        teleportHomeBatch(owner.createCommandSourceStack(), owner, List.of(data),
+                "Ranked pull TPHome", 0);
     }
 
     private static Set<UUID> resolveOwnedRankedParticipantsFromSelection(MinecraftServer server, ServerPlayer owner, TeamSelection selection) {
@@ -14137,6 +14127,7 @@ public class TameCommands {
         UUID playerId = player.getUUID();
         if (ranked) PlayerDebugSettings.setRankedGlow(playerId, enabled);
         else PlayerDebugSettings.setDuelsGlow(playerId, enabled);
+        TameDuelManager.refreshGlowSettings(source.getServer());
         player.sendSystemMessage(Component.literal((ranked ? "Ranked" : "Duel") + " Team 1 glow " + (enabled ? "enabled." : "disabled."))
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
