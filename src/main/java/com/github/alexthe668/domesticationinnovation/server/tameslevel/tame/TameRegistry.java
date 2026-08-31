@@ -167,6 +167,9 @@ public class TameRegistry {
         if (data == null || data.uuid == null) {
             return;
         }
+        if (isSummonType(data.type)) {
+            return;
+        }
         if (hasLevelPrefixName(data.name)) {
             remove(data.uuid);
             return;
@@ -1075,6 +1078,9 @@ public class TameRegistry {
 
     public static void bindEntityToData(LivingEntity tame, TameData data) {
         if (tame == null || data == null) {
+            return;
+        }
+        if (isSummonType(tame)) {
             return;
         }
         data.ensureTlId();

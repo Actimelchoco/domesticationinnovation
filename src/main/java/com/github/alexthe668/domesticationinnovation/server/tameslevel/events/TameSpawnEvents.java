@@ -981,7 +981,6 @@ public class TameSpawnEvents {
         UUID tlId = TameData.getTlId(living);
         if (tracked == null && tlId != null) tracked = TameRegistry.getByTlId(tlId);
         if (tracked != null) {
-            if (tracked.name != null && !tracked.name.isBlank()) living.setCustomName(Component.literal(tracked.name));
             TameRegistry.removeDeathsForIdentity(tracked.uuid, tracked.tlId);
             TameRegistry.remove(tracked.uuid);
         }

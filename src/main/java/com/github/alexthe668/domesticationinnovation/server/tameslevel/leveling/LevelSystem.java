@@ -721,6 +721,9 @@ public class LevelSystem {
     }
 
     public static void ensureClassAssigned(LivingEntity tame, TameData data, boolean notifyOwner) {
+        if (tame == null || data == null || TameRegistry.isSummonType(tame)) {
+            return;
+        }
         if (data.tameClass != null) {
             return;
         }
@@ -1507,6 +1510,9 @@ public class LevelSystem {
     // ===============================
 
     public static void updateTameName(LivingEntity entity, TameData data) {
+        if (entity == null || data == null || TameRegistry.isSummonType(entity)) {
+            return;
+        }
         String name = PlayerDebugSettings.hideLevelInName(data.ownerUUID)
                 ? data.name
                 : "[Lvl " + data.level + "] " + data.name;
@@ -1548,6 +1554,9 @@ public class LevelSystem {
 
     public static boolean reapplyTypeBasePlusBonuses(LivingEntity tame, TameData data) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+        if (TameRegistry.isSummonType(tame)) {
             return false;
         }
         normalizeFixedHealthBonuses(data);
