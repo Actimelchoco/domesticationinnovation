@@ -8936,21 +8936,10 @@ public class TameCommands {
         boolean includeSelfRequested = parsed.selection != null && parsed.selection.includeSelf;
         Set<UUID> selectedIds = new LinkedHashSet<>();
         if (selfOnly) {
-            if (add) {
-                selectedIds.add(player.getUUID());
-                for (LivingEntity tame : loadedOwnedDuelTames(source, player.getUUID())) {
-                    if (tame != null && tame.isAlive()) {
-                        selectedIds.add(tame.getUUID());
-                    }
-                }
-            } else {
-                selectedIds.add(player.getUUID());
-                for (UUID participantId : RANKED_POOL) {
-                    if (participantId != null && player.getUUID().equals(participantOwnerForSession(source.getServer(), participantId))) {
-                        selectedIds.add(participantId);
-                    }
-                }
-            }
+            // "myself" is the player participant only. Use "all" when all owned
+            // tames are intended; silently expanding self made ranked add/pull
+            // affect the owner's entire roster.
+            selectedIds.add(player.getUUID());
         } else {
             if (add) {
                 TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
@@ -8965,9 +8954,6 @@ public class TameCommands {
             }
         }
         if (selectedIds.isEmpty()) {
-            if (selfOnly && !add) {
-                return error(player, "You have no ranked tames to pull.");
-            }
             return error(player, add
                     ? "No loaded/alive ranked participants matched that selection."
                     : "No ranked participants matched that selection.");

@@ -364,7 +364,11 @@ public class CommonProxy {
             Entity hit = ((EntityHitResult) event.getRayTraceResult()).getEntity();
             if (event.getProjectile().getOwner() instanceof Player) {
                 Player player = (Player) event.getProjectile().getOwner();
-                if (TameableUtils.isPetOf(player, hit)) {
+                // A player may deliberately be placed opposite their own tame in a duel.
+                // Let that projectile reach the normal duel damage checks instead of
+                // treating it as an accidental owner hit here at impact time.
+                if (TameableUtils.isPetOf(player, hit)
+                        && !TameDuelManager.areDuelOpponents(player.getUUID(), hit.getUUID())) {
                     event.setCanceled(true);
                 }
             }
