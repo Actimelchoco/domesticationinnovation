@@ -209,7 +209,6 @@ public final class TameDuelManager {
         // Ensure participants have a valid target immediately after duel-start prep.
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
-        applyThreatTickMovementState(server, battle);
         maintainTeamOneGlow(server, battle);
     }
 
@@ -379,12 +378,10 @@ public final class TameDuelManager {
             String reason = battle.teamA.isEmpty() ? "Team A eliminated." : "Team B eliminated.";
             finishBattle(server, battle, reason);
         } else {
-            // Death/removal events occur before the next entity AI tick. Resolve replacement
-            // targets (or seat survivors) now so a tame cannot follow/teleport to its owner in
-            // the one-tick gap after its previous target disappears.
+            // Resolve replacement targets immediately after an elimination. Owner-follow
+            // goals remain suppressed independently, so targetless participants stay mobile.
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            applyThreatTickMovementState(server, battle);
         }
         return true;
     }
@@ -500,35 +497,12 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            applyThreatTickMovementState(server, battle);
             if (teamOneGlowEnabled(battle)) {
                 maintainTeamOneGlow(server, battle);
                 syncPlayerEnemyGlow(server, battle);
             } else {
                 clearTeamOneGlow(server, battle);
                 clearBattleViewerGlow(server, battle);
-            }
-        }
-    }
-
-    private static void applyThreatTickMovementState(MinecraftServer server, DuelBattle battle) {
-        if (server == null || battle == null) {
-            return;
-        }
-        for (UUID participantId : battle.roster) {
-            LivingEntity tame = findLoadedTame(server, participantId);
-            if (tame == null || !tame.isAlive()) {
-                continue;
-            }
-            LivingEntity target = TameEntityAdapter.target(tame);
-            boolean hasTarget = isUsableCurrentDuelTarget(tame, target);
-            TameCommands.applyDuelMovementOrder(tame, hasTarget);
-            if (hasTarget) {
-                // Applying a movement order clears targets for several vanilla and interface
-                // tame implementations, so restore the validated duel target afterwards.
-                setDuelCombatTarget(tame, target);
-            } else if (tame instanceof net.minecraft.world.entity.Mob mob) {
-                mob.getNavigation().stop();
             }
         }
     }
@@ -639,7 +613,7 @@ public final class TameDuelManager {
             setDuelCombatTarget(tame, nearest);
         } else {
             clearDuelCombatTarget(tame);
-            TameCommands.applyDuelMovementOrder(tame, false);
+            TameCommands.applyDuelMovementOrder(tame, true);
         }
     }
 
@@ -661,7 +635,7 @@ public final class TameDuelManager {
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 clearDuelCombatTarget(own);
-                TameCommands.applyDuelMovementOrder(own, false);
+                TameCommands.applyDuelMovementOrder(own, true);
                 continue;
             }
             TameCommands.applyDuelMovementOrder(own, true);
@@ -730,9 +704,9 @@ public final class TameDuelManager {
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
-        // Spawn every tame into the duel seated. The immediate threat pass switches
-        // only participants with a valid opponent to wander and leaves the rest sitting.
-        TameCommands.applyDuelMovementOrder(tame, false);
+        // Owner-follow goals are suppressed separately, so participants can start mobile
+        // without getting a one-tick opportunity to teleport back to their owner.
+        TameCommands.applyDuelMovementOrder(tame, true);
     }
 
     private static void clearDuelRestingState(LivingEntity tame) {
