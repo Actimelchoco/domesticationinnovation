@@ -31,6 +31,16 @@ public final class TameGoalSupport {
     private TameGoalSupport() {
     }
 
+    static void setNativeCombatTarget(TamableAnimal tame, LivingEntity target) {
+        if (tame == null || target == null || !target.isAlive()) return;
+        if (tame.getTarget() != target) {
+            tame.setTarget(target);
+            // Wake native HurtByTargetGoal-only combat implementations without
+            // dealing artificial damage.
+            tame.setLastHurtByMob(target);
+        }
+    }
+
     static TameData data(TamableAnimal tame) {
         return TameRegistry.get(tame.getUUID());
     }
@@ -48,7 +58,7 @@ public final class TameGoalSupport {
 
         LivingEntity target = findBestHostile(level, centerX, centerY, centerZ, data.protectionRadius, false);
         if (target != null) {
-            tame.setTarget(target);
+            setNativeCombatTarget(tame, target);
             if (tame.distanceToSqr(centerX, centerY, centerZ) > Math.pow(data.protectionRadius + 6, 2)) {
                 tame.getNavigation().moveTo(centerX, centerY, centerZ, 1.2D);
             }
@@ -89,7 +99,7 @@ public final class TameGoalSupport {
 
         SHARED_BOSS_TARGETS.put(key, target.getUUID());
         if (tame.getTarget() != target) {
-            tame.setTarget(target);
+            setNativeCombatTarget(tame, target);
         }
     }
 
@@ -120,7 +130,7 @@ public final class TameGoalSupport {
         if (target == null) {
             target = findBestHostile(level, owner.getX(), owner.getY(), owner.getZ(), aggroRadius, false);
         }
-        if (target != null) tame.setTarget(target);
+        if (target != null) setNativeCombatTarget(tame, target);
     }
 
     private static LivingEntity prioritizeOwnerCombatTarget(ServerPlayer owner, TamableAnimal tame) {
@@ -153,7 +163,7 @@ public final class TameGoalSupport {
             return;
         }
         LivingEntity target = findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);
-        if (target != null) tame.setTarget(target);
+        if (target != null) setNativeCombatTarget(tame, target);
     }
 
     static LivingEntity nearestHunterHostile(ServerLevel level, TamableAnimal tame, double huntRadius) {
@@ -184,7 +194,7 @@ public final class TameGoalSupport {
             }
         }
         if (best != null) {
-            tame.setTarget(best);
+            setNativeCombatTarget(tame, best);
         }
     }
 
@@ -200,7 +210,7 @@ public final class TameGoalSupport {
         }
 
         LivingEntity target = findPreferredForDistant(level, owner.getX(), owner.getY(), owner.getZ(), 30.0D);
-        if (target != null) tame.setTarget(target);
+        if (target != null) setNativeCombatTarget(tame, target);
     }
 
     private static LivingEntity findPreferredForDistant(ServerLevel level, double x, double y, double z, double radius) {

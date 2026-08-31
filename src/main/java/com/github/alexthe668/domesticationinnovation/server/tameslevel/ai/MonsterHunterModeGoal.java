@@ -73,7 +73,7 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
                 combatRescanTicks = 0;
                 LivingEntity closer = TameGoalSupport.nearestHunterHostile(level, tame, 10.0D);
                 if (closer != null && closer != current && tame.distanceToSqr(closer) < tame.distanceToSqr(current)) {
-                    tame.setTarget(closer);
+                    TameGoalSupport.setNativeCombatTarget(tame, closer);
                     trackedLivingTarget = closer.getUUID();
                 }
             }

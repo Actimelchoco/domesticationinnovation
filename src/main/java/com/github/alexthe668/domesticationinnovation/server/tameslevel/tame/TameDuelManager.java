@@ -1170,6 +1170,9 @@ public final class TameDuelManager {
         }
         if (tame instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != target) {
             mob.setTarget(target);
+            // Some modded animals only expose HurtByTargetGoal. This starts that
+            // native combat path without applying damage to the tame.
+            tame.setLastHurtByMob(target);
         }
         maintainMossyGolemDuelAttack(tame, target);
         try {
@@ -1221,6 +1224,7 @@ public final class TameDuelManager {
             mob.setTarget(null);
             mob.getNavigation().stop();
         }
+        tame.setLastHurtByMob(null);
         try {
             tame.getBrain().eraseMemory(MemoryModuleType.ANGRY_AT);
             tame.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
