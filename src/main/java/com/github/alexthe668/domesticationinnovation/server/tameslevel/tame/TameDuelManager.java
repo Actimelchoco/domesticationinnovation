@@ -67,6 +67,7 @@ public final class TameDuelManager {
         private final Map<UUID, CompoundTag> tameSnapshots = new HashMap<>();
         private final Map<UUID, CompoundTag> playerSnapshots = new HashMap<>();
         private final Map<UUID, DuelStats> duelStats = new HashMap<>();
+        private final Map<String, String> originalScoreboardTeams = new HashMap<>();
         private final Map<UUID, List<ServerBossEvent>> ownerBossBars = new HashMap<>();
         private final Set<UUID> spectatorIds = new HashSet<>();
         private final boolean broadcastToServer;
@@ -912,6 +913,7 @@ public final class TameDuelManager {
         Set<UUID> allParticipants = new HashSet<>(battle.roster);
         clearTeamOneGlow(server, battle);
         clearBattleViewerGlow(server, battle);
+        restoreDuelScoreboardTeams(server, battle);
         int restoredCount = 0;
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
@@ -989,27 +991,56 @@ public final class TameDuelManager {
         if (server == null || battle == null) {
             return;
         }
-        Set<UUID> viewers = new HashSet<>();
-        // Tame-only duels previously gave the owners the global Glowing effect
-        // without the private scoreboard teams that color it, producing a white
-        // outline. Owners must receive the same absolute A/B color mapping even
-        // when they are not combat participants themselves.
-        if (battle.ownerA != null && server.getPlayerList().getPlayer(battle.ownerA) != null) {
-            viewers.add(battle.ownerA);
+        Scoreboard scoreboard = server.getScoreboard();
+        PlayerTeam blueTeam = getOrCreateDuelScoreboardTeam(scoreboard, battle, true);
+        PlayerTeam redTeam = getOrCreateDuelScoreboardTeam(scoreboard, battle, false);
+        boolean glowEnabled = teamOneGlowEnabled(battle);
+        blueTeam.setColor(glowEnabled ? ChatFormatting.BLUE : ChatFormatting.WHITE);
+        redTeam.setColor(glowEnabled ? ChatFormatting.RED : ChatFormatting.WHITE);
+        syncDuelScoreboardEntries(server, battle, scoreboard, blueTeam, battle.originalTeamA);
+        syncDuelScoreboardEntries(server, battle, scoreboard, redTeam, battle.originalTeamB);
+    }
+
+    private static PlayerTeam getOrCreateDuelScoreboardTeam(Scoreboard scoreboard, DuelBattle battle, boolean teamA) {
+        String name = duelGlowTeamName(battle.battleId, teamA);
+        PlayerTeam team = scoreboard.getPlayerTeam(name);
+        if (team == null) {
+            team = scoreboard.addPlayerTeam(name);
         }
-        if (battle.ownerB != null && server.getPlayerList().getPlayer(battle.ownerB) != null) {
-            viewers.add(battle.ownerB);
+        team.setAllowFriendlyFire(true);
+        return team;
+    }
+
+    private static void syncDuelScoreboardEntries(MinecraftServer server, DuelBattle battle, Scoreboard scoreboard,
+                                                   PlayerTeam duelTeam, Set<UUID> participantIds) {
+        for (String entry : collectGlowEntries(server, participantIds)) {
+            if (!battle.originalScoreboardTeams.containsKey(entry)) {
+                PlayerTeam original = scoreboard.getPlayersTeam(entry);
+                battle.originalScoreboardTeams.put(entry, original == null ? "" : original.getName());
+            }
+            scoreboard.addPlayerToTeam(entry, duelTeam);
         }
-        for (UUID participantId : battle.roster) {
-            if (server.getPlayerList().getPlayer(participantId) != null) {
-                viewers.add(participantId);
+    }
+
+    private static void restoreDuelScoreboardTeams(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) return;
+        Scoreboard scoreboard = server.getScoreboard();
+        PlayerTeam blueTeam = scoreboard.getPlayerTeam(duelGlowTeamName(battle.battleId, true));
+        PlayerTeam redTeam = scoreboard.getPlayerTeam(duelGlowTeamName(battle.battleId, false));
+        for (Map.Entry<String, String> entry : battle.originalScoreboardTeams.entrySet()) {
+            String scoreboardEntry = entry.getKey();
+            PlayerTeam current = scoreboard.getPlayersTeam(scoreboardEntry);
+            if (current == blueTeam || current == redTeam) {
+                scoreboard.removePlayerFromTeam(scoreboardEntry, current);
+            }
+            if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                PlayerTeam original = scoreboard.getPlayerTeam(entry.getValue());
+                if (original != null) scoreboard.addPlayerToTeam(scoreboardEntry, original);
             }
         }
-        for (UUID viewerId : viewers) {
-            // Colors are absolute: Team A is blue and Team B is red, regardless
-            // of which side the viewing player belongs to.
-            syncViewerTeamGlow(server, viewerId, battle.teamA, battle.teamB);
-        }
+        if (blueTeam != null) scoreboard.removePlayerTeam(blueTeam);
+        if (redTeam != null) scoreboard.removePlayerTeam(redTeam);
+        battle.originalScoreboardTeams.clear();
     }
 
     private static void syncViewerTeamGlow(MinecraftServer server, UUID viewerId, Set<UUID> blueIds, Set<UUID> orangeIds) {
