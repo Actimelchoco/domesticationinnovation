@@ -14147,7 +14147,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
         boolean enabled = PlayerDebugSettings.duelGlow(player.getUUID());
-        player.sendSystemMessage(Component.literal("Duel Team 1 glow is " + (enabled ? "enabled." : "disabled."))
+        player.sendSystemMessage(Component.literal("Duel glow is " + (enabled ? "enabled." : "disabled."))
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -14158,7 +14158,7 @@ public class TameCommands {
         UUID playerId = player.getUUID();
         PlayerDebugSettings.setDuelGlow(playerId, enabled);
         TameDuelManager.refreshGlowSettings(source.getServer());
-        player.sendSystemMessage(Component.literal("Duel Team 1 glow " + (enabled ? "enabled." : "disabled."))
+        player.sendSystemMessage(Component.literal("Duel glow " + (enabled ? "enabled." : "disabled."))
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }

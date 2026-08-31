@@ -209,7 +209,13 @@ public final class TameDuelManager {
         // Ensure participants have a valid target immediately after duel-start prep.
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
-        maintainTeamOneGlow(server, battle);
+        // Do not leave a restored/snapshotted glow visible for the first duel
+        // maintenance interval when the owners have disabled duelGlow.
+        if (teamOneGlowEnabled(battle)) {
+            maintainTeamOneGlow(server, battle);
+        } else {
+            clearTeamOneGlow(server, battle);
+        }
         syncPlayerEnemyGlow(server, battle);
     }
 
@@ -539,11 +545,15 @@ public final class TameDuelManager {
 
     private static void clearBattleViewerGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
-        for (UUID participantId : battle.roster) {
-            if (server.getPlayerList().getPlayer(participantId) != null
-                    && (BLUE_GLOW_ENTRIES_BY_VIEWER.containsKey(participantId)
-                    || ORANGE_GLOW_ENTRIES_BY_VIEWER.containsKey(participantId))) {
-                clearViewerEnemyGlow(server, participantId);
+        Set<UUID> viewers = new HashSet<>(battle.roster);
+        if (battle.ownerA != null) viewers.add(battle.ownerA);
+        if (battle.ownerB != null) viewers.add(battle.ownerB);
+        viewers.addAll(battle.spectatorIds);
+        for (UUID viewerId : viewers) {
+            if (server.getPlayerList().getPlayer(viewerId) != null
+                    && (BLUE_GLOW_ENTRIES_BY_VIEWER.containsKey(viewerId)
+                    || ORANGE_GLOW_ENTRIES_BY_VIEWER.containsKey(viewerId))) {
+                clearViewerEnemyGlow(server, viewerId);
             }
         }
     }
@@ -901,6 +911,7 @@ public final class TameDuelManager {
 
         Set<UUID> allParticipants = new HashSet<>(battle.roster);
         clearTeamOneGlow(server, battle);
+        clearBattleViewerGlow(server, battle);
         int restoredCount = 0;
         for (UUID participantId : allParticipants) {
             BATTLE_ID_BY_ENTITY.remove(participantId);
@@ -979,6 +990,16 @@ public final class TameDuelManager {
             return;
         }
         Set<UUID> viewers = new HashSet<>();
+        // Tame-only duels previously gave the owners the global Glowing effect
+        // without the private scoreboard teams that color it, producing a white
+        // outline. Owners must receive the same absolute A/B color mapping even
+        // when they are not combat participants themselves.
+        if (battle.ownerA != null && server.getPlayerList().getPlayer(battle.ownerA) != null) {
+            viewers.add(battle.ownerA);
+        }
+        if (battle.ownerB != null && server.getPlayerList().getPlayer(battle.ownerB) != null) {
+            viewers.add(battle.ownerB);
+        }
         for (UUID participantId : battle.roster) {
             if (server.getPlayerList().getPlayer(participantId) != null) {
                 viewers.add(participantId);
