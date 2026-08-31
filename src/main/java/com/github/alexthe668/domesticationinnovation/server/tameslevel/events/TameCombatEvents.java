@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.events;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
+import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BlessfulledCompat;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
@@ -30,6 +31,7 @@ import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.LivingEntity;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.Rabbit;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -220,6 +222,9 @@ public class TameCombatEvents {
                 || (tlId != null && TameDuelManager.isTameInDuel(tlId))
                 || TameDuelManager.consumeRecentDuelElimination(tame.getUUID())
                 || (tlId != null && TameDuelManager.consumeRecentDuelElimination(tlId));
+        if (!diedInDuel && tame instanceof Rabbit && data != null && data.activeSurvivalDays >= 18) {
+            tame.spawnAtLocation(new ItemStack(DIItemRegistry.SINISTER_CARROT.get()));
+        }
         if (data != null) {
             LevelSystem.storeHighestProgressSnapshot(data);
         }
@@ -736,6 +741,9 @@ public class TameCombatEvents {
         if (death == null) {
             return null;
         }
+        if (death.lastTameDamagerUuid() != null) {
+            return death.lastTameDamagerUuid();
+        }
         if (death.killer() instanceof ServerPlayer player) {
             return player.getUUID();
         }
@@ -770,7 +778,8 @@ public class TameCombatEvents {
         return best;
     }
 
-    private record PendingDeath(LivingEntity dead, UUID deadId, UUID duelParticipantId, LivingEntity killer, UUID killerTameUuid, Set<UUID> contributors) {
+    private record PendingDeath(LivingEntity dead, UUID deadId, UUID duelParticipantId, LivingEntity killer, UUID killerTameUuid,
+                                UUID lastTameDamagerUuid, Set<UUID> contributors) {
         private static PendingDeath capture(LivingDeathEvent event) {
             if (event == null || event.isCanceled()) {
                 return null;
@@ -804,6 +813,7 @@ public class TameCombatEvents {
                     resolveDuelParticipantUuid(dead),
                     killer,
                     killerTameUuid,
+                    LevelSystem.lastTameDamager(dead.getUUID()),
                     contributors
             );
         }

@@ -227,6 +227,7 @@ public class TameCommands {
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
     private static final long TELEPORT_CLIENT_REFRESH_DELAY_TICKS = 20L;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
+    private static final long RANKED_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final double DUEL_SESSION_ARENA_MAX_DRIFT_SQR = 56.0D * 56.0D;
     private static final UUID RANKED_SESSION_OWNER_A = UUID.fromString("8ca9f9dd-cdc9-4d67-98aa-5f6ef6d76013");
     private static final UUID RANKED_SESSION_OWNER_B = UUID.fromString("a9129d8e-1f49-40ce-aee0-27ec9dd6f483");
@@ -2180,12 +2181,7 @@ public class TameCommands {
                                                 .executes(ctx -> participantsList(ctx.getSource(), true, false)))
                                         .then(Commands.literal("active")
                                                 .executes(ctx -> participantsList(ctx.getSource(), false, true))))
-                                .then(Commands.literal("leaderboard")
-                                        .executes(ctx -> rankedLeaderboard(ctx.getSource(), false, false))
-                                        .then(Commands.literal("owned")
-                                                .executes(ctx -> rankedLeaderboard(ctx.getSource(), true, false)))
-                                        .then(Commands.literal("active")
-                                                .executes(ctx -> rankedLeaderboard(ctx.getSource(), false, true)))))
+                                .then(buildOrganizedDuelLeaderboardCommand()))
                                 .then(Commands.literal("decline")
                                         .then(Commands.argument("player", StringArgumentType.word())
                                                 .suggests((ctx, b) -> suggestIncomingDuelChallengers(ctx.getSource(), b))
@@ -5112,7 +5108,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         p.sendSystemMessage(Component.literal("/tame is an alias for /tames").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Use /tames info <topic> for the live mechanic page.").withStyle(ChatFormatting.GOLD));
-        p.sendSystemMessage(Component.literal("Topics: selection, settings, chestxdrum, stat, inspect, search, leaderboard, duelleaderboard, group, inventory, armor, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, collar, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
+        p.sendSystemMessage(Component.literal("Topics: selection, settings, chestxdrum, stat, inspect, search, leaderboard, duelleaderboard, group, inventory, collar, sinisterCarrot, mode, follow, sit, wander, guardian, guardian_arrow, tool guardian, movement, tp, tphome, bed, respawn, arise, ariseReincarnated, graveyard, reincarnate, healthSiphon, enterPortalsByThemselves, sitOnChairs, arena, duel, duelSession, duelSessionFFA, ranked, debug, attribute, ability, class").withStyle(ChatFormatting.GRAY));
         p.sendSystemMessage(Component.literal("Examples: /tames info ranked, /tames info duelSession, /tames info arena, /tames info duel accept, /tames info ability arrow_shot 5, /tames info attribute tethered_teleport 1, /tames info class dps").withStyle(ChatFormatting.DARK_AQUA));
         p.sendSystemMessage(Component.literal("/tames berserk|passive"));
         return 1;
@@ -5230,7 +5226,7 @@ public class TameCommands {
                     "Tames keep up to 18 stacks of accepted food-valued items. Loaded tames consume saturation while following, wandering, or fighting outside duels.",
                     "Inventory distribute shares compatible food among selected loaded tames. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
-                    "Food autopickup moves food-valued drops from kills into the tame inventory before they appear as item drops.",
+                    "Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.",
                     "Register a container above your drum with /tames chestxdrum set <radius> <height>. On its interval, it refills loaded hungry tames until they reach green.",
                     "Chest x drum reverse-pull rules can return configured non-preferred food or food preferred by selected tame types from tame inventories to the chest.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
@@ -5262,12 +5258,11 @@ public class TameCommands {
                     "At 0 saturation with no usable stored food, the tame sits, stops using abilities, and ignores follow/wander commands.",
                     "=== Saturation drain ===",
                     "Following: 2 per second | Wandering/guarding: 1 per second | Fighting a live target: 4 per second",
-                    "During duel and ranked rounds, this ordinary activity drain runs at one tenth of its normal frequency.",
+                    "During duel and ranked rounds, this ordinary activity drain runs at one hundredth of its normal frequency.",
                     "Duels and ranked have no separate food entry payment.",
                     "Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.",
                     "Natural regeneration costs saturation. Command teleports do not.",
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
-                    "Each equipped armor piece increases saturation use by 50%.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
                     "Drum refill: stand on the container above the drum, then use /tames chestxdrum set <radius> <height>.",
@@ -5488,7 +5483,17 @@ public class TameCommands {
                     "Lists your tames with collar tags (or without via notag), including their Protection tier.",
                     "Protection I-XII is crafted by surrounding a collar tag with the tier material.",
                     "Protection II-XII must be upgraded sequentially from the previous tier.",
+                    "Every collar tag grants 5 base armor points, in addition to its Protection effect.",
                     "Each level reduces post-armor damage by 4%."
+            );
+        }
+        else if (key.equals("sinistercarrot") || key.equals("sinestercarrot") || key.equals("sinister carrot") || key.equals("sinester carrot")) {
+            sendInfoPage(p, "Sinister Carrot",
+                    "Found as one item in Woodland Mansion chests. The default chance is 30% per generated chest and can be changed with sinister_carrot_loot_chance.",
+                    "A registered tamed rabbit also drops one after a real death if it completed at least 18 active survival days.",
+                    "Duel and ranked eliminations do not produce a Sinister Carrot.",
+                    "Use it on your tamed rabbit to turn it into the evil rabbit variant, or on a zombie horse to convert it into a skeleton horse.",
+                    "Eating it gives Wither for 5 seconds."
             );
         }
         else if (key.equals("inspect")) {
@@ -5555,7 +5560,10 @@ public class TameCommands {
             sendInfoPage(p, "Ranked",
                     "/tames ranked",
                     "/tames ranked system",
-                    "/tames ranked leaderboard [owned|active]",
+                    "/tames ranked leaderboard [<number>|all]",
+                    "/tames ranked leaderboard owned [<number>|all]",
+                    "/tames ranked leaderboard type <type> [owned] [<number>|all]",
+                    "/tames ranked participants [owned|active]",
                     "/tames ranked add <selection>",
                     "/tames ranked pull <selection>",
                     "/tames ranked dailyBonus [done|hasntdone]",
@@ -5563,12 +5571,15 @@ public class TameCommands {
                     "/tames admin ranked pullAllParticipants",
                     "/tames admin ranked setA|setB|setWaitingA|setWaitingB",
                     "Ranked is a continuously running duelSessionFFA on the configured ranked arena.",
-                    "Tames must be level 10 or higher. Rejected selections print Not Level 10 followed by names.",
-                    "There is no duel or ranked entry payment. During rounds, tames consume ordinary food at one tenth of their normal rate.",
+                    "Tames must be level 10 or higher and have at least one stored food item before they can be added.",
+                    "A tame is pulled from ranked after a round if its food inventory is empty.",
+                    "There is no duel or ranked entry payment. During rounds, tames consume ordinary food at one hundredth of their normal rate.",
                     "Each tame's first three ranked matches per Minecraft day grant uncapped normal duel XP, even on a loss. Later ranked XP is win-only and capped normally.",
                     "dailyBonus reports owned tames that have or have not completed those three matches.",
                     "Only tames whose owners are online are selected into rounds.",
                     "Offline-owner tames stay idle at waiting until their owner is online again.",
+                    "When no round is active and enough eligible participants are waiting, the next ranked round starts after 1 second.",
+                    "/tames ranked leaderboard uses the full duel leaderboard. /tames ranked participants lists only the current ranked pool.",
                     "The ranked arena is reserved and cannot be used through /tames duel arena."
             );
         }
@@ -5580,7 +5591,7 @@ public class TameCommands {
                     "/tames duel nearby [radius]",
                     "/tames duel cancel",
                     "Selections support comma-separated tame names, groups, types, and movement states.",
-                    "Duels have no entry payment; participating tames consume food at one tenth of their normal rate.",
+                    "Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.",
                     "After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20."
             );
         }
@@ -8934,6 +8945,7 @@ public class TameCommands {
         int forbiddenType = 0;
         int skipped = 0;
         List<String> belowLevel = new ArrayList<>();
+        List<String> withoutFood = new ArrayList<>();
 
         for (UUID participantId : selectedIds) {
             if (participantId == null) {
@@ -8943,6 +8955,10 @@ public class TameCommands {
                 TameData participantData = rankedTameDataForParticipant(participantId);
                 if (participantData != null && participantData.level < 10) {
                     belowLevel.add(tameDisplayName(participantData));
+                    continue;
+                }
+                if (participantData != null && !hasStoredHungerFood(participantData)) {
+                    withoutFood.add(tameDisplayName(participantData));
                     continue;
                 }
                 if (participantData != null && TameRegistry.isRankedTameTypeForbidden(tameTypeId(participantData))) {
@@ -9016,6 +9032,10 @@ public class TameCommands {
         if (!belowLevel.isEmpty()) {
             belowLevel.sort(String.CASE_INSENSITIVE_ORDER);
             player.sendSystemMessage(Component.literal("Not Level 10: " + String.join(", ", belowLevel)).withStyle(ChatFormatting.RED));
+        }
+        if (!withoutFood.isEmpty()) {
+            withoutFood.sort(String.CASE_INSENSITIVE_ORDER);
+            player.sendSystemMessage(Component.literal("No Food: " + String.join(", ", withoutFood)).withStyle(ChatFormatting.RED));
         }
         return changed > 0 ? 1 : 0;
     }
@@ -23561,7 +23581,7 @@ public class TameCommands {
         while (!stack.isEmpty()) {
             ItemStack one = stack.copy();
             one.setCount(1);
-            if (hungerFoodPoints(one, data, tame) <= 0 || !addHungerFoodStack(data, one)) {
+            if (hungerFoodPoints(one, data, tame) <= 0 || !addHungerFoodStack(data, one, tame)) {
                 break;
             }
             stack.shrink(1);
@@ -23575,7 +23595,11 @@ public class TameCommands {
     }
 
     private static boolean addHungerFoodStack(TameData data, ItemStack incoming) {
-        if (data == null || incoming == null || incoming.isEmpty() || hungerFoodPoints(incoming, data, null) <= 0) {
+        return addHungerFoodStack(data, incoming, null);
+    }
+
+    private static boolean addHungerFoodStack(TameData data, ItemStack incoming, LivingEntity tame) {
+        if (data == null || incoming == null || incoming.isEmpty() || hungerFoodPoints(incoming, data, tame) <= 0) {
             return false;
         }
         for (ItemStack existing : data.hungerInventory) {
@@ -26290,8 +26314,11 @@ public class TameCommands {
                         resolveTimedOutDuelSessionRound(server, rankedSession);
                     }
                 } else {
+                    Set<UUID> finishedRound = new LinkedHashSet<>(rankedSession.currentRoundA);
+                    finishedRound.addAll(rankedSession.currentRoundB);
                     forceEndDuelSessionSide(server, rankedSession.currentRoundA);
                     forceEndDuelSessionSide(server, rankedSession.currentRoundB);
+                    pullFoodlessRankedTamesAfterRound(server, rankedSession, finishedRound);
                     teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
                     syncIdleDuelSessionTames(server, rankedSession);
                     restoreRankedRoundPlayers(server, rankedSession);
@@ -26382,6 +26409,41 @@ public class TameCommands {
         if (changed) {
             persistRankedPoolToRegistry();
             normalizeRankedRoundAfterPoolChange(server, session);
+        }
+    }
+
+    private static boolean hasStoredHungerFood(TameData data) {
+        return data != null && data.hungerInventory.stream().anyMatch(stack -> stack != null && !stack.isEmpty());
+    }
+
+    private static void pullFoodlessRankedTamesAfterRound(MinecraftServer server, ActiveDuelSession session, Set<UUID> participants) {
+        if (server == null || session == null || !session.ranked || participants == null || participants.isEmpty()) {
+            return;
+        }
+        Map<UUID, List<String>> pulledByOwner = new LinkedHashMap<>();
+        boolean changed = false;
+        for (UUID participantId : participants) {
+            TameData data = rankedTameDataForParticipant(participantId);
+            if (data == null || hasStoredHungerFood(data)) {
+                continue;
+            }
+            changed |= RANKED_POOL.remove(participantId);
+            session.poolA.remove(participantId);
+            session.poolB.remove(participantId);
+            session.queuedPullAfterRound.remove(participantId);
+            session.idleSitHoldUntilTick.remove(participantId);
+            pulledByOwner.computeIfAbsent(data.ownerUUID, ignored -> new ArrayList<>()).add(tameDisplayName(data));
+            sendPulledRankedParticipantHome(server, participantId);
+        }
+        if (!changed) {
+            return;
+        }
+        persistRankedPoolToRegistry();
+        for (Map.Entry<UUID, List<String>> entry : pulledByOwner.entrySet()) {
+            ServerPlayer owner = entry.getKey() == null ? null : server.getPlayerList().getPlayer(entry.getKey());
+            if (owner == null) continue;
+            entry.getValue().sort(String.CASE_INSENSITIVE_ORDER);
+            owner.sendSystemMessage(Component.literal("Pulled from ranked - No Food: " + String.join(", ", entry.getValue())).withStyle(ChatFormatting.RED));
         }
     }
 
@@ -26552,7 +26614,9 @@ public class TameCommands {
             ServerLevel overworld = server == null ? null : server.overworld();
             now = overworld == null ? 0L : overworld.getGameTime();
         }
-        session.nextRoundAtTick = now + DUEL_SESSION_NEXT_ROUND_DELAY_TICKS;
+        session.nextRoundAtTick = now + (session.ranked
+                ? RANKED_NEXT_ROUND_DELAY_TICKS
+                : DUEL_SESSION_NEXT_ROUND_DELAY_TICKS);
     }
 
     private static DuelSessionRound createDuelSessionRound(MinecraftServer server, List<UUID> availableA, List<UUID> availableB) {
@@ -29211,6 +29275,7 @@ public class TameCommands {
                 "guardian_arrow", "movement", "tp", "tphome", "bed", "respawn", "arise",
                 "ariseReincarnated", "graveyard", "reincarnate", "healthSiphon",
                 "enterPortalsByThemselves", "sitOnChairs", "collar", "inspect", "search", "arena",
+                "sinisterCarrot",
                 "ranked", "duel", "duelSession", "duelSessionFFA", "duel duel", "duel accept", "duel decline", "duel ff",
                 "duel duelleaderboard", "debug", "attribute", "ability", "class")) {
             suggestInfoTopic(b, topic);

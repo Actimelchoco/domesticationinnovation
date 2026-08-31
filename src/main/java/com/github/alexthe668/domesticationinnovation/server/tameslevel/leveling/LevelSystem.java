@@ -70,6 +70,8 @@ public class LevelSystem {
     public static final Map<UUID, Set<UUID>> mobDamageTracker = new HashMap<>();
     // mobUUID -> set of playerUUID
     public static final Map<UUID, Set<UUID>> mobOwnerDamageTracker = new HashMap<>();
+    // mobUUID -> tameUUID that most recently damaged it
+    private static final Map<UUID, UUID> lastTameDamagerByMob = new HashMap<>();
 
     private enum BaseStatReward {
         HP("hp", "HP", Attributes.MAX_HEALTH, 1.0D),
@@ -270,7 +272,15 @@ public class LevelSystem {
     // ===============================
 
     public static void trackDamage(LivingEntity mob, LivingEntity tame) {
+        if (mob == null || tame == null) {
+            return;
+        }
         mobDamageTracker.computeIfAbsent(mob.getUUID(), k -> new HashSet<>()).add(tame.getUUID());
+        lastTameDamagerByMob.put(mob.getUUID(), tame.getUUID());
+    }
+
+    public static UUID lastTameDamager(UUID mobId) {
+        return mobId == null ? null : lastTameDamagerByMob.get(mobId);
     }
 
     public static void trackOwnerDamage(LivingEntity mob, Player player) {
@@ -292,6 +302,7 @@ public class LevelSystem {
         }
         mobDamageTracker.remove(mobId);
         mobOwnerDamageTracker.remove(mobId);
+        lastTameDamagerByMob.remove(mobId);
     }
 
     // ===============================
@@ -302,7 +313,7 @@ public class LevelSystem {
         UUID mobId = dead.getUUID();
         Set<UUID> tameIds = mobDamageTracker.get(mobId);
         if (tameIds == null || tameIds.isEmpty()) {
-            mobOwnerDamageTracker.remove(mobId);
+            clearDamageTracking(mobId);
             return;
         }
 
