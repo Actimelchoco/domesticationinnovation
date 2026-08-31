@@ -3,6 +3,8 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class PlayerDuelStats {
@@ -21,6 +23,8 @@ public class PlayerDuelStats {
     public int rankedSaturation = 0;
     public long ariseCostDay = Long.MIN_VALUE;
     public int ariseUsesToday = 0;
+    /** Successful Animights creations, keyed by the resulting entity type. */
+    public final Map<String, Integer> animightConversions = new HashMap<>();
 
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
@@ -39,6 +43,13 @@ public class PlayerDuelStats {
         tag.putInt("rankedSaturation", Math.max(0, rankedSaturation));
         tag.putLong("ariseCostDay", ariseCostDay);
         tag.putInt("ariseUsesToday", Math.max(0, ariseUsesToday));
+        CompoundTag animightTag = new CompoundTag();
+        animightConversions.forEach((type, count) -> {
+            if (type != null && !type.isBlank() && count != null && count > 0) {
+                animightTag.putInt(type, count);
+            }
+        });
+        tag.put("animightConversions", animightTag);
         return tag;
     }
 
@@ -68,6 +79,13 @@ public class PlayerDuelStats {
                 data.ariseCostDay = tag.getLong("ariseCostDay");
             }
             data.ariseUsesToday = Math.max(0, tag.getInt("ariseUsesToday"));
+            if (tag.contains("animightConversions", Tag.TAG_COMPOUND)) {
+                CompoundTag animightTag = tag.getCompound("animightConversions");
+                for (String type : animightTag.getAllKeys()) {
+                    int count = Math.max(0, animightTag.getInt(type));
+                    if (count > 0) data.animightConversions.put(type, count);
+                }
+            }
         }
         return data;
     }

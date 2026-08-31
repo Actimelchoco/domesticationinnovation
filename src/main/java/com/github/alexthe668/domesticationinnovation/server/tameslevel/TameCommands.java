@@ -6434,9 +6434,11 @@ public class TameCommands {
             player.sendSystemMessage(Component.literal(tameDisplayName(data) + " cannot become a " + resultName + " during a duel.").withStyle(ChatFormatting.RED));
             return;
         }
-        if (data.level < 18) {
+        int requiredLevel = requiredAnimightHostLevel(player, resultId.toString());
+        if (data.level < requiredLevel) {
             PENDING_CATINO_CONVERSIONS.remove(player.getUUID());
-            player.sendSystemMessage(Component.literal(resultName + " conversion requires Level 18: " + tameDisplayName(data) + ".")
+            player.sendSystemMessage(Component.literal(resultName + " conversion requires Level " + requiredLevel
+                            + ": " + tameDisplayName(data) + ".")
                     .withStyle(ChatFormatting.RED));
             refreshPlayerCommands(player);
             return;
@@ -6497,7 +6499,10 @@ public class TameCommands {
                 || loadedType == null || !pending.hostType().equals(loadedType.toString())) {
             return error(player, "The original host must still be loaded and alive.");
         }
-        if (data.level < 18) return error(player, tameDisplayName(data) + " is no longer Level 18.");
+        int requiredLevel = requiredAnimightHostLevel(player, pending.resultType());
+        if (data.level < requiredLevel) {
+            return error(player, tameDisplayName(data) + " is no longer Level " + requiredLevel + ".");
+        }
         long survivalDays = daysAlive(source, data);
         if (survivalDays < 60L) {
             return error(player, tameDisplayName(data) + " no longer has the required 60-day survival streak ("
@@ -6568,6 +6573,7 @@ public class TameCommands {
         CompoundTag snapshot = new CompoundTag();
         catino.save(snapshot);
         data.entitySnapshot = snapshot;
+        recordAnimightConversion(player, pending.resultType());
         TameRegistry.markDirty();
         loaded.discard();
         if (!player.getAbilities().instabuild) essence.shrink(1);
@@ -6576,6 +6582,37 @@ public class TameCommands {
                         + " and is now level 1 with +" + conversionHealthBonus + " max HP from its former level.")
                 .withStyle(ChatFormatting.GREEN));
         return 1;
+    }
+
+    private static int requiredAnimightHostLevel(ServerPlayer player, String resultType) {
+        int completed = animightConversionCount(player, resultType);
+        long required = 18L * (completed + 1L);
+        return (int) Math.min(Integer.MAX_VALUE, required);
+    }
+
+    private static int animightConversionCount(ServerPlayer player, String resultType) {
+        if (player == null || resultType == null || resultType.isBlank()) return 0;
+        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(
+                player.getUUID(), player.getGameProfile().getName());
+        int recorded = stats == null ? 0 : Math.max(0, stats.animightConversions.getOrDefault(resultType, 0));
+        int registered = 0;
+        for (TameData owned : TameRegistry.getOwned(player.getUUID())) {
+            if (owned != null && resultType.equals(owned.type)) registered++;
+        }
+        if (stats != null && registered > recorded) {
+            stats.animightConversions.put(resultType, registered);
+            TameRegistry.markDirty();
+        }
+        return Math.max(recorded, registered);
+    }
+
+    private static void recordAnimightConversion(ServerPlayer player, String resultType) {
+        if (player == null || resultType == null || resultType.isBlank()) return;
+        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(
+                player.getUUID(), player.getGameProfile().getName());
+        if (stats == null) return;
+        int completedBeforeCreation = Math.max(0, stats.animightConversions.getOrDefault(resultType, 0));
+        stats.animightConversions.put(resultType, completedBeforeCreation + 1);
     }
 
     private static ItemStack findPlayerItem(ServerPlayer player, ResourceLocation itemId) {
