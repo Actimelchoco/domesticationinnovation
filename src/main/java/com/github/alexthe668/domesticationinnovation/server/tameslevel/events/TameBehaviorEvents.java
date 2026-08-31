@@ -11,6 +11,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameFoodManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.BlockPos;
@@ -48,10 +49,24 @@ public class TameBehaviorEvents {
     public static void onTameTargetChange(LivingChangeTargetEvent event) {
         if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
         if (tame.level().isClientSide) return;
+        LivingEntity newTarget = event.getNewTarget();
+        UUID ownerId = TameEntityAdapter.ownerUuid(tame);
+        if (newTarget instanceof Player player
+                && !TameDuelManager.areDuelOpponents(tame.getUUID(), player.getUUID())
+                && (player.getUUID().equals(ownerId) || PlayerDebugSettings.tamesFriendly(ownerId)
+                || !TameProtectionEvents.ownersMayFight(ownerId, player.getUUID()))) {
+            event.setNewTarget(null);
+            return;
+        }
+        if (newTarget != null && TameEntityAdapter.isTame(newTarget)
+                && !TameDuelManager.areDuelOpponents(tame.getUUID(), newTarget.getUUID())
+                && !TameProtectionEvents.ownersMayFight(ownerId, TameEntityAdapter.ownerUuid(newTarget))) {
+            event.setNewTarget(null);
+            return;
+        }
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null || TameMode.byId(data.mode) != TameMode.ASSASIN) return;
 
-        LivingEntity newTarget = event.getNewTarget();
         if (newTarget != null && !TameGoalSupport.isAssasinTarget(data.ownerUUID, newTarget)) {
             event.setNewTarget(null);
         }

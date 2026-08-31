@@ -24,6 +24,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> COMBAT_ASSISTS = new HashMap<>();
     private static final Map<UUID, Boolean> COMBAT_KILLS = new HashMap<>();
     private static final Map<UUID, Boolean> COMBAT_DEATH = new HashMap<>();
+    private static final Map<UUID, Boolean> CONFLICT_NOTY = new HashMap<>();
     private static final Map<UUID, Boolean> ABILITY_USED = new HashMap<>();
     private static final Map<UUID, Boolean> ATTRIBUTE_USED = new HashMap<>();
     private static final Map<UUID, Boolean> LEVEL_UP = new HashMap<>();
@@ -37,6 +38,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, List<ChestDrumRange>> CHEST_DRUM_RANGES = new HashMap<>();
     private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_NON_PREFERRED_TYPES = new HashMap<>();
     private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES = new HashMap<>();
+    private static final Map<UUID, Set<UUID>> DO_NOT_ATTACK_OWNERS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_SESSION_MESSAGES = new HashMap<>();
@@ -52,6 +54,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
+    private static final Map<UUID, Boolean> TAMES_FRIENDLY = new HashMap<>();
     private static final Map<UUID, Boolean> HIDE_LEVEL_IN_NAME = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_CHEST_DRUM_FOOD_PREFERENCES = new HashMap<>();
@@ -64,6 +67,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("combatAssists", COMBAT_ASSISTS, false),
             new BooleanSetting("combatKills", COMBAT_KILLS, false),
             new BooleanSetting("combatDeath", COMBAT_DEATH, true),
+            new BooleanSetting("conflictNoty", CONFLICT_NOTY, true),
             new BooleanSetting("abilityUsed", ABILITY_USED, false),
             new BooleanSetting("attributeUsed", ATTRIBUTE_USED, false),
             new BooleanSetting("levelUp", LEVEL_UP, true),
@@ -87,6 +91,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
+            new BooleanSetting("tamesFriendly", TAMES_FRIENDLY, true),
             new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false),
             new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
     );
@@ -113,6 +118,10 @@ public final class PlayerDebugSettings {
 
     public static boolean combatDeath(UUID player) {
         return getBoolean(COMBAT_DEATH, player, true);
+    }
+
+    public static boolean conflictNoty(UUID player) {
+        return getBoolean(CONFLICT_NOTY, player, true);
     }
 
     public static boolean abilityUsed(UUID player) {
@@ -182,6 +191,24 @@ public final class PlayerDebugSettings {
         setTypeRule(CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES, player, type, enabled);
     }
 
+    public static Set<UUID> doNotAttackOwners(UUID player) {
+        return player == null ? Set.of() : Set.copyOf(DO_NOT_ATTACK_OWNERS.getOrDefault(player, Set.of()));
+    }
+
+    public static boolean isDoNotAttackOwner(UUID player, UUID otherOwner) {
+        return player != null && otherOwner != null
+                && DO_NOT_ATTACK_OWNERS.getOrDefault(player, Set.of()).contains(otherOwner);
+    }
+
+    public static void setDoNotAttackOwner(UUID player, UUID otherOwner, boolean protectedOwner) {
+        if (player == null || otherOwner == null || player.equals(otherOwner)) return;
+        Set<UUID> values = DO_NOT_ATTACK_OWNERS.computeIfAbsent(player, ignored -> new LinkedHashSet<>());
+        if (protectedOwner) values.add(otherOwner);
+        else values.remove(otherOwner);
+        if (values.isEmpty()) DO_NOT_ATTACK_OWNERS.remove(player);
+        markDirty();
+    }
+
     public static boolean duelAssistMessages(UUID player) {
         return getBoolean(DUEL_ASSIST_MESSAGES, player, true);
     }
@@ -246,6 +273,10 @@ public final class PlayerDebugSettings {
         return getBoolean(FRIENDLY_FIRE, player, false);
     }
 
+    public static boolean tamesFriendly(UUID player) {
+        return getBoolean(TAMES_FRIENDLY, player, true);
+    }
+
     public static boolean hideLevelInName(UUID player) {
         return getBoolean(HIDE_LEVEL_IN_NAME, player, false);
     }
@@ -264,6 +295,10 @@ public final class PlayerDebugSettings {
 
     public static void setCombatDeath(UUID player, boolean enabled) {
         setBoolean(COMBAT_DEATH, player, enabled, true);
+    }
+
+    public static void setConflictNoty(UUID player, boolean enabled) {
+        setBoolean(CONFLICT_NOTY, player, enabled, true);
     }
 
     public static void setAbilityUsed(UUID player, boolean enabled) {
@@ -436,6 +471,10 @@ public final class PlayerDebugSettings {
         setBoolean(FRIENDLY_FIRE, player, enabled, false);
     }
 
+    public static void setTamesFriendly(UUID player, boolean enabled) {
+        setBoolean(TAMES_FRIENDLY, player, enabled, true);
+    }
+
     public static void setOtherGeneral(UUID player, boolean enabled) {
         setNewTameMessages(player, enabled);
         setAutoRespawnMessages(player, enabled);
@@ -477,6 +516,16 @@ public final class PlayerDebugSettings {
         }
         saveTypeRules(out, "chestDrumPullNonPreferredTypes", CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
         saveTypeRules(out, "chestDrumPullPreferredFoodOfTypes", CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
+        for (Map.Entry<UUID, Set<UUID>> entry : DO_NOT_ATTACK_OWNERS.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
+            ListTag list = new ListTag();
+            for (UUID ownerId : entry.getValue()) {
+                CompoundTag value = new CompoundTag();
+                value.putUUID("owner", ownerId);
+                list.add(value);
+            }
+            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("doNotAttackOwners", list);
+        }
         return out;
     }
 
@@ -519,6 +568,15 @@ public final class PlayerDebugSettings {
             }
             loadTypeRules(tag, "chestDrumPullNonPreferredTypes", player, CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
             loadTypeRules(tag, "chestDrumPullPreferredFoodOfTypes", player, CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
+            if (tag.contains("doNotAttackOwners", Tag.TAG_LIST)) {
+                ListTag list = tag.getList("doNotAttackOwners", Tag.TAG_COMPOUND);
+                Set<UUID> values = new LinkedHashSet<>();
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag saved = list.getCompound(i);
+                    if (saved.hasUUID("owner")) values.add(saved.getUUID("owner"));
+                }
+                if (!values.isEmpty()) DO_NOT_ATTACK_OWNERS.put(player, values);
+            }
         }
     }
 
@@ -546,6 +604,7 @@ public final class PlayerDebugSettings {
         CHEST_DRUM_RANGES.clear();
         CHEST_DRUM_PULL_NON_PREFERRED_TYPES.clear();
         CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES.clear();
+        DO_NOT_ATTACK_OWNERS.clear();
     }
 
     private static void setTypeRule(Map<UUID, Set<String>> rules, UUID player, String type, boolean enabled) {

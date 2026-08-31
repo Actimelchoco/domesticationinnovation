@@ -38,6 +38,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelSnapshots;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameFoodManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameIllBloodManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
@@ -1047,6 +1048,16 @@ public class TameCommands {
                         .executes(ctx -> listDoNotAttack(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("doNotAttackOwner")
+                        .executes(ctx -> listDoNotAttackOwners(ctx.getSource()))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
+                                        .executes(ctx -> setDoNotAttackOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), true))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
+                                        .executes(ctx -> setDoNotAttackOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), false)))))
                 .then(Commands.literal("enterPortalsByThemselves")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -1066,6 +1077,10 @@ public class TameCommands {
                         .executes(ctx -> playerFriendlyFireStatus(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setPlayerFriendlyFire(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("tamesFriendly")
+                        .executes(ctx -> playerTamesFriendlyStatus(ctx.getSource()))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> setPlayerTamesFriendly(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("herding")
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -14176,6 +14191,56 @@ public class TameCommands {
         return playerFriendlyFireStatus(source);
     }
 
+    private static int playerTamesFriendlyStatus(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        boolean enabled = PlayerDebugSettings.tamesFriendly(player.getUUID());
+        player.sendSystemMessage(Component.literal("Tames friendly: " + enabled + ".")
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setPlayerTamesFriendly(CommandSourceStack source, boolean enabled) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        PlayerDebugSettings.setTamesFriendly(player.getUUID(), enabled);
+        return playerTamesFriendlyStatus(source);
+    }
+
+    private static int listDoNotAttackOwners(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        Set<UUID> protectedOwners = PlayerDebugSettings.doNotAttackOwners(player.getUUID());
+        if (protectedOwners.isEmpty()) {
+            player.sendSystemMessage(Component.literal("Protected owners: none. Any owner with tamesFriendly=false can enter a conflict with you.")
+                    .withStyle(ChatFormatting.YELLOW));
+            return 1;
+        }
+        List<String> names = protectedOwners.stream()
+                .map(id -> resolveKnownOwnerName(source.getServer(), id, id.toString()))
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+        player.sendSystemMessage(Component.literal("Protected owners (cannot conflict with you): " + String.join(", ", names) + ".")
+                .withStyle(ChatFormatting.GREEN));
+        return 1;
+    }
+
+    private static int setDoNotAttackOwner(CommandSourceStack source, String playerName, boolean protectedOwner) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        UUID otherOwner = resolveKnownOwnerUuid(source.getServer(), playerName);
+        if (otherOwner == null) return error(player, "Unknown player: " + playerName + ".");
+        if (player.getUUID().equals(otherOwner)) return error(player, "You cannot add yourself to doNotAttackOwner.");
+        PlayerDebugSettings.setDoNotAttackOwner(player.getUUID(), otherOwner, protectedOwner);
+        if (protectedOwner) TameIllBloodManager.clearBetween(player.getUUID(), otherOwner);
+        String resolvedName = resolveKnownOwnerName(source.getServer(), otherOwner, playerName);
+        player.sendSystemMessage(Component.literal(resolvedName + (protectedOwner
+                ? " is now protected from conflicts with you."
+                : " may enter conflicts with you again."))
+                .withStyle(protectedOwner ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
     private static String formatBlockLocation(String dimension, BlockPos pos) {
         return dimension + " [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]";
     }
@@ -16708,7 +16773,10 @@ public class TameCommands {
                                         .executes(ctx -> setCombatDebug(ctx.getSource(), "kills", BoolArgumentType.getBool(ctx, "enabled")))))
                         .then(Commands.literal("death")
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "death", BoolArgumentType.getBool(ctx, "enabled"))))))
+                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "death", BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(Commands.literal("conflictNoty")
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setCombatDebug(ctx.getSource(), "conflictNoty", BoolArgumentType.getBool(ctx, "enabled"))))))
                 .then(Commands.literal("other")
                         .executes(ctx -> otherDebugStatus(ctx.getSource()))
                         .then(Commands.literal("NewTame")
@@ -16920,7 +16988,7 @@ public class TameCommands {
         p.sendSystemMessage(Component.literal("Debug groups: /tames debug duel|ranked|inventory|combat|other").withStyle(ChatFormatting.GOLD));
         p.sendSystemMessage(Component.literal("Duel -> kill: " + PlayerDebugSettings.duelKillNotifications(playerId, false) + ", result: " + PlayerDebugSettings.duelResultMessages(playerId, false) + ", start: " + PlayerDebugSettings.duelStartMessages(playerId, false) + ", sum: " + PlayerDebugSettings.duelSummaryMessages(playerId, false) + ", assists: " + PlayerDebugSettings.duelAssistMessages(playerId)).withStyle(ChatFormatting.YELLOW));
         p.sendSystemMessage(Component.literal("Inventory -> lowOnFood: " + PlayerDebugSettings.inventoryLowOnFood(playerId) + ", noFood: " + PlayerDebugSettings.inventoryNoFood(playerId) + ", sum: " + PlayerDebugSettings.inventorySummary(playerId) + ", sumMin: " + PlayerDebugSettings.inventorySummaryMinutes(playerId)).withStyle(ChatFormatting.YELLOW));
-        p.sendSystemMessage(Component.literal("Combat -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId)).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Combat -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId) + ", conflictNoty: " + PlayerDebugSettings.conflictNoty(playerId)).withStyle(ChatFormatting.YELLOW));
         p.sendSystemMessage(Component.literal("Other -> NewTame: " + PlayerDebugSettings.newTameMessages(playerId) + ", respawnedAutomatically: " + PlayerDebugSettings.autoRespawnMessages(playerId) + ", levelUp: " + PlayerDebugSettings.levelUp(playerId)).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
@@ -16944,6 +17012,7 @@ public class TameCommands {
             case "assists" -> PlayerDebugSettings.setCombatAssists(playerId, enabled);
             case "kills" -> PlayerDebugSettings.setCombatKills(playerId, enabled);
             case "death" -> PlayerDebugSettings.setCombatDeath(playerId, enabled);
+            case "conflictNoty" -> PlayerDebugSettings.setConflictNoty(playerId, enabled);
             default -> {
                 return error(p, "Unknown combat debug category: " + category + ".");
             }
@@ -16955,7 +17024,7 @@ public class TameCommands {
     private static int combatDebugStatus(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
         UUID playerId = p.getUUID();
-        p.sendSystemMessage(Component.literal("Combat debug -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId)).withStyle(ChatFormatting.YELLOW));
+        p.sendSystemMessage(Component.literal("Combat debug -> assists: " + PlayerDebugSettings.combatAssists(playerId) + ", kills: " + PlayerDebugSettings.combatKills(playerId) + ", death: " + PlayerDebugSettings.combatDeath(playerId) + ", conflictNoty: " + PlayerDebugSettings.conflictNoty(playerId)).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -17102,9 +17171,12 @@ public class TameCommands {
 
     private static int removeTargetAll(CommandSourceStack source) {
         ServerPlayer p = source.getPlayer();
+        TameIllBloodManager.clear(p.getUUID());
         int count = 0;
-        for (TamableAnimal ta : loadedOwnedAllTames(source, p.getUUID())) {
-            ta.setTarget(null);
+        for (TameData data : ownedTames(p.getUUID())) {
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
+            if (tame == null) continue;
+            TameEntityAdapter.setTarget(tame, null);
             count++;
         }
         p.sendSystemMessage(Component.literal("Removed targets from " + count + " loaded tames."));
@@ -20031,7 +20103,7 @@ public class TameCommands {
 
         for (ServerLevel level : source.getServer().getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) {
+                if (!(entity instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) {
                     continue;
                 }
                 TameData data = TameRegistry.get(tame.getUUID());
@@ -20073,22 +20145,9 @@ public class TameCommands {
         }
 
         TameData data = matches.get(0);
-        TamableAnimal tame = findLoadedTameByUuid(source, data.uuid);
-        if (tame == null && data.tlId != null) {
-            for (ServerLevel level : source.getServer().getAllLevels()) {
-                for (Entity entity : level.getAllEntities()) {
-                    if (entity instanceof TamableAnimal candidate && data.tlId.equals(TameData.getTlId(candidate))) {
-                        tame = candidate;
-                        if (!candidate.getUUID().equals(data.uuid)) {
-                            TameRegistry.rebindEntityUuid(data, candidate.getUUID());
-                        }
-                        break;
-                    }
-                }
-                if (tame != null) {
-                    break;
-                }
-            }
+        LivingEntity tame = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        if (tame != null && !tame.getUUID().equals(data.uuid)) {
+            TameRegistry.rebindEntityUuid(data, tame.getUUID());
         }
         if (tame == null) {
             return error(source.getPlayer(), "Target tame is not loaded.");
@@ -20102,7 +20161,7 @@ public class TameCommands {
         return 1;
     }
 
-    public static boolean refreshLoadedTameStatsAfterRebuild(TamableAnimal tame, TameData data, boolean fullHeal) {
+    public static boolean refreshLoadedTameStatsAfterRebuild(LivingEntity tame, TameData data, boolean fullHeal) {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
             return false;
         }
@@ -20110,7 +20169,7 @@ public class TameCommands {
         float oldMaxHealth = Math.max(1.0F, (float) tame.getMaxHealth());
         double healthRatio = Mth.clamp(oldHealth / oldMaxHealth, 0.0F, 1.0F);
 
-        TameGoalInstaller.installIfMissing(tame);
+        if (tame instanceof TamableAnimal tamable) TameGoalInstaller.installIfMissing(tamable);
         TameRegistry.bindEntityToData(tame, data);
         LevelSystem.ensureClassAssigned(tame, data, false);
         if (!LevelSystem.reapplyTypeBasePlusBonuses(tame, data)) {
@@ -20121,7 +20180,7 @@ public class TameCommands {
                 ? (float) tame.getMaxHealth()
                 : (float) Mth.clamp(tame.getMaxHealth() * healthRatio, 1.0D, tame.getMaxHealth());
         tame.setHealth(nextHealth);
-        TameSpawnEvents.queueDeferredStatRefresh(tame, data, 1200L);
+        if (tame instanceof TamableAnimal tamable) TameSpawnEvents.queueDeferredStatRefresh(tamable, data, 1200L);
 
         data.lastKnownDimension = level.dimension().location().toString();
         data.lastKnownX = tame.blockPosition().getX();
@@ -20134,7 +20193,7 @@ public class TameCommands {
         return true;
     }
 
-    private static boolean fixLoadedTameStats(TamableAnimal tame, TameData data) {
+    private static boolean fixLoadedTameStats(LivingEntity tame, TameData data) {
         return refreshLoadedTameStatsAfterRebuild(tame, data, false);
     }
 

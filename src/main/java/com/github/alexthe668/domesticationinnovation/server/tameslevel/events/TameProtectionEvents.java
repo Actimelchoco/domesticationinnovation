@@ -5,12 +5,17 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameIllBloodManager;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.NeutralMob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
@@ -47,11 +52,20 @@ public class TameProtectionEvents {
             return;
         }
 
-        // Block direct player attacks against tamed animals.
-        if (TameEntityAdapter.isTame(victim) && attacker instanceof Player) {
-            LivingEntity target = victim;
-            if (!TameDuelManager.areDuelOpponents(attacker.getUUID(), target.getUUID())) {
+        // Owners cannot hurt their own tames. Other players can only hurt a tame
+        // when that tame's owner has explicitly disabled tame friendliness.
+        Player playerAttacker = resolvePlayerAttacker(event.getSource());
+        if (TameEntityAdapter.isTame(victim) && playerAttacker != null) {
+            UUID ownerId = TameEntityAdapter.ownerUuid(victim);
+            if (playerAttacker.getUUID().equals(ownerId) || PlayerDebugSettings.tamesFriendly(ownerId)) {
                 event.setCanceled(true);
+            } else if (PlayerDebugSettings.isDoNotAttackOwner(playerAttacker.getUUID(), ownerId)
+                    || PlayerDebugSettings.isDoNotAttackOwner(ownerId, playerAttacker.getUUID())) {
+                event.setCanceled(true);
+            } else {
+                if (TameIllBloodManager.add(playerAttacker.getUUID(), ownerId)) {
+                    notifyConflictStarted(playerAttacker, ownerId);
+                }
             }
             return;
         }
@@ -66,13 +80,17 @@ public class TameProtectionEvents {
             return;
         }
 
-        if (!TLAdminRuntimeSettings.friendlyFireEnabled(TameEntityAdapter.ownerUuid(tameAttacker))) {
-            if (victim instanceof Player) {
+        UUID tameOwnerId = TameEntityAdapter.ownerUuid(tameAttacker);
+        if (victim instanceof Player playerVictim) {
+            if (playerVictim.getUUID().equals(tameOwnerId) || !ownersMayFight(tameOwnerId, playerVictim.getUUID())) {
                 clearForbiddenPlayerAggression(tameAttacker);
                 event.setCanceled(true);
-                return;
             }
-            if (TameEntityAdapter.isTame(victim)) {
+            return;
+        }
+        if (TameEntityAdapter.isTame(victim)) {
+            UUID victimOwnerId = TameEntityAdapter.ownerUuid(victim);
+            if (!ownersMayFight(tameOwnerId, victimOwnerId)) {
                 event.setCanceled(true);
                 return;
             }
@@ -86,16 +104,12 @@ public class TameProtectionEvents {
             return;
         }
 
-        // Prevent tamed entities (including projectile abilities) from damaging players or other tamed entities.
-        if (victim instanceof Player) {
-            event.setCanceled(true);
-            return;
-        }
+        // Prevent tamed entities (including projectile abilities) from damaging other tamed entities.
         if (TameEntityAdapter.isTame(victim)) {
             if (TameDuelManager.areDuelOpponents(tameAttacker.getUUID(), victim.getUUID())) {
                 return;
             }
-            event.setCanceled(true);
+            if (!ownersMayFight(tameOwnerId, TameEntityAdapter.ownerUuid(victim))) event.setCanceled(true);
         }
     }
 
@@ -145,6 +159,19 @@ public class TameProtectionEvents {
         if (canPlayersBypassFriendlyFire(attacker, victim)) {
             event.setCanceled(false);
         }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onConflictDamageLanded(LivingHurtEvent event) {
+        if (event == null || event.isCanceled() || event.getAmount() <= 0.0F) return;
+        LivingEntity victim = event.getEntity();
+        LivingEntity tameAttacker = resolveTameAttacker(event.getSource().getEntity(), event.getSource().getDirectEntity());
+        Player playerAttacker = resolvePlayerAttacker(event.getSource());
+        UUID attackerOwner = playerAttacker != null ? playerAttacker.getUUID()
+                : tameAttacker != null && TameEntityAdapter.isTame(tameAttacker) ? TameEntityAdapter.ownerUuid(tameAttacker) : null;
+        UUID victimOwner = victim instanceof Player player ? player.getUUID()
+                : TameEntityAdapter.isTame(victim) ? TameEntityAdapter.ownerUuid(victim) : null;
+        TameIllBloodManager.recordDamage(attackerOwner, victimOwner);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
@@ -209,21 +236,18 @@ public class TameProtectionEvents {
             TameEntityAdapter.setTarget(tame, null);
             return;
         }
-        if (!TLAdminRuntimeSettings.friendlyFireEnabled(TameEntityAdapter.ownerUuid(tame))) {
-            if (target instanceof Player) {
+        UUID ownerId = TameEntityAdapter.ownerUuid(tame);
+        if (target instanceof Player playerTarget) {
+            if (playerTarget.getUUID().equals(ownerId) || !ownersMayFight(ownerId, playerTarget.getUUID())) {
                 clearForbiddenPlayerAggression(tame);
-                return;
             }
-            if (TameEntityAdapter.isTame(target)) {
-                TameEntityAdapter.setTarget(tame, null);
-                return;
-            }
+            return;
         }
         if (TameEntityAdapter.isTame(target)) {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID())) {
                 return;
             }
-            TameEntityAdapter.setTarget(tame, null);
+            if (!ownersMayFight(ownerId, TameEntityAdapter.ownerUuid(target))) TameEntityAdapter.setTarget(tame, null);
             return;
         }
         if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) {
@@ -243,6 +267,30 @@ public class TameProtectionEvents {
         if (tame instanceof NeutralMob neutral) {
             neutral.setPersistentAngerTarget(null);
             neutral.setRemainingPersistentAngerTime(0);
+        }
+    }
+
+    public static boolean ownersMayFight(UUID firstOwner, UUID secondOwner) {
+        return firstOwner != null && secondOwner != null && !firstOwner.equals(secondOwner)
+                && !PlayerDebugSettings.tamesFriendly(firstOwner)
+                && !PlayerDebugSettings.tamesFriendly(secondOwner)
+                && !PlayerDebugSettings.isDoNotAttackOwner(firstOwner, secondOwner)
+                && !PlayerDebugSettings.isDoNotAttackOwner(secondOwner, firstOwner)
+                && TameIllBloodManager.has(firstOwner, secondOwner);
+    }
+
+    private static void notifyConflictStarted(Player aggressor, UUID otherOwnerId) {
+        if (!(aggressor instanceof ServerPlayer attackingPlayer) || otherOwnerId == null || attackingPlayer.getServer() == null) return;
+        ServerPlayer otherOwner = attackingPlayer.getServer().getPlayerList().getPlayer(otherOwnerId);
+        String attackerName = attackingPlayer.getName().getString();
+        String otherName = otherOwner == null ? otherOwnerId.toString() : otherOwner.getName().getString();
+        if (PlayerDebugSettings.conflictNoty(attackingPlayer.getUUID())) {
+            attackingPlayer.sendSystemMessage(Component.literal("Conflict started with " + otherName + " and their tames.")
+                    .withStyle(ChatFormatting.RED));
+        }
+        if (otherOwner != null && PlayerDebugSettings.conflictNoty(otherOwnerId)) {
+            otherOwner.sendSystemMessage(Component.literal("Conflict started with " + attackerName + " and their tames.")
+                    .withStyle(ChatFormatting.RED));
         }
     }
 
