@@ -377,6 +377,13 @@ public final class TameDuelManager {
         if (battle.teamA.isEmpty() || battle.teamB.isEmpty()) {
             String reason = battle.teamA.isEmpty() ? "Team A eliminated." : "Team B eliminated.";
             finishBattle(server, battle, reason);
+        } else {
+            // Death/removal events occur before the next entity AI tick. Resolve replacement
+            // targets (or seat survivors) now so a tame cannot follow/teleport to its owner in
+            // the one-tick gap after its previous target disappears.
+            maintainTargets(server, battle.teamA, battle.teamB);
+            maintainTargets(server, battle.teamB, battle.teamA);
+            applyThreatTickMovementState(server, battle);
         }
         return true;
     }
@@ -514,7 +521,7 @@ public final class TameDuelManager {
             }
             LivingEntity target = TameEntityAdapter.target(tame);
             boolean hasTarget = isUsableCurrentDuelTarget(tame, target);
-            TameCommands.applyMovementOrderCode(tame, hasTarget ? 2 : 1);
+            TameCommands.applyDuelMovementOrder(tame, hasTarget);
             if (hasTarget) {
                 // Applying a movement order clears targets for several vanilla and interface
                 // tame implementations, so restore the validated duel target afterwards.
@@ -608,15 +615,11 @@ public final class TameDuelManager {
             return;
         }
         if (tame instanceof TamableAnimal tamable) ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
-        TameCommands.applyMovementOrderCode(tame, 2);
-        if (tame instanceof IComandableMob commandableMob) {
-            commandableMob.setCommand(0);
-        }
         if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
-        clearDuelRestingState(tame);
         applyDuelFollowRangeBoost(tame);
         LivingEntity current = TameEntityAdapter.target(tame);
         if (isUsableCurrentDuelTarget(tame, current)) {
+            TameCommands.applyDuelMovementOrder(tame, true);
             setDuelCombatTarget(tame, current);
             return;
         }
@@ -630,30 +633,36 @@ public final class TameDuelManager {
         Set<UUID> opponents = teamA ? battle.teamB : battle.teamA;
         LivingEntity nearest = nearestLoadedOpponent(server, tame, opponents);
         if (nearest != null) {
+            TameCommands.applyDuelMovementOrder(tame, true);
             setDuelCombatTarget(tame, nearest);
         } else {
             clearDuelCombatTarget(tame);
+            TameCommands.applyDuelMovementOrder(tame, false);
         }
     }
 
     private static void maintainTargets(MinecraftServer server, Set<UUID> ownTeam, Set<UUID> enemyTeam) {
-        if (ownTeam == null || ownTeam.isEmpty() || enemyTeam == null || enemyTeam.isEmpty()) return;
+        if (ownTeam == null || ownTeam.isEmpty()) return;
         for (UUID ownId : ownTeam) {
             LivingEntity own = findLoadedTame(server, ownId);
             if (own == null || !own.isAlive()) continue;
-            forceDuelAwakeAndMobile(own);
             applyDuelFollowRangeBoost(own);
-            keepParticipantNearBattle(server, own, enemyTeam);
+            if (enemyTeam != null && !enemyTeam.isEmpty()) {
+                keepParticipantNearBattle(server, own, enemyTeam);
+            }
             LivingEntity current = TameEntityAdapter.target(own);
             if (isUsableCurrentDuelTarget(own, current)) {
+                TameCommands.applyDuelMovementOrder(own, true);
                 setDuelCombatTarget(own, current);
                 continue;
             }
             LivingEntity nearest = nearestLoadedOpponent(server, own, enemyTeam);
             if (nearest == null) {
                 clearDuelCombatTarget(own);
+                TameCommands.applyDuelMovementOrder(own, false);
                 continue;
             }
+            TameCommands.applyDuelMovementOrder(own, true);
             setDuelCombatTarget(own, nearest);
         }
     }
@@ -720,7 +729,7 @@ public final class TameDuelManager {
         }
         // Spawn every tame into the duel seated. The immediate threat pass switches
         // only participants with a valid opponent to wander and leaves the rest sitting.
-        TameCommands.applyMovementOrderCode(tame, 1);
+        TameCommands.applyDuelMovementOrder(tame, false);
     }
 
     private static void clearDuelRestingState(LivingEntity tame) {

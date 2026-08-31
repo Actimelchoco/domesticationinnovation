@@ -21770,6 +21770,49 @@ public class TameCommands {
         });
     }
 
+    /**
+     * Enforces the temporary sit/wander state used during a duel without serializing the
+     * tame and dirtying the registry every threat tick. The pre-duel snapshot remains the
+     * authoritative state and is restored when the duel ends.
+     */
+    public static void applyDuelMovementOrder(LivingEntity tame, boolean hasTarget) {
+        if (tame == null) return;
+        MovementOrder order = hasTarget ? MovementOrder.WANDER : MovementOrder.SIT;
+        TameData data = TameRegistry.get(tame.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        if (data != null) data.movementOrder = hasTarget ? 2 : 1;
+
+        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+            mob.getNavigation().stop();
+            if (!hasTarget) mob.setTarget(null);
+        }
+        if (tame instanceof TamableAnimal tamable) {
+            if (tamable instanceof IComandableMob commandable) {
+                syncCommandableMovementState(tamable, commandable, order);
+            } else {
+                clearExternalWanderingState(tamable, order);
+            }
+            tamable.setOrderedToSit(!hasTarget);
+            tamable.setInSittingPose(!hasTarget);
+            return;
+        }
+        if (tame instanceof IComandableMob commandable) {
+            ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+            String typeId = key == null ? tame.getType().toString() : key.toString();
+            boolean inverted = usesInvertedGenericCallOrder(typeId);
+            int movementIndex = hasTarget ? 2 : 1;
+            int fallback = hasTarget ? (inverted ? 2 : 0) : 1;
+            commandable.setCommand(TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback));
+        }
+        tryInvokeBooleanSetter(tame, "setOrderedToSit", !hasTarget);
+        tryInvokeBooleanSetter(tame, "setInSittingPose", !hasTarget);
+        tryInvokeBooleanSetter(tame, "setSitting", !hasTarget);
+        if (hasTarget) {
+            tryInvokeBooleanSetter(tame, "setSleeping", false);
+            tryInvokeBooleanSetter(tame, "setPlayingDead", false);
+        }
+    }
+
     private static boolean isLivingTameSitting(LivingEntity tame) {
         if (tame instanceof TamableAnimal tamable) return tamable.isOrderedToSit();
         return tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
