@@ -11,9 +11,12 @@ import com.github.alexthe668.domesticationinnovation.server.item.DeedOfOwnership
 import com.github.alexthe668.domesticationinnovation.server.item.FeatherOnAStickItem;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.google.common.collect.ImmutableList;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -139,7 +142,38 @@ public class ClientProxy extends CommonProxy {
         if(event.getEntityIn() instanceof HighlightedBlockEntity){
             event.setColor(OreColorRegistry.getBlockColor(((HighlightedBlockEntity) event.getEntityIn()).getBlockState()));
             event.setResult(Event.Result.ALLOW);
+        } else if (event.getEntityIn() instanceof LivingEntity living) {
+            int duelTeam = TameableUtils.getTamesLevelDuelGlowTeam(living);
+            if (ClientDuelGlowSettings.duelGlow() && (duelTeam == 1 || duelTeam == 2)) {
+                event.setColor(duelTeam == 1 ? 0x3F76E4 : 0xE53935);
+                event.setResult(Event.Result.ALLOW);
+            }
         }
+    }
+
+    @SubscribeEvent
+    public void registerClientCommands(RegisterClientCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("tames")
+                .then(Commands.literal("settings")
+                        .then(Commands.literal("duelGlow")
+                                .executes(ctx -> showClientDuelGlow(ctx.getSource()))
+                                .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                        .executes(ctx -> setClientDuelGlow(ctx.getSource(),
+                                                BoolArgumentType.getBool(ctx, "enabled")))))));
+    }
+
+    private static int showClientDuelGlow(CommandSourceStack source) {
+        boolean enabled = ClientDuelGlowSettings.duelGlow();
+        source.sendSystemMessage(Component.literal("Client duel glow is " + (enabled ? "enabled." : "disabled."))
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int setClientDuelGlow(CommandSourceStack source, boolean enabled) {
+        ClientDuelGlowSettings.setDuelGlow(enabled);
+        source.sendSystemMessage(Component.literal("Client duel glow " + (enabled ? "enabled." : "disabled."))
+                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return 1;
     }
 
     @SubscribeEvent

@@ -86,7 +86,6 @@ public final class PlayerDebugSettings {
             new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
-            new BooleanSetting("duelGlow", DUEL_GLOW, true),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
             new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false),
             new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)

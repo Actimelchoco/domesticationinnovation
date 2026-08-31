@@ -4,6 +4,7 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -212,11 +213,7 @@ public final class TameDuelManager {
         maintainTargets(server, battle.teamB, battle.teamA);
         // Do not leave a restored/snapshotted glow visible for the first duel
         // maintenance interval when the owners have disabled duelGlow.
-        if (teamOneGlowEnabled(battle)) {
-            maintainTeamOneGlow(server, battle);
-        } else {
-            clearTeamOneGlow(server, battle);
-        }
+        clearTeamOneGlow(server, battle);
         syncPlayerEnemyGlow(server, battle);
     }
 
@@ -505,11 +502,9 @@ public final class TameDuelManager {
             if (battle == null) continue;
             maintainTargets(server, battle.teamA, battle.teamB);
             maintainTargets(server, battle.teamB, battle.teamA);
-            if (teamOneGlowEnabled(battle)) {
-                maintainTeamOneGlow(server, battle);
-            } else {
-                clearTeamOneGlow(server, battle);
-            }
+            // Remove any legacy vanilla glow, then synchronize only the harmless
+            // team marker. Rendering is controlled by each extension client.
+            clearTeamOneGlow(server, battle);
             // Player clients also use these private team assignments to distinguish an
             // opposing owned tame from a normal pet. Keep them synced even when the
             // optional visual glow is disabled.
@@ -520,15 +515,9 @@ public final class TameDuelManager {
     private static void maintainTeamOneGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
         if (!teamOneGlowEnabled(battle)) return;
-        // Both teams need the vanilla glowing flag. Their private client-side
-        // scoreboard teams decide which outline color is rendered.
-        for (UUID participantId : battle.roster) {
-            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
-            if (participant != null && participant.isAlive()) {
-                participant.addEffect(new MobEffectInstance(MobEffects.GLOWING, DUEL_GLOW_DURATION_TICKS, 0, false, false, false));
-                TEAM_ONE_GLOWED_ENTITIES.add(participantId);
-            }
-        }
+        // The synchronized duel-team marker is rendered as glow only by clients
+        // carrying the extension. Never apply vanilla's global Glowing effect:
+        // it would force unmodified clients to see an uncolored white outline.
     }
 
     private static void clearTeamOneGlow(MinecraftServer server, DuelBattle battle) {
@@ -572,11 +561,7 @@ public final class TameDuelManager {
         if (server == null) return;
         for (DuelBattle battle : BATTLE_BY_ID.values()) {
             if (battle == null) continue;
-            if (teamOneGlowEnabled(battle)) {
-                maintainTeamOneGlow(server, battle);
-            } else {
-                clearTeamOneGlow(server, battle);
-            }
+            clearTeamOneGlow(server, battle);
             syncPlayerEnemyGlow(server, battle);
         }
     }
@@ -937,6 +922,10 @@ public final class TameDuelManager {
                 restoredCount++;
             }
         }
+        // Restoration can replace an entity after the earlier cleanup. Clear the
+        // final instances and persist clean snapshots so duel glow cannot return
+        // while the tame is outside a duel.
+        clearDuelVisualState(server, allParticipants);
         notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
     }
 
@@ -994,11 +983,43 @@ public final class TameDuelManager {
         Scoreboard scoreboard = server.getScoreboard();
         PlayerTeam blueTeam = getOrCreateDuelScoreboardTeam(scoreboard, battle, true);
         PlayerTeam redTeam = getOrCreateDuelScoreboardTeam(scoreboard, battle, false);
-        boolean glowEnabled = teamOneGlowEnabled(battle);
-        blueTeam.setColor(glowEnabled ? ChatFormatting.BLUE : ChatFormatting.WHITE);
-        redTeam.setColor(glowEnabled ? ChatFormatting.RED : ChatFormatting.WHITE);
+        boolean glowEnabled = true;
+        // These teams remain useful for client-side duel opponent recognition,
+        // but outline color is supplied directly by the extension.
+        blueTeam.setColor(ChatFormatting.WHITE);
+        redTeam.setColor(ChatFormatting.WHITE);
         syncDuelScoreboardEntries(server, battle, scoreboard, blueTeam, battle.originalTeamA);
         syncDuelScoreboardEntries(server, battle, scoreboard, redTeam, battle.originalTeamB);
+        syncDirectDuelOutlineColors(server, battle, glowEnabled);
+    }
+
+    private static void syncDirectDuelOutlineColors(MinecraftServer server, DuelBattle battle, boolean enabled) {
+        for (UUID participantId : battle.originalTeamA) {
+            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
+            if (participant != null) TameableUtils.setTamesLevelDuelGlowTeam(participant, enabled ? 1 : 0);
+        }
+        for (UUID participantId : battle.originalTeamB) {
+            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
+            if (participant != null) TameableUtils.setTamesLevelDuelGlowTeam(participant, enabled ? 2 : 0);
+        }
+    }
+
+    private static void clearDuelVisualState(MinecraftServer server, Set<UUID> participantIds) {
+        if (server == null || participantIds == null) return;
+        for (UUID participantId : participantIds) {
+            LivingEntity participant = findLoadedLivingParticipant(server, participantId);
+            if (participant == null) continue;
+            participant.removeEffect(MobEffects.GLOWING);
+            TameableUtils.setTamesLevelDuelGlowTeam(participant, 0);
+            TameData data = TameRegistry.get(participantId);
+            if (data == null) data = TameRegistry.getByTlId(participantId);
+            if (data != null) {
+                CompoundTag refreshed = new CompoundTag();
+                participant.save(refreshed);
+                data.entitySnapshot = refreshed;
+                TameRegistry.markDirty();
+            }
+        }
     }
 
     private static PlayerTeam getOrCreateDuelScoreboardTeam(Scoreboard scoreboard, DuelBattle battle, boolean teamA) {

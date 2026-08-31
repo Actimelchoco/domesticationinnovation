@@ -1062,10 +1062,6 @@ public class TameCommands {
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("duelGlow")
-                        .executes(ctx -> duelGlowStatus(ctx.getSource()))
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setDuelGlow(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("friendlyFire")
                         .executes(ctx -> playerFriendlyFireStatus(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -5139,7 +5135,7 @@ public class TameCommands {
                     "/tames settings hideLevelInName <true|false>",
                     "/tames settings noAutoSetBed <true|false>",
                     "/tames chestxdrum system",
-                    "/tames settings duelGlow|friendlyFire <true|false>",
+                    "/tames settings friendlyFire <true|false>",
                     "/tames settings orescenting <tame> <ore id>",
                     "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
                     "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",

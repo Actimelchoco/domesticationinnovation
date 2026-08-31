@@ -51,6 +51,7 @@ import java.util.*;
 import java.util.function.Predicate;
 
 public class TameableUtils {
+    private static final String TAMES_LEVEL_DUEL_GLOW_TEAM = "TamesLevelDuelGlowTeam";
     private static final Map<UUID, ShadowHandRuntimeState> SHADOW_HAND_RUNTIME = new HashMap<>();
 
     private static final String ENCHANTMENT_TAG = "StoredPetEnchantments";
@@ -932,6 +933,20 @@ public class TameableUtils {
         } else {
             Citadel.sendMSGToServer(new PropertiesMessage("CitadelTagUpdate", tag, enchanted.getId()));
         }
+    }
+
+    public static int getTamesLevelDuelGlowTeam(LivingEntity entity) {
+        return entity == null ? 0 : CitadelEntityData.getOrCreateCitadelTag(entity).getInt(TAMES_LEVEL_DUEL_GLOW_TEAM);
+    }
+
+    public static void setTamesLevelDuelGlowTeam(LivingEntity entity, int team) {
+        if (entity == null) return;
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        int normalized = team == 1 || team == 2 ? team : 0;
+        if (tag.getInt(TAMES_LEVEL_DUEL_GLOW_TEAM) == normalized) return;
+        if (normalized == 0) tag.remove(TAMES_LEVEL_DUEL_GLOW_TEAM);
+        else tag.putInt(TAMES_LEVEL_DUEL_GLOW_TEAM, normalized);
+        sync(entity, tag);
     }
 
     private static boolean hasAnyPositiveLevels(Map<String, Integer> levels) {
