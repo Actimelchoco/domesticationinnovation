@@ -132,6 +132,22 @@ public class TameRegistry {
         DISABLED_TAME_TYPE_IDS.addAll(savedData.getDisabledTameTypeIds());
         SUMMON_TYPE_IDS.clear();
         SUMMON_TYPE_IDS.addAll(savedData.getSummonTypeIds());
+        // Older builds allowed direct registration/backfill callers to bypass the
+        // summon check. Purge those stale rows on startup without touching the
+        // actual entities.
+        boolean removedConfiguredSummons = TAMES.entrySet().removeIf(entry -> {
+            TameData data = entry.getValue();
+            if (data == null || !isSummonType(data.type)) {
+                return false;
+            }
+            if (data.uuid != null) invalidIds.add(data.uuid);
+            if (data.tlId != null) invalidTlIds.add(data.tlId);
+            return true;
+        });
+        if (removedConfiguredSummons) {
+            rebuildIndexes();
+            changed = true;
+        }
         PLAYER_DUEL_STATS.clear();
         PLAYER_DUEL_STATS.putAll(savedData.getPlayerDuelStats());
         OWNER_TELEPORT_APPROVED_CREDITS.clear();

@@ -132,8 +132,8 @@ import java.util.regex.Pattern;
 
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class CommonProxy {
-    private static final String ARMOR_SHORTCUT_TICK_TAG = "TLArmorShortcutTick";
-    private static final String ARMOR_SHORTCUT_TARGET_TAG = "TLArmorShortcutTarget";
+    private static final String HUNGER_SHORTCUT_TICK_TAG = "TLHungerShortcutTick";
+    private static final String HUNGER_SHORTCUT_TARGET_TAG = "TLHungerShortcutTarget";
 
     public static final String SKIP_LANTERN_UNLOAD_ONCE_TAG = "diSkipLanternUnloadOnce";
     private static final Pattern NUMERIC_SUFFIX = Pattern.compile("^(.*?)(?:\\s+(\\d+))?$");
@@ -1416,10 +1416,23 @@ public class CommonProxy {
         }
         CompoundTag playerData = player.getPersistentData();
         long interactionTick = player.level().getGameTime();
+        // Forge may fire both EntityInteractSpecific and EntityInteract for the
+        // same click. Depositing the held stack empties the hand during the first
+        // callback, so the second callback previously interpreted it as an
+        // empty-hand click and opened the inventory.
+        if (playerData.getLong(HUNGER_SHORTCUT_TICK_TAG) == interactionTick
+                && playerData.hasUUID(HUNGER_SHORTCUT_TARGET_TAG)
+                && target.getUUID().equals(playerData.getUUID(HUNGER_SHORTCUT_TARGET_TAG))) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return true;
+        }
         if (!player.getMainHandItem().isEmpty()) {
             if (!TameCommands.depositHeldHungerFood(serverPlayer, tame)) {
                 return false;
             }
+            playerData.putLong(HUNGER_SHORTCUT_TICK_TAG, interactionTick);
+            playerData.putUUID(HUNGER_SHORTCUT_TARGET_TAG, target.getUUID());
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
             return true;

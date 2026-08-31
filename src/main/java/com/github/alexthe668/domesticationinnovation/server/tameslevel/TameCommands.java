@@ -9099,8 +9099,25 @@ public class TameCommands {
         data.lastKnownZ = loaded.blockPosition().getZ();
         data.lastKnownGameTime = loaded.level().getGameTime();
         loaded.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
+        removeEntityFromClientsBeforeDiscard(loaded);
         loaded.discard();
         TameRegistry.markDirty();
+    }
+
+    /**
+     * Ranked waiting tames can be hidden and respawned again within a short round
+     * transition. Explicitly remove the old runtime entity from every client in
+     * the dimension before discarding it, preventing a non-interactive render-only
+     * copy from surviving when vanilla tracking misses the rapid transition.
+     */
+    private static void removeEntityFromClientsBeforeDiscard(LivingEntity entity) {
+        if (entity == null || !(entity.level() instanceof ServerLevel level)) {
+            return;
+        }
+        ClientboundRemoveEntitiesPacket packet = new ClientboundRemoveEntitiesPacket(entity.getId());
+        for (ServerPlayer viewer : level.players()) {
+            sendClientPacket(viewer, packet);
+        }
     }
 
     private static void sendPulledRankedParticipantHome(MinecraftServer server, UUID participantId) {

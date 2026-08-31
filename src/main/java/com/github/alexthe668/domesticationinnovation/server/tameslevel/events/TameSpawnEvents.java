@@ -288,6 +288,10 @@ public class TameSpawnEvents {
 
     public static TameData registerOrRestoreTame(TamableAnimal tame, boolean notifyClassIfNew, boolean allowDeadIdentitySync) {
         if (tame == null || !tame.isTame()) return null;
+        // This is the common registration boundary. Spawn events are not the only
+        // callers: behavior ticks, world-load scans and persistence backfills can
+        // all arrive here directly. Never give a configured summon an identity.
+        if (TameRegistry.isSummonType(tame)) return null;
         if (purgeInvalidPrefixedTame(tame)) return null;
         if (TameRegistry.isTameTypeDisabled(tame)) {
             return null;
@@ -946,6 +950,7 @@ public class TameSpawnEvents {
 
     private static void registerLiveOnlyModifiedTame(LivingEntity living, ModifedToBeTameable modified) {
         if (living == null || modified == null || living.level().isClientSide || modified.getTameOwnerUUID() == null) return;
+        if (TameRegistry.isSummonType(living)) return;
         TameData data = TameRegistry.get(living.getUUID());
         if (data == null) {
             UUID tlId = TameData.readOrCreateTlId(living);
