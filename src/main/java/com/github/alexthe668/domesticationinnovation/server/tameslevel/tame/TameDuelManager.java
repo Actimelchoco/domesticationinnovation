@@ -710,17 +710,17 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
-        TameCommands.applyMovementOrderCode(tame, 2);
         applyDuelFollowRangeBoost(tame);
         if (tame instanceof TamableAnimal tamable) {
             ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
-            tamable.setOrderedToSit(false);
             forceMossyGolemCombatCommand(tamable);
         }
         if (tame instanceof IComandableMob commandableMob) {
             commandableMob.setCommand(0);
         }
-        clearDuelRestingState(tame);
+        // Spawn every tame into the duel seated. The immediate threat pass switches
+        // only participants with a valid opponent to wander and leaves the rest sitting.
+        TameCommands.applyMovementOrderCode(tame, 1);
     }
 
     private static void clearDuelRestingState(LivingEntity tame) {
