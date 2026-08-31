@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -23,6 +24,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -1783,8 +1785,9 @@ public class LevelSystem {
             return;
         }
         Set<UUID> preserved = preservedModifierIds.length == 0
-                ? Set.of()
+                ? new HashSet<>()
                 : new HashSet<>(List.of(preservedModifierIds));
+        preserveEquippedItemModifiers(tame, attribute, preserved);
         for (AttributeModifier modifier : new ArrayList<>(instance.getModifiers())) {
             if (!preserved.contains(modifier.getId())) {
                 instance.removeModifier(modifier);
@@ -1827,6 +1830,16 @@ public class LevelSystem {
             case ARMOR_TOUGHNESS -> data.bonusArmorToughness += amount;
             case KNOCKBACK -> data.bonusKnockback += amount;
             case KNOCKBACK_RESIST -> data.bonusKnockbackResist += amount;
+        }
+    }
+
+    private static void preserveEquippedItemModifiers(LivingEntity tame, Attribute attribute, Set<UUID> preserved) {
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack equipped = tame.getItemBySlot(slot);
+            if (equipped.isEmpty()) continue;
+            for (AttributeModifier modifier : equipped.getAttributeModifiers(slot).get(attribute)) {
+                preserved.add(modifier.getId());
+            }
         }
     }
 

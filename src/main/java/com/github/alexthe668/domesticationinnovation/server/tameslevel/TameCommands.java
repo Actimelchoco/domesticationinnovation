@@ -181,6 +181,10 @@ public class TameCommands {
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final String DOC_RESOURCE_BASE = "assets/domesticationinnovation/tameslevel/old docus/";
     private static final Path DOC_SOURCE_BASE = Path.of("docs", "old", "tameslevel");
+    private static final int END_ARENA_RESET_CHUNK_RADIUS = 12;
+    private static boolean pendingLiveEndArenaReset;
+    private static long pendingLiveEndArenaResetStarted;
+    private static UUID pendingLiveEndArenaResetRequester;
     private static final int FOOD_POINTS_PER_APPROVED_ITEM = 20;
     private static final int TAME_HUNGER_INITIAL_SATURATION = 1000;
     private static final int TAME_HUNGER_SATURATION_PER_FOOD_POINT = 100;
@@ -3081,6 +3085,11 @@ public class TameCommands {
                                 .then(Commands.literal("rebuildEnderDragonArena")
                                         .executes(ctx -> adminRebuildEnderDragonArena(ctx.getSource())))
 
+                                .then(Commands.literal("deleteEnderDragonChunks")
+                                        .executes(ctx -> warnDeleteEnderDragonChunks(ctx.getSource()))
+                                        .then(Commands.literal("confirm")
+                                                .executes(ctx -> adminDeleteEnderDragonChunks(ctx.getSource()))))
+
                                 .then(Commands.literal("resetServerProgress")
                                         .executes(ctx -> adminResetServerProgress(ctx.getSource())))
                                 .then(Commands.literal("resetDuelLeaderboards")
@@ -3887,6 +3896,7 @@ public class TameCommands {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = event.getServer();
         if (server == null) return;
+        processPendingLiveEndArenaReset(server);
         if (server.getTickCount() % 20 == 0) {
             cleanupSimpleDuelState(server, true);
             refreshChangedDuelCommandStates(server);
@@ -13254,20 +13264,27 @@ public class TameCommands {
         if (player == null) {
             return false;
         }
-        Vec3 currentPos = player.position();
-        Vec3 currentMotion = player.getDeltaMovement();
-        float currentYRot = player.getYRot();
-        float currentXRot = player.getXRot();
-        boolean hadNoPhysics = player.noPhysics;
-        player.stopRiding();
-        player.load(playerSnapshot.copy());
-        player.teleportTo(currentPos.x, currentPos.y, currentPos.z);
-        player.setYRot(currentYRot);
-        player.setXRot(currentXRot);
-        player.setYHeadRot(currentYRot);
-        player.setYBodyRot(currentYRot);
-        player.setDeltaMovement(currentMotion);
-        player.noPhysics = hadNoPhysics;
+
+        // Only vanilla armor is protected from duel wear. Loading the complete player NBT here also
+        // rewinds Forge capabilities such as Curios/Artifacts and can eject their equipped stacks.
+        List<ItemStack> armor = new ArrayList<>(List.of(
+                ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY));
+        ListTag inventory = playerSnapshot.getList("Inventory", Tag.TAG_COMPOUND);
+        for (int i = 0; i < inventory.size(); i++) {
+            CompoundTag entry = inventory.getCompound(i);
+            int armorIndex = entry.getByte("Slot") - 100;
+            if (armorIndex >= 0 && armorIndex < armor.size()) {
+                armor.set(armorIndex, ItemStack.of(entry));
+            }
+        }
+        for (int i = 0; i < armor.size(); i++) {
+            player.getInventory().armor.set(i, armor.get(i));
+        }
+        player.removeAllEffects();
+        player.setSecondsOnFire(0);
+        player.setHealth(player.getMaxHealth());
+        player.invulnerableTime = Math.max(player.invulnerableTime, 20);
+        player.hurtMarked = true;
         player.containerMenu.broadcastChanges();
         player.inventoryMenu.broadcastChanges();
         return true;
@@ -17318,6 +17335,84 @@ public class TameCommands {
         return 1;
     }
 
+    private static int warnDeleteEnderDragonChunks(CommandSourceStack source) {
+        source.sendFailure(Component.literal("This permanently resets the 25x25 End chunks centered on chunk 0,0 while the server stays online. "
+                + "Everyone must leave the End first. Run /tames admin deleteEnderDragonChunks confirm."));
+        return 0;
+    }
+
+    private static int adminDeleteEnderDragonChunks(CommandSourceStack source) {
+        if (pendingLiveEndArenaReset) return adminError(source, "An End arena reset is already in progress.");
+        ServerLevel end = source.getServer().getLevel(Level.END);
+        if (end == null) return adminError(source, "The End dimension is unavailable.");
+        if (!end.players().isEmpty()) return adminError(source, "Everyone must leave the End before its arena chunks can be reset.");
+        for (long forced : end.getForcedChunks()) {
+            int x = ChunkPos.getX(forced);
+            int z = ChunkPos.getZ(forced);
+            if (isEndArenaResetChunk(x, z)) {
+                return adminError(source, "Chunk " + x + ", " + z + " is force-loaded. Unforce it before resetting the arena.");
+            }
+        }
+
+        List<Entity> entities = new ArrayList<>();
+        end.getAllEntities().forEach(entity -> {
+            ChunkPos pos = entity.chunkPosition();
+            if (isEndArenaResetChunk(pos.x, pos.z)) entities.add(entity);
+        });
+        entities.forEach(Entity::discard);
+        pendingLiveEndArenaReset = true;
+        pendingLiveEndArenaResetStarted = source.getServer().getTickCount();
+        pendingLiveEndArenaResetRequester = source.getEntity() instanceof ServerPlayer player ? player.getUUID() : null;
+        source.sendSuccess(() -> Component.literal("Live End arena reset started. The server is unloading and deleting chunks -12..12; keep everyone out of the End until completion.")
+                .withStyle(ChatFormatting.YELLOW), true);
+        return 1;
+    }
+
+    private static boolean isEndArenaResetChunk(int x, int z) {
+        return Math.abs(x) <= END_ARENA_RESET_CHUNK_RADIUS && Math.abs(z) <= END_ARENA_RESET_CHUNK_RADIUS;
+    }
+
+    private static void processPendingLiveEndArenaReset(MinecraftServer server) {
+        if (!pendingLiveEndArenaReset) return;
+        ServerLevel end = server.getLevel(Level.END);
+        if (end == null) {
+            finishLiveEndArenaReset(server, false, "The End dimension became unavailable; reset cancelled.");
+            return;
+        }
+        if (!end.players().isEmpty()) {
+            finishLiveEndArenaReset(server, false, "A player entered the End; reset cancelled before deletion.");
+            return;
+        }
+        for (int x = -END_ARENA_RESET_CHUNK_RADIUS; x <= END_ARENA_RESET_CHUNK_RADIUS; x++) {
+            for (int z = -END_ARENA_RESET_CHUNK_RADIUS; z <= END_ARENA_RESET_CHUNK_RADIUS; z++) {
+                if (end.getChunkSource().getChunkNow(x, z) != null) {
+                    if (server.getTickCount() - pendingLiveEndArenaResetStarted > 20L * 30L) {
+                        finishLiveEndArenaReset(server, false, "The arena chunks did not unload within 30 seconds. Check for chunk loaders and try again.");
+                    }
+                    return;
+                }
+            }
+        }
+
+        for (int x = -END_ARENA_RESET_CHUNK_RADIUS; x <= END_ARENA_RESET_CHUNK_RADIUS; x++) {
+            for (int z = -END_ARENA_RESET_CHUNK_RADIUS; z <= END_ARENA_RESET_CHUNK_RADIUS; z++) {
+                end.getChunkSource().chunkMap.write(new ChunkPos(x, z), null);
+            }
+        }
+        end.getChunkSource().chunkMap.flushWorker();
+        finishLiveEndArenaReset(server, true, "Deleted the 25x25 End arena chunks while the server remained online. They will regenerate when a player returns.");
+    }
+
+    private static void finishLiveEndArenaReset(MinecraftServer server, boolean success, String message) {
+        UUID requester = pendingLiveEndArenaResetRequester;
+        pendingLiveEndArenaReset = false;
+        pendingLiveEndArenaResetRequester = null;
+        ServerPlayer player = requester == null ? null : server.getPlayerList().getPlayer(requester);
+        Component component = Component.literal(message).withStyle(success ? ChatFormatting.GREEN : ChatFormatting.RED);
+        if (player != null) player.sendSystemMessage(component);
+        DomesticationMod.LOGGER.info("[END-ARENA-RESET] {}", message);
+    }
+
     private static int adminResetServerProgress(CommandSourceStack source) {
         int resetData = TameRegistry.TAMES.size();
         int resetDeaths = TameRegistry.DEATH_HISTORY.size();
@@ -21160,8 +21255,15 @@ public class TameCommands {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return;
         Set<UUID> preserved = preservedModifierIds.length == 0
-                ? Set.of()
+                ? new HashSet<>()
                 : new HashSet<>(List.of(preservedModifierIds));
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack equipped = tame.getItemBySlot(slot);
+            if (equipped.isEmpty()) continue;
+            for (AttributeModifier modifier : equipped.getAttributeModifiers(slot).get(attribute)) {
+                preserved.add(modifier.getId());
+            }
+        }
         for (AttributeModifier modifier : new ArrayList<>(instance.getModifiers())) {
             if (!preserved.contains(modifier.getId())) {
                 instance.removeModifier(modifier);
@@ -22877,18 +22979,20 @@ public class TameCommands {
             return false;
         }
         String itemName = held.getHoverName().getString();
-        ItemStack one = held.copy();
-        one.setCount(1);
-        if (!addHungerFoodStack(data, one)) {
-            hungerMessage(player, tameDisplayName(data) + "'s food inventory is full.");
+        int transferred = held.getCount();
+        ItemStack fullStack = held.copy();
+        if (!canAddEntireHungerFoodStack(data, fullStack) || !addHungerFoodStack(data, fullStack)) {
+            hungerMessage(player, tameDisplayName(data) + " does not have room for the whole held stack.");
             return true;
         }
         if (!player.isCreative()) {
-            held.shrink(1);
+            held.shrink(transferred);
         }
         resetHungerFoodNotifications(data);
         TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Gave " + itemName + " (" + points + " food points) to " + tameDisplayName(data) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        long totalPoints = Math.min(Integer.MAX_VALUE, (long) points * transferred);
+        player.sendSystemMessage(Component.literal("Gave " + transferred + "x " + itemName + " (" + totalPoints
+                + " food points) to " + tameDisplayName(data) + ".").withStyle(TAME_HUNGER_MESSAGE_COLOR));
         return true;
     }
 
@@ -23215,6 +23319,19 @@ public class TameCommands {
             if (ItemStack.isSameItemSameTags(existing, incoming) && existing.getCount() < existing.getMaxStackSize()) return true;
         }
         return data.hungerInventory.size() < TAME_HUNGER_MAX_STACKS;
+    }
+
+    private static boolean canAddEntireHungerFoodStack(TameData data, ItemStack incoming) {
+        if (data == null || incoming == null || incoming.isEmpty()) return false;
+        int capacity = 0;
+        for (ItemStack existing : data.hungerInventory) {
+            if (ItemStack.isSameItemSameTags(existing, incoming)) {
+                capacity += Math.max(0, existing.getMaxStackSize() - existing.getCount());
+            }
+        }
+        int freeSlots = Math.max(0, TAME_HUNGER_MAX_STACKS - data.hungerInventory.size());
+        capacity += freeSlots * incoming.getMaxStackSize();
+        return capacity >= incoming.getCount();
     }
 
     private static int hungerInventoryTaste(CommandSourceStack source, String type, String selectionRaw) {
