@@ -6,6 +6,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTa
 import com.github.alexthe668.domesticationinnovation.server.entity.ai.FollowOwner2Goal;
 import com.github.alexthe668.domesticationinnovation.server.entity.ai.OwnerHurtTarget2Goal;
 import com.github.alexthe668.domesticationinnovation.server.entity.ai.Sit2Goal;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -121,7 +122,7 @@ public abstract class FoxMixin extends Animal implements ModifedToBeTameable, IC
             method = {"Lnet/minecraft/world/entity/animal/Fox;aiStep()V"}
     )
     private void di_aiStep_2(CallbackInfo ci) {
-        if(this.isFollowingOwner()){
+        if(this.isFollowingOwner() || TameDuelManager.isEntityInDuel(this.getUUID())){
             this.setSleeping(false);
             this.setSitting(false);
         }

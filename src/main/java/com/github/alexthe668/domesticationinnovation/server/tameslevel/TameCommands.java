@@ -99,6 +99,7 @@ import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -21843,6 +21844,16 @@ public class TameCommands {
         if (hasTarget) {
             tryInvokeBooleanSetter(tame, "setSleeping", false);
             tryInvokeBooleanSetter(tame, "setPlayingDead", false);
+            if (tame instanceof ModifedToBeTameable) {
+                try {
+                    // Amphibian/interface tames can retain their custom STAY brain activity
+                    // after command 1 is cleared. Explicitly leave it; duel target memories
+                    // applied immediately afterwards will select their combat activity.
+                    tame.getBrain().setActiveActivityToFirstValid(List.of(Activity.FIGHT, Activity.IDLE));
+                } catch (Throwable ignored) {
+                    // Other interface implementations may not register either activity.
+                }
+            }
         }
     }
 
