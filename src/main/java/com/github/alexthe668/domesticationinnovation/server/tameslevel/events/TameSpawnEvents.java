@@ -25,6 +25,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.AnimalTameEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -84,6 +85,23 @@ public class TameSpawnEvents {
 
     private static boolean isTameReconstructionSuppressed() {
         return TAME_RECONSTRUCTION_DEPTH.get() > 0;
+    }
+
+    @SubscribeEvent
+    public static void onPlayerStartsTracking(PlayerEvent.StartTracking event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && event.getTarget() instanceof TamableAnimal tame
+                && tame.isTame()
+                && tame.isAlive()) {
+            TameCommands.queueTrackingClientReload(player, tame);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerStopsTracking(PlayerEvent.StopTracking event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            TameCommands.cancelTrackingClientReload(player, event.getTarget());
+        }
     }
 
     @SubscribeEvent

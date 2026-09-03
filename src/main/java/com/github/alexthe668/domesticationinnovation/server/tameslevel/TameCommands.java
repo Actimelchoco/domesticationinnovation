@@ -228,6 +228,7 @@ public class TameCommands {
     private static final int IMMEDIATE_CHUNK_TP_INITIAL_DELAY_TICKS = 5;
     private static final int IMMEDIATE_CHUNK_TP_MAX_WAIT_TICKS = 200;
     private static final long TELEPORT_CLIENT_REFRESH_DELAY_TICKS = 20L;
+    private static final long TRACKING_CLIENT_REFRESH_DELAY_TICKS = 2L;
     private static final long DUEL_SESSION_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final long RANKED_NEXT_ROUND_DELAY_TICKS = 20L;
     private static final double DUEL_SESSION_ARENA_MAX_DRIFT_SQR = 56.0D * 56.0D;
@@ -242,6 +243,7 @@ public class TameCommands {
     private static final Map<UUID, PendingMorningLanternRecall> PENDING_MORNING_LANTERN = new HashMap<>();
     private static final Map<UUID, PendingImmediateChunkTeleport> PENDING_IMMEDIATE_CHUNK_TELEPORTS = new HashMap<>();
     private static final Map<UUID, PendingTeleportClientRefresh> PENDING_TELEPORT_CLIENT_REFRESH = new HashMap<>();
+    private static final Map<TrackingClientRefreshKey, PendingTrackingClientRefresh> PENDING_TRACKING_CLIENT_REFRESH = new HashMap<>();
     private static final Map<UUID, Long> AUTO_FOLLOW_RETRY_AFTER = new HashMap<>();
     private static final Set<UUID> AUTO_FOLLOW_RECOVER_REQUIRED = new HashSet<>();
     private static final long AUTO_FOLLOW_RETRY_DELAY_TICKS = 100L;
@@ -3911,6 +3913,9 @@ public class TameCommands {
         }
         if (!PENDING_TELEPORT_CLIENT_REFRESH.isEmpty()) {
             PENDING_TELEPORT_CLIENT_REFRESH.entrySet().removeIf(entry -> processPendingTeleportClientRefresh(server, entry.getKey(), entry.getValue()));
+        }
+        if (!PENDING_TRACKING_CLIENT_REFRESH.isEmpty()) {
+            PENDING_TRACKING_CLIENT_REFRESH.entrySet().removeIf(entry -> processPendingTrackingClientRefresh(server, entry.getValue()));
         }
         TamePerformanceProfiler.run("system.ranked_pool_load", TameCommands::ensureRankedPoolLoadedFromRegistry);
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
@@ -15794,6 +15799,13 @@ public class TameCommands {
     private record PendingTeleportClientRefresh(UUID tameUuid, UUID tlId, String dimensionId, long dueTick, boolean strongRefresh) {
     }
 
+    private record TrackingClientRefreshKey(UUID playerUuid, UUID tameUuid) {
+    }
+
+    private record PendingTrackingClientRefresh(UUID playerUuid, UUID tameUuid, UUID tlId,
+                                                String dimensionId, long dueTick) {
+    }
+
     public static boolean autoFollowTeleportLoadedToOwner(TamableAnimal tame, ServerPlayer player) {
         if (tame == null || player == null || !tame.isAlive()) {
             return false;
@@ -16068,6 +16080,51 @@ public class TameCommands {
         queueDelayedTeleportClientRefresh(null, tame, strongRefresh);
     }
 
+    public static void queueTrackingClientReload(ServerPlayer player, TamableAnimal tame) {
+        if (player == null || tame == null || tame.level().isClientSide
+                || !tame.isTame() || !tame.isAlive() || tame.level().getServer() == null) {
+            return;
+        }
+        MinecraftServer server = tame.level().getServer();
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        TrackingClientRefreshKey key = new TrackingClientRefreshKey(player.getUUID(), tame.getUUID());
+        PENDING_TRACKING_CLIENT_REFRESH.put(key, new PendingTrackingClientRefresh(
+                player.getUUID(), tame.getUUID(), TameData.getTlId(tame),
+                tame.level().dimension().location().toString(),
+                now + TRACKING_CLIENT_REFRESH_DELAY_TICKS
+        ));
+    }
+
+    public static void cancelTrackingClientReload(ServerPlayer player, Entity entity) {
+        if (player == null || entity == null) {
+            return;
+        }
+        PENDING_TRACKING_CLIENT_REFRESH.remove(new TrackingClientRefreshKey(
+                player.getUUID(), entity.getUUID()));
+    }
+
+    private static boolean processPendingTrackingClientRefresh(MinecraftServer server,
+                                                               PendingTrackingClientRefresh pending) {
+        if (server == null || pending == null) {
+            return true;
+        }
+        long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
+        if (pending.dueTick() > now) {
+            return false;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(pending.playerUuid());
+        TamableAnimal tame = findLoadedTameByIdentity(server, pending.tameUuid(), pending.tlId());
+        if (player == null || player.connection == null || player.isRemoved()
+                || tame == null || !tame.isAlive()
+                || player.level() != tame.level()
+                || player.distanceToSqr(tame) > 192.0D * 192.0D
+                || !tame.level().dimension().location().toString().equals(pending.dimensionId())) {
+            return true;
+        }
+        sendFullEntityRefresh(player, tame);
+        return true;
+    }
+
     private static boolean processPendingTeleportClientRefresh(MinecraftServer server, UUID key, PendingTeleportClientRefresh pending) {
         if (server == null || pending == null) {
             return true;
@@ -16119,23 +16176,27 @@ public class TameCommands {
         // This includes newly-nearby viewers if tracking failed, without returning to a
         // dimension-wide resend.
         if (strongRefresh) {
-            List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
             for (ServerPlayer viewer : level.players()) {
                 if (viewer == null || viewer.connection == null || viewer.isRemoved()
                         || viewer.distanceToSqr(tame) > 192.0D * 192.0D) continue;
-                sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
-                sendClientPacket(viewer, tame.getAddEntityPacket());
-                if (values != null && !values.isEmpty()) {
-                    sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
-                }
-                sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(
-                        tame.getId(), tame.getAttributes().getSyncableAttributes()));
-                sendClientPacket(viewer, createEquipmentPacket(tame));
-                sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
+                sendFullEntityRefresh(viewer, tame);
             }
             return;
         }
         level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
+    }
+
+    private static void sendFullEntityRefresh(ServerPlayer viewer, TamableAnimal tame) {
+        List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
+        sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
+        sendClientPacket(viewer, tame.getAddEntityPacket());
+        if (values != null && !values.isEmpty()) {
+            sendClientPacket(viewer, new ClientboundSetEntityDataPacket(tame.getId(), values));
+        }
+        sendClientPacket(viewer, new ClientboundUpdateAttributesPacket(
+                tame.getId(), tame.getAttributes().getSyncableAttributes()));
+        sendClientPacket(viewer, createEquipmentPacket(tame));
+        sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
     }
 
     private static ClientboundSetEquipmentPacket createEquipmentPacket(LivingEntity tame) {
