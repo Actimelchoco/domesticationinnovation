@@ -23222,7 +23222,9 @@ public class TameCommands {
         if (data == null) {
             data = TameRegistry.getByTlId(TameData.getTlId(tame));
         }
-        if (data == null || data.dead || data.stored || data.ownerUUID == null || !data.ownerUUID.equals(player.getUUID())) {
+        // Anyone may give compatible food directly to a living tame. Inventory
+        // access remains owner-only in openHungerInventory.
+        if (data == null || data.dead || data.stored || data.ownerUUID == null) {
             return false;
         }
         ItemStack held = player.getMainHandItem();
