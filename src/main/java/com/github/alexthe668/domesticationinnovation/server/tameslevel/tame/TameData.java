@@ -122,6 +122,7 @@ public class TameData {
     public final Map<String, Integer> attributeLevels = new LinkedHashMap<>();
     public final Map<String, Long> cooldowns = new LinkedHashMap<>();
     public CompoundTag entitySnapshot = new CompoundTag();
+    public CompoundTag bewereagerState = new CompoundTag();
     public int hungerSaturation = 1000;
     public final List<ItemStack> hungerInventory = new ArrayList<>();
     public final List<ItemStack> armorInventory = new ArrayList<>();
@@ -330,6 +331,7 @@ public class TameData {
         cooldowns.forEach(cooldownsTag::putLong);
         tag.put("cooldowns", cooldownsTag);
         tag.put("entitySnapshot", entitySnapshot == null ? new CompoundTag() : entitySnapshot.copy());
+        tag.put("bewereagerState", bewereagerState.copy());
         tag.putInt("hungerSaturation", Math.max(0, hungerSaturation));
         tag.putBoolean("hungerEmptyNotified", hungerEmptyNotified);
         tag.putBoolean("hungerLowNotified", hungerLowNotified);
@@ -542,6 +544,7 @@ public class TameData {
                 data.cooldowns.put(key, cooldownsTag.getLong(key));
             }
         }
+        data.bewereagerState = tag.getCompound("bewereagerState").copy();
         if (tag.contains("entitySnapshot", Tag.TAG_COMPOUND)) {
             data.entitySnapshot = tag.getCompound("entitySnapshot").copy();
         } else {
@@ -622,7 +625,7 @@ public class TameData {
     }
 
     public boolean isInactive() {
-        return dead || stored;
+        return dead || stored || bewereagerState.getBoolean("Active");
     }
 
     public boolean isActuallyDead() {

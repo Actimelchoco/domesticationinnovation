@@ -203,6 +203,7 @@ public class TameCombatEvents {
     // acted on the registry after restoration, invalidating the replacement's ranked identity.
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onTameDeath(LivingDeathEvent event) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(event.getEntity())) return;
         if (event.isCanceled()) return;
 
         LivingEntity tame = event.getEntity();

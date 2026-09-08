@@ -51,6 +51,8 @@
     "SaintsDragonsVarasuchusMixin",
     "SculkSensorBlockMixin",
     "ShootTongueMixin",
+    "SpeciesWolfTransformationMixin",
+    "SpeciesBewereagerMixin",
     "TameableAnimalMixin",
     "VillagerMixin",
     "WolfMixin"

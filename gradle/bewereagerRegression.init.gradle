@@ -1,0 +1,5 @@
+allprojects {
+    afterEvaluate {
+        sourceSets.main.java.srcDir('src/test/bewereager')
+    }
+}

@@ -682,6 +682,7 @@ public class TameRegistry {
 
     public static boolean usesInvertedCallOrderByDefault(String typeId) {
         String normalized = normalizeTypeId(typeId);
+        if ("species:bewereager".equals(normalized)) return false;
         if (normalized == null || normalized.isBlank()) {
             return false;
         }

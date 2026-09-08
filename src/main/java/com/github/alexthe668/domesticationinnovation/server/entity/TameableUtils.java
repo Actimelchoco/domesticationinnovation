@@ -152,6 +152,7 @@ public class TameableUtils {
     }
 
     public static boolean shouldBlockOffensiveDiTarget(LivingEntity source, Entity target) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(source)) return source == target;
         if (source == null || target == null) {
             return false;
         }

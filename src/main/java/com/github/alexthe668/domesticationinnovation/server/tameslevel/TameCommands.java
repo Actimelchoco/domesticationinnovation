@@ -13035,6 +13035,7 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
 
@@ -13428,6 +13429,7 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAtServer(TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
 
@@ -13789,6 +13791,7 @@ public class TameCommands {
     }
 
     private static RecoverResult recoverPetEntity(CommandSourceStack source, ServerPlayer p, TameData data) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RecoverResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RecoverResult.fail("horse-type tames cannot be recovered");
         if (p == null || data == null) return RecoverResult.fail("invalid context");
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
@@ -13859,6 +13862,7 @@ public class TameCommands {
     }
 
     private static RecoverResult recoverPetEntityAtLocation(ServerPlayer owner, SpawnTarget target, TameData data) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RecoverResult.fail("hostile Bewereager cannot be controlled");
         if (target == null || target.level == null || target.pos == null || data == null) {
             return RecoverResult.fail("invalid context");
         }
@@ -22661,6 +22665,7 @@ public class TameCommands {
     private static List<TameData> ownedTames(UUID owner) {
         List<TameData> list = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(d)) continue;
             if (!owner.equals(d.ownerUUID)) continue;
             if (isDeadEntry(d.uuid)) continue;
             list.add(d);
@@ -22671,6 +22676,7 @@ public class TameCommands {
     private static List<TameData> ownedTamesForAllCommands(UUID owner) {
         List<TameData> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) continue;
             if (isRemovedFromAll(owner, data)) continue;
             list.add(data);
         }
@@ -24595,6 +24601,7 @@ public class TameCommands {
     private static List<TameData> ownedGroup(UUID owner, String group) {
         List<TameData> list = new ArrayList<>();
         for (TameData d : TameRegistry.TAMES.values()) {
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(d)) continue;
             if (!owner.equals(d.ownerUUID)) continue;
             if (isInGroup(d, group)) list.add(d);
         }
@@ -28570,6 +28577,7 @@ public class TameCommands {
     }
 
     private static String inactiveSuffix(TameData data) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return " [HOSTILE BEWEREAGER]";
         if (data == null) {
             return "";
         }
@@ -28586,6 +28594,7 @@ public class TameCommands {
     }
 
     private static String statusLabel(TameData data, MinecraftServer server) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return "hostile bewereager";
         if (data == null) {
             return "unknown";
         }
@@ -28602,6 +28611,7 @@ public class TameCommands {
     }
 
     private static ChatFormatting statusColor(TameData data, boolean loaded) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return ChatFormatting.RED;
         if (data == null) {
             return ChatFormatting.WHITE;
         }

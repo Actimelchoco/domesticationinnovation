@@ -137,8 +137,11 @@ public class TameAbilityEvents {
             Map<SupportCacheKey, List<LivingEntity>> supportCache = new HashMap<>();
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof LivingEntity tame)) continue;
-                if (!TameEntityAdapter.isTame(tame) || !tame.isAlive()) continue;
-                TameData data = TameRegistry.get(tame.getUUID());
+                boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame);
+                if ((!TameEntityAdapter.isTame(tame) && !cursed) || !tame.isAlive()) continue;
+                TameData data = cursed
+                        ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
+                        : TameRegistry.get(tame.getUUID());
                 if (data == null || (data.abilityLevels.isEmpty() && data.abilities.isEmpty() && data.attributeLevels.isEmpty())) continue;
                 if (reviveDeadEntry(data)) {
                     revivedDeadEntry = true;
@@ -154,7 +157,7 @@ public class TameAbilityEvents {
                         target = duelTarget;
                     }
                 }
-                if (TameMode.byId(data.mode) == TameMode.PASSIVE && !isDuelOpponent(tame, target)) {
+                if (!cursed && TameMode.byId(data.mode) == TameMode.PASSIVE && !isDuelOpponent(tame, target)) {
                     if (TameEntityAdapter.target(tame) != null) {
                         TameEntityAdapter.setTarget(tame, null);
                     }
@@ -245,10 +248,13 @@ public class TameAbilityEvents {
             }
 
             LivingEntity attackerTame = resolveTameAttacker(event);
-            if (attackerTame != null && TameEntityAdapter.isTame(attackerTame)) {
-                TameData attackerData = TameRegistry.get(attackerTame.getUUID());
+            boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame);
+            if (attackerTame != null && (TameEntityAdapter.isTame(attackerTame) || cursedAttacker)) {
+                TameData attackerData = cursedAttacker
+                        ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(attackerTame)
+                        : TameRegistry.get(attackerTame.getUUID());
                 if (attackerData != null
-                        && (TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
+                        && (cursedAttacker || TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
                         && !isProtectedPassiveWildlife(event.getEntity())
                         && !INTERNAL_BONUS_DAMAGE.get()) {
@@ -2431,6 +2437,7 @@ public class TameAbilityEvents {
 
     private static boolean isFriendly(LivingEntity tame, Entity entity) {
         if (entity == tame) return true;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) return false;
         if (entity instanceof Player player) {
             return !TameDuelManager.areDuelOpponents(tame.getUUID(), player.getUUID());
         }
@@ -2676,6 +2683,7 @@ private static void applyWardenScreamPush(LivingEntity tame, LivingEntity target
 
     private static boolean shouldUseOffensiveAbilities(LivingEntity tame, TameData data, LivingEntity target) {
         if (tame == null || data == null || target == null || !target.isAlive()) return false;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) return target != tame;
         if (isFriendly(tame, target)) return false;
         if (isDuelOpponent(tame, target)) {
             return true;
