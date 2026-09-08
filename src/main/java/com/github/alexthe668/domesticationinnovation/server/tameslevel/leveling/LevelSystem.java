@@ -1640,12 +1640,22 @@ public class LevelSystem {
             // the tracked total. In that broken state, subtracting the tracked total once still
             // leaves exactly one additional copy above the entity type's real base.
             if (Math.abs(trackedBonus) > 1.0E-6D
+                    && !hasExternalBaseScaling(data, attribute)
                     && Math.abs(snapshotBase - templateBase - trackedBonus) <= 1.0E-6D) {
                 return templateBase;
             }
             return snapshotBase;
         }
         return readBaseOrDefault(template, attribute);
+    }
+
+    private static boolean hasExternalBaseScaling(TameData data, Attribute attribute) {
+        if (data == null || data.entitySnapshot == null) return false;
+        CompoundTag persistent = data.entitySnapshot.getCompound("ForgeData");
+        // Armageddon scales the base once and retains these flags across saves.
+        // A scaled base can coincide with a TL reward; it is not a duplicate reward.
+        return (attribute == Attributes.MAX_HEALTH && persistent.getBoolean("health_doubled"))
+                || (attribute == Attributes.ATTACK_DAMAGE && persistent.getBoolean("damage_doubled"));
     }
 
     private static Double resolveForcedTypeBaseValue(TameData data, Attribute attribute) {

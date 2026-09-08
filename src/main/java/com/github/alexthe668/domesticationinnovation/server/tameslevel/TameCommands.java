@@ -6553,13 +6553,14 @@ public class TameCommands {
         if (!(created instanceof TamableAnimal catino)) {
             return error(player, "Animights Catino could not be created.");
         }
-        catino.moveTo(loaded.getX(), loaded.getY(), loaded.getZ(), loaded.getYRot(), loaded.getXRot());
-        catino.setTame(true);
-        catino.setOwnerUUID(player.getUUID());
-        catino.getPersistentData().putUUID(TameData.TL_ID_TAG, data.ensureTlId());
         TameSpawnEvents.beginTameReconstruction();
         boolean spawned;
         try {
+            catino.getPersistentData().putUUID(TameData.TL_ID_TAG, data.ensureTlId());
+            catino.moveTo(loaded.getX(), loaded.getY(), loaded.getZ(), loaded.getYRot(), loaded.getXRot());
+            catino.setTame(true);
+            catino.setOwnerUUID(player.getUUID());
+            TameableUtils.copyCollar(loaded, catino);
             spawned = level.addFreshEntity(catino);
         } finally {
             TameSpawnEvents.endTameReconstruction();
@@ -6568,7 +6569,12 @@ public class TameCommands {
 
         TameRegistry.rebindEntityUuid(data, catino.getUUID());
         TameRegistry.bindEntityToData(catino, data);
-        data.type = catino.getType().toString();
+        data.type = pending.resultType();
+        // The host snapshot describes a different species and its old rewards.
+        // Seed normalization from the new entity before applying conversion HP.
+        CompoundTag initialSnapshot = new CompoundTag();
+        catino.save(initialSnapshot);
+        data.entitySnapshot = initialSnapshot;
         data.lastKnownDimension = level.dimension().location().toString();
         data.lastKnownX = catino.blockPosition().getX();
         data.lastKnownY = catino.blockPosition().getY();
@@ -19600,7 +19606,10 @@ public class TameCommands {
     }
 
     public static void refreshRegistrySnapshotFor(TamableAnimal tame) {
-        if (tame == null) {
+        // Death/drop callbacks may still reference the original entity after it has
+        // been discarded. Never replace its pre-drop recovery snapshot with that
+        // entity's empty equipment (or an empty tag when save returns false).
+        if (tame == null || !tame.isAlive() || tame.isRemoved()) {
             return;
         }
         TameData data = TameRegistry.get(tame.getUUID());
@@ -19611,7 +19620,7 @@ public class TameCommands {
             return;
         }
         CompoundTag snapshot = new CompoundTag();
-        tame.save(snapshot);
+        if (!tame.save(snapshot)) return;
         data.entitySnapshot = snapshot;
         data.lastKnownDimension = tame.level().dimension().location().toString();
         data.lastKnownX = tame.blockPosition().getX();

@@ -580,6 +580,16 @@ public class TameableUtils {
         return tag.contains(COLLAR_TAG) && tag.getBoolean(COLLAR_TAG);
     }
 
+    public static void copyCollar(LivingEntity source, LivingEntity target) {
+        CompoundTag sourceTag = CitadelEntityData.getOrCreateCitadelTag(source);
+        CompoundTag targetTag = CitadelEntityData.getOrCreateCitadelTag(target);
+        targetTag.putBoolean(COLLAR_TAG, hasCollar(source));
+        targetTag.put(ENCHANTMENT_TAG, sourceTag.getList(ENCHANTMENT_TAG, Tag.TAG_COMPOUND).copy());
+        sync(target, targetTag);
+        refreshCollarAttributes(target);
+        syncVisualCollarEnchants(target);
+    }
+
     public static void syncVisualCollarEnchants(LivingEntity entity) {
         if (entity == null || entity.level().isClientSide) {
             return;
