@@ -28,7 +28,6 @@ public class TimedTameLlamaSpit extends LlamaSpit {
 
     @Override
     protected void onHitBlock(BlockHitResult result) {
-        TimedTameImpactExplosion.explodeOnBlockImpact(this, 1.25F, 1.7D, 0.30D, 0.06D);
-        this.discard();
+        super.onHitBlock(result);
     }
 }
