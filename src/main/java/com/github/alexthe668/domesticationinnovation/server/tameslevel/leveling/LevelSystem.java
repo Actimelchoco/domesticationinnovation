@@ -431,6 +431,7 @@ public class LevelSystem {
             applyInvestedXp(data, remainingXp);
         }
         data.activeSurvivalDays = 0;
+        data.adminSurvivalStart = Long.MIN_VALUE;
         data.lastActiveSurvivalDay = Long.MIN_VALUE;
         updateTameName(tame, data);
         if (applyPenaltyAndCountDeath) {
@@ -1621,6 +1622,12 @@ public class LevelSystem {
         AttributeInstance instance = tame.getAttribute(attribute);
         if (instance == null) return attribute.getDefaultValue();
         return instance.getBaseValue();
+    }
+
+    /** Retain the live base and external modifiers while replacing, not stacking, TL's HP reward. */
+    public static void refreshTrackedHealthBonus(LivingEntity tame, TameData data) {
+        applyManagedAdditionModifier(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID,
+                data.bonusHealth, "tl_bonus_health");
     }
 
     private static double resolveBaseValue(TameData data, LivingEntity template, Attribute attribute, double trackedBonus) {

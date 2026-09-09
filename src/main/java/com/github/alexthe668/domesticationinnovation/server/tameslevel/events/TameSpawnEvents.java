@@ -469,7 +469,8 @@ public class TameSpawnEvents {
             for (ServerLevel level : server.getAllLevels()) {
                 Entity entity = level.getEntity(entry.getKey());
                 if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
-                if (tame.hasCustomName()) return true;
+                // Only animals unnamed at the taming event enter this queue. Other
+                // handlers may have added a generated display name before this tick.
                 TameData data = registerOrRestoreTame(tame, true, true);
                 if (data == null) return true;
                 String randomName = pickRandomUnusedTameName(usedServerTameNames(tame));
@@ -1079,7 +1080,7 @@ public class TameSpawnEvents {
                 if (line == null) {
                     continue;
                 }
-                String cleaned = line.trim();
+                String cleaned = line.replace("\uFEFF", "").trim();
                 if (cleaned.isBlank() || cleaned.startsWith("#")) {
                     continue;
                 }
@@ -1088,7 +1089,8 @@ public class TameSpawnEvents {
             if (!names.isEmpty()) {
                 return new ArrayList<>(names);
             }
-        } catch (IOException ignored) {
+        } catch (IOException exception) {
+            System.err.println("[TamesLevel] Cannot read tame name pool " + RANDOM_TAME_NAME_FILE.toAbsolutePath() + ": " + exception.getMessage());
         }
         LinkedHashSet<String> configNames = new LinkedHashSet<>();
         try {
@@ -1114,9 +1116,16 @@ public class TameSpawnEvents {
             return;
         }
         Files.createDirectories(RANDOM_TAME_NAME_FILE.getParent());
+        try (java.io.InputStream defaults = TameSpawnEvents.class.getResourceAsStream(
+                "/assets/domesticationinnovation/tame_name_pool.txt")) {
+            if (defaults != null) {
+                Files.copy(defaults, RANDOM_TAME_NAME_FILE);
+                return;
+            }
+        }
         List<String> lines = new ArrayList<>();
         lines.add("# One tame name per line.");
-        lines.add("# When a duplicate name would need a suffix, TL picks a random unused name from this file instead.");
+        lines.add("# TL picks a random unused name when a tame is first registered.");
         lines.addAll(DEFAULT_RANDOM_TAME_NAMES);
         Files.write(RANDOM_TAME_NAME_FILE, lines, StandardCharsets.UTF_8);
     }

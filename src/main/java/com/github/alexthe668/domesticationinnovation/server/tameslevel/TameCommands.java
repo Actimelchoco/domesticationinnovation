@@ -3484,6 +3484,11 @@ public class TameCommands {
                                 .then(Commands.literal("stat")
                                         .then(Commands.argument("pet", StringArgumentType.string())
                                                 .suggests((ctx, b) -> suggestAllAliveTameNames(b))
+                                                .then(Commands.literal("days")
+                                                        .then(Commands.argument("value", IntegerArgumentType.integer(0))
+                                                                .executes(ctx -> adminSetTameStat(ctx.getSource(),
+                                                                        StringArgumentType.getString(ctx, "pet"), "days",
+                                                                        IntegerArgumentType.getInteger(ctx, "value")))))
                                                 .then(Commands.literal("kills")
                                                         .then(Commands.argument("value", IntegerArgumentType.integer(0))
                                                                 .executes(ctx -> adminSetTameStat(
@@ -20282,6 +20287,12 @@ public class TameCommands {
             case "kills" -> data.kills = Math.max(0, value);
             case "assists" -> data.assists = Math.max(0, value);
             case "deaths" -> data.deaths = Math.max(0, value);
+            case "days" -> {
+                long now = source.getServer().overworld().getDayTime();
+                data.activeSurvivalDays = Math.max(0, value);
+                data.adminSurvivalStart = now - (long) data.activeSurvivalDays * 24000L;
+                data.lastActiveSurvivalDay = Math.floorDiv(now, 24000L);
+            }
             default -> {
                 return error(player, "Unknown stat: " + stat);
             }
@@ -21387,6 +21398,7 @@ public class TameCommands {
         deathRow.putInt("y", data.deathY);
         deathRow.putInt("z", data.deathZ);
         data.deathHistory.add(deathRow);
+        data.adminSurvivalStart = Long.MIN_VALUE;
         while (data.deathHistory.size() > 64) {
             data.deathHistory.remove(0);
         }
@@ -28648,8 +28660,8 @@ public class TameCommands {
     private static long daysAlive(CommandSourceStack source, TameData data) {
         if (data == null) return 0L;
         long now = source.getServer().overworld().getDayTime();
-        long start = survivalStartDayTime(data);
-        if (start < 0L) return Math.max(0, data.activeSurvivalDays);
+        long start = data.adminSurvivalStart != Long.MIN_VALUE ? data.adminSurvivalStart : survivalStartDayTime(data);
+        if (start < 0L && data.adminSurvivalStart == Long.MIN_VALUE) return Math.max(0, data.activeSurvivalDays);
         long ticks = Math.max(0L, now - start);
         long days = ticks / 24000L;
         return Math.max(days, Math.max(0, data.activeSurvivalDays));

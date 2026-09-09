@@ -41,6 +41,7 @@
     "LegendaryMonstersMossyGolemMixin",
     "LivingEntityMixin",
     "MobMixin",
+    "MutantMonstersCreeperMinionMixin",
     "PanicGoalMixin",
     "ParrotMixin",
     "PlayerMixin",

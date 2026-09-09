@@ -269,6 +269,7 @@ public class TameCombatEvents {
                 deathRow.putInt("y", data.deathY);
                 deathRow.putInt("z", data.deathZ);
                 data.deathHistory.add(deathRow);
+                data.adminSurvivalStart = Long.MIN_VALUE;
                 while (data.deathHistory.size() > 64) {
                     data.deathHistory.remove(0);
                 }

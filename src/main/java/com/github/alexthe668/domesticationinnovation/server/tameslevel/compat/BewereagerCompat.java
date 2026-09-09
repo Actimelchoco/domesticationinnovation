@@ -196,6 +196,7 @@ public final class BewereagerCompat {
         TameRegistry.rebindEntityUuid(data, beast.getUUID());
         TameRegistry.bindEntityToData(beast, data);
         data.type = TYPE.toString(); data.movementOrder = 0;
+        LevelSystem.refreshTrackedHealthBonus(beast, data);
         data.entitySnapshot = new CompoundTag(); beast.save(data.entitySnapshot);
         if (!player.getAbilities().instabuild) event.getItemStack().shrink(1);
         notify(data, player.getServer(), data.name + " is now a permanently tamed Bewereager, with its level and stats preserved.");
