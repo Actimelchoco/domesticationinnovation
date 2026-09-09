@@ -21969,9 +21969,11 @@ public class TameCommands {
         if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
         if (data != null) data.movementOrder = hasTarget ? 2 : 1;
 
-        if (tame instanceof net.minecraft.world.entity.Mob mob) {
+        // Target refreshes run throughout combat. Preserve the attack goal's path;
+        // stopping it here repeatedly prevents melee companions from approaching.
+        if (!hasTarget && tame instanceof net.minecraft.world.entity.Mob mob) {
             mob.getNavigation().stop();
-            if (!hasTarget) mob.setTarget(null);
+            mob.setTarget(null);
         }
         if (tame instanceof TamableAnimal tamable) {
             if (tamable instanceof IComandableMob commandable) {
