@@ -98,6 +98,11 @@ public class TameSpawnEvents {
     }
 
     @SubscribeEvent
+    public static void onTrackingPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) TameCommands.clearClientTracking(player);
+    }
+
+    @SubscribeEvent
     public static void onPlayerStopsTracking(PlayerEvent.StopTracking event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             TameCommands.cancelTrackingClientReload(player, event.getTarget());

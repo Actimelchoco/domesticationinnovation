@@ -244,6 +244,7 @@ public class TameCommands {
     private static final Map<UUID, PendingImmediateChunkTeleport> PENDING_IMMEDIATE_CHUNK_TELEPORTS = new HashMap<>();
     private static final Map<UUID, PendingTeleportClientRefresh> PENDING_TELEPORT_CLIENT_REFRESH = new HashMap<>();
     private static final Map<TrackingClientRefreshKey, PendingTrackingClientRefresh> PENDING_TRACKING_CLIENT_REFRESH = new HashMap<>();
+    private static final Set<TrackingClientRefreshKey> ACTIVE_CLIENT_TRACKERS = new HashSet<>();
     private static final Map<UUID, Long> AUTO_FOLLOW_RETRY_AFTER = new HashMap<>();
     private static final Set<UUID> AUTO_FOLLOW_RECOVER_REQUIRED = new HashSet<>();
     private static final long AUTO_FOLLOW_RETRY_DELAY_TICKS = 100L;
@@ -16103,6 +16104,7 @@ public class TameCommands {
         MinecraftServer server = tame.level().getServer();
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         TrackingClientRefreshKey key = new TrackingClientRefreshKey(player.getUUID(), tame.getUUID());
+        ACTIVE_CLIENT_TRACKERS.add(key);
         PENDING_TRACKING_CLIENT_REFRESH.put(key, new PendingTrackingClientRefresh(
                 player.getUUID(), tame.getUUID(), TameData.getTlId(tame),
                 tame.level().dimension().location().toString(),
@@ -16114,8 +16116,9 @@ public class TameCommands {
         if (player == null || entity == null) {
             return;
         }
-        PENDING_TRACKING_CLIENT_REFRESH.remove(new TrackingClientRefreshKey(
-                player.getUUID(), entity.getUUID()));
+        TrackingClientRefreshKey key = new TrackingClientRefreshKey(player.getUUID(), entity.getUUID());
+        ACTIVE_CLIENT_TRACKERS.remove(key);
+        PENDING_TRACKING_CLIENT_REFRESH.remove(key);
     }
 
     private static boolean processPendingTrackingClientRefresh(MinecraftServer server,
@@ -16201,7 +16204,15 @@ public class TameCommands {
         level.getChunkSource().broadcastAndSend(tame, new ClientboundTeleportEntityPacket(tame));
     }
 
+    public static void clearClientTracking(ServerPlayer player) {
+        ACTIVE_CLIENT_TRACKERS.removeIf(key -> key.playerUuid().equals(player.getUUID()));
+        PENDING_TRACKING_CLIENT_REFRESH.keySet().removeIf(key -> key.playerUuid().equals(player.getUUID()));
+    }
+
     private static void sendFullEntityRefresh(ServerPlayer viewer, TamableAnimal tame) {
+        // Never spawn a client copy outside vanilla tracking: it would miss updates and removal.
+        if (viewer.level() != tame.level() || !ACTIVE_CLIENT_TRACKERS.contains(
+                new TrackingClientRefreshKey(viewer.getUUID(), tame.getUUID()))) return;
         List<net.minecraft.network.syncher.SynchedEntityData.DataValue<?>> values = tame.getEntityData().getNonDefaultValues();
         sendClientPacket(viewer, new ClientboundRemoveEntitiesPacket(tame.getId()));
         sendClientPacket(viewer, tame.getAddEntityPacket());
