@@ -90,8 +90,8 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onPlayerStartsTracking(PlayerEvent.StartTracking event) {
         if (event.getEntity() instanceof ServerPlayer player
-                && event.getTarget() instanceof TamableAnimal tame
-                && tame.isTame()
+                && event.getTarget() instanceof LivingEntity tame
+                && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter.isTame(tame)
                 && tame.isAlive()) {
             TameCommands.queueTrackingClientReload(player, tame);
         }

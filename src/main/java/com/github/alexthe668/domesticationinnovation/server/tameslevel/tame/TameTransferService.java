@@ -10,6 +10,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.item.DyeColor;
@@ -171,7 +174,62 @@ public final class TameTransferService {
         return new TransferResult(null, true, "spawn failed in target dimension");
     }
 
-    private static List<double[]> transferAttempts(ServerLevel level, TamableAnimal tame, double x, double y, double z) {
+    public static LivingEntity transferInterfaceToLocation(LivingEntity tame, ServerLevel level,
+            double x, double y, double z, float yaw, float pitch, TameData data, boolean exact) {
+        if (tame == null || level == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) return null;
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        level.getChunk(BlockPos.containing(x, y, z));
+        double[] pos = exact ? new double[]{x, y, z} : transferAttempts(level, tame, x, y, z).get(0);
+        LivingEntity moved = tame;
+        if (tame.level() != level) {
+            CompoundTag snapshot = new CompoundTag();
+            if (!tame.save(snapshot)) return null;
+            Entity created = tame.getType().create(level);
+            if (!(created instanceof LivingEntity replacement) || !TameEntityAdapter.isSupported(replacement)) return null;
+            TameSpawnEvents.beginTameReconstruction();
+            try {
+                replacement.load(snapshot);
+                replacement.setUUID(tame.getUUID());
+                replacement.moveTo(pos[0], pos[1], pos[2], yaw, pitch);
+                if (data != null && data.ownerUUID != null) TameEntityAdapter.setOwner(replacement, data.ownerUUID);
+                if (!level.addFreshEntity(replacement)) return null;
+            } finally {
+                TameSpawnEvents.endTameReconstruction();
+            }
+            // Commit only after the replacement is present; failed spawning leaves the source intact.
+            tame.getPersistentData().putBoolean(CommonProxy.SKIP_LANTERN_UNLOAD_ONCE_TAG, true);
+            tame.discard();
+            moved = replacement;
+        } else {
+            moved.teleportTo(pos[0], pos[1], pos[2]);
+            moved.setYRot(yaw);
+            moved.setXRot(pitch);
+        }
+        moved.stopRiding();
+        moved.ejectPassengers();
+        moved.fallDistance = 0;
+        moved.setDeltaMovement(0, 0, 0);
+        moved.setPortalCooldown();
+        if (moved instanceof Mob mob) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
+        if (data != null) {
+            TameRegistry.bindEntityToData(moved, data);
+            data.lastKnownDimension = level.dimension().location().toString();
+            data.lastKnownX = moved.blockPosition().getX();
+            data.lastKnownY = moved.blockPosition().getY();
+            data.lastKnownZ = moved.blockPosition().getZ();
+            data.lastKnownGameTime = level.getGameTime();
+            CompoundTag saved = new CompoundTag();
+            if (moved.save(saved)) data.entitySnapshot = saved;
+            TameRegistry.markDirty();
+        }
+        TameCommands.queueClientReloadForTame(moved);
+        return moved;
+    }
+
+    private static List<double[]> transferAttempts(ServerLevel level, LivingEntity tame, double x, double y, double z) {
         List<double[]> positions = new ArrayList<>();
         if (level == null || tame == null) {
             positions.add(new double[]{x, y, z});
@@ -207,7 +265,7 @@ public final class TameTransferService {
         return positions;
     }
 
-    private static double[] safeTransferAttempt(ServerLevel level, TamableAnimal tame, BlockPos candidateBase) {
+    private static double[] safeTransferAttempt(ServerLevel level, LivingEntity tame, BlockPos candidateBase) {
         if (level == null || tame == null || candidateBase == null) {
             return null;
         }

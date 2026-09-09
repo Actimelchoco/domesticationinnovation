@@ -1015,21 +1015,41 @@ public class CommonProxy {
         event.setAmount(event.getAmount() * (1.0F - reduction));
     }
 
+    private static boolean hunterBeltCompatibilityFailureReported;
+
+    private static LivingEntity resolveInterfaceBeltAttacker(Entity source) {
+        Entity attacker = source;
+        if (source instanceof net.minecraft.world.entity.projectile.Projectile projectile) {
+            attacker = projectile.getOwner();
+        } else if (source instanceof net.minecraft.world.entity.projectile.EvokerFangs fangs) {
+            attacker = fangs.getOwner();
+        } else if (!(source instanceof LivingEntity) && source instanceof net.minecraft.world.entity.OwnableEntity ownable) {
+            attacker = ownable.getOwner();
+        }
+        return attacker instanceof LivingEntity living
+                && !(attacker instanceof TamableAnimal)
+                && attacker instanceof ModifedToBeTameable
+                && TameEntityAdapter.isTame(attacker) ? living : null;
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onInterfaceTameHunterBeltDamage(LivingHurtEvent event) {
-        Entity attacker = event.getSource().getEntity();
-        if (!(attacker instanceof LivingEntity living)
-                || attacker instanceof TamableAnimal
-                || !(attacker instanceof ModifedToBeTameable)
-                || !TameEntityAdapter.isTame(attacker)) {
-            return;
+        // Relics already handles a vanilla tame supplied as the causing entity.
+        if (event.getSource().getEntity() instanceof TamableAnimal) return;
+        LivingEntity living = resolveInterfaceBeltAttacker(event.getSource().getEntity());
+        if (living == null) living = resolveInterfaceBeltAttacker(event.getSource().getDirectEntity());
+        if (living == null) return;
+        // Fox trust slots can retain a breeder/previous owner. The registry is the
+        // authoritative owner for TL tames; never borrow another trusted player's belt.
+        TameData data = TameRegistry.get(living.getUUID());
+        if (data == null) {
+            UUID tlId = TameData.getTlId(living);
+            if (tlId != null) data = TameRegistry.getByTlId(tlId);
         }
-        LivingEntity owner = TameEntityAdapter.owner(attacker);
-        Player player = owner instanceof Player found ? found : null;
-        if (player == null && living.getServer() != null) {
-            UUID ownerId = TameEntityAdapter.ownerUuid(attacker);
-            if (ownerId != null) player = living.getServer().getPlayerList().getPlayer(ownerId);
-        }
+        UUID ownerId = data != null && data.ownerUUID != null
+                ? data.ownerUUID : TameEntityAdapter.ownerUuid(living);
+        Player player = ownerId == null || living.getServer() == null ? null
+                : living.getServer().getPlayerList().getPlayer(ownerId);
         if (player == null) {
             return;
         }
@@ -1059,7 +1079,10 @@ public class CommonProxy {
                 // Belt damage must still work if optional Relics XP bookkeeping changes.
             }
         } catch (ReflectiveOperationException | LinkageError ignored) {
-            // Relics is optional, and incompatible versions should leave damage unchanged.
+            if (!hunterBeltCompatibilityFailureReported) {
+                hunterBeltCompatibilityFailureReported = true;
+                System.err.println("[TamesLevel] Hunter Belt compatibility failed: " + ignored);
+            }
         }
     }
 

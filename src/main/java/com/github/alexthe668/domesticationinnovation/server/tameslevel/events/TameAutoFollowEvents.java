@@ -12,6 +12,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameTransferService;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.item.DyeColor;
@@ -167,9 +170,9 @@ public class TameAutoFollowEvents {
         }
         UUID ownerId = owner.getUUID();
         for (TameData data : TameRegistry.getOwned(ownerId)) {
-            TamableAnimal loaded = findLoadedOwnedTame(owner, data.uuid);
+            LivingEntity loaded = findLoadedOwnedTame(owner, data.uuid);
             if (loaded != null && loaded.isAlive()) {
-                TameCommands.syncLiveMovementStateFor(loaded);
+                if (loaded instanceof TamableAnimal tamable) TameCommands.syncLiveMovementStateFor(tamable);
                 if (!isAutoFollowEligibleLoaded(loaded, data, ownerId)) continue;
                 teleportLoadedTame(owner, loaded, data, targetLevel, targetPos, yRot, xRot);
                 continue;
@@ -205,7 +208,7 @@ public class TameAutoFollowEvents {
                 && hasTeleportCapability(data);
     }
 
-    private static boolean isAutoFollowEligibleLoaded(TamableAnimal tame, TameData data, UUID ownerId) {
+    private static boolean isAutoFollowEligibleLoaded(LivingEntity tame, TameData data, UUID ownerId) {
         return data != null
                 && tame != null
                 && data.uuid != null
@@ -215,7 +218,7 @@ public class TameAutoFollowEvents {
                 && !data.wanderLock
                 && !TameDuelManager.isTameInDuel(data.uuid)
                 && !TameCommands.isDuelSessionLocked(data.uuid)
-                && TameCommands.isLiveFollowing(tame)
+                && (tame instanceof TamableAnimal tamable ? TameCommands.isLiveFollowing(tamable) : TameEntityAdapter.isFollowingOwner(tame))
                 && hasTeleportCapability(data);
     }
 
@@ -229,21 +232,24 @@ public class TameAutoFollowEvents {
         return data.entitySnapshot != null && data.entitySnapshot.toString().contains("tethered_teleport");
     }
 
-    private static TamableAnimal findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {
+    private static LivingEntity findLoadedOwnedTame(ServerPlayer owner, UUID tameUuid) {
         if (owner == null || owner.server == null || tameUuid == null) {
             return null;
         }
         for (ServerLevel level : owner.server.getAllLevels()) {
             Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof TamableAnimal tame) || !tame.isTame()) continue;
-            if (!owner.getUUID().equals(tame.getOwnerUUID())) continue;
+            if (!(entity instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) continue;
+            if (!owner.getUUID().equals(TameEntityAdapter.ownerUuid(tame))) continue;
             return tame;
         }
         return null;
     }
 
-    private static void teleportLoadedTame(ServerPlayer owner, TamableAnimal tame, TameData data, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot) {
-        if (owner == null || tame == null || data == null || targetLevel == null || targetPos == null) {
+    private static void teleportLoadedTame(ServerPlayer owner, LivingEntity living, TameData data, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot) {
+        if (owner == null || living == null || data == null || targetLevel == null || targetPos == null) return;
+        if (!(living instanceof TamableAnimal tame)) {
+            TameTransferService.transferInterfaceToLocation(living, targetLevel, targetPos.x, targetPos.y,
+                    targetPos.z, yRot, xRot, data, false);
             return;
         }
         if (tame.level().dimension().equals(targetLevel.dimension())) {

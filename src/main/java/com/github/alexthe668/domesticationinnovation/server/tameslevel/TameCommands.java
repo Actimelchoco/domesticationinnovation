@@ -4000,8 +4000,9 @@ public class TameCommands {
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
                 teleportLivingTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
                 resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
-                if (liveData != null && liveData.movementOrder == 1) {
-                    applyLivingMovementOverride(tame, liveData, MovementOrder.SIT);
+                LivingEntity moved = TameEntityAdapter.findLoaded(server, pending.tameUuid, pending.tlId);
+                if (moved != null && liveData != null && liveData.movementOrder == 1) {
+                    applyLivingMovementOverride(moved, liveData, MovementOrder.SIT);
                 }
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 if (!pending.silent) notifyImmediateChunkTeleport(server, pending.ownerUuid, "Teleport: " + pending.tameName + ".", ChatFormatting.WHITE);
@@ -15841,8 +15842,8 @@ public class TameCommands {
     public static boolean autoFollowTeleportLoadedToLocation(LivingEntity tame, ServerLevel level, Vec3 pos, float yRot, float xRot) {
         if (tame instanceof TamableAnimal tamable) return autoFollowTeleportLoadedToLocation(tamable, level, pos, yRot, xRot);
         if (tame == null || level == null || pos == null || !tame.isAlive() || !TameEntityAdapter.isTame(tame)) return false;
-        tame.teleportTo(level, pos.x, pos.y, pos.z, Set.of(), yRot, xRot);
-        return true;
+        return TameTransferService.transferInterfaceToLocation(tame, level, pos.x, pos.y, pos.z,
+                yRot, xRot, TameRegistry.get(tame.getUUID()), false) != null;
     }
 
     public static boolean autoFollowQueueCrossDimensionLiveTeleport(TamableAnimal tame, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
@@ -15896,8 +15897,8 @@ public class TameCommands {
         if (tame == null || target == null || target.level == null || target.pos == null || !tame.isAlive()) return;
         TameData data = TameRegistry.get(tame.getUUID());
         clearGuardianAnchor(data);
-        tame.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z,
-                java.util.Set.of(), target.yRot, target.xRot);
+        TameTransferService.transferInterfaceToLocation(tame, target.level, target.pos.x, target.pos.y, target.pos.z,
+                target.yRot, target.xRot, data, exactTarget);
     }
 
     private static SpawnTarget findSafeTameTeleportTarget(TamableAnimal tame, SpawnTarget target) {
@@ -16033,7 +16034,7 @@ public class TameCommands {
         if (server == null) {
             return;
         }
-        TamableAnimal moved = findLoadedTameByIdentity(server, tameUuid, tlId);
+        LivingEntity moved = findLoadedLivingTameByIdentity(server, tameUuid, tlId);
         if (moved != null) {
             resendEntityToRelevantPlayers(moved);
         }
@@ -16096,9 +16097,9 @@ public class TameCommands {
         queueDelayedTeleportClientRefresh(null, tame, strongRefresh);
     }
 
-    public static void queueTrackingClientReload(ServerPlayer player, TamableAnimal tame) {
+    public static void queueTrackingClientReload(ServerPlayer player, LivingEntity tame) {
         if (player == null || tame == null || tame.level().isClientSide
-                || !tame.isTame() || !tame.isAlive() || tame.level().getServer() == null) {
+                || !TameEntityAdapter.isTame(tame) || !tame.isAlive() || tame.level().getServer() == null) {
             return;
         }
         MinecraftServer server = tame.level().getServer();
@@ -16131,7 +16132,7 @@ public class TameCommands {
             return false;
         }
         ServerPlayer player = server.getPlayerList().getPlayer(pending.playerUuid());
-        TamableAnimal tame = findLoadedTameByIdentity(server, pending.tameUuid(), pending.tlId());
+        LivingEntity tame = findLoadedLivingTameByIdentity(server, pending.tameUuid(), pending.tlId());
         if (player == null || player.connection == null || player.isRemoved()
                 || tame == null || !tame.isAlive()
                 || player.level() != tame.level()
@@ -16151,7 +16152,7 @@ public class TameCommands {
         if (pending.dueTick() > now) {
             return false;
         }
-        TamableAnimal moved = findLoadedTameByIdentity(server, pending.tameUuid(), pending.tlId());
+        LivingEntity moved = findLoadedLivingTameByIdentity(server, pending.tameUuid(), pending.tlId());
         if (moved == null || !moved.isAlive()) {
             return true;
         }
@@ -16181,11 +16182,11 @@ public class TameCommands {
         return ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
     }
 
-    private static void resendEntityToRelevantPlayers(TamableAnimal tame) {
+    private static void resendEntityToRelevantPlayers(LivingEntity tame) {
         resendEntityToRelevantPlayers(tame, false);
     }
 
-    private static void resendEntityToRelevantPlayers(TamableAnimal tame, boolean strongRefresh) {
+    private static void resendEntityToRelevantPlayers(LivingEntity tame, boolean strongRefresh) {
         if (tame == null || !(tame.level() instanceof ServerLevel level)) {
             return;
         }
@@ -16209,7 +16210,7 @@ public class TameCommands {
         PENDING_TRACKING_CLIENT_REFRESH.keySet().removeIf(key -> key.playerUuid().equals(player.getUUID()));
     }
 
-    private static void sendFullEntityRefresh(ServerPlayer viewer, TamableAnimal tame) {
+    private static void sendFullEntityRefresh(ServerPlayer viewer, LivingEntity tame) {
         // Never spawn a client copy outside vanilla tracking: it would miss updates and removal.
         if (viewer.level() != tame.level() || !ACTIVE_CLIENT_TRACKERS.contains(
                 new TrackingClientRefreshKey(viewer.getUUID(), tame.getUUID()))) return;
@@ -16807,8 +16808,9 @@ public class TameCommands {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
             clearGuardianAnchor(data);
-            tame.teleportTo(player.serverLevel(), player.getX(), player.getY(), player.getZ(), java.util.Set.of(), player.getYRot(), player.getXRot());
-            if (data != null && !data.horseType) applyLivingMovementOverride(tame, data, MovementOrder.FOLLOW);
+            LivingEntity moved = TameTransferService.transferInterfaceToLocation(tame, player.serverLevel(),
+                    player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot(), data, false);
+            if (moved != null && data != null && !data.horseType) applyLivingMovementOverride(moved, data, MovementOrder.FOLLOW);
         }
     }
 
