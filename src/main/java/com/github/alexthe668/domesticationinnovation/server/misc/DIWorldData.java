@@ -51,6 +51,8 @@ public class DIWorldData extends SavedData {
                 String mode = innerTag.contains("RequestMode", Tag.TAG_STRING)
                         ? innerTag.getString("RequestMode")
                         : LanternRequest.MODE_LANTERN;
+                // Discard legacy block-retrieval requests, but retain command teleports.
+                if (LanternRequest.MODE_LANTERN.equals(mode)) continue;
                 String targetDimension = innerTag.contains("TargetDimension", Tag.TAG_STRING) ? innerTag.getString("TargetDimension") : "";
                 double targetX = innerTag.contains("TargetX", Tag.TAG_DOUBLE) ? innerTag.getDouble("TargetX") : 0.0D;
                 double targetY = innerTag.contains("TargetY", Tag.TAG_DOUBLE) ? innerTag.getDouble("TargetY") : 0.0D;
@@ -190,6 +192,7 @@ public class DIWorldData extends SavedData {
     }
 
     public void addLanternRequest(LanternRequest request){
+        if (request == null || request.isLanternMode()) return;
         this.lanternRequestList.add(request);
         this.setDirty();
     }

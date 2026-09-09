@@ -3921,7 +3921,7 @@ public class TameCommands {
         TamePerformanceProfiler.run("system.pending_immediate_chunk_tp", () -> processPendingImmediateChunkTeleports(server));
         TamePerformanceProfiler.run("system.pending_guardian_respawn_deployments", () -> processPendingGuardianRespawnDeployments(server));
         TamePerformanceProfiler.run("system.morning_registry_sweep", () -> processMorningRegistrySweep(server));
-        TamePerformanceProfiler.run("system.pending_morning_lantern_recalls", () -> processPendingMorningLanternRecalls(server));
+        // Wayward Lantern retrieval is retired, including queued morning recalls.
         TamePerformanceProfiler.run("system.ranked_session_ensure", () -> ensureRankedSessionRunning(server));
         TamePerformanceProfiler.run("system.duel_sessions", () -> processDuelSessions(server));
         TamePerformanceProfiler.run("system.tame_hunger", () -> processTameHunger(server));
@@ -4098,7 +4098,7 @@ public class TameCommands {
         }
         processMorningPetBedRespawns(server);
         processMorningGuardianWanderLocks(server);
-        scheduleMorningWaywardLanternRecalls(server, overworld.getGameTime());
+        // Do not schedule automatic Wayward Lantern recalls.
     }
 
     private static void incrementOwnerActiveSurvivalDays(MinecraftServer server, long day) {

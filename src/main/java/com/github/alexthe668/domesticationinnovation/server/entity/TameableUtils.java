@@ -204,24 +204,7 @@ public class TameableUtils {
     }
 
     public static boolean shouldUnloadToLantern(LivingEntity tameable) {
-        if (DomesticationMod.CONFIG.trinaryCommandSystem.get() && tameable instanceof IComandableMob commandableMob) {
-            return commandableMob.getCommand() == 2;
-        } else {
-            CompoundTag tag = new CompoundTag();
-            tameable.addAdditionalSaveData(tag);
-            int command = -1;
-            //compat with alexs mobs
-            for (String s : tag.getAllKeys()) {
-                if (s.endsWith("Command") && tag.contains(s, 1)) {
-                    command = tag.getInt(s);
-                }
-            }
-            if (command != -1) {
-                return command == 1;
-            } else if (tameable instanceof TamableAnimal animal) {
-                return !animal.isOrderedToSit();
-            }
-        }
+        // Wayward Lantern pet retrieval is disabled pending its redesign.
         return false;
     }
 

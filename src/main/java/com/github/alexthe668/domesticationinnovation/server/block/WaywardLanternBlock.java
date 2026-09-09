@@ -97,7 +97,8 @@ public class WaywardLanternBlock extends BaseEntityBlock {
 
     @javax.annotation.Nullable
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level p_152180_, BlockState p_152181_, BlockEntityType<T> p_152182_) {
-        return p_152180_.isClientSide ? null : createTickerHelper(p_152182_, DITileEntityRegistry.WAYWARD_LANTERN.get(), WaywardLanternBlockEntity::tick);
+        // Reserved for a future use; the lantern must not retrieve or teleport pets.
+        return null;
     }
 
 
