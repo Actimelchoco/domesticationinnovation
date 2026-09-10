@@ -1666,6 +1666,8 @@ public class LevelSystem {
     }
 
     private static Double resolveForcedTypeBaseValue(TameData data, Attribute attribute) {
+        Double primitiveBase = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.baseValue(data, attribute);
+        if (primitiveBase != null) return primitiveBase;
         if (data == null || data.type == null) {
             return resolveForcedClassBaseValue(data, attribute);
         }
@@ -1843,6 +1845,7 @@ public class LevelSystem {
                 ? new HashSet<>()
                 : new HashSet<>(List.of(preservedModifierIds));
         preserveEquippedItemModifiers(tame, attribute, preserved);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.preserveIndividualModifiers(tame, attribute, preserved);
         for (AttributeModifier modifier : new ArrayList<>(instance.getModifiers())) {
             if (!preserved.contains(modifier.getId())) {
                 instance.removeModifier(modifier);

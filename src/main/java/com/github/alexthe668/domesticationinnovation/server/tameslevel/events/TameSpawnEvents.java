@@ -171,6 +171,9 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onSpawn(EntityJoinLevelEvent event) {
         if (isTameReconstructionSuppressed()) return;
+        if (event.getEntity() instanceof LivingEntity primitive) {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.captureSpawnBaseline(primitive);
+        }
         if (event.getEntity() instanceof LivingEntity living && ignoreOrTerminateConfiguredSummon(living)) return;
 
         if (event.getEntity() instanceof LivingEntity living

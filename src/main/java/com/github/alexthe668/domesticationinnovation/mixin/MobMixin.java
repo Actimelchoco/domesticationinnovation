@@ -2,6 +2,8 @@ package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat;
 import com.github.alexthe668.domesticationinnovation.server.entity.ai.AmphibiousPathNavigation;
 import com.github.alexthe668.domesticationinnovation.server.entity.ai.AquaticMoveControl;
 import net.minecraft.world.entity.Entity;
@@ -17,6 +19,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.BlockPathTypes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -30,6 +33,20 @@ public abstract class MobMixin extends LivingEntity {
     private boolean hasWaterEnchantNavigator = false;
     private MoveControl prevMoveControl;
     private PathNavigation prevNavigation;
+    @Unique private boolean tl$primitiveGoalsInstalled;
+
+    @Inject(method = "serverAiStep", at = @At("HEAD"))
+    private void tl$primitivePetGoals(CallbackInfo ci) {
+        Mob mob = (Mob) (Object) this;
+        if (!PrimitiveMobsCompat.isPrimitivePet(mob) || !((ModifedToBeTameable) mob).isTame()) return;
+        if (!tl$primitiveGoalsInstalled) {
+            mob.targetSelector.removeAllGoals(goal -> true);
+            mob.targetSelector.addGoal(1, new PrimitiveMobsCompat.PetTargetGoal(mob));
+            tl$primitiveGoalsInstalled = true;
+        }
+        var pet = (ModifedToBeTameable) mob;
+        if (pet.isStayingStill() || mob.getTarget() != null && !pet.isValidAttackTarget(mob.getTarget())) mob.setTarget(null);
+    }
 
     protected MobMixin(EntityType<? extends LivingEntity> type, Level level) {
         super(type, level);
