@@ -31,6 +31,43 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = "primitive_compat_tests")
 public class PrimitiveCompatTests {
     private static int checks;
+    private static void testMissingDeathEvent(ServerLevel level) {
+        for (Entity.RemovalReason reason : Entity.RemovalReason.values()) {
+            for (boolean zeroHealth : new boolean[] {false, true}) {
+                var wolf = deathFixture(level);
+                TameData data = TameRegistry.get(wolf.getUUID());
+                if (zeroHealth) wolf.setHealth(0);
+                wolf.remove(reason);
+                boolean shouldDie = reason == Entity.RemovalReason.KILLED
+                        || (reason == Entity.RemovalReason.DISCARDED && zeroHealth);
+                check(data.dead == shouldDie, "removal death classification " + reason + " zero=" + zeroHealth);
+                check(data.deaths == (shouldDie ? 1 : 0), "removal death counted once");
+                check(data.deathHistory.size() == (shouldDie ? 1 : 0), "removal archived once");
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents.onRemovedTame(
+                        new net.minecraftforge.event.entity.EntityLeaveLevelEvent(wolf, level));
+                check(data.deaths == (shouldDie ? 1 : 0), "duplicate leave event is harmless");
+            }
+        }
+        var normal = deathFixture(level);
+        TameData normalData = TameRegistry.get(normal.getUUID());
+        normal.hurt(normal.damageSources().generic(), 1000);
+        check(normalData.dead && normalData.deaths == 1 && normalData.deathHistory.size() == 1,
+                "ordinary damage death is not counted twice by removal fallback");
+        var clone = deathFixture(level);
+        TameData cloneData = TameRegistry.get(clone.getUUID());
+        clone.getPersistentData().putBoolean(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.ADMIN_CLONE_SILENT_TAG, true);
+        clone.remove(Entity.RemovalReason.KILLED);
+        check(!cloneData.dead, "silent clone cleanup is not a death");
+    }
+    private static net.minecraft.world.entity.animal.Wolf deathFixture(ServerLevel level) {
+        var wolf = EntityType.WOLF.create(level);
+        wolf.setTame(true);
+        wolf.setOwnerUUID(UUID.randomUUID());
+        wolf.moveTo(0, -59, 0);
+        level.addFreshEntity(wolf);
+        check(TameRegistry.get(wolf.getUUID()) != null, "death fixture registered");
+        return wolf;
+    }
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
         checks++;
@@ -52,6 +89,7 @@ public class PrimitiveCompatTests {
     public static void run(ServerStartedEvent event) {
         try {
             ServerLevel level = event.getServer().overworld();
+            testMissingDeathEvent(level);
             Player owner = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "PrimitiveOwner"));
             owner.moveTo(0, -59, 0);
             Player stranger = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "PrimitiveOther"));

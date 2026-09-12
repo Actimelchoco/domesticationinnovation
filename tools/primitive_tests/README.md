@@ -48,3 +48,11 @@ Minecraft's OwnableEntity interface, even when they are not DI-adapted or
 PathfinderMob subclasses. Wild Primitive Mobs remain targetable and noncombat
 scans are unaffected. Tests cover same-owner wolves, other-owner wolves, a generic
 external owned mob, pre-taming aggro, direct attacks and the duel exception.
+
+Death-removal regressions also cover registered wolves removed without a
+LivingDeathEvent. Explicit KILLED removal and zero-health DISCARD must archive
+one death; healthy discards, chunk/player unloads, dimension changes and silent
+clone cleanup must not. Ordinary damage deaths and duplicate leave events must
+not double-count deaths. This covers a reproduced missing-event path, not every
+possible third-party disappearance. Existing unloaded registry entries are not
+automatically classified as dead.

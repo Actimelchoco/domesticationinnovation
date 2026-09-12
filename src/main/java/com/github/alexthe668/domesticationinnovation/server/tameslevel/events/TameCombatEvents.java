@@ -294,6 +294,29 @@ public class TameCombatEvents {
         }
     }
 
+    /** Some modded attacks remove their victim without firing LivingDeathEvent. */
+    @SubscribeEvent
+    public static void onRemovedTame(net.minecraftforge.event.entity.EntityLeaveLevelEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity tame) || tame.level().isClientSide) return;
+        Entity.RemovalReason reason = tame.getRemovalReason();
+        if (reason != Entity.RemovalReason.KILLED
+                && !(reason == Entity.RemovalReason.DISCARDED && tame.getHealth() <= 0)) return;
+        if (tame.getPersistentData().getBoolean(DEATH_REMOVAL_TAG)
+                || tame.getPersistentData().getBoolean(TameCommands.ADMIN_CLONE_SILENT_TAG)) return;
+        TameData data = TameRegistry.get(tame.getUUID());
+        UUID tlId = TameData.getTlId(tame);
+        if (data == null && tlId != null) data = TameRegistry.getByTlId(tlId);
+        // Never let removal of an obsolete entity invalidate its replacement.
+        if (data == null || data.dead || !tame.getUUID().equals(data.uuid)) return;
+        // Duels own elimination/restoration, including removals during cleanup.
+        if (TameDuelManager.isTameInDuel(tame.getUUID())
+                || (tlId != null && TameDuelManager.isTameInDuel(tlId))) return;
+        DamageSource source = tame.getLastDamageSource();
+        if (source == null) source = tame.damageSources().generic();
+        // Call just our registry handler; reposting a death event would rerun other mods' drops/rewards.
+        onTameDeath(new LivingDeathEvent(tame, source));
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.getServer() == null) {
