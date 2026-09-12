@@ -34,12 +34,23 @@ public abstract class MobMixin extends LivingEntity {
     private MoveControl prevMoveControl;
     private PathNavigation prevNavigation;
     @Unique private boolean tl$primitiveGoalsInstalled;
+    @Unique private final java.util.List<net.minecraft.world.entity.ai.goal.WrappedGoal> tl$primitiveWildGoals = new java.util.ArrayList<>();
 
     @Inject(method = "serverAiStep", at = @At("HEAD"))
     private void tl$primitivePetGoals(CallbackInfo ci) {
         Mob mob = (Mob) (Object) this;
-        if (!PrimitiveMobsCompat.isPrimitivePet(mob) || !((ModifedToBeTameable) mob).isTame()) return;
+        if (!PrimitiveMobsCompat.isPrimitivePet(mob)) return;
+        if (!((ModifedToBeTameable) mob).isTame()) {
+            if (tl$primitiveGoalsInstalled) {
+                mob.targetSelector.removeAllGoals(goal -> true);
+                for (var goal : tl$primitiveWildGoals) mob.targetSelector.addGoal(goal.getPriority(), goal.getGoal());
+                tl$primitiveWildGoals.clear();
+                tl$primitiveGoalsInstalled = false;
+            }
+            return;
+        }
         if (!tl$primitiveGoalsInstalled) {
+            tl$primitiveWildGoals.addAll(mob.targetSelector.getAvailableGoals());
             mob.targetSelector.removeAllGoals(goal -> true);
             mob.targetSelector.addGoal(1, new PrimitiveMobsCompat.PetTargetGoal(mob));
             tl$primitiveGoalsInstalled = true;

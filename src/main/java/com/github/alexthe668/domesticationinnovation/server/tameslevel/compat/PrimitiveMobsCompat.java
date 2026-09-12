@@ -22,7 +22,87 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID)
 public final class PrimitiveMobsCompat {
     public static final String BASELINE = "TLPrimitiveSpawnBaseline";
+    private static final String RESET_GENERATION = "TLPrimitiveResetGeneration";
     private PrimitiveMobsCompat() {}
+
+    /** Monster inheritance must not make an owned Primitive mob prey for another pet. */
+    public static boolean protectFromOtherPets(LivingEntity attacker, LivingEntity target) {
+        if (attacker == null || target == null || !isPrimitivePet(target)
+                || !((ModifedToBeTameable) target).isTame()) return false;
+        boolean pet = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter.isTame(attacker)
+                || attacker instanceof OwnableEntity owned && owned.getOwnerUUID() != null;
+        return pet && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager
+                .areDuelOpponents(attacker.getUUID(), target.getUUID());
+    }
+
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
+    public static void protectTarget(net.minecraftforge.event.entity.living.LivingChangeTargetEvent event) {
+        if (protectFromOtherPets(event.getEntity(), event.getNewTarget())) event.setNewTarget(null);
+    }
+
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
+    public static void clearOldHostileTarget(LivingEvent.LivingTickEvent event) {
+        if (!event.getEntity().level().isClientSide && event.getEntity() instanceof Mob mob
+                && protectFromOtherPets(mob, mob.getTarget())) {
+            mob.setTarget(null);
+            mob.getNavigation().stop();
+        }
+    }
+
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
+    public static void protectFromPetAttack(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (event.getSource().getEntity() instanceof LivingEntity attacker
+                && protectFromOtherPets(attacker, event.getEntity())) event.setCanceled(true);
+    }
+
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
+    public static void beforeRegistryBackfill(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof LivingEntity mob) {
+            applyRegistryReset(mob);
+        }
+    }
+
+    public static boolean isPrimitiveType(String type) {
+        if (type == null) return false;
+        String normalized = type.trim().toLowerCase(Locale.ROOT).replace("_", "");
+        if (normalized.startsWith("entity.")) normalized = normalized.substring(7);
+        return normalized.startsWith("primitivemobs:") || normalized.startsWith("primitivemobs.")
+                || normalized.startsWith("com.misanthropy.primitivemobs.entity.");
+    }
+
+    /** Inspect identity fields only: a wolf carrying Raw Dodo is not a Primitive Mobs pet. */
+    public static boolean isPrimitiveSnapshot(CompoundTag tag) {
+        if (tag == null) return false;
+        for (String key : List.of("id", "type", "Type", "EntityType", "entityType")) {
+            if (isPrimitiveType(tag.getString(key))) return true;
+        }
+        for (String key : List.of("snapshot", "entitySnapshot", "EntityData")) {
+            if (tag.contains(key, Tag.TAG_COMPOUND) && isPrimitiveSnapshot(tag.getCompound(key))) return true;
+        }
+        return false;
+    }
+
+    public static void applyRegistryReset(LivingEntity mob) {
+        if (mob.level().isClientSide || !isPrimitivePet(mob)) return;
+        long generation = PrimitiveResetData.get(mob.getServer()).generation();
+        if (mob.getPersistentData().getLong(RESET_GENERATION) < generation) {
+            ((ModifedToBeTameable) mob).setTameOwnerUUID(null);
+            if (mob.getPersistentData().contains(BASELINE)) {
+                // Reapply the individual's baseline with zero registry bonuses before forgetting it.
+                var cleared = new TameData(mob, null, false);
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem.reapplyTypeBasePlusBonuses(mob, cleared);
+            }
+            mob.getPersistentData().remove(TameData.TL_ID_TAG);
+            ((IComandableMob) mob).setCommand(0);
+            ((Mob) mob).setTarget(null);
+            ((Mob) mob).getNavigation().stop();
+            if (mob.hasCustomName()) {
+                String name = mob.getCustomName().getString().replaceFirst("(?i)^\\s*\\[(?:lvl|level)\\s*\\d+\\]\\s*", "");
+                mob.setCustomName(net.minecraft.network.chat.Component.literal(name));
+            }
+        }
+        mob.getPersistentData().putLong(RESET_GENERATION, generation);
+    }
 
     public static boolean isPrimitivePet(Entity entity) {
         if (!(entity instanceof ModifedToBeTameable)) return false;
@@ -65,6 +145,7 @@ public final class PrimitiveMobsCompat {
         ModifedToBeTameable pet = (ModifedToBeTameable) mob;
         if (pet.isTame()) return; // Never steal an existing owner, including egg NBT.
         pet.setTameOwnerUUID(player.getUUID());
+        mob.getPersistentData().putLong(RESET_GENERATION, PrimitiveResetData.get(mob.getServer()).generation());
         ((IComandableMob) mob).setCommand(2);
         mob.setTarget(null);
         mob.setLastHurtByMob(null);
@@ -79,6 +160,7 @@ public final class PrimitiveMobsCompat {
     public static void captureSpawnBaseline(LivingEntity mob) {
         if (mob.level().isClientSide || !isPrimitivePet(mob) || mob.getPersistentData().contains(BASELINE)) return;
         CompoundTag baseline = new CompoundTag();
+        baseline.putDouble("MaxHealth", mob.getMaxHealth());
         CompoundTag attributes = new CompoundTag();
         CompoundTag modifierIds = new CompoundTag();
         Set<UUID> effectModifiers = new HashSet<>();
@@ -127,6 +209,37 @@ public final class PrimitiveMobsCompat {
         CompoundTag bases = data.entitySnapshot.getCompound("ForgeData").getCompound(BASELINE).getCompound("Bases");
         var id = ForgeRegistries.ATTRIBUTES.getKey(attribute);
         return id != null && bases.contains(id.toString(), Tag.TAG_ANY_NUMERIC) ? bases.getDouble(id.toString()) : null;
+    }
+
+    public static double hungerExtraLevels(TameData data) {
+        if (data == null || !(isPrimitiveType(data.type) || isPrimitiveSnapshot(data.entitySnapshot))) return 0;
+        CompoundTag baseline = data.entitySnapshot == null ? new CompoundTag()
+                : data.entitySnapshot.getCompound("ForgeData").getCompound(BASELINE);
+        double health = baseline.contains("MaxHealth", Tag.TAG_ANY_NUMERIC) ? baseline.getDouble("MaxHealth")
+                : originalMaxHealth(data, baseline);
+        return Double.isFinite(health) ? Math.max(0, health - 20) : 0;
+    }
+
+    private static double originalMaxHealth(TameData data, CompoundTag baseline) {
+        // Compatibility with the first integration's baseline format, before MaxHealth existed.
+        Double base = baseValue(data, net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (base == null) return 20;
+        var instance = new net.minecraft.world.entity.ai.attributes.AttributeInstance(
+                net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH, ignored -> {});
+        instance.setBaseValue(base);
+        Set<UUID> originalIds = new HashSet<>();
+        for (Tag id : baseline.getCompound("ModifierIds").getList("minecraft:generic.max_health", Tag.TAG_STRING)) {
+            try { originalIds.add(UUID.fromString(id.getAsString())); } catch (IllegalArgumentException ignored) { }
+        }
+        for (Tag attr : data.entitySnapshot.getList("Attributes", Tag.TAG_COMPOUND)) {
+            CompoundTag attribute = (CompoundTag) attr;
+            if (!attribute.getString("Name").equals("minecraft:generic.max_health")) continue;
+            for (Tag mod : attribute.getList("Modifiers", Tag.TAG_COMPOUND)) {
+                var modifier = net.minecraft.world.entity.ai.attributes.AttributeModifier.load((CompoundTag) mod);
+                if (modifier != null && originalIds.contains(modifier.getId())) instance.addPermanentModifier(modifier);
+            }
+        }
+        return instance.getValue();
     }
 
     /** Replace hostile prey selection with retaliation and the owner's combat orders. */

@@ -46,6 +46,7 @@
     "ParrotMixin",
     "PlayerMixin",
     "PrimitivePetMixin",
+    "PrimitivePetTargetingMixin",
     "PrimitiveThrownEggMixin",
     "PrimitiveSpawnEggMixin",
     "PrimitiveCreeperExplosionMixin",

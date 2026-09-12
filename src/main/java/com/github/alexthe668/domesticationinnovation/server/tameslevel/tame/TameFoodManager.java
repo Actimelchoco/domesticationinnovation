@@ -71,6 +71,8 @@ public final class TameFoodManager {
         MinecraftServer server = tame == null ? null : tame.getServer();
         if (server != null) init(server);
         String type = typeId(tame, data);
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitiveType(type)
+                && itemId(stack).equals("primitive_mobs:dodo")) return true;
         if (tame instanceof Animal animal) {
             try {
                 if (animal.isFood(stack)) return true;
@@ -164,6 +166,10 @@ public final class TameFoodManager {
         String normalized = normalizeType(type);
         Map<String, String> foodNames = new LinkedHashMap<>();
         Map<String, String> categories = new LinkedHashMap<>();
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitiveType(normalized)) {
+            String name = displayItemName("primitive_mobs:dodo");
+            foodNames.put(name.toLowerCase(Locale.ROOT), name);
+        }
         for (String itemId : LEARNED.getOrDefault(normalized, Set.of())) {
             String displayName = displayItemName(itemId);
             if (!displayName.isBlank()) foodNames.put(displayName.toLowerCase(Locale.ROOT), displayName);

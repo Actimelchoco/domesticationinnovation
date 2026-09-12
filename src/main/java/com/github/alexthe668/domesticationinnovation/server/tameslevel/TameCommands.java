@@ -3076,6 +3076,15 @@ public class TameCommands {
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
 
+                                .then(Commands.literal("reset")
+                                        .then(Commands.literal("primitiveMobs")
+                                                .executes(ctx -> {
+                                                    var result = TameRegistry.resetPrimitiveMobs(ctx.getSource().getServer());
+                                                    ctx.getSource().sendSuccess(() -> Component.literal("Primitive Mobs registry reset: " + result
+                                                            + ". Old pets become wild when loaded; new taming remains available."), true);
+                                                    return 1;
+                                                })))
+
                                 .then(buildCanEatAdminCommand())
 
                                 .then(Commands.literal("isSummon")
@@ -22798,16 +22807,22 @@ public class TameCommands {
             return 0;
         }
         int level = data == null ? 1 : Math.max(1, data.level);
-        int remainingLevels = level;
+        double weightedLevels = saturationWeightedLevels(level)
+                + saturationWeightedLevels(com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.hungerExtraLevels(data));
+        return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.round(baseCost * (1.0D + weightedLevels / 100.0D))));
+    }
+
+    private static double saturationWeightedLevels(double remainingLevels) {
         double weightedLevels = 0.0D;
         double bandWeight = 1.0D;
         while (remainingLevels > 0) {
-            int levelsInBand = Math.min(50, remainingLevels);
+            double levelsInBand = Math.min(50, remainingLevels);
             weightedLevels += levelsInBand * bandWeight;
+            if (!Double.isFinite(weightedLevels) || weightedLevels >= Integer.MAX_VALUE * 100.0D) return Integer.MAX_VALUE * 100.0D;
             remainingLevels -= levelsInBand;
             bandWeight *= 2.0D;
         }
-        return Math.max(1, (int) Math.round(baseCost * (1.0D + weightedLevels / 100.0D)));
+        return weightedLevels;
     }
 
     private static boolean ensureHungerSaturation(TameData data, LivingEntity tame, int required) {

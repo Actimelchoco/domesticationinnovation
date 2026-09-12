@@ -23,6 +23,90 @@ import java.util.ArrayList;
 import java.util.regex.Pattern;
 
 public class TameRegistry {
+    public record PrimitiveResetResult(int entries, int deaths, int temporaryEntries, int respawns) {
+        @Override public String toString() {
+            return entries + " tame entries, " + deaths + " death records, " + temporaryEntries
+                    + " temporary entries, " + respawns + " queued respawns removed";
+        }
+    }
+
+    public static PrimitiveResetResult resetPrimitiveMobs(MinecraftServer server) {
+        Set<UUID> ids = new HashSet<>();
+        Set<TameData> records = new HashSet<>(TAMES.values());
+        records.addAll(TL_IDS.values()); // Also recover orphaned/stale secondary-index entries.
+        for (TameData data : records) {
+            if (data != null && (primitiveType(data.type) || primitiveSnapshot(data.entitySnapshot))) {
+                if (data.uuid != null) ids.add(data.uuid);
+                if (data.tlId != null) ids.add(data.tlId);
+            }
+        }
+        java.util.function.Predicate<TameDeathRecord> primitiveDeath = record -> record != null
+                && (primitiveType(record.type) || primitiveSnapshot(record.snapshot)
+                || ids.contains(record.uuid) || ids.contains(record.tlId));
+        List<TameDeathRecord> deaths = new ArrayList<>(DEATH_HISTORY);
+        deaths.addAll(LAST_DEATHS.values());
+        for (TameDeathRecord record : deaths) {
+            if (primitiveDeath.test(record)) {
+                if (record.uuid != null) ids.add(record.uuid);
+                if (record.tlId != null) ids.add(record.tlId);
+            }
+        }
+        for (UUID id : new HashSet<>(ids)) TameDuelManager.endDuelForEntity(server, id);
+
+        // End duels first: duel restoration may load old snapshots and rebuild registry rows.
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveResetData.get(server).advance();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (entity instanceof LivingEntity living) {
+                    com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.applyRegistryReset(living);
+                }
+            }
+        }
+        int before = TAMES.size();
+        TAMES.entrySet().removeIf(entry -> ids.contains(entry.getKey()) || entry.getValue() != null
+                && (ids.contains(entry.getValue().uuid) || ids.contains(entry.getValue().tlId)
+                || primitiveType(entry.getValue().type) || primitiveSnapshot(entry.getValue().entitySnapshot)));
+        int removed = before - TAMES.size();
+        before = LAST_DEATHS.size() + DEATH_HISTORY.size();
+        LAST_DEATHS.entrySet().removeIf(entry -> ids.contains(entry.getKey()) || primitiveDeath.test(entry.getValue()));
+        DEATH_HISTORY.removeIf(primitiveDeath);
+        int removedDeaths = before - LAST_DEATHS.size() - DEATH_HISTORY.size();
+        before = TEMPORARY_TAMES.size();
+        TEMPORARY_TAMES.removeIf(row -> primitiveSnapshot(row) || snapshotIdentityMatches(row, ids));
+        int removedTemporary = before - TEMPORARY_TAMES.size();
+        RANKED_PARTICIPANTS.removeAll(ids);
+        rebuildIndexes();
+        int respawns = 0;
+        var worldData = com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData.get(server.overworld());
+        if (worldData != null) {
+            for (var request : worldData.getRespawnRequestsSnapshot()) {
+                if (primitiveType(request.getEntityTypeLoc()) || primitiveSnapshot(request.getEntityData())
+                        || snapshotIdentityMatches(request.getEntityData(), ids)) {
+                    worldData.removeRespawnRequest(request);
+                    respawns++;
+                }
+            }
+        }
+        markDirty();
+        return new PrimitiveResetResult(removed, removedDeaths, removedTemporary, respawns);
+    }
+
+    private static boolean snapshotIdentityMatches(CompoundTag tag, Set<UUID> ids) {
+        if (tag == null) return false;
+        for (String key : List.of("UUID", "uuid", TameData.TL_ID_TAG)) {
+            if (tag.hasUUID(key) && ids.contains(tag.getUUID(key))) return true;
+        }
+        return tag.contains("ForgeData", 10) && snapshotIdentityMatches(tag.getCompound("ForgeData"), ids);
+    }
+
+    private static boolean primitiveType(String type) {
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitiveType(type);
+    }
+
+    private static boolean primitiveSnapshot(CompoundTag tag) {
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitiveSnapshot(tag);
+    }
+
     private static final Pattern LEVEL_PREFIX_PATTERN = Pattern.compile("^\\s*\\[(?:(?:lvl|level)\\s*)?\\d+\\]\\s*", Pattern.CASE_INSENSITIVE);
     private static final int MAX_DEATH_HISTORY_PER_TAME = 16;
 

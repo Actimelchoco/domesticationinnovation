@@ -2111,6 +2111,12 @@ public class CommonProxy {
             return;
         }
         CompoundTag payload = createDefaultProgressPayload(tame, ownerUUID, table);
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitivePet(tame)) {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.captureSpawnBaseline(tame);
+            CompoundTag snapshot = new CompoundTag();
+            tame.save(snapshot);
+            payload.put("entitySnapshot", snapshot);
+        }
         TameableUtils.setDIProgressData(tame, payload);
         tame.setCustomName(Component.literal(tameName(payload)));
         if (ownerUUID != null && tame.level().getServer() != null) {

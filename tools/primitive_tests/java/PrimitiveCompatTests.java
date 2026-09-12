@@ -134,9 +134,179 @@ public class PrimitiveCompatTests {
                     hatched.forEach(Entity::discard);
                 }
             }
+            checkOtherPets(level, owner);
+            checkFoodAndReset(level, owner);
             System.out.println("PRIMITIVE_COMPAT_TESTS_PASS " + checks);
         } catch (Throwable failure) {
             System.out.println("PRIMITIVE_COMPAT_TESTS_FAIL"); failure.printStackTrace();
         } finally { event.getServer().halt(false); }
+    }
+
+    /** Models an external mod's owned Mob which is neither TamableAnimal nor PathfinderMob. */
+    private static final class ExternalOwnedMob extends Mob implements OwnableEntity {
+        private final UUID ownerId;
+        private ExternalOwnedMob(ServerLevel level, UUID ownerId) {
+            super(EntityType.ZOMBIE, level);
+            this.ownerId = ownerId;
+            moveTo(0, -59, 0);
+        }
+        @Override public UUID getOwnerUUID() { return ownerId; }
+    }
+
+    private static void checkOtherPets(ServerLevel level, Player owner) {
+        UUID otherOwner = UUID.randomUUID();
+        for (String name : List.of("baby_spider", "chameleon", "festive_creeper", "support_creeper", "rocket_creeper")) {
+            Mob primitive = create(level, name, 100);
+            Mob external = new ExternalOwnedMob(level, otherOwner);
+            external.setTarget(primitive);
+            check(external.getTarget() == primitive, name + " wild target remains selectable");
+            PrimitiveMobsCompat.tame(primitive, owner);
+            PrimitiveMobsCompat.clearOldHostileTarget(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(external));
+            check(external.getTarget() == null, name + " pre-taming aggro cleared");
+            var sameOwnerWolf = EntityType.WOLF.create(level);
+            sameOwnerWolf.setTame(true); sameOwnerWolf.setOwnerUUID(owner.getUUID()); sameOwnerWolf.moveTo(0, -59, 0);
+            var otherOwnerWolf = EntityType.WOLF.create(level);
+            otherOwnerWolf.setTame(true); otherOwnerWolf.setOwnerUUID(otherOwner); otherOwnerWolf.moveTo(0, -59, 0);
+            for (Mob pet : List.of(sameOwnerWolf, otherOwnerWolf, external)) {
+                check(PrimitiveMobsCompat.protectFromOtherPets(pet, primitive), name + " owned-pet recognition");
+                check(!net.minecraft.world.entity.ai.targeting.TargetingConditions.forCombat().test(pet, primitive), name + " monster scan rejects tame");
+                check(net.minecraft.world.entity.ai.targeting.TargetingConditions.forNonCombat().test(pet, primitive), name + " noncombat scans still see tame");
+                pet.setTarget(primitive);
+                check(pet.getTarget() == null, name + " direct target assignment blocked");
+                float health = primitive.getHealth();
+                primitive.hurt(level.damageSources().mobAttack(pet), 3);
+                check(primitive.getHealth() == health, name + " custom pet attack cannot damage tame");
+            }
+            Mob unowned = new ExternalOwnedMob(level, null);
+            check(!PrimitiveMobsCompat.protectFromOtherPets(unowned, primitive), name + " ownerless mob not falsely treated as pet");
+            Mob zombie = EntityType.ZOMBIE.create(level);
+            check(!PrimitiveMobsCompat.protectFromOtherPets(zombie, primitive), name + " wild hostile unaffected");
+            primitive.discard();
+        }
+
+        var wolf = EntityType.WOLF.create(level);
+        wolf.setTame(true); wolf.setOwnerUUID(otherOwner); wolf.moveTo(3, -59, 0);
+        level.addFreshEntity(wolf);
+        Mob primitive = create(level, "baby_spider", 100);
+        PrimitiveMobsCompat.tame(primitive, owner);
+        TameData a = new TameData(wolf, otherOwner, false);
+        TameData b = new TameData(primitive, owner.getUUID(), false);
+        a.hungerSaturation = 10000; b.hungerSaturation = 10000;
+        TameRegistry.register(a); TameRegistry.register(b);
+        TameDuelManager.startTeamDuel(level.getServer(), otherOwner, Set.of(wolf.getUUID()), owner.getUUID(), Set.of(primitive.getUUID()));
+        check(TameDuelManager.areDuelOpponents(wolf.getUUID(), primitive.getUUID()), "duel fixture started");
+        check(!PrimitiveMobsCompat.protectFromOtherPets(wolf, primitive), "intentional duel opponents remain targetable");
+        TameDuelManager.endDuelForEntity(level.getServer(), wolf.getUUID());
+        wolf.discard(); primitive.discard();
+    }
+
+    private static void checkFoodAndReset(ServerLevel level, Player owner) throws Exception {
+        var commandsClass = com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class;
+        var cost = commandsClass.getDeclaredMethod("scaleSaturationCost", TameData.class, int.class);
+        cost.setAccessible(true);
+        var preferred = commandsClass.getDeclaredMethod("isPreferredDistributionFood", ItemStack.class, TameData.class, LivingEntity.class);
+        preferred.setAccessible(true);
+        ItemStack raw = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("primitive_mobs:dodo")));
+        check(!raw.isEmpty(), "Raw Dodo ID resolves");
+        Mob preOwned = (Mob) type("rocket_creeper").create(level);
+        preOwned.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        preOwned.setHealth(100);
+        PrimitiveMobsCompat.tame(preOwned, owner);
+        level.addFreshEntity(preOwned);
+        TameData automatic = TameRegistry.get(preOwned.getUUID());
+        check(automatic != null && PrimitiveMobsCompat.hungerExtraLevels(automatic) == 80, "automatic join backfill keeps 100 HP baseline");
+        check(preOwned.getAttributeBaseValue(Attributes.MAX_HEALTH) == 100, "automatic join registration does not reset base HP");
+        preOwned.discard();
+        for (String name : List.of("baby_spider", "chameleon", "festive_creeper", "support_creeper", "rocket_creeper")) {
+            Mob mob = create(level, name, 100);
+            PrimitiveMobsCompat.tame(mob, owner);
+            TameData data = new TameData(mob, owner.getUUID(), false);
+            check(TameFoodManager.accepts(raw, data, mob), name + " accepts Raw Dodo");
+            check((boolean) preferred.invoke(null, raw, data, null), name + " stored pets prefer Raw Dodo");
+            check(TameFoodManager.foodsForDisplay(level.getServer(), data.type).stream().anyMatch(s -> s.contains("Raw Dodo")), name + " displays Raw Dodo");
+            data.level = 50;
+            check(PrimitiveMobsCompat.hungerExtraLevels(data) == 80, name + " 100 HP adds 80 hunger levels");
+            check((int) cost.invoke(null, data, 100) == 260, name + " additive 100 HP + level 50 costs 260%");
+            data.bonusHealth = 400;
+            LevelSystem.reapplyTypeBasePlusBonuses(mob, data);
+            mob.save(data.entitySnapshot);
+            check((int) cost.invoke(null, data, 100) == 260, name + " leveling HP does not inflate baseline cost");
+            data.entitySnapshot.getCompound("ForgeData").getCompound(PrimitiveMobsCompat.BASELINE).putDouble("MaxHealth", 20);
+            check((int) cost.invoke(null, data, 100) == 150, name + " 20 HP has normal level cost");
+            data.entitySnapshot.getCompound("ForgeData").getCompound(PrimitiveMobsCompat.BASELINE).putDouble("MaxHealth", 10);
+            check((int) cost.invoke(null, data, 100) == 150, name + " below 20 HP has normal level cost");
+            data.entitySnapshot.getCompound("ForgeData").getCompound(PrimitiveMobsCompat.BASELINE).remove("MaxHealth");
+            check((int) cost.invoke(null, data, 100) == 260, name + " first-version baseline migrates without reward HP");
+            data.level = Integer.MAX_VALUE;
+            check((int) cost.invoke(null, data, 4) == Integer.MAX_VALUE, name + " huge levels saturate without overflow");
+            mob.discard();
+        }
+
+        Mob loaded = create(level, "rocket_creeper", 100);
+        PrimitiveMobsCompat.tame(loaded, owner);
+        TameData liveData = new TameData(loaded, owner.getUUID(), false);
+        TameRegistry.register(liveData);
+        UUID oldIdentity = liveData.tlId;
+        CompoundTag oldEntity = new CompoundTag(); loaded.save(oldEntity);
+        ObfuscationReflectionHelper.findMethod(Mob.class, "m_6140_").invoke(loaded);
+
+        TameData broken = TameData.fromTag(liveData.toTag());
+        broken.uuid = UUID.randomUUID(); broken.tlId = UUID.randomUUID(); broken.ownerUUID = null;
+        broken.type = "entity.primitiveMobs.removed_creeper"; broken.entitySnapshot = new CompoundTag();
+        broken.name = "Broken old primitive entry"; broken.dead = true;
+        TameRegistry.register(broken);
+        UUID brokenId = broken.uuid;
+        broken.uuid = null; // A malformed row whose map key and value identity no longer agree.
+
+        TameData snapshotOnly = TameData.fromTag(liveData.toTag());
+        snapshotOnly.uuid = UUID.randomUUID(); snapshotOnly.tlId = UUID.randomUUID(); snapshotOnly.type = "unknown";
+        snapshotOnly.name = "Snapshot only primitive"; snapshotOnly.stored = true;
+        TameRegistry.register(snapshotOnly);
+        var death = new TameDeathRecord(); death.uuid = UUID.randomUUID(); death.type = "primitive_mobs:removed_type";
+        TameRegistry.LAST_DEATHS.put(death.uuid, death); TameRegistry.DEATH_HISTORY.add(death);
+        TameRegistry.archiveTemporaryTame(liveData.toTag());
+        TameRegistry.setRankedParticipants(Set.of(oldIdentity, death.uuid));
+
+        var wolf = EntityType.WOLF.create(level);
+        TameData keep = new TameData(wolf, owner.getUUID(), false);
+        keep.name = "Unrelated wolf with Raw Dodo"; keep.hungerInventory.add(raw.copy());
+        TameRegistry.register(keep);
+        check((int) cost.invoke(null, keep, 100) == 101, "other species hunger unchanged");
+        var worldData = com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData.get(level);
+        worldData.addRespawnRequest(new com.github.alexthe668.domesticationinnovation.server.misc.RespawnRequest(
+                "primitive_mobs:removed_type", level.dimension().location().toString(), oldEntity, new BlockPos(0, -59, 0), 0, "old"));
+        worldData.addRespawnRequest(new com.github.alexthe668.domesticationinnovation.server.misc.RespawnRequest(
+                "minecraft:wolf", level.dimension().location().toString(), keep.entitySnapshot, new BlockPos(0, -59, 0), 0, "keep"));
+        var source = level.getServer().createCommandSourceStack();
+        var dispatcher = level.getServer().getCommands().getDispatcher();
+        boolean denied = false;
+        try { dispatcher.execute("tames admin reset primitiveMobs", source.withPermission(0)); }
+        catch (com.mojang.brigadier.exceptions.CommandSyntaxException expected) { denied = true; }
+        check(denied, "reset requires admin permission");
+        check(dispatcher.execute("tames admin reset primitiveMobs", source.withPermission(4)) == 1, "exact reset command runs");
+        check(TameRegistry.get(brokenId) == null, "broken UUID row purged");
+        check(TameRegistry.get(snapshotOnly.uuid) == null, "snapshot-only row purged");
+        check(TameRegistry.getByTlId(oldIdentity) == null, "secondary index purged");
+        check(TameRegistry.getOwned(owner.getUUID()).stream().noneMatch(d -> PrimitiveMobsCompat.isPrimitiveType(d.type)), "owner index purged");
+        check(TameRegistry.get(keep.uuid) == keep, "unrelated tame with Raw Dodo retained");
+        check(!TameRegistry.LAST_DEATHS.containsKey(death.uuid) && !TameRegistry.DEATH_HISTORY.contains(death), "orphan death records purged");
+        check(TameRegistry.getTemporaryTames().stream().noneMatch(PrimitiveMobsCompat::isPrimitiveSnapshot), "temporary archive purged");
+        check(TameRegistry.getRankedParticipants().isEmpty(), "ranked references purged");
+        check(worldData.getRespawnRequestsSnapshot().stream().noneMatch(r -> PrimitiveMobsCompat.isPrimitiveType(r.getEntityTypeLoc())), "old respawn requests purged");
+        check(worldData.getRespawnRequestsSnapshot().stream().anyMatch(r -> r.getEntityTypeLoc().equals("minecraft:wolf")), "other respawns retained");
+        check(!TameEntityAdapter.isTame(loaded) && TameData.getTlId(loaded) == null, "loaded ownership and identity cleared");
+        ObfuscationReflectionHelper.findMethod(Mob.class, "m_6140_").invoke(loaded);
+        check(loaded.targetSelector.getAvailableGoals().stream().noneMatch(g -> g.getGoal() instanceof PrimitiveMobsCompat.PetTargetGoal), "wild AI restored after reset");
+        loaded.discard();
+        Mob stale = (Mob) type("rocket_creeper").create(level); stale.load(oldEntity);
+        level.addFreshEntity(stale);
+        check(!TameEntityAdapter.isTame(stale) && TameRegistry.get(stale.getUUID()) == null, "unloaded stale snapshot cannot re-register");
+        var epoch = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveResetData.get(level.getServer());
+        check(com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveResetData.load(((net.minecraft.world.level.saveddata.SavedData) epoch).save(new CompoundTag())).generation() == epoch.generation(), "reset epoch persists");
+        PrimitiveMobsCompat.tame(stale, owner);
+        check(owner.getUUID().equals(TameEntityAdapter.ownerUuid(stale)), "fresh taming works after reset");
+        PrimitiveMobsCompat.applyRegistryReset(stale);
+        check(TameEntityAdapter.isTame(stale), "fresh tame not invalidated by old reset");
+        stale.discard();
     }
 }
