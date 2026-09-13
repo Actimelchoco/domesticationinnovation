@@ -3128,6 +3128,8 @@ public class TameCommands {
                                                 .executes(ctx -> adminRepairLoadedTames(ctx.getSource()))))
                                 .then(Commands.literal("grantMissingMilestoneAttributes")
                                         .executes(ctx -> adminGrantMissingMilestoneAttributes(ctx.getSource())))
+                                .then(Commands.literal("repairClassDamage")
+                                        .executes(ctx -> adminRepairClassDamage(ctx.getSource())))
                                 .then(Commands.literal("repairMissingDuelRewards")
                                         .executes(ctx -> adminRepairMissingDuelRewards(ctx.getSource()))
                                         .then(Commands.argument("pet", StringArgumentType.string())
@@ -3481,6 +3483,8 @@ public class TameCommands {
                                         .executes(ctx -> adminVersion(ctx.getSource())))
                                 .then(Commands.literal("addMissingAbilities")
                                         .executes(ctx -> adminAddMissingAbilities(ctx.getSource())))
+                                .then(Commands.literal("repairClassDamage")
+                                        .executes(ctx -> adminRepairClassDamage(ctx.getSource())))
                                 .then(Commands.literal("repairMissingDuelRewards")
                                         .executes(ctx -> adminRepairMissingDuelRewards(ctx.getSource()))
                                         .then(Commands.literal("all")
@@ -20496,6 +20500,18 @@ public class TameCommands {
                         + " tame(s), totaling " + finalRestoredLevels + " recorded ability level(s)."
         ), true);
         return 1;
+    }
+
+    private static int adminRepairClassDamage(CommandSourceStack source) {
+        int changed = 0;
+        for (TameData data : new ArrayList<>(TameRegistry.TAMES.values())) {
+            if (data == null) continue;
+            LivingEntity tame = TameEntityAdapter.findLoaded(source.getServer(), data.uuid, data.tlId);
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.ClassDamageRepair.repair(tame, data)) changed++;
+        }
+        final int count = changed;
+        source.sendSuccess(() -> Component.literal("Repaired DPS/Striker damage for " + count + " tame(s). Already repaired tames were skipped."), true);
+        return count;
     }
 
     private static int adminRepairMissingDuelRewards(CommandSourceStack source) {

@@ -223,6 +223,8 @@ public class PrimitiveCompatTests {
     public static void run(ServerStartedEvent event) {
         try {
             ServerLevel level = event.getServer().overworld();
+            checks += ClassDamageTests.run(level);
+            checks += ActivityProgressTests.run(level);
             testRocketImpact(level);
             testHunterInterest(level);
             testMissingDeathEvent(level);

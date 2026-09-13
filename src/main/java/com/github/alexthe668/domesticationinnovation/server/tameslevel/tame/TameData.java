@@ -144,6 +144,7 @@ public class TameData {
     public int savedAssists = 0;
     public double savedBonusHealth = 0;
     public double savedBonusDamage = 0;
+    public boolean classDamageRepaired = false;
     public double savedBonusSpeed = 0;
     public double savedBonusArmor = 0;
     public double savedBonusArmorToughness = 0;
@@ -365,6 +366,7 @@ public class TameData {
         tag.putInt("savedAssists", savedAssists);
         tag.putDouble("savedBonusHealth", savedBonusHealth);
         tag.putDouble("savedBonusDamage", savedBonusDamage);
+        tag.putBoolean("classDamageRepaired", classDamageRepaired);
         tag.putDouble("savedBonusSpeed", savedBonusSpeed);
         tag.putDouble("savedBonusArmor", savedBonusArmor);
         tag.putDouble("savedBonusArmorToughness", savedBonusArmorToughness);
@@ -589,6 +591,7 @@ public class TameData {
         data.savedAssists = Math.max(0, tag.getInt("savedAssists"));
         data.savedBonusHealth = tag.getDouble("savedBonusHealth");
         data.savedBonusDamage = tag.getDouble("savedBonusDamage");
+        data.classDamageRepaired = tag.getBoolean("classDamageRepaired");
         data.savedBonusSpeed = tag.getDouble("savedBonusSpeed");
         data.savedBonusArmor = tag.getDouble("savedBonusArmor");
         data.savedBonusArmorToughness = tag.getDouble("savedBonusArmorToughness");

@@ -77,3 +77,19 @@ knockback-to-radius bonus used by minions. Rocket landing no longer costs health
 When Blessfulled is installed in the isolated server, its real particle-data
 constructors are checked for incoming/outgoing popup types; rendering still needs
 a connected client. Damage popups use the final positive damage event.
+
+Activity progression checks cover exact 1 XP after ten minutes following a moving
+owner, one-minute idle resets, starvation and unload resets, daily guard HP and
+changing guard posts, and five-minute damage-received participation (including
+duplicate hits/death events and zero damage). Guard time counts loaded ticks
+within 16 blocks of the same assigned post; it persists in the pet's ForgeData.
+Following progress is deliberately transient. Activity rewards are excluded from
+duels and use fixed XP, without combat/recovery multipliers or mending diversion.
+
+Class-damage checks verify DPS/Striker +1 damage rewards and Striker's base-stat
+distribution (50 damage, 5 knockback, 35 knockback resistance, 3.5 armor, 3.5
+toughness, 3 HP). `/tames admin repairClassDamage` converts existing bonuses once,
+including saved progress and reward history, and refreshes loaded attributes.
+Newly recorded damage rewards carry a version marker so the repair excludes them.
+Tests verify conversion, preserved species bases, marker persistence and admin
+permissions. As with reset tests, commands run only in the disposable world.

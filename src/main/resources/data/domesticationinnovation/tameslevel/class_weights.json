@@ -747,12 +747,12 @@
       "preferredAbilityWeightMultiplier": 1.0,
       "autoPreferredWeightBalance": false,
       "baseStats": {
-        "armor": 0.0,
-        "armor_toughness": 0.0,
-        "damage": 1.0,
-        "hp": 0.0,
-        "knockback": 0.0,
-        "knockback_resist": 0.0,
+        "damage": 16.666666666666668,
+        "knockback": 1.6666666666666667,
+        "knockback_resist": 11.666666666666666,
+        "armor": 1.1666666666666667,
+        "armor_toughness": 1.1666666666666667,
+        "hp": 0.04285714285714286,
         "speed": 0.0
       }
     },
