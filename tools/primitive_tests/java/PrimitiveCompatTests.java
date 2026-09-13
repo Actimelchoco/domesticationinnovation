@@ -31,6 +31,26 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = "primitive_compat_tests")
 public class PrimitiveCompatTests {
     private static int checks;
+    private static void testLastDuelAttacker(ServerLevel level) {
+        var first = deathFixture(level);
+        var last = deathFixture(level);
+        var victim = deathFixture(level);
+        UUID owner = first.getOwnerUUID();
+        last.setOwnerUUID(owner);
+        TameRegistry.get(last.getUUID()).ownerUUID = owner;
+        TameDuelManager.startTeamDuel(level.getServer(), owner, Set.of(first.getUUID(), last.getUUID()),
+                victim.getOwnerUUID(), Set.of(victim.getUUID()));
+        check(TameDuelManager.areDuelOpponents(first.getUUID(), victim.getUUID()), "last attacker duel started");
+        LevelSystem.trackDamage(victim, first);
+        LevelSystem.trackDamage(victim, last);
+        victim.hurt(victim.damageSources().generic(), 1000);
+        TameData credited = TameRegistry.get(last.getUUID());
+        check(credited.duelKills == 1, "last tame attacker receives environmental duel kill");
+        check(TameRegistry.get(first.getUUID()).duelKills == 0, "earlier attacker is not killer");
+        check(TameRegistry.get(first.getUUID()).duelAssists == 1, "earlier attacker keeps assist credit");
+        check(LevelSystem.lastTameDamager(victim.getUUID()) == null, "damage tracking released after attribution");
+        TameDuelManager.endDuelForEntity(level.getServer(), first.getUUID());
+    }
     private static void testMissingDeathEvent(ServerLevel level) {
         for (Entity.RemovalReason reason : Entity.RemovalReason.values()) {
             for (boolean zeroHealth : new boolean[] {false, true}) {
@@ -90,6 +110,7 @@ public class PrimitiveCompatTests {
         try {
             ServerLevel level = event.getServer().overworld();
             testMissingDeathEvent(level);
+            testLastDuelAttacker(level);
             Player owner = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "PrimitiveOwner"));
             owner.moveTo(0, -59, 0);
             Player stranger = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "PrimitiveOther"));

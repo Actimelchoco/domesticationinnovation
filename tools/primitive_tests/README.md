@@ -56,3 +56,7 @@ clone cleanup must not. Ordinary damage deaths and duplicate leave events must
 not double-count deaths. This covers a reproduced missing-event path, not every
 possible third-party disappearance. Existing unloaded registry entries are not
 automatically classified as dead.
+
+Duel attribution checks cover two tame contributors followed by an environmental
+finishing blow: the last tame attacker gets the kill, the earlier attacker gets
+an assist, and damage tracking is released after the death has been attributed.

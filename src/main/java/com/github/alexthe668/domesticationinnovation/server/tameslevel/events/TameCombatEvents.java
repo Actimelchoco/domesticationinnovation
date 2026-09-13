@@ -67,6 +67,11 @@ public class TameCombatEvents {
     private static final Deque<PendingDeath> PENDING_DEATHS = new ArrayDeque<>();
     private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
     private static final Map<UUID, PendingDeath> CAPTURED_DEATHS = new HashMap<>();
+    // Entity removal clears live damage tracking before the normal-priority death listener.
+    // Key by event so nested deaths cannot overwrite each other's attribution. Weak keys
+    // also release snapshots if another listener cancels an event before our consumer.
+    private static final Map<LivingDeathEvent, PendingDeath> EARLY_DEATH_ATTRIBUTION =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private static final Map<UUID, PendingInstantRespawn> PENDING_INSTANT_RESPAWNS = new HashMap<>();
     private static final Map<UUID, Integer> DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS = new HashMap<>();
     private static final Set<UUID> DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE = new HashSet<>();
@@ -139,7 +144,8 @@ public class TameCombatEvents {
     @SubscribeEvent
     public static void onDeath(LivingDeathEvent event) {
         try {
-            PendingDeath death = PendingDeath.capture(event);
+            PendingDeath death = EARLY_DEATH_ATTRIBUTION.remove(event);
+            if (death == null) death = PendingDeath.capture(event);
             if (death == null) {
                 return;
             }
@@ -218,6 +224,8 @@ public class TameCombatEvents {
                 && (!TameEntityAdapter.isSupported(tame) || data == null)) {
             return;
         }
+
+        EARLY_DEATH_ATTRIBUTION.put(event, PendingDeath.capture(event));
 
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
                 || (tlId != null && TameDuelManager.isTameInDuel(tlId))
@@ -734,6 +742,10 @@ public class TameCombatEvents {
         LivingEntity effectiveKillerTame = resolveEffectiveKillerTame(serverLevel, death);
         UUID effectiveKillerTameUuid = effectiveKillerTame != null ? effectiveKillerTame.getUUID() : death.killerTameUuid();
         UUID deadParticipantId = death.duelParticipantId();
+        if (deadParticipantId != null && TameDuelManager.isEntityInDuel(deadParticipantId)
+                && death.lastTameDamagerUuid() != null) {
+            effectiveKillerTameUuid = death.lastTameDamagerUuid();
+        }
         if (dead != null && deadParticipantId != null && TameDuelManager.isEntityInDuel(deadParticipantId)) {
             TameDuelManager.recordElimination(
                     dead.level().getServer(),
@@ -778,6 +790,10 @@ public class TameCombatEvents {
     private static LivingEntity resolveEffectiveKillerTame(ServerLevel level, PendingDeath death) {
         if (level == null || death == null) {
             return null;
+        }
+        if (death.duelParticipantId() != null && TameDuelManager.isEntityInDuel(death.duelParticipantId())
+                && death.lastTameDamagerUuid() != null) {
+            return level.getEntity(death.lastTameDamagerUuid()) instanceof LivingEntity last ? last : null;
         }
         if (TameEntityAdapter.isTame(death.killer())) {
             return death.killer();
