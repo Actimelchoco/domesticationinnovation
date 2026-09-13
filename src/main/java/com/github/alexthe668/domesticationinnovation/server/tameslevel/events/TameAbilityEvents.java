@@ -1937,13 +1937,7 @@ public class TameAbilityEvents {
     }
 
     private static boolean isMutantCreeperMinion(LivingEntity tame) {
-        if (tame == null) {
-            return false;
-        }
-        ResourceLocation key = EntityType.getKey(tame.getType());
-        return key != null
-                && "mutantmonsters".equals(key.getNamespace())
-                && "creeper_minion".equals(key.getPath());
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPetCreeper(tame);
     }
 
     private static float lightningfangChance(int level) {

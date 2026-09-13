@@ -31,7 +31,7 @@ public abstract class PrimitiveCreeperExplosionMixin extends Monster {
         entityData.set(DATA_IS_IGNITED, false);
         if (!level().isClientSide && tl$blastCooldown == 0) {
             tl$blastCooldown = 60;
-            level().explode(this, getX(), getY(), getZ(), explosionRadius * (creeper.isPowered() ? 2.0F : 1.0F), Level.ExplosionInteraction.MOB);
+            level().explode(this, getX(), getY(), getZ(), PrimitiveMobsCompat.petBlastRadius(this, explosionRadius * (creeper.isPowered() ? 2.0F : 1.0F)), Level.ExplosionInteraction.NONE);
         }
     }
 

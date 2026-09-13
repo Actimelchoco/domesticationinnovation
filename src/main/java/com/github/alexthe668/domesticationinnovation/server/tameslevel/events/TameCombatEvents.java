@@ -104,10 +104,6 @@ public class TameCombatEvents {
         LivingEntity tame = resolveTameAttacker(event);
         if (tame != null && TameEntityAdapter.isTame(tame)) {
             LevelSystem.trackDamage(mob, tame);
-            boolean duelPink = TameDuelManager.isTameInDuel(tame.getUUID()) && !TameDuelManager.isTeamAEntity(tame.getUUID());
-            BlessfulledCompat.showTameDealtDamagePopup(tame, mob, event.getAmount(), duelPink);
-        } else if (TameEntityAdapter.isTame(mob)) {
-            BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), mob, event.getAmount());
         }
         if (tame == null && event.getSource().getEntity() instanceof LivingEntity modifiedAttacker
                 && modifiedAttacker instanceof ModifedToBeTameable modified
@@ -120,6 +116,18 @@ public class TameCombatEvents {
 
         if (event.getSource().getEntity() instanceof ServerPlayer player) {
             LevelSystem.trackOwnerDamage(mob, player);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onDamagePopup(net.minecraftforge.event.entity.living.LivingDamageEvent event) {
+        if (event.isCanceled() || event.getAmount() <= 0 || event.getEntity().level().isClientSide) return;
+        LivingEntity attacker = resolveTameAttacker(event.getSource());
+        if (attacker != null) {
+            boolean pink = TameDuelManager.isTameInDuel(attacker.getUUID()) && !TameDuelManager.isTeamAEntity(attacker.getUUID());
+            BlessfulledCompat.showTameDealtDamagePopup(attacker, event.getEntity(), event.getAmount(), pink);
+        } else if (TameEntityAdapter.isTame(event.getEntity())) {
+            BlessfulledCompat.showTameReceivedDamagePopup(event.getSource().getEntity(), event.getEntity(), event.getAmount());
         }
     }
 

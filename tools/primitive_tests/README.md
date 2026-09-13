@@ -68,3 +68,12 @@ merely selecting the same target do not refresh pursuit. Native and DI follow
 goals pause during pursuit, then resume the selected movement order on timeout.
 The shared rule excludes duels. Tests cover vanilla wolves, all five Primitive
 types, both damage directions, unrelated damage, cooldown and follow suppression.
+
+Primitive creeper combat checks exercise rocket landing explosions at one HP,
+all three creepers targeting opposing pets through a native tick, and actual
+fuse/impact/thrown-TNT blasts against duel pets. Blasts retain the tame attacker
+for DI attack effects and indicators, preserve blocks, and add the same tracked
+knockback-to-radius bonus used by minions. Rocket landing no longer costs health.
+When Blessfulled is installed in the isolated server, its real particle-data
+constructors are checked for incoming/outgoing popup types; rendering still needs
+a connected client. Damage popups use the final positive damage event.

@@ -4,6 +4,8 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.*;
 import net.minecraft.server.level.ServerLevel;
@@ -21,6 +23,18 @@ import java.util.*;
 
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID)
 public final class PrimitiveMobsCompat {
+    public static float petBlastRadius(LivingEntity entity, float nativeRadius) {
+        if (!TameEntityAdapter.isTame(entity)) return nativeRadius;
+        TameData data = TameRegistry.get(entity.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(entity));
+        return nativeRadius + (data == null ? 0 : (float) Math.max(0, data.bonusKnockback));
+    }
+    public static boolean isPetCreeper(LivingEntity entity) {
+        if (entity == null) return false;
+        if (entity instanceof net.minecraft.world.entity.monster.Creeper && isPrimitivePet(entity)) return true;
+        return new net.minecraft.resources.ResourceLocation("mutantmonsters", "creeper_minion")
+                .equals(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType()));
+    }
     public static final String BASELINE = "TLPrimitiveSpawnBaseline";
     private static final String RESET_GENERATION = "TLPrimitiveResetGeneration";
     private PrimitiveMobsCompat() {}

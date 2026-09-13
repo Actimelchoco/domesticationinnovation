@@ -50,6 +50,8 @@
     "PrimitiveThrownEggMixin",
     "PrimitiveSpawnEggMixin",
     "PrimitiveCreeperExplosionMixin",
+    "PrimitiveRocketExplosionMixin",
+    "PrimitiveTntMixin",
     "RabbitMixin",
     "SaintsDragonsDragonEntityMixin",
     "SaintsDragonsRaevyxMixin",

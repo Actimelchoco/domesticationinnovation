@@ -2655,15 +2655,10 @@ public class CommonProxy {
     }
 
     private static boolean isMutantCreeperMinionExplosion(LivingEntity attacker, LivingAttackEvent event) {
-        if (!(attacker instanceof TamableAnimal tame) || event == null || event.getSource() == null) {
-            return false;
-        }
-        ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-        return key != null
-                && "mutantmonsters".equals(key.getNamespace())
-                && "creeper_minion".equals(key.getPath())
+        return event != null && event.getSource() != null
                 && event.getSource().getEntity() == attacker
-                && event.getSource().is(DamageTypeTags.IS_EXPLOSION);
+                && event.getSource().is(DamageTypeTags.IS_EXPLOSION)
+                && com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPetCreeper(attacker);
     }
 
     private static int psychicAbilityToEnchantScale(int abilityLevel) {

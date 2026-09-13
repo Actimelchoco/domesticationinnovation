@@ -32,6 +32,69 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = "primitive_compat_tests")
 public class PrimitiveCompatTests {
     private static int checks;
+    private static UUID blastVictim;
+    private static net.minecraft.world.damagesource.DamageSource observedBlast;
+    @SubscribeEvent
+    public static void observeBlast(net.minecraftforge.event.entity.living.LivingDamageEvent event) {
+        if (event.getEntity().getUUID().equals(blastVictim)) observedBlast = event.getSource();
+    }
+    private static void testRocketImpact(ServerLevel level) throws Exception {
+        var owner = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RocketOwner"));
+        Mob rocket = create(level, "rocket_creeper", 20);
+        PrimitiveMobsCompat.tame(rocket, owner);
+        rocket.setHealth(1);
+        var impact = rocket.getClass().getDeclaredMethod("explodeOnImpact");
+        impact.setAccessible(true);
+        impact.invoke(rocket);
+        check(rocket.isAlive() && rocket.getHealth() == 1, "tamed rocket survives impact at one HP");
+        rocket.discard();
+        for (String name : List.of("rocket_creeper", "festive_creeper", "support_creeper")) {
+            Mob creeper = create(level, name, 50);
+            PrimitiveMobsCompat.tame(creeper, owner);
+            TameRegistry.register(new TameData(creeper, owner.getUUID(), false));
+            TameRegistry.get(creeper.getUUID()).bonusKnockback = 1;
+            check(PrimitiveMobsCompat.petBlastRadius(creeper, 3) == 4, name + " minion-style radius bonus applies once");
+            var opponent = deathFixture(level);
+            opponent.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1000);
+            opponent.setHealth(1000);
+            opponent.moveTo(2, -59, 0);
+            TameDuelManager.startTeamDuel(level.getServer(), owner.getUUID(), Set.of(creeper.getUUID()),
+                    opponent.getOwnerUUID(), Set.of(opponent.getUUID()));
+            creeper.setTarget(opponent);
+            creeper.tick();
+            check(creeper.getTarget() == opponent, name + " keeps opposing tame as duel target through native tick");
+            blastVictim = opponent.getUUID(); observedBlast = null;
+            if (name.equals("festive_creeper")) {
+                Class<?> tntClass = Class.forName("com.misanthropy.primitive_mobs.entity.projectile.PrimitiveTnt");
+                Entity tnt = (Entity) tntClass.getConstructor(Level.class, double.class, double.class, double.class, LivingEntity.class, float.class, int.class)
+                        .newInstance(level, opponent.getX(), opponent.getY(), opponent.getZ(), creeper, 1.5F, 30);
+                var explode = tntClass.getDeclaredMethod("explode"); explode.setAccessible(true);
+                explode.invoke(tnt);
+            } else if (name.equals("rocket_creeper")) {
+                impact.invoke(creeper);
+            } else {
+                ObfuscationReflectionHelper.findMethod(Creeper.class, "m_32315_").invoke(creeper);
+            }
+            check(observedBlast != null && observedBlast.getEntity() == creeper,
+                    name + " explosion damages duel tame with correct attacker");
+            var baseHit = com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.class
+                    .getDeclaredMethod("isBaseAttackHit", LivingEntity.class, net.minecraftforge.event.entity.living.LivingHurtEvent.class);
+            baseHit.setAccessible(true);
+            check((boolean) baseHit.invoke(null, creeper, new net.minecraftforge.event.entity.living.LivingHurtEvent(opponent, observedBlast, 1)),
+                    name + " blast qualifies for minion-style attack effects");
+            check(creeper.isAlive(), name + " survives own attack");
+            TameDuelManager.endDuelForEntity(level.getServer(), creeper.getUUID());
+            creeper.discard(); opponent.discard();
+        }
+        blastVictim = null;
+        if (net.minecraftforge.fml.ModList.get().isLoaded("blessfulled")) {
+            var popup = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BlessfulledCompat.class
+                    .getDeclaredMethod("createDamagePopup", float.class, int.class);
+            popup.setAccessible(true);
+            check(popup.invoke(null, 5F, 0) != null, "actual Blessfulled outgoing indicator constructs");
+            check(popup.invoke(null, 5F, 5) != null, "actual Blessfulled incoming indicator constructs");
+        }
+    }
     private static void testHunterInterest(ServerLevel level) {
         var wolf = deathFixture(level);
         TameRegistry.get(wolf.getUUID()).mode = TameMode.MONSTER_HUNTER.id();
@@ -160,6 +223,7 @@ public class PrimitiveCompatTests {
     public static void run(ServerStartedEvent event) {
         try {
             ServerLevel level = event.getServer().overworld();
+            testRocketImpact(level);
             testHunterInterest(level);
             testMissingDeathEvent(level);
             testLastDuelAttacker(level);
