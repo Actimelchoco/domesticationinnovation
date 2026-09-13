@@ -60,3 +60,11 @@ automatically classified as dead.
 Duel attribution checks cover two tame contributors followed by an environmental
 finishing blow: the last tame attacker gets the kill, the earlier attacker gets
 an assist, and damage tracking is released after the death has been attributed.
+
+Monster hunters abandon a target after 600 ticking-entity ticks without positive
+damage exchanged with that target. They ignore it for 1200 ticks afterward;
+renewed damage permits retaliation immediately. Other attackers, zero damage and
+merely selecting the same target do not refresh pursuit. Native and DI follow
+goals pause during pursuit, then resume the selected movement order on timeout.
+The shared rule excludes duels. Tests cover vanilla wolves, all five Primitive
+types, both damage directions, unrelated damage, cooldown and follow suppression.

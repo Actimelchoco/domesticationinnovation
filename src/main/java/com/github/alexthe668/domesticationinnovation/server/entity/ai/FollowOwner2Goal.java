@@ -50,6 +50,7 @@ public class FollowOwner2Goal extends Goal {
     }
 
     public boolean canUse() {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { return false; }
         LivingEntity livingentity = ((ModifedToBeTameable) this.tamable).getTameOwner();
         if(tamable instanceof IComandableMob commandableMob && commandableMob.getCommand() != 2 && DomesticationMod.CONFIG.trinaryCommandSystem.get()) {
             return false;
@@ -68,6 +69,7 @@ public class FollowOwner2Goal extends Goal {
     }
 
     public boolean canContinueToUse() {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { return false; }
         if(tamable instanceof IComandableMob commandableMob && commandableMob.getCommand() != 2 && DomesticationMod.CONFIG.trinaryCommandSystem.get()) {
             return false;
         }else if (this.navigation.isDone()) {
@@ -92,6 +94,7 @@ public class FollowOwner2Goal extends Goal {
     }
 
     public void tick() {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { return; }
         if (TameableUtils.hasEnchant(tamable, DIEnchantmentRegistry.AMPHIBIOUS) && tamable.isInWaterOrBubble() && this.tamable.distanceToSqr(this.owner) < 144.0D) {
             tamable.getNavigation().moveTo(owner, speedModifier);
         }

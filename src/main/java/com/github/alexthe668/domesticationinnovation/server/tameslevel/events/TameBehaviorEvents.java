@@ -409,7 +409,8 @@ public class TameBehaviorEvents {
         LivingEntity owner = TameEntityAdapter.owner(tame);
         LivingEntity priority = owner == null ? null : owner.getLastHurtByMob();
         if (priority == null && owner != null) priority = owner.getLastHurtMob();
-        if (priority != null && priority.isAlive() && isValidCombatTarget(tame, priority)) {
+        if (priority != null && priority.isAlive() && isValidCombatTarget(tame, priority)
+                && !HunterInterestEvents.isIgnored(tame, priority)) {
             tame.setTarget(priority);
             return;
         }
@@ -418,6 +419,7 @@ public class TameBehaviorEvents {
         LivingEntity best = null;
         double bestDistance = Double.MAX_VALUE;
         for (LivingEntity candidate : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
+            if (HunterInterestEvents.isIgnored(tame, candidate)) continue;
             if (!isValidCombatTarget(tame, candidate)) continue;
             if (mode == TameMode.MONSTER_HUNTER && !(candidate instanceof Enemy)) continue;
             if ((mode == TameMode.BODYGUARD || mode == TameMode.BOSS) && !(candidate instanceof Monster)) continue;

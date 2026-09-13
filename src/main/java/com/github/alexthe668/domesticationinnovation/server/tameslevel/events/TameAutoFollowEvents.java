@@ -209,6 +209,7 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isAutoFollowEligibleLoaded(LivingEntity tame, TameData data, UUID ownerId) {
+        if (HunterInterestEvents.holdsCombatPosition(tame)) return false;
         return data != null
                 && tame != null
                 && data.uuid != null

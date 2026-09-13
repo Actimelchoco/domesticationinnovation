@@ -478,7 +478,7 @@ public class TameCombatEvents {
         return tame != null && TameEntityAdapter.isTame(tame) ? tame.getUUID() : null;
     }
 
-    private static LivingEntity resolveTameAttacker(DamageSource source) {
+    static LivingEntity resolveTameAttacker(DamageSource source) {
         if (source == null) {
             return null;
         }

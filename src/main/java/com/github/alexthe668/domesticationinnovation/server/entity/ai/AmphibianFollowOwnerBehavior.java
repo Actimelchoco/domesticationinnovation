@@ -37,6 +37,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
    }
 
     protected boolean checkExtraStartConditions(ServerLevel level, T axolotl) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(axolotl)) { return false; }
         if(axolotl instanceof ModifedToBeTameable tamed){
             owner = tamed.getTameOwner();
             if(owner != null && owner.isAlive() && !owner.isSpectator() && tamed.isFollowingOwner()){
@@ -48,6 +49,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
 
 
     protected boolean canStillUse(ServerLevel level, T axolotl, long gameTime) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(axolotl)) { return false; }
         if(!axolotl.getBrain().hasMemoryValue(MemoryModuleType.BREED_TARGET) && owner != null && owner.isAlive()){
             return ((ModifedToBeTameable)axolotl).isFollowingOwner() && axolotl.distanceTo(owner) > STOP_DISTANCE;
         }
@@ -59,6 +61,7 @@ public class AmphibianFollowOwnerBehavior<T extends Animal> extends Behavior<T> 
     }
 
     protected void tick(ServerLevel p_23503_, T axolotl, long gameTime) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(axolotl)) { return; }
         if (gameTime % TELEPORT_CHECK_DELAY_TICKS == 0 && shouldTeleportToOwner(axolotl)) {
             this.teleportToOwner(axolotl);
         } else{

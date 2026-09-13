@@ -5,6 +5,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTa
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.*;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
@@ -31,6 +32,56 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = "primitive_compat_tests")
 public class PrimitiveCompatTests {
     private static int checks;
+    private static void testHunterInterest(ServerLevel level) {
+        var wolf = deathFixture(level);
+        TameRegistry.get(wolf.getUUID()).mode = TameMode.MONSTER_HUNTER.id();
+        var zombie = EntityType.ZOMBIE.create(level);
+        zombie.moveTo(4, -59, 0);
+        level.addFreshEntity(zombie);
+        wolf.setTarget(zombie);
+        for (int tick = 0; tick <= 601; tick++) {
+            wolf.tickCount = tick;
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+                    new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(wolf));
+        }
+        check(wolf.getTarget() == null, "hunter drops unreachable target after thirty seconds");
+        check(!HunterInterestEvents.holdsCombatPosition(wolf), "expired pursuit releases owner follow");
+        wolf.setTarget(zombie);
+        check(wolf.getTarget() == null, "expired target cannot immediately be reacquired");
+        wolf.tickCount += HunterInterestEvents.RETRY_TICKS;
+        wolf.setTarget(zombie);
+        check(wolf.getTarget() == zombie, "expired target can be retried after cooldown");
+        HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(wolf));
+        check(HunterInterestEvents.holdsCombatPosition(wolf), "active hunter suppresses owner follow");
+        var follow = new net.minecraft.world.entity.ai.goal.FollowOwnerGoal(wolf, 1, 10, 2, false);
+        check(!follow.canUse() && !follow.canContinueToUse(), "vanilla owner goal cannot start or continue during pursuit");
+        // No owner is set: the mixin must return before vanilla tick dereferences it.
+        follow.tick();
+        int started = wolf.tickCount;
+        wolf.tickCount = started + 500;
+        HunterInterestEvents.damage(new net.minecraftforge.event.entity.living.LivingDamageEvent(zombie, wolf.damageSources().mobAttack(wolf), 1));
+        wolf.tickCount = started + 601;
+        HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(wolf));
+        check(wolf.getTarget() == zombie, "dealing damage to current target extends pursuit");
+        wolf.tickCount = started + 1000;
+        HunterInterestEvents.damage(new net.minecraftforge.event.entity.living.LivingDamageEvent(wolf, wolf.damageSources().mobAttack(zombie), 1));
+        wolf.tickCount = started + 1101;
+        HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(wolf));
+        check(wolf.getTarget() == zombie, "receiving damage from current target extends pursuit");
+        var other = EntityType.ZOMBIE.create(level);
+        wolf.tickCount = started + 1500;
+        HunterInterestEvents.damage(new net.minecraftforge.event.entity.living.LivingDamageEvent(wolf, wolf.damageSources().mobAttack(other), 1));
+        HunterInterestEvents.damage(new net.minecraftforge.event.entity.living.LivingDamageEvent(wolf, wolf.damageSources().mobAttack(zombie), 0));
+        wolf.tickCount = started + 1601;
+        HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(wolf));
+        check(wolf.getTarget() == null, "unrelated or zero damage does not extend pursuit");
+        HunterInterestEvents.damage(new net.minecraftforge.event.entity.living.LivingDamageEvent(wolf, wolf.damageSources().mobAttack(zombie), 1));
+        wolf.setTarget(zombie);
+        check(wolf.getTarget() == zombie, "actual renewed combat permits retaliation during cooldown");
+        TameRegistry.get(wolf.getUUID()).mode = TameMode.PASSIVE.id();
+        check(!HunterInterestEvents.holdsCombatPosition(wolf), "other modes retain their follow behavior");
+        wolf.discard(); zombie.discard();
+    }
     private static void testLastDuelAttacker(ServerLevel level) {
         var first = deathFixture(level);
         var last = deathFixture(level);
@@ -109,6 +160,7 @@ public class PrimitiveCompatTests {
     public static void run(ServerStartedEvent event) {
         try {
             ServerLevel level = event.getServer().overworld();
+            testHunterInterest(level);
             testMissingDeathEvent(level);
             testLastDuelAttacker(level);
             Player owner = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "PrimitiveOwner"));
@@ -132,6 +184,23 @@ public class PrimitiveCompatTests {
                 check(mob.getAttributeBaseValue(Attributes.MAX_HEALTH) == 37, name + " native 20 HP reset removed");
                 PrimitiveMobsCompat.tame(mob, stranger);
                 check(owner.getUUID().equals(TameEntityAdapter.ownerUuid(mob)), name + " ownership protected");
+                TameData interestData = TameRegistry.get(mob.getUUID());
+                if (interestData == null) {
+                    interestData = new TameData(mob, owner.getUUID(), false);
+                    TameRegistry.register(interestData);
+                }
+                int originalMode = interestData.mode;
+                interestData.mode = TameMode.MONSTER_HUNTER.id();
+                var unreachable = EntityType.ZOMBIE.create(level);
+                mob.setTarget(unreachable);
+                HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(mob));
+                mob.tickCount += 601;
+                HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(mob));
+                check(mob.getTarget() == null, name + " interface hunter expires unreachable target");
+                mob.setTarget(unreachable);
+                check(mob.getTarget() == null, name + " interface hunter respects retry cooldown");
+                interestData.mode = originalMode;
+                HunterInterestEvents.tick(new net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent(mob));
                 for (int command = 0; command < 3; command++) {
                     ((IComandableMob) mob).setCommand(command);
                     check(((IComandableMob) mob).getCommand() == command, name + " synced command " + command);

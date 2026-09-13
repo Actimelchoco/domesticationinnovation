@@ -162,13 +162,16 @@ public final class TameGoalSupport {
         if (current != null && current.isAlive() && !current.isRemoved() && level.getEntity(current.getUUID()) == current) {
             return;
         }
-        LivingEntity target = findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);
+        LivingEntity target = nearestHunterHostile(level, tame, huntRadius);
         if (target != null) setNativeCombatTarget(tame, target);
     }
 
     static LivingEntity nearestHunterHostile(ServerLevel level, TamableAnimal tame, double huntRadius) {
         if (level == null || tame == null) return null;
-        return findNearestHostile(level, tame.getX(), tame.getY(), tame.getZ(), huntRadius);
+        return level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(huntRadius),
+                candidate -> isHunterHostile(candidate)
+                        && !com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.isIgnored(tame, candidate))
+                .stream().min(java.util.Comparator.comparingDouble(tame::distanceToSqr)).orElse(null);
     }
 
     static void setAggressiveTarget(ServerLevel level, TamableAnimal tame, double huntRadius) {

@@ -43,6 +43,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canUse(CallbackInfoReturnable<Boolean> cir){
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { cir.setReturnValue(false); return; }
         if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
             cir.setReturnValue(false);
             return;
@@ -59,6 +60,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canContinueToUse(CallbackInfoReturnable<Boolean> cir){
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { cir.setReturnValue(false); return; }
         if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
             cir.setReturnValue(false);
             return;
@@ -87,6 +89,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_tick(CallbackInfo ci) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { ci.cancel(); return; }
         if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
             tamable.getNavigation().stop();
             ci.cancel();
