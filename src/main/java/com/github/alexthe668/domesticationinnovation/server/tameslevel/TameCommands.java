@@ -22079,8 +22079,10 @@ public class TameCommands {
         }
         if (!(tame instanceof ModifedToBeTameable modified) || !modified.isTame() || data == null || data.horseType) return;
         if ((order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
-            order = MovementOrder.SIT;
+            applyHungerForcedSit(tame, data);
+            return;
         }
+        data.hungerForcedSit = false;
         if (order != MovementOrder.GUARDIAN) clearGuardianAnchor(data);
         data.movementOrder = switch (order) {
             case FOLLOW -> 0;
@@ -22108,7 +22110,7 @@ public class TameCommands {
             };
             commandable.setCommand(TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback));
         }
-        if (order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) {
+        if (order != MovementOrder.SIT) {
             tryInvokeBooleanSetter(tame, "setOrderedToSit", false);
             tryInvokeBooleanSetter(tame, "setSitting", false);
             tryInvokeBooleanSetter(tame, "setSleeping", false);
@@ -22124,10 +22126,11 @@ public class TameCommands {
         }
         if ((order == MovementOrder.FOLLOW || order == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
             if (currentLiveMovementOrder(tame, data) != MovementOrder.SIT) {
-                applyMovementOverride(tame, MovementOrder.SIT);
+                applyHungerForcedSit(tame, data);
             }
             return;
         }
+        if (data != null) data.hungerForcedSit = false;
         if (order != MovementOrder.GUARDIAN) {
             clearGuardianAnchor(data);
         }
@@ -22178,7 +22181,7 @@ public class TameCommands {
         }
         MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
         if ((liveOrder == MovementOrder.FOLLOW || liveOrder == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
-            applyMovementOverride(tame, MovementOrder.SIT);
+            applyHungerForcedSit(tame, data);
             return true;
         }
         int liveCode = switch (liveOrder) {
@@ -22769,6 +22772,15 @@ public class TameCommands {
             if (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
                 changed |= refillHungerFromNearbyDrumChest(tame, data, now);
             }
+            if (data.hungerForcedSit && totalHungerFoodPoints(data) > 0) {
+                if (data.hasHome) {
+                    applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+                } else {
+                    BlockPos pos = tame.blockPosition();
+                    applyGuardianAnchor(tame.level().dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ(), tame, data);
+                }
+                changed = true;
+            }
             changed |= updateHungerWarningState(server, data);
             int drain = hungerDrainPerSecond(tame, data, now);
             if (drain <= 0) {
@@ -22783,7 +22795,7 @@ public class TameCommands {
                     changed = true;
                     continue;
                 }
-                applyLivingMovementOverride(tame, data, MovementOrder.SIT);
+                applyHungerForcedSit(tame, data);
                 notifyOwnerHungerEmpty(server, data);
                 changed = true;
                 continue;
@@ -22796,6 +22808,23 @@ public class TameCommands {
         if (changed) {
             TameRegistry.markDirty();
         }
+    }
+
+    private static void applyHungerForcedSit(LivingEntity tame, TameData data) {
+        // Sitting normally clears the guardian anchor; hunger only suspends it.
+        boolean hasHome = data.hasHome;
+        String dimension = data.homeDimension;
+        int x = data.homeX;
+        int y = data.homeY;
+        int z = data.homeZ;
+        applyLivingMovementOverride(tame, data, MovementOrder.SIT);
+        data.hasHome = hasHome;
+        data.homeDimension = dimension;
+        data.homeX = x;
+        data.homeY = y;
+        data.homeZ = z;
+        data.hungerForcedSit = true;
+        TameRegistry.markDirty();
     }
 
     private static int hungerDrainPerSecond(LivingEntity tame, TameData data, long now) {

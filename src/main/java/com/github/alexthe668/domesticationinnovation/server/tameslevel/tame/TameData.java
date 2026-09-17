@@ -127,6 +127,7 @@ public class TameData {
     public int hungerSaturation = 1000;
     public final List<ItemStack> hungerInventory = new ArrayList<>();
     public final List<ItemStack> armorInventory = new ArrayList<>();
+    public boolean hungerForcedSit = false;
     public boolean hungerEmptyNotified = false;
     public boolean hungerLowNotified = false;
     public boolean hungerLastFoodNotified = false;
@@ -336,6 +337,7 @@ public class TameData {
         tag.put("entitySnapshot", entitySnapshot == null ? new CompoundTag() : entitySnapshot.copy());
         tag.put("bewereagerState", bewereagerState.copy());
         tag.putInt("hungerSaturation", Math.max(0, hungerSaturation));
+        tag.putBoolean("hungerForcedSit", hungerForcedSit);
         tag.putBoolean("hungerEmptyNotified", hungerEmptyNotified);
         tag.putBoolean("hungerLowNotified", hungerLowNotified);
         tag.putBoolean("hungerLastFoodNotified", hungerLastFoodNotified);
@@ -556,6 +558,7 @@ public class TameData {
             data.entitySnapshot = new CompoundTag();
         }
         data.hungerSaturation = tag.contains("hungerSaturation", Tag.TAG_INT) ? Math.max(0, tag.getInt("hungerSaturation")) : 1000;
+        data.hungerForcedSit = tag.getBoolean("hungerForcedSit");
         data.hungerEmptyNotified = tag.getBoolean("hungerEmptyNotified");
         data.hungerLowNotified = tag.getBoolean("hungerLowNotified");
         data.hungerLastFoodNotified = tag.getBoolean("hungerLastFoodNotified");
