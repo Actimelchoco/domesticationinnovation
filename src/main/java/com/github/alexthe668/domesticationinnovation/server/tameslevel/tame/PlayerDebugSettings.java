@@ -4,7 +4,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,8 +13,6 @@ import java.util.UUID;
 
 public final class PlayerDebugSettings {
     public static final int DEFAULT_INVENTORY_SUMMARY_MINUTES = 10;
-    public static final int DEFAULT_CHEST_DRUM_BLOCK_RANGE = 20;
-    public static final int DEFAULT_CHEST_DRUM_HEIGHT = 2;
 
     private PlayerDebugSettings() {
     }
@@ -35,9 +32,6 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> INVENTORY_NO_FOOD = new HashMap<>();
     private static final Map<UUID, Boolean> INVENTORY_SUMMARY = new HashMap<>();
     private static final Map<UUID, Integer> INVENTORY_SUMMARY_MINUTES = new HashMap<>();
-    private static final Map<UUID, List<ChestDrumRange>> CHEST_DRUM_RANGES = new HashMap<>();
-    private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_NON_PREFERRED_TYPES = new HashMap<>();
-    private static final Map<UUID, Set<String>> CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES = new HashMap<>();
     private static final Map<UUID, Set<UUID>> DO_NOT_ATTACK_OWNERS = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_ASSIST_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_KILL_NOTIFICATIONS = new HashMap<>();
@@ -57,7 +51,6 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> TAMES_FRIENDLY = new HashMap<>();
     private static final Map<UUID, Boolean> HIDE_LEVEL_IN_NAME = new HashMap<>();
     private static final Map<UUID, Boolean> ENABLE_MENDING = new HashMap<>();
-    private static final Map<UUID, Boolean> ENABLE_CHEST_DRUM_FOOD_PREFERENCES = new HashMap<>();
 
     private record BooleanSetting(String key, Map<UUID, Boolean> values, boolean defaultValue) {
     }
@@ -92,8 +85,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
             new BooleanSetting("tamesFriendly", TAMES_FRIENDLY, true),
-            new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false),
-            new BooleanSetting("enableChestXDrumFoodPreferences", ENABLE_CHEST_DRUM_FOOD_PREFERENCES, true)
+            new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false)
     );
 
     public static boolean enemyKilled(UUID player) {
@@ -102,10 +94,6 @@ public final class PlayerDebugSettings {
 
     public static boolean enableMending(UUID player) {
         return getBoolean(ENABLE_MENDING, player, true);
-    }
-
-    public static boolean enableChestXDrumFoodPreferences(UUID player) {
-        return getBoolean(ENABLE_CHEST_DRUM_FOOD_PREFERENCES, player, true);
     }
 
     public static boolean combatAssists(UUID player) {
@@ -166,29 +154,6 @@ public final class PlayerDebugSettings {
 
     public static long inventorySummaryIntervalTicks(UUID player) {
         return 20L * 60L * inventorySummaryMinutes(player);
-    }
-
-    public record ChestDrumRange(String dimension, int x, int y, int z, int blockRange, int height) {
-    }
-
-    public static List<ChestDrumRange> chestDrumRanges(UUID player) {
-        return player == null ? List.of() : List.copyOf(CHEST_DRUM_RANGES.getOrDefault(player, List.of()));
-    }
-
-    public static Set<String> chestDrumPullNonPreferredTypes(UUID player) {
-        return player == null ? Set.of() : Set.copyOf(CHEST_DRUM_PULL_NON_PREFERRED_TYPES.getOrDefault(player, Set.of()));
-    }
-
-    public static Set<String> chestDrumPullPreferredFoodOfTypes(UUID player) {
-        return player == null ? Set.of() : Set.copyOf(CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES.getOrDefault(player, Set.of()));
-    }
-
-    public static void setChestDrumPullNonPreferred(UUID player, String type, boolean enabled) {
-        setTypeRule(CHEST_DRUM_PULL_NON_PREFERRED_TYPES, player, type, enabled);
-    }
-
-    public static void setChestDrumPullPreferredFoodOf(UUID player, String type, boolean enabled) {
-        setTypeRule(CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES, player, type, enabled);
     }
 
     public static Set<UUID> doNotAttackOwners(UUID player) {
@@ -333,10 +298,6 @@ public final class PlayerDebugSettings {
         setBoolean(ENABLE_MENDING, player, enabled, true);
     }
 
-    public static void setEnableChestXDrumFoodPreferences(UUID player, boolean enabled) {
-        setBoolean(ENABLE_CHEST_DRUM_FOOD_PREFERENCES, player, enabled, true);
-    }
-
     public static void setInventoryLowOnFood(UUID player, boolean enabled) {
         setBoolean(INVENTORY_LOW_ON_FOOD, player, enabled, false);
     }
@@ -359,25 +320,6 @@ public final class PlayerDebugSettings {
         } else {
             INVENTORY_SUMMARY_MINUTES.put(player, normalized);
         }
-        markDirty();
-    }
-
-    public static void setChestDrumRange(UUID player, String dimension, int x, int y, int z, int blockRange, int height) {
-        if (player == null) {
-            return;
-        }
-        int normalizedRange = Math.max(1, Math.min(50, blockRange));
-        int normalizedHeight = Math.max(0, Math.min(10, height));
-        List<ChestDrumRange> ranges = CHEST_DRUM_RANGES.computeIfAbsent(player, ignored -> new ArrayList<>());
-        ranges.removeIf(range -> range.dimension().equals(dimension) && range.x() == x && range.y() == y && range.z() == z);
-        ranges.add(new ChestDrumRange(dimension, x, y, z, normalizedRange, normalizedHeight));
-        markDirty();
-    }
-
-    public static void removeChestDrumRange(UUID player, ChestDrumRange range) {
-        List<ChestDrumRange> ranges = CHEST_DRUM_RANGES.get(player);
-        if (ranges == null || !ranges.remove(range)) return;
-        if (ranges.isEmpty()) CHEST_DRUM_RANGES.remove(player);
         markDirty();
     }
 
@@ -499,23 +441,6 @@ public final class PlayerDebugSettings {
             CompoundTag row = out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag());
             row.putInt("inventorySummaryMinutes", Math.max(1, entry.getValue()));
         }
-        for (Map.Entry<UUID, List<ChestDrumRange>> entry : CHEST_DRUM_RANGES.entrySet()) {
-            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
-            ListTag list = new ListTag();
-            for (ChestDrumRange range : entry.getValue()) {
-                CompoundTag saved = new CompoundTag();
-                saved.putString("dimension", range.dimension());
-                saved.putInt("x", range.x());
-                saved.putInt("y", range.y());
-                saved.putInt("z", range.z());
-                saved.putInt("blockRange", range.blockRange());
-                saved.putInt("height", range.height());
-                list.add(saved);
-            }
-            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("chestDrumRanges", list);
-        }
-        saveTypeRules(out, "chestDrumPullNonPreferredTypes", CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
-        saveTypeRules(out, "chestDrumPullPreferredFoodOfTypes", CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
         for (Map.Entry<UUID, Set<UUID>> entry : DO_NOT_ATTACK_OWNERS.entrySet()) {
             if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
             ListTag list = new ListTag();
@@ -556,18 +481,6 @@ public final class PlayerDebugSettings {
             if (tag.contains("inventorySummaryMinutes", Tag.TAG_INT)) {
                 INVENTORY_SUMMARY_MINUTES.put(player, Math.max(1, tag.getInt("inventorySummaryMinutes")));
             }
-            if (tag.contains("chestDrumRanges", Tag.TAG_LIST)) {
-                ListTag list = tag.getList("chestDrumRanges", Tag.TAG_COMPOUND);
-                List<ChestDrumRange> ranges = new ArrayList<>();
-                for (int i = 0; i < list.size(); i++) {
-                    CompoundTag saved = list.getCompound(i);
-                    ranges.add(new ChestDrumRange(saved.getString("dimension"), saved.getInt("x"), saved.getInt("y"), saved.getInt("z"),
-                            Math.max(1, Math.min(50, saved.getInt("blockRange"))), Math.max(0, Math.min(10, saved.getInt("height")))));
-                }
-                if (!ranges.isEmpty()) CHEST_DRUM_RANGES.put(player, ranges);
-            }
-            loadTypeRules(tag, "chestDrumPullNonPreferredTypes", player, CHEST_DRUM_PULL_NON_PREFERRED_TYPES);
-            loadTypeRules(tag, "chestDrumPullPreferredFoodOfTypes", player, CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES);
             if (tag.contains("doNotAttackOwners", Tag.TAG_LIST)) {
                 ListTag list = tag.getList("doNotAttackOwners", Tag.TAG_COMPOUND);
                 Set<UUID> values = new LinkedHashSet<>();
@@ -601,44 +514,7 @@ public final class PlayerDebugSettings {
             setting.values().clear();
         }
         INVENTORY_SUMMARY_MINUTES.clear();
-        CHEST_DRUM_RANGES.clear();
-        CHEST_DRUM_PULL_NON_PREFERRED_TYPES.clear();
-        CHEST_DRUM_PULL_PREFERRED_FOOD_OF_TYPES.clear();
         DO_NOT_ATTACK_OWNERS.clear();
-    }
-
-    private static void setTypeRule(Map<UUID, Set<String>> rules, UUID player, String type, boolean enabled) {
-        if (player == null || type == null || type.isBlank()) return;
-        String normalized = type.trim().toLowerCase(java.util.Locale.ROOT);
-        Set<String> values = rules.computeIfAbsent(player, ignored -> new LinkedHashSet<>());
-        if (enabled) values.add(normalized);
-        else values.remove(normalized);
-        if (values.isEmpty()) rules.remove(player);
-        markDirty();
-    }
-
-    private static void saveTypeRules(Map<UUID, CompoundTag> out, String key, Map<UUID, Set<String>> rules) {
-        for (Map.Entry<UUID, Set<String>> entry : rules.entrySet()) {
-            if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
-            ListTag list = new ListTag();
-            for (String type : entry.getValue()) {
-                CompoundTag value = new CompoundTag();
-                value.putString("type", type);
-                list.add(value);
-            }
-            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put(key, list);
-        }
-    }
-
-    private static void loadTypeRules(CompoundTag tag, String key, UUID player, Map<UUID, Set<String>> rules) {
-        if (!tag.contains(key, Tag.TAG_LIST)) return;
-        ListTag list = tag.getList(key, Tag.TAG_COMPOUND);
-        Set<String> values = new LinkedHashSet<>();
-        for (int i = 0; i < list.size(); i++) {
-            String type = list.getCompound(i).getString("type").trim().toLowerCase(java.util.Locale.ROOT);
-            if (!type.isBlank()) values.add(type);
-        }
-        if (!values.isEmpty()) rules.put(player, values);
     }
 
     private static void markDirty() {

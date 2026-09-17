@@ -1,0 +1,11 @@
+gradle.projectsEvaluated {
+    def p = rootProject
+    p.sourceSets.test.java.srcDir(p.file('tools/chestdrum_tests/java'))
+    p.sourceSets.test.resources.srcDir(p.file('tools/chestdrum_tests/resources'))
+    p.tasks.register('chestDrumTestJar', Jar) {
+        dependsOn p.tasks.named('testClasses')
+        archiveFileName = 'chestdrum-tests.jar'
+        from p.sourceSets.test.output
+    }
+    p.reobf.create('chestDrumTestJar')
+}

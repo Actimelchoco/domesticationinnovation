@@ -16,6 +16,24 @@ public class DrumBlockEntity extends BlockEntity {
         super(DITileEntityRegistry.DRUM.get(), pos, state);
     }
 
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.LoadedChestDrums.add(this);
+    }
+
+    @Override
+    public void setRemoved() {
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.LoadedChestDrums.remove(this);
+        super.setRemoved();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.LoadedChestDrums.remove(this);
+        super.onChunkUnloaded();
+    }
+
     public UUID getPlacerUUID() {
         return placerUUID;
     }

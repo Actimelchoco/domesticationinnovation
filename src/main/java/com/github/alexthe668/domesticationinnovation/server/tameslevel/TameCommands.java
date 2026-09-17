@@ -196,7 +196,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_MAX_STACKS = 18;
     private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 100;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
-    private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 60L;
+    private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 250L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
     private static final ChatFormatting TAME_HUNGER_MESSAGE_COLOR = ChatFormatting.GOLD;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
@@ -996,40 +996,11 @@ public class TameCommands {
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildChestDrumSettingsCommand() {
         return Commands.literal("chestxdrum")
-                .executes(ctx -> listChestDrumRanges(ctx.getSource()))
+                .executes(ctx -> listChestDrumRanges(ctx.getSource(), false))
+                .then(Commands.literal("deactivated")
+                        .executes(ctx -> listChestDrumRanges(ctx.getSource(), true)))
                 .then(Commands.literal("system")
-                        .executes(ctx -> infoDetail(ctx.getSource(), "chestxdrum system")))
-                .then(Commands.literal("foodPreferences")
-                        .executes(ctx -> chestDrumFoodPreferencesStatus(ctx.getSource()))
-                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ctx -> setChestXDrumFoodPreferences(
-                                        ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("set")
-                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 50))
-                                .then(Commands.argument("height", IntegerArgumentType.integer(0, 10))
-                                        .executes(ctx -> setChestDrumRange(ctx.getSource(),
-                                                IntegerArgumentType.getInteger(ctx, "radius"),
-                                                IntegerArgumentType.getInteger(ctx, "height"))))))
-                .then(Commands.literal("pullNonPreferredFood")
-                        .executes(ctx -> listChestDrumPullNonPreferred(ctx.getSource()))
-                        .then(Commands.argument("type", StringArgumentType.word())
-                                .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
-                                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                        .executes(ctx -> setChestDrumPullNonPreferred(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "type"),
-                                                BoolArgumentType.getBool(ctx, "enabled"))))))
-                .then(Commands.literal("pullPreferredFoodOf")
-                        .executes(ctx -> listChestDrumPullPreferredFoodOf(ctx.getSource()))
-                        .then(Commands.literal("add")
-                                .then(Commands.argument("type", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
-                                        .executes(ctx -> setChestDrumPullPreferredFoodOf(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "type"), true))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("type", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> suggestOwnedTypes(ctx.getSource(), builder))
-                                        .executes(ctx -> setChestDrumPullPreferredFoodOf(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, "type"), false)))));
+                        .executes(ctx -> infoDetail(ctx.getSource(), "chestxdrum system")));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand() {
@@ -4249,7 +4220,7 @@ public class TameCommands {
             ServerLevel level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
             if (level != null) centers.add(new LevelPosition(level, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ)));
         }
-        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(server, ownerUuid)) {
+        for (DrumRange range : validChestDrumRanges(server, ownerUuid)) {
             ResourceLocation dimensionId = ResourceLocation.tryParse(range.dimension());
             ServerLevel level = dimensionId == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
             if (level == null) continue;
@@ -4265,26 +4236,17 @@ public class TameCommands {
         return result;
     }
 
-    private static List<PlayerDebugSettings.ChestDrumRange> validChestDrumRanges(MinecraftServer server, UUID ownerUuid) {
-        List<PlayerDebugSettings.ChestDrumRange> valid = new ArrayList<>();
-        for (PlayerDebugSettings.ChestDrumRange range : PlayerDebugSettings.chestDrumRanges(ownerUuid)) {
-            ResourceLocation dimensionId = ResourceLocation.tryParse(range.dimension());
-            ServerLevel level = dimensionId == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
-            if (level == null) {
-                PlayerDebugSettings.removeChestDrumRange(ownerUuid, range);
-                continue;
+    private record DrumRange(String dimension, int x, int y, int z, int blockRange, int height) { }
+
+    private static List<DrumRange> validChestDrumRanges(MinecraftServer server, UUID ownerUuid) {
+        List<DrumRange> valid = new ArrayList<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (LoadedChestDrums.Chest chest : LoadedChestDrums.chests(level)) {
+                if (!Objects.equals(ownerUuid, chest.owner())) continue;
+                BlockPos pos = chest.pos();
+                valid.add(new DrumRange(level.dimension().location().toString(),
+                        pos.getX(), pos.getY(), pos.getZ(), LoadedChestDrums.RANGE, LoadedChestDrums.HEIGHT));
             }
-            BlockPos inventoryPos = new BlockPos(range.x(), range.y(), range.z());
-            if (!level.hasChunkAt(inventoryPos)) {
-                valid.add(range);
-                continue;
-            }
-            boolean exists = inventoryAccessFromBlockEntity(level.getBlockEntity(inventoryPos), Direction.DOWN) != null
-                    && level.getBlockState(inventoryPos.below()).is(DIBlockRegistry.DRUM.get())
-                    && level.getBlockEntity(inventoryPos.below()) instanceof DrumBlockEntity drum
-                    && ownerUuid.equals(drum.getPlacerUUID());
-            if (exists) valid.add(range);
-            else PlayerDebugSettings.removeChestDrumRange(ownerUuid, range);
         }
         return valid;
     }
@@ -5263,8 +5225,8 @@ public class TameCommands {
                     "Inventory distribute shares compatible food among selected loaded tames. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.",
-                    "Register a container above your drum with /tames chestxdrum set <radius> <height>. On its interval, it refills loaded hungry tames until they reach green.",
-                    "Chest x drum reverse-pull rules can return configured non-preferred food or food preferred by selected tame types from tame inventories to the chest.",
+                    "Containers above loaded drums automatically refill nearby tames of all owners every 250 seconds until they reach green.",
+                    "Chest x drums distribute preferred foods first, then compatible fallback foods, within 25 blocks horizontally and 5 vertically.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -5301,11 +5263,9 @@ public class TameCommands {
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "Drum refill: stand on the container above the drum, then use /tames chestxdrum set <radius> <height>.",
-                    "With chestxdrum foodPreferences true, refill uses only preferred food. With false, compatible fallback food is also allowed. Refill stops at 500 stored food points (green).",
-                    "/tames chestxdrum pullNonPreferredFood <type> <true|false> controls pulling non-preferred food from that tame type back into the chest; default false.",
-                    "/tames chestxdrum pullPreferredFoodOf add|remove <type> pulls that type's preferred foods from other tames, but preserves preferred food on tames of the selected type.",
-                    "Larger configured refill areas run less frequently. Bare chestxdrum and pull-rule commands print their current settings.",
+                    "Place a container above a drum: every 250 seconds it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.",
+                    "Preferred food is distributed first, then compatible fallback food. Refill stops at 500 stored food points (green).",
+                    "/tames chestxdrum lists loaded chest x drums within 250 blocks; /tames chestxdrum system explains feeding.",
                     "=== Notifications ===",
                     "/tames debug inventory lowOnFood|noFood|sum <true|false>",
                     "/tames debug inventory sumMin <minutes>",
@@ -5314,18 +5274,16 @@ public class TameCommands {
         }
         else if (key.equals("chestxdrum") || key.equals("chestxdrum system")) {
             sendInfoPage(p, "Chest x Drum System",
-                    "/tames chestxdrum",
-                    "/tames chestxdrum set <radius> <height>",
-                    "/tames chestxdrum foodPreferences [<true|false>]",
-                    "/tames chestxdrum pullNonPreferredFood [<owned type> <true|false>]",
-                    "/tames chestxdrum pullPreferredFoodOf [add|remove] <owned type>",
-                    "Stand on a container with your drum directly below it, then use set to register that location's radius and height.",
-                    "Bare chestxdrum lists every valid registered location. Larger areas run at longer intervals.",
-                    "On each interval, loaded hungry tames refill until their stored food reaches 500 points.",
-                    "foodPreferences defaults true: true restricts refill to preferred food; false also permits compatible fallback food.",
-                    "pullNonPreferredFood defaults false per type and moves that type's non-preferred stored food back into the chest.",
-                    "pullPreferredFoodOf moves an added type's preferred foods from other tames, while preserving preferred food on tames of the added type.",
-                    "Reverse pulling runs before refill, transfers only what the chest accepts, and persists per owner."
+                    "/tames chestxdrum lists loaded chest x drums within 250 blocks in your dimension, nearest first.",
+                    "/tames chestxdrum system shows this help.",
+                    "/tames chestxdrum deactivated lists nearby deactivated setups and the drum blocking each one.",
+                    "A chest within another active chest x drum's fixed range is deactivated. Fixed position priority selects the active setup.",
+                    "It reactivates automatically when the blocking setup is removed or unloaded. Deactivation changes are announced nearby.",
+                    "Place a container directly above any drum. No registration or ownership requirement is needed for feeding.",
+                    "Every 250 seconds, each loaded chest x drum refills nearby loaded tames belonging to any owner.",
+                    "The fixed area extends 25 blocks in both X/Z directions and 5 blocks up/down from the container: 51 x 51 x 11 blocks.",
+                    "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
+                    "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory."
             );
         }
         else if (key.equals("mode")) {
@@ -6721,24 +6679,6 @@ public class TameCommands {
         if (player == null) return 0;
         PlayerDebugSettings.setEnableMending(player.getUUID(), enabled);
         player.sendSystemMessage(Component.literal("Stored armor Mending " + (enabled ? "enabled" : "disabled") + ".")
-                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    static int setChestXDrumFoodPreferences(CommandSourceStack source, boolean enabled) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        PlayerDebugSettings.setEnableChestXDrumFoodPreferences(player.getUUID(), enabled);
-        player.sendSystemMessage(Component.literal("Chest x drum food preferences " + (enabled ? "enabled" : "disabled") + ".")
-                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    private static int chestDrumFoodPreferencesStatus(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        boolean enabled = PlayerDebugSettings.enableChestXDrumFoodPreferences(player.getUUID());
-        player.sendSystemMessage(Component.literal("Chest x drum food preferences: " + enabled + ".")
                 .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -14086,42 +14026,24 @@ public class TameCommands {
         return 1;
     }
 
-    private static int setChestDrumRange(CommandSourceStack source, int blockRange, int height) {
+    private static int listChestDrumRanges(CommandSourceStack source, boolean deactivatedOnly) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
-        BlockPos inventoryPos = drumInventoryBelowPlayerPosition(player);
-        if (inventoryPos == null) return error(player, "Stand on an inventory with your drum directly beneath it.");
-        String dimension = player.serverLevel().dimension().location().toString();
-        PlayerDebugSettings.setChestDrumRange(player.getUUID(), dimension, inventoryPos.getX(), inventoryPos.getY(), inventoryPos.getZ(), blockRange, height);
-        player.sendSystemMessage(Component.literal("Chest x drum range at " + formatBlockLocation(dimension, inventoryPos) + " set to " + blockRange + " blocks and " + height + " blocks high.")
-                .withStyle(ChatFormatting.GREEN));
-        return 1;
-    }
-
-    private static int listChestDrumRanges(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        List<PlayerDebugSettings.ChestDrumRange> ranges = validChestDrumRanges(source.getServer(), player.getUUID());
-        player.sendSystemMessage(Component.literal("Chest x drum locations:").withStyle(ChatFormatting.GOLD));
-        if (ranges.isEmpty()) {
-            player.sendSystemMessage(Component.literal("<none>").withStyle(ChatFormatting.GRAY));
-            return 1;
+        List<LoadedChestDrums.Status> statuses = LoadedChestDrums.statuses(player.serverLevel()).stream()
+                .filter(status -> !deactivatedOnly || !status.active())
+                .filter(status -> player.blockPosition().distSqr(status.chest().pos()) <= 250.0 * 250.0)
+                .sorted(Comparator.comparingDouble(status -> player.blockPosition().distSqr(status.chest().pos())))
+                .toList();
+        player.sendSystemMessage(Component.literal((deactivatedOnly ? "Deactivated" : "Loaded")
+                + " chest x drums within 250 blocks:").withStyle(ChatFormatting.GOLD));
+        if (statuses.isEmpty()) player.sendSystemMessage(Component.literal("<none>").withStyle(ChatFormatting.GRAY));
+        for (LoadedChestDrums.Status status : statuses) {
+            BlockPos pos = status.chest().pos();
+            player.sendSystemMessage(Component.literal("- " + formatBlockLocation(player.level().dimension().location().toString(), pos)
+                    + " (" + Math.round(Math.sqrt(player.blockPosition().distSqr(pos))) + " blocks away): "
+                    + (status.active() ? "active" : "deactivated; in range of " + status.blocker().toShortString()))
+                    .withStyle(status.active() ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         }
-        for (PlayerDebugSettings.ChestDrumRange range : ranges) {
-            player.sendSystemMessage(Component.literal("- " + formatBlockLocation(range.dimension(), new BlockPos(range.x(), range.y(), range.z()))
-                    + ": range " + range.blockRange() + ", height " + range.height()).withStyle(ChatFormatting.YELLOW));
-        }
-        return ranges.size();
-    }
-
-    private static int setChestDrumPullNonPreferred(CommandSourceStack source, String requestedType, boolean enabled) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        String type = ownedCanonicalType(player.getUUID(), requestedType);
-        if (type == null) return error(player, "You do not own a living tame of type '" + requestedType + "'.");
-        PlayerDebugSettings.setChestDrumPullNonPreferred(player.getUUID(), type, enabled);
-        player.sendSystemMessage(Component.literal("Chest x drum pull non-preferred food for " + shortEntityTypeName(type)
-                + ": " + enabled + ".").withStyle(enabled ? ChatFormatting.YELLOW : ChatFormatting.GREEN));
         return 1;
     }
 
@@ -14146,47 +14068,6 @@ public class TameCommands {
                     .withStyle(ChatFormatting.YELLOW));
         }
         return 1;
-    }
-
-    private static int listChestDrumPullNonPreferred(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        Set<String> types = PlayerDebugSettings.chestDrumPullNonPreferredTypes(player.getUUID());
-        player.sendSystemMessage(Component.literal("Chest x drum types that pull non-preferred food (default false):").withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal(types.isEmpty() ? "<none>" : types.stream()
-                .map(TameCommands::shortEntityTypeName).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.joining(", ")))
-                .withStyle(ChatFormatting.GRAY));
-        return 1;
-    }
-
-    private static int setChestDrumPullPreferredFoodOf(CommandSourceStack source, String requestedType, boolean enabled) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        String type = ownedCanonicalType(player.getUUID(), requestedType);
-        if (type == null) return error(player, "You do not own a living tame of type '" + requestedType + "'.");
-        PlayerDebugSettings.setChestDrumPullPreferredFoodOf(player.getUUID(), type, enabled);
-        player.sendSystemMessage(Component.literal((enabled ? "Added " : "Removed ") + shortEntityTypeName(type)
-                + (enabled ? " to" : " from") + " chest x drum pullPreferredFoodOf.")
-                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    private static int listChestDrumPullPreferredFoodOf(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        Set<String> types = PlayerDebugSettings.chestDrumPullPreferredFoodOfTypes(player.getUUID());
-        player.sendSystemMessage(Component.literal("Chest x drum pulls preferred foods for these types:").withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal(types.isEmpty() ? "<none>" : types.stream()
-                .map(TameCommands::shortEntityTypeName).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.joining(", ")))
-                .withStyle(ChatFormatting.GRAY));
-        return 1;
-    }
-
-    private static String ownedCanonicalType(UUID owner, String requestedType) {
-        for (TameData data : ownedTames(owner)) {
-            if (matchesTypeFilter(data, requestedType)) return tameTypeId(data);
-        }
-        return null;
     }
 
     private static int duelGlowStatus(CommandSourceStack source) {
@@ -14278,21 +14159,6 @@ public class TameCommands {
 
     private static String formatBlockLocation(String dimension, BlockPos pos) {
         return dimension + " [" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "]";
-    }
-
-    private static BlockPos drumInventoryBelowPlayerPosition(ServerPlayer player) {
-        if (player == null) return null;
-        ServerLevel level = player.serverLevel();
-        BlockPos supportPos = BlockPos.containing(player.getX(), player.getBoundingBox().minY - 0.01D, player.getZ());
-        LinkedHashSet<BlockPos> candidates = new LinkedHashSet<>();
-        candidates.add(supportPos);
-        candidates.add(player.blockPosition().below());
-        for (BlockPos pos : candidates) {
-            if (inventoryAccessFromBlockEntity(level.getBlockEntity(pos), Direction.UP) == null) continue;
-            if (!level.getBlockState(pos.below()).is(DIBlockRegistry.DRUM.get())) continue;
-            if (level.getBlockEntity(pos.below()) instanceof DrumBlockEntity drum && player.getUUID().equals(drum.getPlacerUUID())) return pos.immutable();
-        }
-        return null;
     }
 
     private static int guardianAddSelectionToGroup(CommandSourceStack source, String setName, String selectionRaw) {
@@ -22755,10 +22621,7 @@ public class TameCommands {
             return;
         }
         long now = server.overworld().getGameTime();
-        if (now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L) {
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) validChestDrumRanges(server, player.getUUID());
-        }
-        boolean changed = false;
+        boolean changed = now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L && feedLoadedChestDrums(server);
         Set<UUID> processed = new HashSet<>();
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || data.uuid == null || data.dead || data.stored || !processed.add(data.uuid)) {
@@ -22767,10 +22630,6 @@ public class TameCommands {
             LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
             if (tame == null || !tame.isAlive()) {
                 continue;
-            }
-            changed |= pullHungerFoodIntoNearbyDrumChest(tame, data, now);
-            if (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
-                changed |= refillHungerFromNearbyDrumChest(tame, data, now);
             }
             if (data.hungerForcedSit && totalHungerFoodPoints(data) > 0) {
                 if (data.hasHome) {
@@ -23171,125 +23030,113 @@ public class TameCommands {
         return sent;
     }
 
-    private static boolean refillHungerFromNearbyDrumChest(LivingEntity tame, TameData data, long now) {
-        if (tame == null || data == null || !(tame.level() instanceof ServerLevel level)) {
-            return false;
+    private static final class DrumFeedTarget {
+        final LivingEntity tame;
+        final TameData data;
+        long storedSaturation;
+        boolean fed;
+
+        DrumFeedTarget(LivingEntity tame, TameData data) {
+            this.tame = tame;
+            this.data = data;
+            for (ItemStack stack : data.hungerInventory) {
+                storedSaturation += (long) Math.max(0, hungerFoodSaturation(stack, data, tame)) * stack.getCount();
+            }
         }
-        UUID ownerUuid = data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
-        BlockPos center = tame.blockPosition();
-        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(level.getServer(), ownerUuid)) {
-            if (!level.dimension().location().toString().equals(range.dimension())) continue;
-            BlockPos pos = new BlockPos(range.x(), range.y(), range.z());
-            if (Math.abs(center.getX() - pos.getX()) > range.blockRange()
-                    || Math.abs(center.getZ() - pos.getZ()) > range.blockRange()
-                    || Math.abs(center.getY() - pos.getY()) > range.height()) continue;
-            if (now % chestDrumFeedIntervalTicks(range) != 0L) continue;
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (blockEntity == null) {
-                continue;
-            }
-            LazyOptional<IItemHandler> optional = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER);
-            IItemHandler handler = optional.orElse(null);
-            if (handler == null) {
-                continue;
-            }
-            boolean changed = false;
-            List<Integer> slotOrder = new ArrayList<>();
-            for (int slot = 0; slot < handler.getSlots(); slot++) slotOrder.add(slot);
-            boolean foodPreferences = PlayerDebugSettings.enableChestXDrumFoodPreferences(ownerUuid);
-            if (foodPreferences) {
-                slotOrder.sort(Comparator.comparingInt(slot ->
-                        isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame) ? 0 : 1));
-            }
-            for (int slot : slotOrder) {
-                if (foodPreferences && !isPreferredDistributionFood(handler.getStackInSlot(slot), data, tame)) continue;
-                if (totalHungerFoodPoints(data) >= TAME_HUNGER_GREEN_FOOD_POINTS) break;
-                while (totalHungerFoodPoints(data) < TAME_HUNGER_GREEN_FOOD_POINTS) {
-                    ItemStack simulated = handler.extractItem(slot, 1, true);
-                    if (simulated.isEmpty() || hungerFoodPoints(simulated, data, tame) <= 0) break;
-                    ItemStack one = simulated.copy();
-                    one.setCount(1);
-                    if (!addHungerFoodStack(data, one)) break;
-                    handler.extractItem(slot, 1, false);
-                    resetHungerFoodNotifications(data);
-                    changed = true;
+
+        boolean full() {
+            return storedSaturation >= (long) TAME_HUNGER_GREEN_FOOD_POINTS * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
+        }
+    }
+
+    private record DrumFeedJob(LoadedChestDrums.Chest chest, List<Integer> occupiedSlots, List<DrumFeedTarget> targets) { }
+
+    private static boolean feedLoadedChestDrums(MinecraftServer server) {
+        List<DrumFeedJob> jobs = new ArrayList<>();
+        Map<UUID, DrumFeedTarget> targets = new HashMap<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (LoadedChestDrums.Chest chest : LoadedChestDrums.activeChests(level)) {
+                List<Integer> occupiedSlots = new ArrayList<>();
+                for (int slot = 0; slot < chest.inventory().getSlots(); slot++) {
+                    if (!chest.inventory().getStackInSlot(slot).isEmpty()) occupiedSlots.add(slot);
+                }
+                if (occupiedSlots.isEmpty()) continue;
+                BlockPos pos = chest.pos();
+                AABB area = new AABB(pos).inflate(LoadedChestDrums.RANGE, LoadedChestDrums.HEIGHT, LoadedChestDrums.RANGE);
+                List<DrumFeedTarget> nearby = new ArrayList<>();
+                // Minecraft's section index finds local entities without scanning blocks or all registered tames.
+                for (LivingEntity tame : level.getEntitiesOfClass(LivingEntity.class, area,
+                        entity -> entity.isAlive() && LoadedChestDrums.inRange(pos, entity.blockPosition()))) {
+                    TameData data = TameRegistry.get(tame.getUUID());
+                    if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+                    if (data == null || data.dead || data.stored) continue;
+                    DrumFeedTarget target = targets.get(tame.getUUID());
+                    if (target == null) {
+                        target = new DrumFeedTarget(tame, data);
+                        targets.put(tame.getUUID(), target);
+                    }
+                    if (!target.full()) nearby.add(target);
+                }
+                if (!nearby.isEmpty()) {
+                    nearby.sort(Comparator.comparingLong(target -> target.storedSaturation));
+                    jobs.add(new DrumFeedJob(chest, occupiedSlots, nearby));
                 }
             }
-            if (changed) {
-                blockEntity.setChanged();
-                return true;
+        }
+        boolean changed = false;
+        // Complete preferred distribution across ALL chests before any fallback transfer.
+        for (boolean preferred : new boolean[]{true, false}) {
+            for (DrumFeedJob job : jobs) {
+                boolean chestChanged = false;
+                for (DrumFeedTarget target : job.targets()) {
+                    if (!target.full()) chestChanged |= feedFromDrumChest(job.chest().inventory(), job.occupiedSlots(), target, preferred);
+                }
+                if (chestChanged) job.chest().blockEntity().setChanged();
+                changed |= chestChanged;
             }
         }
-        return false;
-    }
-
-    private static boolean pullHungerFoodIntoNearbyDrumChest(LivingEntity tame, TameData data, long now) {
-        if (tame == null || data == null || data.hungerInventory.isEmpty() || !(tame.level() instanceof ServerLevel level)) return false;
-        UUID ownerUuid = data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
-        Set<String> nonPreferredTypes = PlayerDebugSettings.chestDrumPullNonPreferredTypes(ownerUuid);
-        Set<String> preferredFoodTypes = PlayerDebugSettings.chestDrumPullPreferredFoodOfTypes(ownerUuid);
-        if (nonPreferredTypes.isEmpty() && preferredFoodTypes.isEmpty()) return false;
-        BlockPos center = tame.blockPosition();
-        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(level.getServer(), ownerUuid)) {
-            if (!level.dimension().location().toString().equals(range.dimension())) continue;
-            BlockPos pos = new BlockPos(range.x(), range.y(), range.z());
-            if (Math.abs(center.getX() - pos.getX()) > range.blockRange()
-                    || Math.abs(center.getZ() - pos.getZ()) > range.blockRange()
-                    || Math.abs(center.getY() - pos.getY()) > range.height()) continue;
-            if (now % chestDrumFeedIntervalTicks(range) != 0L) continue;
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (blockEntity == null) continue;
-            IItemHandler handler = blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
-            if (handler == null) continue;
-            boolean changed = false;
-            for (int i = 0; i < data.hungerInventory.size(); i++) {
-                ItemStack stored = data.hungerInventory.get(i);
-                if (stored == null || stored.isEmpty() || !shouldPullTameFood(stored, data, tame, ownerUuid,
-                        nonPreferredTypes, preferredFoodTypes)) continue;
-                ItemStack remainder = insertIntoHandler(handler, stored.copy());
-                int moved = stored.getCount() - remainder.getCount();
-                if (moved <= 0) continue;
-                stored.shrink(moved);
-                if (stored.isEmpty()) data.hungerInventory.remove(i--);
-                changed = true;
-            }
-            if (changed) {
-                blockEntity.setChanged();
-                return true;
+        if (changed) {
+            for (DrumFeedTarget target : targets.values()) {
+                if (target.fed) resetHungerFoodNotifications(target.data);
             }
         }
-        return false;
+        return changed;
     }
 
-    private static boolean shouldPullTameFood(ItemStack stack, TameData sourceData, LivingEntity sourceTame, UUID ownerUuid,
-                                              Set<String> nonPreferredTypes, Set<String> preferredFoodTypes) {
-        boolean preferredBySource = isPreferredDistributionFood(stack, sourceData, sourceTame);
-        String sourceType = tameTypeId(sourceData);
-        if (nonPreferredTypes.contains(sourceType) && !preferredBySource) return true;
-        if (preferredFoodTypes.isEmpty()) return false;
-        if (preferredFoodTypes.contains(sourceType) && preferredBySource) return false;
-        for (TameData candidate : ownedTames(ownerUuid)) {
-            if (candidate == null || !preferredFoodTypes.contains(tameTypeId(candidate))) continue;
-            if (isPreferredDistributionFood(stack, candidate, null)) return true;
+    private static boolean feedFromDrumChest(IItemHandler handler, List<Integer> occupiedSlots, DrumFeedTarget target, boolean preferred) {
+        boolean changed = false;
+        for (int slot : occupiedSlots) {
+            if (target.full()) break;
+            ItemStack available = handler.getStackInSlot(slot);
+            if (available.isEmpty() || isPreferredDistributionFood(available, target.data, target.tame) != preferred) continue;
+            int saturation = hungerFoodSaturation(available, target.data, target.tame);
+            if (saturation <= 0) continue;
+            long deficit = (long) TAME_HUNGER_GREEN_FOOD_POINTS * TAME_HUNGER_SATURATION_PER_FOOD_POINT - target.storedSaturation;
+            int wanted = (int) Math.min(available.getCount(), (deficit + saturation - 1) / saturation);
+            int capacity = Math.max(0, TAME_HUNGER_MAX_STACKS - target.data.hungerInventory.size()) * available.getMaxStackSize();
+            for (ItemStack stored : target.data.hungerInventory) {
+                if (ItemStack.isSameItemSameTags(stored, available)) capacity += Math.max(0, stored.getMaxStackSize() - stored.getCount());
+            }
+            wanted = Math.min(wanted, capacity);
+            if (wanted <= 0) continue;
+            ItemStack simulated = handler.extractItem(slot, wanted, true);
+            if (simulated.isEmpty() || !ItemStack.isSameItemSameTags(simulated, available)) continue;
+            ItemStack extracted = handler.extractItem(slot, Math.min(wanted, simulated.getCount()), false);
+            if (extracted.isEmpty()) continue;
+            int count = extracted.getCount();
+            // Extract first so a handler refusing extraction can never duplicate food.
+            addHungerFoodStack(target.data, extracted, target.tame);
+            int moved = count - extracted.getCount();
+            target.storedSaturation += (long) saturation * moved;
+            changed |= moved > 0;
+            target.fed |= moved > 0;
+            // Preserve any unexpected remainder from a nonstandard inventory implementation.
+            if (!extracted.isEmpty()) {
+                ItemStack remainder = net.minecraftforge.items.ItemHandlerHelper.insertItemStacked(handler, extracted, false);
+                if (!remainder.isEmpty()) target.tame.spawnAtLocation(remainder);
+            }
         }
-        return false;
-    }
-
-    private static ItemStack insertIntoHandler(IItemHandler handler, ItemStack stack) {
-        ItemStack remainder = stack;
-        for (int slot = 0; slot < handler.getSlots() && !remainder.isEmpty(); slot++) {
-            remainder = handler.insertItem(slot, remainder, false);
-        }
-        return remainder;
-    }
-
-    private static long chestDrumFeedIntervalTicks(PlayerDebugSettings.ChestDrumRange range) {
-        long configuredVolume = (2L * range.blockRange() + 1L) * (2L * range.blockRange() + 1L) * (2L * range.height() + 1L);
-        long defaultVolume = (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_BLOCK_RANGE + 1L)
-                * (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_BLOCK_RANGE + 1L)
-                * (2L * PlayerDebugSettings.DEFAULT_CHEST_DRUM_HEIGHT + 1L);
-        long multiplier = Math.max(1L, (configuredVolume + defaultVolume - 1L) / defaultVolume);
-        return TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS * multiplier;
+        return changed;
     }
 
     private static int hungerInventoryOpen(CommandSourceStack source, String name) {
@@ -23626,37 +23473,87 @@ public class TameCommands {
         return null;
     }
 
+    private static final class DistributionShare {
+        final DrumFeedTarget target;
+        final int saturation;
+        final int order;
+        int capacity;
+        int planned;
+
+        DistributionShare(DrumFeedTarget target, int saturation, int capacity, int order) {
+            this.target = target;
+            this.saturation = saturation;
+            this.capacity = capacity;
+            this.order = order;
+        }
+    }
+
     private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory, boolean preferredOnly) {
         int moved = 0;
-        List<Integer> slotOrder = new ArrayList<>();
-        for (int slot = 0; slot < inventory.getContainerSize(); slot++) slotOrder.add(slot);
-        for (int slot : slotOrder) {
-            while (true) {
-                ItemStack sourceStack = inventory.getItem(slot);
-                if (sourceStack == null || sourceStack.isEmpty()) break;
-                ItemStack one = sourceStack.copy();
-                one.setCount(1);
-                List<TameData> accepting = selected.stream()
-                        .filter(data -> canAddHungerFoodStack(data, one))
-                        .filter(data -> !preferredOnly || isPreferredDistributionFood(one, data,
-                                findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId)))
-                        .sorted(Comparator.comparingInt(TameCommands::totalHungerFoodPoints))
-                        .collect(Collectors.toCollection(ArrayList::new));
-                if (accepting.isEmpty()) break;
-                ItemStack extracted = inventory.remove(slot, 1);
-                if (extracted == null || extracted.isEmpty()) break;
-                extracted.setCount(1);
-                TameData target = accepting.get(0);
-                if (!addHungerFoodStack(target, extracted)) break;
-                target.hungerEmptyNotified = false;
-                resetHungerFoodNotifications(target);
-                moved++;
+        List<DrumFeedTarget> targets = new ArrayList<>();
+        Set<UUID> seen = new HashSet<>();
+        for (TameData data : selected) {
+            if (data == null || !seen.add(data.uuid)) continue;
+            LivingEntity tame = findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId);
+            if (tame != null && tame.isAlive()) targets.add(new DrumFeedTarget(tame, data));
+        }
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack source = inventory.getItem(slot);
+            if (source == null || source.isEmpty()) continue;
+            List<DistributionShare> shares = new ArrayList<>();
+            java.util.PriorityQueue<DistributionShare> queue = new java.util.PriorityQueue<>(
+                    Comparator.<DistributionShare>comparingLong(share -> share.target.storedSaturation)
+                            .thenComparingInt(share -> share.order));
+            for (int i = 0; i < targets.size(); i++) {
+                DrumFeedTarget target = targets.get(i);
+                if (preferredOnly && !isPreferredDistributionFood(source, target.data, target.tame)) continue;
+                int saturation = hungerFoodSaturation(source, target.data, target.tame);
+                if (saturation <= 0) continue;
+                int capacity = Math.max(0, TAME_HUNGER_MAX_STACKS - target.data.hungerInventory.size()) * source.getMaxStackSize();
+                for (ItemStack stored : target.data.hungerInventory) {
+                    if (ItemStack.isSameItemSameTags(stored, source)) capacity += Math.max(0, stored.getMaxStackSize() - stored.getCount());
+                }
+                if (capacity <= 0) continue;
+                DistributionShare share = new DistributionShare(target, saturation, capacity, i);
+                shares.add(share);
+                queue.add(share);
+            }
+            // Balance using cached totals. No entity lookup, food predicate, inventory scan,
+            // stack allocation or full-list sort occurs for each individual food item.
+            int remaining = source.getCount();
+            while (remaining > 0 && !queue.isEmpty()) {
+                DistributionShare share = queue.remove();
+                long untilNext = queue.isEmpty() ? remaining : Math.max(1L,
+                        (queue.peek().target.storedSaturation - share.target.storedSaturation + share.saturation - 1) / share.saturation);
+                int count = (int) Math.min(Math.min(remaining, share.capacity), untilNext);
+                share.planned += count;
+                share.capacity -= count;
+                share.target.storedSaturation += (long) count * share.saturation;
+                remaining -= count;
+                if (share.capacity > 0) queue.add(share);
+            }
+            for (DistributionShare share : shares) {
+                if (share.planned == 0) continue;
+                ItemStack extracted = inventory.remove(slot, share.planned);
+                int accepted = 0;
+                if (extracted != null && !extracted.isEmpty()) {
+                    int count = extracted.getCount();
+                    addHungerFoodStack(share.target.data, extracted, share.target.tame);
+                    accepted = count - extracted.getCount();
+                    if (!extracted.isEmpty()) player.drop(extracted, false);
+                }
+                share.target.storedSaturation -= (long) (share.planned - accepted) * share.saturation;
+                share.target.fed |= accepted > 0;
+                moved += accepted;
             }
         }
         if (moved <= 0) {
             return hungerMessage(player, preferredOnly
                     ? "The inventory below you has no food preferred by the selected loaded tames, or their inventories are full."
                     : "The inventory below you has no compatible food or selected tames are full.");
+        }
+        for (DrumFeedTarget target : targets) {
+            if (target.fed) resetHungerFoodNotifications(target.data);
         }
         TameRegistry.markDirty();
         player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) from the inventory to loaded tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
@@ -25381,7 +25278,7 @@ public class TameCommands {
         ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, bedDimension));
         if (level == null) return null;
         BlockPos bedPos = new BlockPos(data.petBedX, data.petBedY, data.petBedZ);
-        for (PlayerDebugSettings.ChestDrumRange range : validChestDrumRanges(server, data.ownerUUID)) {
+        for (DrumRange range : validChestDrumRanges(server, data.ownerUUID)) {
             if (!data.petBedDimension.equals(range.dimension())) continue;
             BlockPos inventoryPos = new BlockPos(range.x(), range.y(), range.z());
             if (Math.abs(bedPos.getX() - inventoryPos.getX()) > range.blockRange()
