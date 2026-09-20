@@ -6,6 +6,7 @@ gradle.projectsEvaluated {
         dependsOn p.tasks.named('testClasses')
         archiveFileName = 'chestdrum-tests.jar'
         from p.sourceSets.test.output
+        exclude "com/github/alexthe668/domesticationinnovation/server/tameslevel/FoodDistributionPlannerTests.class"
     }
     p.reobf.create('chestDrumTestJar')
 }

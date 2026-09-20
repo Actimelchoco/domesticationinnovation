@@ -52,47 +52,6 @@ public class ChestDrumTests {
         var method = TameCommands.class.getDeclaredMethod("feedLoadedChestDrums", MinecraftServer.class);
         method.setAccessible(true); method.invoke(null, server);
     }
-    private static void testManualDistribution(MinecraftServer server, ServerLevel level) throws Exception {
-        var player = net.minecraftforge.common.util.FakePlayerFactory.get(level,
-                new com.mojang.authlib.GameProfile(UUID.randomUUID(), "FoodTest"));
-        List<TameData> selected = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            Wolf wolf = pet(level, 0, 80, 0);
-            wolf.setOwnerUUID(player.getUUID());
-            TameData data = TameRegistry.get(wolf.getUUID());
-            data.ownerUUID = player.getUUID();
-            selected.add(data);
-        }
-        var inventory = new net.minecraft.world.SimpleContainer(54);
-        for (int slot = 0; slot < 54; slot++) inventory.setItem(slot, new ItemStack(Items.COOKED_BEEF, 64));
-        Class<?> accessType = Class.forName(TameCommands.class.getName() + "$InventoryAccess");
-        Class<?> implementation = Class.forName(TameCommands.class.getName() + "$ContainerInventoryAccess");
-        var constructor = implementation.getDeclaredConstructor(net.minecraft.world.Container.class);
-        constructor.setAccessible(true);
-        Object access = constructor.newInstance(inventory);
-        var distribute = TameCommands.class.getDeclaredMethod("distributeHungerFoodFromInventory",
-                net.minecraft.server.level.ServerPlayer.class, List.class, accessType, boolean.class);
-        distribute.setAccessible(true);
-        long started = System.nanoTime();
-        int moved = (int) distribute.invoke(null, player, selected, access, false);
-        long elapsed = System.nanoTime() - started;
-        check(moved == 3456 && inventory.isEmpty(), "manual distribution moves thousands of items without loss");
-        int min = Integer.MAX_VALUE, max = 0, total = 0;
-        for (TameData data : selected) {
-            int count = data.hungerInventory.stream().mapToInt(ItemStack::getCount).sum();
-            min = Math.min(min, count); max = Math.max(max, count); total += count;
-        }
-        check(total == 3456 && max - min <= 1, "manual distribution remains balanced across 40 tames");
-        for (TameData data : selected) {
-            data.hungerInventory.clear();
-            for (int i = 0; i < 18; i++) data.hungerInventory.add(new ItemStack(Items.STONE, 64));
-        }
-        inventory.setItem(0, new ItemStack(Items.COOKED_BEEF, 64));
-        check((int) distribute.invoke(null, player, selected, access, false) == 0 && inventory.getItem(0).getCount() == 64,
-                "full tame inventories leave source food untouched");
-        System.out.println("MANUAL_DISTRIBUTION_3456_ITEMS_40_TAMES_MS=" + elapsed / 1_000_000.0);
-    }
-
     @SubscribeEvent public static void start(ServerStartedEvent event) {
         ServerLevel level = event.getServer().overworld();
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) {
@@ -110,7 +69,12 @@ public class ChestDrumTests {
         ready = event.getServer().getTickCount() + 40;
     }
     @SubscribeEvent public static void tick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || ready < 0 || event.getServer().getTickCount() < ready) return;
+        if (event.phase != TickEvent.Phase.END) return;
+        if (AsyncFoodDistributionTests.active()) {
+            AsyncFoodDistributionTests.tick(event.getServer());
+            return;
+        }
+        if (ready < 0 || event.getServer().getTickCount() < ready) return;
         ready = -1;
         MinecraftServer server = event.getServer();
         try {
@@ -211,10 +175,10 @@ public class ChestDrumTests {
             check(LoadedChestDrums.chests(level).size() == 1, "container placed after drum discovered");
             level.removeBlock(CHEST.below(), false);
             check(LoadedChestDrums.chests(level).isEmpty(), "removed drum cannot feed");
-            testManualDistribution(server, level);
+            AsyncFoodDistributionTests.start(server, level);
             System.out.println("CHEST_DRUM_TESTS_PASS checks=" + checks);
         } catch (Throwable failure) {
             System.out.println("CHEST_DRUM_TESTS_FAIL"); failure.printStackTrace();
-        } finally { server.halt(false); }
+        } finally { if (!AsyncFoodDistributionTests.active()) server.halt(false); }
     }
 }

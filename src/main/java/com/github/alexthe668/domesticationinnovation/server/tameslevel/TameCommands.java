@@ -3895,6 +3895,7 @@ public class TameCommands {
         if (event.phase != TickEvent.Phase.END) return;
         MinecraftServer server = event.getServer();
         if (server == null) return;
+        processFoodDistributions(server);
         processPendingLiveEndArenaReset(server);
         if (server.getTickCount() % 20 == 0) {
             cleanupSimpleDuelState(server, true);
@@ -3923,6 +3924,7 @@ public class TameCommands {
         if (server == null) {
             return;
         }
+        stopFoodDistributions();
         restoreRankedSessionBeforeShutdown(server);
     }
 
@@ -5222,7 +5224,7 @@ public class TameCommands {
                     "superfood lists globally configured foods that every tame can eat.",
                     "Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.",
                     "Tames keep up to 18 stacks of accepted food-valued items. Loaded tames consume saturation while following, wandering, or fighting outside duels.",
-                    "Inventory distribute shares compatible food among selected loaded tames. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
+                    "Inventory distribute snapshots the chest and selected loaded tames, plans in the background, then transfers food to one tame per tick. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.",
                     "Containers above loaded drums automatically refill nearby tames of all owners every 250 seconds until they reach green.",
@@ -23473,91 +23475,205 @@ public class TameCommands {
         return null;
     }
 
-    private static final class DistributionShare {
-        final DrumFeedTarget target;
-        final int saturation;
-        final int order;
-        int capacity;
-        int planned;
+    private record DistributionFoodKey(net.minecraft.world.item.Item item, CompoundTag tag) { }
+    private record DistributionRecipient(UUID uuid, UUID tlId) { }
+    private static final List<PendingFoodDistribution> FOOD_DISTRIBUTIONS = new ArrayList<>();
+    private static java.util.concurrent.ExecutorService foodDistributionExecutor;
 
-        DistributionShare(DrumFeedTarget target, int saturation, int capacity, int order) {
-            this.target = target;
-            this.saturation = saturation;
-            this.capacity = capacity;
-            this.order = order;
+    private static final class PendingFoodDistribution {
+        final UUID owner;
+        final ServerLevel level;
+        final BlockEntity source;
+        final List<ItemStack> samples;
+        final List<DistributionRecipient> recipients;
+        final boolean preferredOnly;
+        final java.util.concurrent.CompletableFuture<FoodDistributionPlanner.Plan> future;
+        int next;
+        int moved;
+
+        PendingFoodDistribution(UUID owner, ServerLevel level, BlockEntity source, List<ItemStack> samples,
+                                List<DistributionRecipient> recipients, boolean preferredOnly,
+                                java.util.concurrent.CompletableFuture<FoodDistributionPlanner.Plan> future) {
+            this.owner = owner;
+            this.level = level;
+            this.source = source;
+            this.samples = List.copyOf(samples);
+            this.recipients = List.copyOf(recipients);
+            this.preferredOnly = preferredOnly;
+            this.future = future;
         }
     }
 
     private static int distributeHungerFoodFromInventory(ServerPlayer player, List<TameData> selected, InventoryAccess inventory, boolean preferredOnly) {
-        int moved = 0;
-        List<DrumFeedTarget> targets = new ArrayList<>();
+        if (!(inventory.identity() instanceof BlockEntity source) || !(source.getLevel() instanceof ServerLevel level)) {
+            return hungerMessage(player, "Stand on a loaded inventory to distribute food.");
+        }
+        if (FOOD_DISTRIBUTIONS.stream().anyMatch(job -> job.owner.equals(player.getUUID()) || job.source == source)) {
+            return hungerMessage(player, "A food distribution for you or this inventory is already pending.");
+        }
+        if (FOOD_DISTRIBUTIONS.size() >= 16) return hungerMessage(player, "Food distribution is busy; try again shortly.");
+        // Capture world-dependent food predicates and inventory contents on the server thread.
+        List<ItemStack> samples = new ArrayList<>();
+        Map<DistributionFoodKey, Integer> types = new HashMap<>();
+        List<FoodDistributionPlanner.Food> foods = new ArrayList<>();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack == null || stack.isEmpty()) continue;
+            DistributionFoodKey key = new DistributionFoodKey(stack.getItem(), stack.hasTag() ? stack.getTag().copy() : null);
+            Integer type = types.get(key);
+            if (type == null) {
+                type = samples.size();
+                ItemStack sample = stack.copy();
+                sample.setCount(1);
+                samples.add(sample);
+                types.put(key, type);
+            }
+            foods.add(new FoodDistributionPlanner.Food(slot, type, stack.getCount()));
+        }
+        if (foods.isEmpty()) return hungerMessage(player, "The inventory has no food to distribute.");
+        List<DistributionRecipient> recipients = new ArrayList<>();
+        List<FoodDistributionPlanner.Target> targets = new ArrayList<>();
         Set<UUID> seen = new HashSet<>();
         for (TameData data : selected) {
-            if (data == null || !seen.add(data.uuid)) continue;
+            if (data == null || data.dead || data.stored || !player.getUUID().equals(data.ownerUUID) || !seen.add(data.uuid)) continue;
             LivingEntity tame = findLoadedLivingTameByIdentity(player.getServer(), data.uuid, data.tlId);
-            if (tame != null && tame.isAlive()) targets.add(new DrumFeedTarget(tame, data));
-        }
-        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-            ItemStack source = inventory.getItem(slot);
-            if (source == null || source.isEmpty()) continue;
-            List<DistributionShare> shares = new ArrayList<>();
-            java.util.PriorityQueue<DistributionShare> queue = new java.util.PriorityQueue<>(
-                    Comparator.<DistributionShare>comparingLong(share -> share.target.storedSaturation)
-                            .thenComparingInt(share -> share.order));
-            for (int i = 0; i < targets.size(); i++) {
-                DrumFeedTarget target = targets.get(i);
-                if (preferredOnly && !isPreferredDistributionFood(source, target.data, target.tame)) continue;
-                int saturation = hungerFoodSaturation(source, target.data, target.tame);
-                if (saturation <= 0) continue;
-                int capacity = Math.max(0, TAME_HUNGER_MAX_STACKS - target.data.hungerInventory.size()) * source.getMaxStackSize();
-                for (ItemStack stored : target.data.hungerInventory) {
-                    if (ItemStack.isSameItemSameTags(stored, source)) capacity += Math.max(0, stored.getMaxStackSize() - stored.getCount());
+            if (tame == null || !tame.isAlive()) continue;
+            int[] nutrition = new int[samples.size()];
+            int[] partial = new int[samples.size()];
+            boolean acceptsAny = false;
+            for (int type = 0; type < samples.size(); type++) {
+                ItemStack sample = samples.get(type);
+                if (!preferredOnly || isPreferredDistributionFood(sample, data, tame)) {
+                    nutrition[type] = hungerFoodSaturation(sample, data, tame);
                 }
-                if (capacity <= 0) continue;
-                DistributionShare share = new DistributionShare(target, saturation, capacity, i);
-                shares.add(share);
-                queue.add(share);
-            }
-            // Balance using cached totals. No entity lookup, food predicate, inventory scan,
-            // stack allocation or full-list sort occurs for each individual food item.
-            int remaining = source.getCount();
-            while (remaining > 0 && !queue.isEmpty()) {
-                DistributionShare share = queue.remove();
-                long untilNext = queue.isEmpty() ? remaining : Math.max(1L,
-                        (queue.peek().target.storedSaturation - share.target.storedSaturation + share.saturation - 1) / share.saturation);
-                int count = (int) Math.min(Math.min(remaining, share.capacity), untilNext);
-                share.planned += count;
-                share.capacity -= count;
-                share.target.storedSaturation += (long) count * share.saturation;
-                remaining -= count;
-                if (share.capacity > 0) queue.add(share);
-            }
-            for (DistributionShare share : shares) {
-                if (share.planned == 0) continue;
-                ItemStack extracted = inventory.remove(slot, share.planned);
-                int accepted = 0;
-                if (extracted != null && !extracted.isEmpty()) {
-                    int count = extracted.getCount();
-                    addHungerFoodStack(share.target.data, extracted, share.target.tame);
-                    accepted = count - extracted.getCount();
-                    if (!extracted.isEmpty()) player.drop(extracted, false);
+                acceptsAny |= nutrition[type] > 0;
+                for (ItemStack stored : data.hungerInventory) {
+                    if (ItemStack.isSameItemSameTags(stored, sample)) partial[type] += Math.max(0, stored.getMaxStackSize() - stored.getCount());
                 }
-                share.target.storedSaturation -= (long) (share.planned - accepted) * share.saturation;
-                share.target.fed |= accepted > 0;
-                moved += accepted;
             }
+            if (!acceptsAny) continue;
+            long saturation = 0;
+            for (ItemStack stored : data.hungerInventory) saturation += (long) Math.max(0, hungerFoodSaturation(stored, data, tame)) * stored.getCount();
+            targets.add(new FoodDistributionPlanner.Target(saturation,
+                    Math.max(0, TAME_HUNGER_MAX_STACKS - data.hungerInventory.size()), partial, nutrition));
+            recipients.add(new DistributionRecipient(data.uuid, data.tlId));
         }
-        if (moved <= 0) {
-            return hungerMessage(player, preferredOnly
-                    ? "The inventory below you has no food preferred by the selected loaded tames, or their inventories are full."
-                    : "The inventory below you has no compatible food or selected tames are full.");
+        if (targets.isEmpty()) return hungerMessage(player, "No selected loaded tame can accept this food.");
+        int[] stackSizes = samples.stream().mapToInt(ItemStack::getMaxStackSize).toArray();
+        FoodDistributionPlanner.Snapshot snapshot = new FoodDistributionPlanner.Snapshot(stackSizes, foods, targets);
+        if (foodDistributionExecutor == null) {
+            foodDistributionExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+                Thread worker = new Thread(task, "DI-food-distribution");
+                worker.setDaemon(true);
+                return worker;
+            });
         }
-        for (DrumFeedTarget target : targets) {
-            if (target.fed) resetHungerFoodNotifications(target.data);
+        // Only the numeric snapshot crosses the thread boundary. Live references remain in the main-thread job.
+        var future = java.util.concurrent.CompletableFuture.supplyAsync(() -> FoodDistributionPlanner.plan(snapshot), foodDistributionExecutor);
+        FOOD_DISTRIBUTIONS.add(new PendingFoodDistribution(player.getUUID(), level, source, samples, recipients, preferredOnly, future));
+        player.sendSystemMessage(Component.literal("Calculating food distribution; transfers will run for one tame per tick.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+        return 1;
+    }
+
+    private static void processFoodDistributions(MinecraftServer server) {
+        for (int index = 0; index < FOOD_DISTRIBUTIONS.size(); index++) {
+            PendingFoodDistribution job = FOOD_DISTRIBUTIONS.get(index);
+            if (!job.future.isDone()) continue;
+            if (job.future.isCompletedExceptionally() || job.future.isCancelled()) {
+                finishFoodDistribution(server, job, "Food distribution calculation failed; no remaining transfers were made.");
+                FOOD_DISTRIBUTIONS.remove(index--);
+                continue;
+            }
+            // getChunkNow never loads a chunk on behalf of a stale plan.
+            BlockPos pos = job.source.getBlockPos();
+            LevelChunk chunk = job.level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            InventoryAccess live = chunk != null && !job.source.isRemoved() && chunk.getBlockEntity(pos) == job.source
+                    ? inventoryAccessFromBlockEntity(job.source, Direction.UP) : null;
+            if (live == null) {
+                finishFoodDistribution(server, job, "Food distribution stopped: source inventory is gone or unloaded.");
+                FOOD_DISTRIBUTIONS.remove(index--);
+                continue;
+            }
+            FoodDistributionPlanner.Plan plan = job.future.join(); // Already completed; never blocks the server.
+            if (job.next >= job.recipients.size()) {
+                finishFoodDistribution(server, job, "Food distribution complete.");
+                FOOD_DISTRIBUTIONS.remove(index--);
+                continue;
+            }
+            int recipientIndex = job.next++;
+            DistributionRecipient recipient = job.recipients.get(recipientIndex);
+            TameData data = TameRegistry.get(recipient.uuid());
+            LivingEntity tame = data == null || data.dead || data.stored || !job.owner.equals(data.ownerUUID)
+                    ? null : findLoadedLivingTameByIdentity(server, recipient.uuid(), recipient.tlId());
+            if (tame != null && tame.isAlive() && tame.getUUID().equals(recipient.uuid())) {
+                int moved = applyFoodDistribution(job, live, tame, data, plan.targets().get(recipientIndex));
+                if (moved > 0) {
+                    job.moved += moved;
+                    resetHungerFoodNotifications(data);
+                    job.source.setChanged();
+                    TameRegistry.markDirty();
+                }
+            }
+            if (job.next >= job.recipients.size()) {
+                finishFoodDistribution(server, job, "Food distribution complete.");
+                FOOD_DISTRIBUTIONS.remove(index);
+            }
+            return; // At most one recipient across all jobs per server tick.
         }
-        TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Distributed " + moved + " food item(s) from the inventory to loaded tames.").withStyle(TAME_HUNGER_MESSAGE_COLOR));
+    }
+
+    private static int applyFoodDistribution(PendingFoodDistribution job, InventoryAccess live, LivingEntity tame,
+                                             TameData data, List<FoodDistributionPlanner.Allocation> allocations) {
+        int moved = 0;
+        for (FoodDistributionPlanner.Allocation allocation : allocations) {
+            if (allocation.slot() >= live.getContainerSize()) continue;
+            ItemStack expected = job.samples.get(allocation.type());
+            ItemStack available = live.getItem(allocation.slot());
+            if (available == null || available.isEmpty() || !ItemStack.isSameItemSameTags(expected, available)) continue;
+            if (hungerFoodSaturation(available, data, tame) <= 0
+                    || job.preferredOnly && !isPreferredDistributionFood(available, data, tame)) continue;
+            int capacity = Math.max(0, TAME_HUNGER_MAX_STACKS - data.hungerInventory.size()) * available.getMaxStackSize();
+            for (ItemStack stored : data.hungerInventory) {
+                if (ItemStack.isSameItemSameTags(stored, available)) capacity += Math.max(0, stored.getMaxStackSize() - stored.getCount());
+            }
+            int count = Math.min(allocation.count(), Math.min(available.getCount(), capacity));
+            if (count <= 0) continue;
+            ItemStack extracted = live.remove(allocation.slot(), count);
+            if (extracted == null || extracted.isEmpty()) continue;
+            int extractedCount = extracted.getCount();
+            // Extraction and insertion are consecutive on the main thread; no food is held between ticks.
+            if (ItemStack.isSameItemSameTags(extracted, expected)) addHungerFoodStack(data, extracted, tame);
+            moved += extractedCount - extracted.getCount();
+            if (!extracted.isEmpty()) returnDistributionRemainder(job, extracted);
+        }
         return moved;
+    }
+
+    private static void returnDistributionRemainder(PendingFoodDistribution job, ItemStack remainder) {
+        IItemHandler handler = job.source.getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.UP).orElse(null);
+        if (handler == null) handler = job.source.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+        if (handler == null && job.source instanceof Container container) handler = new net.minecraftforge.items.wrapper.InvWrapper(container);
+        if (handler != null) remainder = net.minecraftforge.items.ItemHandlerHelper.insertItemStacked(handler, remainder, false);
+        if (!remainder.isEmpty()) {
+            BlockPos pos = job.source.getBlockPos();
+            net.minecraft.world.Containers.dropItemStack(job.level, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, remainder);
+        }
+        job.source.setChanged();
+    }
+
+    private static void finishFoodDistribution(MinecraftServer server, PendingFoodDistribution job, String message) {
+        ServerPlayer player = server.getPlayerList().getPlayer(job.owner);
+        if (player != null) player.sendSystemMessage(Component.literal(message + " Distributed " + job.moved + " food item(s).")
+                .withStyle(TAME_HUNGER_MESSAGE_COLOR));
+    }
+
+    private static void stopFoodDistributions() {
+        for (PendingFoodDistribution job : FOOD_DISTRIBUTIONS) job.future.cancel(false);
+        FOOD_DISTRIBUTIONS.clear();
+        if (foodDistributionExecutor != null) {
+            foodDistributionExecutor.shutdownNow();
+            foodDistributionExecutor = null;
+        }
     }
 
     private static boolean isPreferredDistributionFood(ItemStack stack, TameData data, LivingEntity tame) {
