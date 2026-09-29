@@ -24168,7 +24168,8 @@ public class TameCommands {
             selected.removeIf(data -> data == null || data.uuid == null || findLoadedTameByIdentity(server, data.uuid, data.tlId) != null);
         } else {
             DuelSelection selection = parseCompactDuelSelector(trimmed);
-            selected = resolveOwnedTameDataSelection(owner, selection);
+            // Named and empty selections may be immutable; callers filter this list in place.
+            selected = new ArrayList<>(resolveOwnedTameDataSelection(owner, selection));
         }
         selected.removeIf(data -> data == null || data.dead || data.stored || isRemovedFromAll(owner, data));
         return selected;

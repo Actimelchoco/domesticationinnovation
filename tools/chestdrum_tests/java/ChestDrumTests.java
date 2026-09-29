@@ -79,6 +79,10 @@ public class ChestDrumTests {
         MinecraftServer server = event.getServer();
         try {
             ServerLevel level = server.overworld();
+            if (Boolean.getBoolean("di.guardianDeployTests")) {
+                GuardianDeployTests.run(level);
+                return;
+            }
             check(LoadedChestDrums.chests(level).size() == 1, "unregistered drum discovered automatically");
             ChestBlockEntity chest = (ChestBlockEntity) level.getBlockEntity(CHEST);
             chest.setItem(0, new ItemStack(Items.COOKED_BEEF, 64));
