@@ -196,7 +196,7 @@ public class TameCommands {
     private static final int TAME_HUNGER_MAX_STACKS = 18;
     private static final int DUEL_HUNGER_DRAIN_INTERVAL_SECONDS = 100;
     private static final int RANKED_TEAM_BALANCE_ATTEMPTS = 1000;
-    private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L * 250L;
+    private static final long TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS = 20L;
     private static final long TAME_HUNGER_EMPTY_DIGEST_INTERVAL_TICKS = 20L * 60L * 10L;
     private static final ChatFormatting TAME_HUNGER_MESSAGE_COLOR = ChatFormatting.GOLD;
     private static final Map<String, Boolean> EXTERNAL_PET_COMMAND_COMPAT_CACHE = new HashMap<>();
@@ -4497,7 +4497,7 @@ public class TameCommands {
                                     String food = ResourceLocationArgument.getId(ctx, "food").toString();
                                     return adminCanEatSuperfoodAdd(ctx.getSource(), food, TameFoodManager.defaultFoodPoints(food));
                                 })
-                                .then(Commands.argument("points", IntegerArgumentType.integer(1, 1_000_000))
+                                .then(Commands.argument("points", IntegerArgumentType.integer(1))
                                         .executes(ctx -> adminCanEatSuperfoodAdd(
                                                 ctx.getSource(),
                                                 ResourceLocationArgument.getId(ctx, "food").toString(),
@@ -4524,7 +4524,7 @@ public class TameCommands {
                                 .suggests((ctx, b) -> suggestKnownTameTypes(b))
                                 .then(Commands.argument("food", ResourceLocationArgument.id())
                                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameFoodManager.foodRuleSuggestions(), b))
-                                        .then(Commands.argument("foodpoints", IntegerArgumentType.integer(1, 1_000_000))
+                                        .then(Commands.argument("foodpoints", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> adminCanEatAllow(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString(), ResourceLocationArgument.getId(ctx, "food").toString(), IntegerArgumentType.getInteger(ctx, "foodpoints")))))))
                 .then(Commands.literal("allowType")
                         .then(Commands.argument("tameType", ResourceLocationArgument.id())
@@ -4537,7 +4537,7 @@ public class TameCommands {
                                                 StringArgumentType.getString(ctx, "foodType"),
                                                 100
                                         ))
-                                        .then(Commands.argument("percentage", IntegerArgumentType.integer(1, 1_000_000))
+                                        .then(Commands.argument("percentage", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> adminCanEatAllowType(
                                                         ctx.getSource(),
                                                         ResourceLocationArgument.getId(ctx, "tameType").toString(),
@@ -5227,7 +5227,7 @@ public class TameCommands {
                     "Inventory distribute snapshots the chest and selected loaded tames, plans in the background, then transfers food to one tame per tick. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.",
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.",
-                    "Containers above loaded drums automatically refill nearby tames of all owners every 250 seconds until they reach green.",
+                    "Containers above loaded drums automatically refill nearby tames of all owners every second until they reach green.",
                     "Chest x drums distribute preferred foods first, then compatible fallback foods, within 25 blocks horizontally and 5 vertically.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
@@ -5265,7 +5265,7 @@ public class TameCommands {
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "Place a container above a drum: every 250 seconds it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.",
+                    "Place a container above a drum: every second it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.",
                     "Preferred food is distributed first, then compatible fallback food. Refill stops at 500 stored food points (green).",
                     "/tames chestxdrum lists loaded chest x drums within 250 blocks; /tames chestxdrum system explains feeding.",
                     "=== Notifications ===",
@@ -5282,7 +5282,7 @@ public class TameCommands {
                     "A chest within another active chest x drum's fixed range is deactivated. Fixed position priority selects the active setup.",
                     "It reactivates automatically when the blocking setup is removed or unloaded. Deactivation changes are announced nearby.",
                     "Place a container directly above any drum. No registration or ownership requirement is needed for feeding.",
-                    "Every 250 seconds, each loaded chest x drum refills nearby loaded tames belonging to any owner.",
+                    "Every second, each loaded chest x drum refills nearby loaded tames belonging to any owner.",
                     "The fixed area extends 25 blocks in both X/Z directions and 5 blocks up/down from the container: 51 x 51 x 11 blocks.",
                     "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
                     "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory."
@@ -22665,6 +22665,8 @@ public class TameCommands {
             data.hungerEmptyNotified = false;
             changed = true;
         }
+        // Eating can drop a freshly filled inventory below green; finish this cycle topped up.
+        if (now % TAME_HUNGER_DRUM_REFILL_INTERVAL_TICKS == 0L) changed |= feedLoadedChestDrums(server);
         changed |= sendHungerEmptyDigests(server, now);
         if (changed) {
             TameRegistry.markDirty();
@@ -22851,7 +22853,7 @@ public class TameCommands {
         int foodSaturation = hungerFoodSaturation(stack, data, tame);
         applyStoredFoodToNativeHunger(tame, stack, data.lastConsumedFoodPreferred);
         stack.shrink(1);
-        data.hungerSaturation = Math.max(0, data.hungerSaturation + foodSaturation);
+        data.hungerSaturation = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.hungerSaturation) + foodSaturation);
         if (stack.isEmpty()) data.hungerInventory.remove(selected);
         int remainingFoodPoints = totalHungerFoodPoints(data);
         if (remainingFoodPoints <= 0) {
@@ -22873,7 +22875,7 @@ public class TameCommands {
 
     private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {
         int saturation = hungerFoodSaturation(stack, data, tame);
-        return saturation <= 0 ? 0 : Math.max(1, (saturation + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT);
+        return saturation <= 0 ? 0 : (int) (((long) saturation + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT);
     }
 
     private static int hungerFoodSaturation(ItemStack stack, TameData data, LivingEntity tame) {
@@ -22898,21 +22900,21 @@ public class TameCommands {
         boolean gluttonous = data != null && data.attributeLevels.getOrDefault("gluttonous", 0) > 0;
         boolean breadFallback = stack.is(Items.BREAD);
         if (!normalFood && !gluttonous && !breadFallback) return 0;
-        int saturation = points * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
+        long saturation = (long) points * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
         if (normalFood) return (int) Math.min(Integer.MAX_VALUE, (long) saturation * 2L);
-        if (gluttonous) return Math.max(1, saturation / 2);
-        return Math.max(1, saturation / 10);
+        if (gluttonous) return (int) Math.min(Integer.MAX_VALUE, Math.max(1, saturation / 2));
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1, saturation / 10));
     }
 
     private static int totalHungerFoodPoints(TameData data) {
         if (data == null) {
             return 0;
         }
-        int total = 0;
+        long total = 0;
         for (ItemStack stack : data.hungerInventory) {
-            total += Math.max(0, hungerFoodSaturation(stack, data, null)) * Math.max(0, stack.getCount());
+            total += (long) Math.max(0, hungerFoodSaturation(stack, data, null)) * Math.max(0, stack.getCount());
         }
-        return total <= 0 ? 0 : (total + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT;
+        return total <= 0 ? 0 : (int) Math.min(Integer.MAX_VALUE, (total + TAME_HUNGER_SATURATION_PER_FOOD_POINT - 1) / TAME_HUNGER_SATURATION_PER_FOOD_POINT);
     }
 
     private static void notifyOwnerHungerEmpty(MinecraftServer server, TameData data) {

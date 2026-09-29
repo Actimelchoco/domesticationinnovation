@@ -159,11 +159,35 @@ public class ChestDrumTests {
             chest.clearContent(); chest.setItem(0, new ItemStack(Items.COOKED_BEEF, 64));
             var hungerTick = TameCommands.class.getDeclaredMethod("processTameHunger", MinecraftServer.class);
             hungerTick.setAccessible(true);
-            server.getWorldData().overworldData().setGameTime(4980); hungerTick.invoke(null, server);
-            check(first.hungerInventory.isEmpty(), "no chest feeding between 250-second boundaries");
+            server.getWorldData().overworldData().setGameTime(4999); hungerTick.invoke(null, server);
+            check(first.hungerInventory.isEmpty(), "no chest feeding between second boundaries");
             server.getWorldData().overworldData().setGameTime(5000); hungerTick.invoke(null, server);
-            check(count(pets.get(0), Items.COOKED_BEEF) == 32, "250-second boundary feeds tame");
+            check(count(pets.get(0), Items.COOKED_BEEF) == 32, "one-second boundary feeds tame to green");
             check(!first.hungerForcedSit && first.movementOrder == 3 && first.homeX == 12, "refill restores guardian anchor");
+            var foodTotal = TameCommands.class.getDeclaredMethod("totalHungerFoodPoints", TameData.class);
+            foodTotal.setAccessible(true);
+            List<Wolf> crowd = new ArrayList<>();
+            for (int i = 0; i < 40; i++) crowd.add(pet(level, 2, 80, 2));
+            chest.clearContent();
+            for (int slot = 0; slot < 27; slot++) chest.setItem(slot, new ItemStack(Items.COOKED_BEEF, 64));
+            server.getWorldData().overworldData().setGameTime(5020); hungerTick.invoke(null, server);
+            for (Wolf wolf : crowd) {
+                check((int) foodTotal.invoke(null, TameRegistry.get(wolf.getUUID())) >= 500,
+                        "all 40 tames stay green after feeding and eating in one cycle");
+                wolf.discard();
+            }
+            var foodManager = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameFoodManager.class;
+            foodManager.getMethod("addSuperfood", MinecraftServer.class, String.class, int.class)
+                    .invoke(null, server, "minecraft:stick", Integer.MAX_VALUE);
+            first.hungerInventory.clear();
+            first.hungerInventory.add(new ItemStack(Items.STICK, 64));
+            check((int) foodTotal.invoke(null, first) > 1_000_000, "high-value food totals do not overflow");
+            var consume = TameCommands.class.getDeclaredMethod("consumeOneHungerFood", TameData.class, net.minecraft.world.entity.LivingEntity.class);
+            consume.setAccessible(true);
+            first.hungerSaturation = 100;
+            check((boolean) consume.invoke(null, first, pets.get(0)) && first.hungerSaturation == Integer.MAX_VALUE,
+                    "high-value food consumption does not overflow");
+            foodManager.getMethod("removeSuperfood", MinecraftServer.class, String.class).invoke(null, server, "minecraft:stick");
             check(LoadedChestDrums.chests(level, new BlockPos(250, 80, 0), 250).size() == 1, "listing includes 250 boundary");
             check(LoadedChestDrums.chests(level, new BlockPos(251, 80, 0), 250).isEmpty(), "listing excludes farther than 250");
             var command = server.getCommands().getDispatcher().getRoot().getChild("tames").getChild("chestxdrum");

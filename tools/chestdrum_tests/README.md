@@ -18,7 +18,7 @@ the `all` selector, and filtering stored/dead tames and invalid state selections
 
 Covers automatic discovery, different owners, inclusive X/Z/Y bounds, rejected
 food, full inventories, conservation of transferred items, preferred-before-fallback
-ordering across overlapping chests, 250-second cadence, guardian recovery, listing
+ordering across overlapping chests, one-second cadence, guardian recovery, listing
 radius, overlap deactivation/reactivation, command availability, and block removal/load lifecycle.
 Also exercises asynchronous manual distribution to 40 owned tames over real server
 ticks. Checks one recipient per tick, snapshots extracting nothing, balance, partial
