@@ -1,0 +1,1068 @@
+DOMESTICATION INNOVATION - TAMESLEVEL COMMAND REFERENCE
+Generated from the current repository source on 2026-10-03.
+
+GETTING STARTED
+/tames                         List your registered tames.
+/tame                          Alias for /tames.
+/tames info                     Show in-game help topics.
+/tames info <topic>             Show a mechanic's help page.
+/tames info ability <id> [level] Show ability documentation or a level preview.
+/tames info attribute <id> [level] Show attribute documentation or a level preview.
+/tames info class <id>          Show class documentation.
+
+NOTATION
+<argument> means a value you must supply; do not type the angle brackets.
+[argument] means optional. A vertical bar separates alternatives.
+Command spelling and capitalization matter. Historical spellings such as
+prefferedFood and generall are intentional command names.
+Quote single name arguments containing spaces, for example "My Wolf".
+Greedy selection arguments can contain spaces without quoting the whole selection.
+Use Tab completion for supported IDs, names, modes, and argument values.
+Most commands require an in-game player. Player commands normally affect your tames.
+Operator commands require the permission specified by the server (usually level 2).
+Arguments named <enabled> or <value> for toggles accept true or false.
+Resource IDs use namespace:name, for example minecraft:wolf or minecraft:beef.
+<selection> commonly accepts all, name <pet>, group <group>, type <type>,
+state follow|sit|wander, or a pet name. Check each mechanic page for extra filters.
+Some commands only appear during an invite, duel, or conversion confirmation.
+
+EXAMPLES
+/tames stat "My Wolf"
+/tames follow group wolves
+/tames sit all
+/tames inventory open "My Wolf"
+/tames inspect "My Wolf"
+/tames info reincarnate
+
+HOW TO USE THIS REFERENCE
+The syntax index below is derived from enabled command registrations, excluding
+branches explicitly disabled in source. Each line is a complete executable form.
+Mechanic pages afterwards explain the commands and their costs. These pages come
+from the built-in help; where a help example differs from the syntax index, use
+the index and in-game Tab completion. State-dependent availability still applies.
+
+PLAYER COMMAND SYNTAX
+=====================
+/tames
+/tames loaded
+/tames confirmCantino
+/tames confirmCatwain
+/tames confirmLancelotl
+/tames confirmJumpy
+/tames recover all
+/tames recover <pet>
+/tames stat strongest
+/tames stat <name>
+/tames inspect <name>
+/tames inspect <name> long
+/tames reincarnate
+/tames reincarnate auto <enabled>
+/tames reincarnate all
+/tames reincarnate group <name>
+/tames reincarnate type <name>
+/tames reincarnate <name>
+/tames rerollClass confirm
+/tames rerollClass cancel
+/tames rerollClass <name>
+/tames settings doNotAttack
+/tames settings doNotAttack remove <mobtype>
+/tames settings doNotAttack <mobtype>
+/tames settings doNotAttackAnimals
+/tames settings doNotAttackAnimals <enabled>
+/tames settings doNotAttackOwner
+/tames settings doNotAttackOwner add <player>
+/tames settings doNotAttackOwner remove <player>
+/tames settings enterPortalsByThemselves <enabled>
+/tames settings healthSiphon <enabled>
+/tames settings enableVoidCloud <enabled>
+/tames settings hideLevelInName <enabled>
+/tames settings noAutoSetBed <enabled>
+/tames settings friendlyFire
+/tames settings friendlyFire <enabled>
+/tames settings tamesFriendly
+/tames settings tamesFriendly <enabled>
+/tames settings orescenting <name> <oreId>
+/tames settings excludeFromAll
+/tames settings excludeFromAll info
+/tames settings excludeFromAll add tame <name>
+/tames settings excludeFromAll add group <name>
+/tames settings excludeFromAll add type <name>
+/tames settings excludeFromAll remove tame <name>
+/tames settings excludeFromAll remove group <name>
+/tames settings excludeFromAll remove type <name>
+/tames chestxdrum
+/tames chestxdrum deactivated
+/tames chestxdrum system
+/tames bed
+/tames bed long
+/tames bed noBed
+/tames bed set <name>
+/tames bed remove all
+/tames bed remove group <group>
+/tames bed remove type <type>
+/tames bed remove <name>
+/tames collar
+/tames collar notag
+/tames collar system
+/tames graveyard
+/tames graveyard deaths
+/tames graveyard deaths <number>
+/tames graveyard <limit>
+/tames search ability <id>
+/tames search attribute <id>
+/tames search class <id>
+/tames show <player> <name>
+/tames ranked
+/tames ranked system
+/tames ranked dailyBonus
+/tames ranked dailyBonus done
+/tames ranked dailyBonus hasntdone
+/tames ranked add myself
+/tames ranked add all
+/tames ranked add <name>
+/tames ranked add group <name>
+/tames ranked add type <name>
+/tames ranked add state <name>
+/tames ranked pull myself
+/tames ranked pull all
+/tames ranked pull <name>
+/tames ranked pull group <name>
+/tames ranked pull type <name>
+/tames ranked pull state <name>
+/tames ranked participants
+/tames ranked participants owned
+/tames ranked participants active
+/tames ranked leaderboard
+/tames ranked leaderboard <limit>
+/tames ranked leaderboard all
+/tames ranked leaderboard owned
+/tames ranked leaderboard owned <limit>
+/tames ranked leaderboard owned all
+/tames ranked leaderboard type <tameType>
+/tames ranked leaderboard type <tameType> <limit>
+/tames ranked leaderboard type <tameType> all
+/tames ranked leaderboard type <tameType> owned
+/tames ranked leaderboard type <tameType> owned <limit>
+/tames ranked leaderboard type <tameType> owned all
+/tames duel selection <spec>
+/tames duel invite <player>
+/tames duel leaderboard
+/tames duel leaderboard <limit>
+/tames duel leaderboard all
+/tames duel leaderboard owned
+/tames duel leaderboard owned <limit>
+/tames duel leaderboard owned all
+/tames duel leaderboard type <tameType>
+/tames duel leaderboard type <tameType> <limit>
+/tames duel leaderboard type <tameType> all
+/tames duel leaderboard type <tameType> owned
+/tames duel leaderboard type <tameType> owned <limit>
+/tames duel leaderboard type <tameType> owned all
+/tames duel arena
+/tames duel arena create <arenaName>
+/tames duel arena delete <arenaName>
+/tames duel arena <arenaName>
+/tames duel arena <arenaName> setA
+/tames duel arena <arenaName> setB
+/tames duel arena <arenaName> setWaitingA
+/tames duel arena <arenaName> setWaitingB
+/tames duel arena <arenaName> hidetames <enabled>
+/tames duel arena <arenaName> duel <spec>
+/tames duel nearby
+/tames duel nearby <radius>
+/tames duel cancel
+/tames duel ff
+/tames duel tp
+/tames duel accept <inviteId>
+/tames duel decline <inviteId>
+/tames duel <selection>
+/tames info
+/tames info approvedItems
+/tames info tool guardian
+/tames info attribute
+/tames info attribute <name>
+/tames info attribute <name> <level>
+/tames info ability
+/tames info ability <name>
+/tames info ability <name> <level>
+/tames info class
+/tames info class <name>
+/tames info <command>
+/tames inventory
+/tames inventory superfood
+/tames inventory prefferedFood <type>
+/tames inventory open <name>
+/tames inventory system
+/tames inventory info
+/tames inventory info <selection>
+/tames inventory autopickup info
+/tames inventory autopickup <enabled>
+/tames inventory autopickup <enabled> all
+/tames inventory autopickup <enabled> unloaded
+/tames inventory autopickup <enabled> follow
+/tames inventory autopickup <enabled> sit
+/tames inventory autopickup <enabled> wander
+/tames inventory autopickup <enabled> state <name>
+/tames inventory autopickup <enabled> group <name>
+/tames inventory autopickup <enabled> type <name>
+/tames inventory autopickup <enabled> <name>
+/tames inventory distribute
+/tames inventory distribute <selection>
+/tames inventory distributeToTamesThatPreffer
+/tames inventory distributeToTamesThatPreffer <selection>
+/tames inventory taste <type>
+/tames inventory taste <type> <selection>
+/tames follow
+/tames follow all
+/tames follow <name>
+/tames follow group <name>
+/tames follow type <name>
+/tames follow state <name>
+/tames sit
+/tames sit all
+/tames sit <name>
+/tames sit group <name>
+/tames sit type <name>
+/tames sit state <name>
+/tames wander
+/tames wander all
+/tames wander <name>
+/tames wander <name> lock
+/tames wander <name> lock <enabled>
+/tames wander <name> unlock
+/tames wander group <name>
+/tames wander type <name>
+/tames wander state <name>
+/tames guardian deployGroup <setName> all
+/tames guardian deployGroup <setName> <name>
+/tames guardian deployGroup <setName> group <name>
+/tames guardian deployGroup <setName> type <name>
+/tames guardian deployGroup <setName> state <name>
+/tames guardian deploy <selection>
+/tames guardian clearDeploys all
+/tames guardian clearDeploys <name>
+/tames guardian clearDeploys group <name>
+/tames guardian clearDeploys type <name>
+/tames guardian clearDeploys state <name>
+/tames guardian addCurrentToGroup <setName>
+/tames guardian addToGroup <setName> <selection>
+/tames guardian manageGroup delete <setName>
+/tames guardian manageGroup remove <setName> all
+/tames guardian manageGroup remove <setName> group <name>
+/tames guardian manageGroup remove <setName> type <name>
+/tames guardian manageGroup remove <setName> state <name>
+/tames guardian manageGroup remove <setName> <pet>
+/tames guardian set all
+/tames guardian set all home
+/tames guardian set all previous
+/tames guardian set group <name>
+/tames guardian set group <name> home
+/tames guardian set group <name> previous
+/tames guardian set type <name>
+/tames guardian set type <name> home
+/tames guardian set type <name> previous
+/tames guardian set state <name>
+/tames guardian set state <name> home
+/tames guardian set state <name> previous
+/tames guardian set <name>
+/tames guardian set <name> home
+/tames guardian set <name> previous
+/tames movement all <name>
+/tames movement <pet> <name>
+/tames movement group <group> <name>
+/tames movement type <type> <name>
+/tames movement state <state> <name>
+/tames tp all
+/tames tp all dim <dimension>
+/tames tp dim <dimension>
+/tames tp unloaded
+/tames tp follow
+/tames tp sit
+/tames tp wander
+/tames tp group <name>
+/tames tp type <name>
+/tames tp <name>
+/tames tp <name> follow
+/tames tp <name> sit
+/tames tp <name> wander
+/tames tphome
+/tames tphome all
+/tames tphome all dim <dimension>
+/tames tphome dim <dimension>
+/tames tphome unloaded
+/tames tphome follow
+/tames tphome sit
+/tames tphome wander
+/tames tphome group <name>
+/tames tphome type <name>
+/tames tphome <name>
+/tames reload
+/tames respawn waitingList
+/tames respawn waitingList <limit>
+/tames respawn order
+/tames respawn order info
+/tames respawn order <mode>
+/tames respawn all
+/tames respawn group <name>
+/tames respawn type <name>
+/tames respawn <name>
+/tames respawnReincarnated all
+/tames respawnReincarnated group <name>
+/tames respawnReincarnated type <name>
+/tames respawnReincarnated <name>
+/tames arise all
+/tames arise group <name>
+/tames arise type <name>
+/tames arise <name>
+/tames ariseReincarnated all
+/tames ariseReincarnated group <name>
+/tames ariseReincarnated type <name>
+/tames ariseReincarnated <name>
+/tames group
+/tames group create <name>
+/tames group <name>
+/tames group <name> clear
+/tames group <name> delete
+/tames group <name> add all
+/tames group <name> add group <group>
+/tames group <name> add type <type>
+/tames group <name> add follow
+/tames group <name> add sit
+/tames group <name> add wander
+/tames group <name> add <pet>
+/tames group <name> remove all
+/tames group <name> remove group <group>
+/tames group <name> remove type <type>
+/tames group <name> remove follow
+/tames group <name> remove sit
+/tames group <name> remove wander
+/tames group <name> remove <pet>
+/tames mode all <mode>
+/tames mode <pet> <mode>
+/tames mode group <name> <mode>
+/tames mode type <name> <mode>
+/tames mode state <name> <mode>
+/tames debug
+/tames debug duel
+/tames debug duel generall <enabled>
+/tames debug duel general <enabled>
+/tames debug duel duelAssists <enabled>
+/tames debug duel duelKill <enabled>
+/tames debug duel duelRanked <enabled>
+/tames debug duel duelSumm <enabled>
+/tames debug duel kill <enabled>
+/tames debug duel result <enabled>
+/tames debug duel start <enabled>
+/tames debug duel sum <enabled>
+/tames debug duel all <enabled>
+/tames debug ranked
+/tames debug ranked general <enabled>
+/tames debug ranked kill <enabled>
+/tames debug ranked result <enabled>
+/tames debug ranked start <enabled>
+/tames debug ranked sum <enabled>
+/tames debug ranked all <enabled>
+/tames debug inventory
+/tames debug inventory lowOnFood <enabled>
+/tames debug inventory noFood <enabled>
+/tames debug inventory sum <enabled>
+/tames debug inventory sumMin <minutes>
+/tames debug combat
+/tames debug combat assists <enabled>
+/tames debug combat kills <enabled>
+/tames debug combat death <enabled>
+/tames debug combat conflictNoty <enabled>
+/tames debug other
+/tames debug other NewTame <enabled>
+/tames debug other newTame <enabled>
+/tames debug other respawnedAutomatically <enabled>
+/tames debug other Respawned automatically <enabled>
+/tames debug other generall <enabled>
+/tames debug other general <enabled>
+/tames removeTarget
+/tames removeTarget <name>
+/tames removeTarget group <name>
+/tames removeTarget type <name>
+/tames removeTarget state <name>
+
+OPERATOR COMMAND SYNTAX
+=======================
+Operator commands edit server-wide rules, other players' tames, progression,
+food rules, ranked arenas, and repair data. resetServerProgress resets server
+progression; deleteEnderDragonChunks and arena rebuild commands can change the
+world. Read command feedback and confirmation prompts before using them.
+Add/remove/clear ability and attribute commands modify the selected tame's
+progression. fixStats, repair, and normalize commands are maintenance tools.
+
+/tames settings herding <enabled>
+/tames settings sitOnChairs <enabled>
+/tames admin reset primitiveMobs
+/tames admin prefferedFood lowPrefferedFood
+/tames admin prefferedFood lowPreferredFood
+/tames admin prefferedFood superfoodAdd <food>
+/tames admin prefferedFood superfoodAdd <food> <points>
+/tames admin prefferedFood superfoodRemove <food>
+/tames admin prefferedFood Rescan all
+/tames admin prefferedFood Rescan <type>
+/tames admin prefferedFood rescan all
+/tames admin prefferedFood rescan <type>
+/tames admin prefferedFood rescanInstant all
+/tames admin prefferedFood rescanInstant <type>
+/tames admin prefferedFood info <type>
+/tames admin prefferedFood clearCustomFoodAllows <type>
+/tames admin prefferedFood allow <type> <food> <foodpoints>
+/tames admin prefferedFood allowType <tameType> <foodType>
+/tames admin prefferedFood allowType <tameType> <foodType> <percentage>
+/tames admin prefferedFood disallow <type> <food>
+/tames admin prefferedFood disallow allow <type> <food>
+/tames admin prefferedFood dissallow <type> <food>
+/tames admin prefferedFood dissallow allow <type> <food>
+/tames admin isSummon
+/tames admin isSummon add <type>
+/tames admin isSummon remove <type>
+/tames admin isSummon <type>
+/tames admin rebuildEnderDragonArena
+/tames admin deleteEnderDragonChunks
+/tames admin deleteEnderDragonChunks confirm
+/tames admin resetServerProgress
+/tames admin resetDuelLeaderboards
+/tames admin duelLeaderboard remove <entry>
+/tames admin reloadTames
+/tames admin repair loaded
+/tames admin grantMissingMilestoneAttributes
+/tames admin repairClassDamage
+/tames admin repairMissingDuelRewards
+/tames admin repairMissingDuelRewards <pet>
+/tames admin reloadClassWeights
+/tames admin normalizeBonuses
+/tames admin normalizeBonuses all
+/tames admin normalizeBonuses <pet>
+/tames admin callOrder follow <number> <typeId>
+/tames admin callOrder sit <number> <typeId>
+/tames admin callOrder wander <number> <typeId>
+/tames admin callOrder info
+/tames admin callOrder add <typeId>
+/tames admin callOrder add id <typeId>
+/tames admin callOrder remove <typeId>
+/tames admin callOrder remove id <typeId>
+/tames admin callOrder invert <typeId>
+/tames admin callOrder invert id <typeId>
+/tames admin player <player> respawn all
+/tames admin player <player> respawn group <name>
+/tames admin player <player> respawn type <name>
+/tames admin player <player> respawn <name>
+/tames admin player <player> arise all
+/tames admin player <player> arise group <name>
+/tames admin player <player> arise type <name>
+/tames admin player <player> arise <name>
+/tames admin player <player> respawnReincarnated all
+/tames admin player <player> respawnReincarnated group <name>
+/tames admin player <player> respawnReincarnated type <name>
+/tames admin player <player> respawnReincarnated <name>
+/tames admin player <player> tp all
+/tames admin player <player> tp unloaded
+/tames admin player <player> tp follow
+/tames admin player <player> tp sit
+/tames admin player <player> tp wander
+/tames admin player <player> tp state <name>
+/tames admin player <player> tp group <name>
+/tames admin player <player> tp type <name>
+/tames admin player <player> tp <name>
+/tames admin player <player> tp <name> follow
+/tames admin player <player> tp <name> sit
+/tames admin player <player> tp <name> wander
+/tames admin player <player> reincarnate <name>
+/tames admin player <player> reincarnate all
+/tames admin player <player> reincarnate group <name>
+/tames admin player <player> reincarnate type <name>
+/tames admin fixStats
+/tames admin fixStats all
+/tames admin fixStats <pet>
+/tames admin fixStale all
+/tames admin setMode <pet> <value>
+/tames admin setOrder <pet> <value>
+/tames admin setFollow <pet> <value>
+/tames admin version
+/tames admin addMissingAbilities
+/tames admin repairMissingDuelRewards all
+/tames admin stat <pet> days <value>
+/tames admin stat <pet> kills <value>
+/tames admin stat <pet> assists <value>
+/tames admin stat <pet> deaths <value>
+/tames admin setClass <pet> <class>
+/tames admin changeClass <pet> <class>
+/tames admin rebuild <class> <pet>
+/tames admin friendlyFire
+/tames admin friendlyFire <enabled>
+/tames admin disableTame disable
+/tames admin disableTame disable <type>
+/tames admin disableTame view
+/tames admin disableTame remove
+/tames admin disableTame remove <type>
+/tames admin dissableTame disable
+/tames admin dissableTame disable <type>
+/tames admin dissableTame view
+/tames admin dissableTame remove
+/tames admin dissableTame remove <type>
+/tames admin postTpStabilization
+/tames admin postTpStabilization <enabled>
+/tames admin duelSessionLength
+/tames admin duelSessionLength <minutes>
+/tames admin ranked
+/tames admin ranked pullAllParticipants
+/tames admin ranked duelff
+/tames admin ranked vorbidType <type>
+/tames admin ranked forbidType <type>
+/tames admin ranked allowType <type>
+/tames admin ranked setArena <arenaName>
+/tames admin ranked clearArena
+/tames admin ranked setA
+/tames admin ranked setB
+/tames admin ranked setWaitingA
+/tames admin ranked setWaitingB
+/tames admin debug
+/tames admin debug abilityUsed <enabled>
+/tames admin debug attributeUsed <enabled>
+/tames admin debug perf
+/tames admin debug perf start
+/tames admin debug perf stop
+/tames admin debug perf reset
+/tames admin debug perf report
+/tames admin debug damage <enabled>
+/tames admin debug teleport <enabled>
+/tames admin debug shadowhands
+/tames admin debug shadowhands <enabled>
+/tames admin debug shadownhands
+/tames admin debug shadownhands <enabled>
+/tames admin debug temporary <pet>
+/tames admin debug tempoary <pet>
+/tames admin debug damageDealt <enabled>
+/tames admin damageNerf
+/tames admin damageNerf single <multiplier>
+/tames admin damageNerf aoe <multiplier>
+/tames admin cooldownNerf
+/tames admin cooldownNerf <percent>
+/tames admin uniteDuplicates
+/tames admin uniteDuplicates all
+/tames admin uniteDuplicates <name>
+/tames admin respawn all
+/tames admin respawn <pet>
+/tames admin respawn <pet> <index>
+/tames admin forceReincarnate <pet>
+/tames admin forceReincarnate <pet> <index>
+/tames admin clone <pet>
+/tames admin terminate <pet>
+/tames admin kill <player> <pet>
+/tames admin clean <player>
+/tames admin clean <player> <index>
+/tames admin approve item
+/tames admin approve list
+/tames admin approve remove
+/tames admin approve remove <item>
+/tames admin collar stripDiEnchants
+/tames admin collar stripAll
+/tames admin registry remove <name>
+/tames admin registry importTL
+/tames admin registry importTL <file>
+/tames admin temporaries
+/tames admin tempoaries
+/tames admin tp allOwners
+/tames admin tp allOwners unloaded
+/tames admin cleanupProjectiles
+/tames admin cleanupProjectiles all
+/tames admin cleanupProjectiles dragonFireball
+/tames admin xp add <pet> <amount>
+/tames admin xp remove <pet> <amount>
+/tames admin ability add <pet> <id>
+/tames admin ability add <pet> <id> <levels>
+/tames admin ability add <id> <pet>
+/tames admin ability add <id> <pet> <levels>
+/tames admin ability remove <pet> <id>
+/tames admin ability remove <pet> <id> <levels>
+/tames admin ability remove <id> <pet>
+/tames admin ability remove <id> <pet> <levels>
+/tames admin ability clear <pet>
+/tames admin ability list <pet>
+/tames admin attribute add <pet> <id>
+/tames admin attribute add <pet> <id> <levels>
+/tames admin attribute add <id> <pet>
+/tames admin attribute add <id> <pet> <levels>
+/tames admin attribute remove <pet> <id>
+/tames admin attribute remove <pet> <id> <levels>
+/tames admin attribute remove <id> <pet>
+/tames admin attribute remove <id> <pet> <levels>
+/tames admin attribute clear <pet>
+/tames admin attribute list <pet>
+
+COMMANDS AND MECHANICS
+======================
+
+TAME SELECTION
+--------------
+<selection> = all | <tame name> | name <tame name> | group <group> | type <type> | state <state>
+follow, sit, and wander are shortcuts for state follow, state sit, and state wander.
+Commands using a greedy <selection> accept tame names containing spaces; 'name <tame name>' is the clearest form.
+Some commands additionally support unloaded or dimension filters. Their own info page lists those additions.
+Dead-tame commands use all, name, group, and type because a loaded movement-state selection is not applicable.
+
+SETTINGS
+--------
+/tames settings doNotAttack [remove] <mobtype>
+/tames settings doNotAttackAnimals <true|false>
+/tames settings enterPortalsByThemselves <true|false>
+/tames settings healthSiphon <true|false>
+/tames settings enableVoidCloud <true|false>
+/tames settings hideLevelInName <true|false>
+/tames settings noAutoSetBed <true|false>
+/tames chestxdrum system
+/tames settings friendlyFire <true|false>
+/tames settings orescenting <tame> <ore id>
+/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>
+excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.
+hideLevelInName defaults false. When true, loaded entity nameplates show only the tame's name.
+Manual inventory distribution always prioritizes native/configured preferred foods.
+Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled.
+
+LEADERBOARD
+-----------
+/tames leaderboard [<sort> [asc|desc]] [<number>|all]
+/tames leaderboard owned [<sort> [asc|desc]] [<number>|all]
+/tames leaderboard type <typeName> [owned] [<sort> [asc|desc]] [<number>|all]
+/tames leaderboard group <groupName> [<sort> [asc|desc]] [<number>|all]
+Modes sort by weighted combat score, kills, deaths, assists, level, or days since last death.
+Sort order defaults to descending. Every path defaults to 10 results; finish with a number or 'all' to change the limit.
+Leaderboard includes all owners by default. Use 'owned' to restrict results to your tames, and 'type <typeName>' to filter by tame type.
+Only tames with invested XP above 0 are included. MMR sorting adds rank-division headers.
+'days' means days since last death, or born day if the tame never died.
+
+DUELLEADERBOARD
+---------------
+/tames duelleaderboard
+/tames duelleaderboard long
+/tames duelleaderboard [mmr|wins|losses|duels|kills|assists|deaths|points] [<number>|all|everytame|owned]
+/tames duelleaderboard group <groupName> [<number>|all|everytame]
+/tames duelleaderboard type <typeName> [<number>|all|everytame|owned]
+/tames duelleaderboard all
+/tames duelleaderboard all long
+Default is top 10 across all players.
+'owned' limits to your entries.
+'long' adds the full stats line: wins / losses / duels / kills / assists / deaths / points.
+Only participants with at least 1 recorded duel are shown.
+
+DEATHS
+------
+/tames graveyard deaths <number>
+Shows recent recorded death entries from the registry.
+
+LOADED
+------
+/tames loaded
+Shows your loaded, duel, unloaded, and dead registry entries.
+
+STAT
+----
+/tames stat <pet>
+/tames stat strongest
+Shows the tame sheet: level, class, record, days, active survival days, bonuses, abilities, and attributes.
+Bed info is shown as: BedType Dimension [x, y, z].
+
+GROUP
+-----
+/tames group <name>
+/tames group create <group>
+/tames group <group> add <pet|group <name>|type <name>|follow|sit|wander|all>
+/tames group <group> remove <pet|group <name>|type <name>|follow|sit|wander|all>
+/tames group <group> clear
+Groups are owner-local labels used by selectors in movement, guardian, tp, respawn, arise, duel, and leaderboard filters.
+
+INVENTORY
+---------
+/tames inventory
+/tames inventory prefferedFood <owned tame type>
+/tames inventory superfood
+/tames inventory open <name>
+/tames inventory info [<selection>]
+/tames inventory autopickup <true|false> [<selection>]
+/tames inventory autopickup info
+/tames inventory distribute [<selection>]
+/tames inventory distributeToTamesThatPreffer [<selection>]
+/tames inventory taste <type> [<selection>]
+/tames inventory system
+Standard selection supports all, tame name, name, group, type, state, follow, sit, and wander. Autopickup additionally supports unloaded.
+prefferedFood reports the learned and configured preferred foods for one owned tame type, using readable item and food-category names.
+superfood lists globally configured foods that every tame can eat.
+Bare /tames inventory lists tame names in one row, colored by food status. /tames inventory info shows saturation, stored food points, stack count, and autopickup.
+Tames keep up to 18 stacks of accepted food-valued items. Loaded tames consume saturation while following, wandering, or fighting outside duels.
+Inventory distribute snapshots the chest and selected loaded tames, plans in the background, then transfers food to one tame per tick. distributeToTamesThatPreffer only gives each item to tames that prefer it. Both use the inventory directly below the player, or held food without a container.
+When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.
+Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.
+Containers above loaded drums automatically refill nearby tames of all owners every second until they reach green.
+Chest x drums distribute preferred foods first, then compatible fallback foods, within 25 blocks horizontally and 5 vertically.
+Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it.
+
+COLLAR PROTECTION
+-----------------
+Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.
+Every collar tag also grants 5 armor points, regardless of Protection level.
+Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.
+Craft a collar in the center with eight matching materials around it:
+Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.
+I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.
+VII copper blocks, VIII iron blocks, IX gold blocks, X emerald blocks, XI diamond blocks, XII netherite ingots.
+The separate tame armor inventory has been removed. Legacy stored armor is returned beside the tame when it next loads.
+
+FOOD SYSTEM
+-----------
+=== Food value ===
+Preferred food: 200% of its base saturation.
+Gluttonous non-preferred edible food: 50% of base saturation.
+Preferred food therefore provides 4x the saturation of Gluttonous non-preferred food with the same nutrition.
+Superfood always counts as preferred food.
+Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected.
+One displayed food point equals 100 saturation.
+=== How feeding works ===
+Tames store up to 18 food stacks. When their saturation buffer cannot cover a cost, they eat stored items until it can.
+At 0 saturation with no usable stored food, the tame sits, stops using abilities, and ignores follow/wander commands.
+=== Saturation drain ===
+Following: 2 per second | Wandering/guarding: 1 per second | Fighting a live target: 4 per second
+During duel and ranked rounds, this ordinary activity drain runs at one hundredth of its normal frequency.
+Duels and ranked have no separate food entry payment.
+Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.
+Natural regeneration costs saturation. Command teleports do not.
+After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.
+=== Food collection and refill ===
+/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.
+Place a container above a drum: every second it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.
+Preferred food is distributed first, then compatible fallback food. Refill stops at 500 stored food points (green).
+/tames chestxdrum lists loaded chest x drums within 250 blocks; /tames chestxdrum system explains feeding.
+=== Notifications ===
+/tames debug inventory lowOnFood|noFood|sum <true|false>
+/tames debug inventory sumMin <minutes>
+These control low-food, no-food, and digest notifications.
+
+CHEST X DRUM SYSTEM
+-------------------
+/tames chestxdrum lists loaded chest x drums within 250 blocks in your dimension, nearest first.
+/tames chestxdrum system shows this help.
+/tames chestxdrum deactivated lists nearby deactivated setups and the drum blocking each one.
+A chest within another active chest x drum's fixed range is deactivated. Fixed position priority selects the active setup.
+It reactivates automatically when the blocking setup is removed or unloaded. Deactivation changes are announced nearby.
+Place a container directly above any drum. No registration or ownership requirement is needed for feeding.
+Every second, each loaded chest x drum refills nearby loaded tames belonging to any owner.
+The fixed area extends 25 blocks in both X/Z directions and 5 blocks up/down from the container: 51 x 51 x 11 blocks.
+First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.
+Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory.
+
+MODE
+----
+/tames mode <pet> <mode>
+/tames mode <all|group|type|state> ... <mode>
+Current modes: default, default_plus, bodyguard, boss, monster_hunter, arena, aggressive, assasin, passive.
+Modes control combat retargeting. They are separate from movement state and movement profile.
+
+FOLLOW, SIT AND WANDER
+----------------------
+/tames follow|sit|wander [<name>|all|group <group>|type <type>|state <follow|wander|sit>]
+These are the main movement-state selectors for batch commands.
+Changing a tame to follow, sit, or wander clears its current guardian anchor.
+Use /tames wander <name> lock [true|false] for modded tames that ignore normal follow/sit/wander state but should not auto-teleport back to the owner when unloaded.
+
+GUARDIAN
+--------
+/tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>
+/tames guardian deploy <selection>
+/tames guardian deployGroup <guardianGroup> <selection>
+/tames guardian clearDeploys <selection>
+/tames guardian addCurrentToGroup <guardianGroup>
+/tames guardian addToGroup <guardianGroup> <tame selection>
+A guardian anchor is a return point. After combat, the tame paths back there.
+If it still has not returned after about 60 seconds, it is teleported back.
+'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.
+'deploy' activates the current guardian locations for the selected tames.
+deployGroup activates the saved locations from one guardian group; clearDeploys removes active guardian deployments from selected tames.
+Guardian groups store per-tame guardian positions under a shared name.
+
+GUARDIANARROW
+-------------
+Rename an arrow to '<target>: <guardianGroup>'.
+Examples: 'all: base', 'group wolves: north', 'type minecraft:wolf: west', 'Fluffy: tower'.
+Right click block: set the next selected tame's guardian location in that guardian group one block above the clicked block.
+Sneak right click block: deploy that guardian group.
+Left click block: remove that guardian-group location at the clicked block from matching selected tames.
+Sneak left click block for 3s: queue a confirm to clear that guardian group for the selected tames; use /tames guardian tool confirm within 60s.
+Right click tame: add it to the selected group if the selector is 'group ...'. Left click tame: remove it from that group.
+Sneak right click tame: store its current guardian anchor in the guardian group. Sneak left click tame: remove that guardian-group anchor from the tame.
+
+MOVEMENT
+--------
+/tames movement <pet|all|group|type|state> <default|skeleton|close>
+default: no extra spacing behavior.
+skeleton: if the target is too close, the tame backs off every 100 ticks.
+close: while idle and not guarding, the tame repaths every 20 ticks to stay roughly 1.5 to 2.5 blocks from its owner.
+
+TP
+--
+/tames tp <name|all|follow|sit|wander|group <group>|type <type>|unloaded>
+/tames tp dim <dimension> | /tames tp all dim <dimension>
+/tames reload
+Teleports tames to the player.
+Reload resends loaded tame entity data to clients without moving them.
+Cost is level XP points, doubled for cross-dimension teleports.
+Loaded tames move immediately; unloaded ones use the lantern/recovery path when possible.
+Teleporting clears the current guardian anchor.
+
+TPHOME
+------
+/tames tphome
+/tames tphome <name|all|follow|sit|wander|group <group>|type <type>|unloaded>
+/tames tphome dim <dimension> | /tames tphome all dim <dimension>
+Without a selection, TPHome sends loaded owned tames within 32 blocks home.
+Teleports tames to the same target the respawn system would use.
+Target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.
+TPHome is free.
+Teleporting clears the current guardian anchor.
+
+BED
+---
+/tames bed
+/tames bed set <pet>
+/tames bed remove <pet>
+/tames bed remove all
+/tames bed remove group <group>
+/tames bed remove type <type>
+Shows your tames with assigned beds.
+Stand on a pet bed and run /tames bed set <pet> to assign that bed for the normal teleport XP cost.
+Each row is formatted as: Tame: BedType, Dimension [x, y, z].
+Removing a bed clears that tame's stored bed assignment.
+
+RESPAWN
+-------
+/tames respawn <name|all|group <name>|type <name>>
+/tames respawn waitingList [limit]
+/tames respawn order [default|level|leaderboard]
+Respawn works only on dead tames and does not apply an extra death penalty.
+Respawn target priority: tame bed, queued DI bed request, owner bed, then player/source position fallback.
+Payment options: full invested XP, or 1 approved item if the tame has a bed, otherwise ceil(level/20) approved items, or 1 vanilla Totem of Undying in main hand.
+Morning auto-respawn is split by pet bed color.
+All dead tames with colored pet beds respawn the next morning.
+White pet beds use the TL graveyard/respawn-order queue, and only 1 white-bed tame per owner respawns each morning.
+
+ARISE (5XPRICE)
+---------------
+/tames arise <name|all|group <name>|type <name>>
+Arise respawns the tame at your current position.
+Payment options: five times invested XP, or ceil(level/10) approved items, or 1 vanilla Totem of Undying in main hand.
+Each successful Arise doubles every payment price again for the rest of the same Minecraft day. The price resets the next day.
+
+ARISE REINCARNATED
+------------------
+/tames ariseReincarnated <name|all|group <name>|type <name>>
+Arise respawns the tame at your current position, then restores saved highest progress when available.
+Payment includes the normal arise cost plus the reincarnation cost for restored levels.
+
+GRAVEYARD
+---------
+/tames graveyard [limit]
+Shows your dead tames in the same order used for morning respawn.
+Each row includes death time, active survival days, reincarnation cost, and the saved highest-level suffix.
+
+REINCARNATE
+-----------
+/tames reincarnate <pet>
+/tames reincarnate
+/tames reincarnate <all|group <name>|type <name>>
+/tames info approvedItems
+/tames reincarnate auto <true|false>
+Manual reincarnation requires the tame to already be alive and loaded. Automatic reincarnation can also occur on respawn.
+It restores the saved highest progress snapshot for that tame.
+Payment options: reincarnation XP cost, or 1 approved item per restored level, or 1 vanilla Totem of Undying in main hand.
+Auto reincarnation uses the player bed material check by default. Tames with a black pet bed auto reincarnate for free on respawn.
+
+HEALTHSIPHON
+------------
+/tames settings healthSiphon <true|false>
+Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.
+This is owner-local and persists for your tame registry.
+
+ENTERPORTALSBYTHEMSELVES
+------------------------
+/tames settings enterPortalsByThemselves <true|false>
+Default is false.
+False: your tames cannot enter portals on their own.
+They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport.
+
+SITONCHAIRS
+-----------
+/tames settings sitOnChairs <true|false>
+Admin runtime toggle (default false).
+false: tames are blocked from mounting seat/chair entities (including Create seats/chairs).
+true: that seat/chair mount block is disabled.
+
+COLLAR
+------
+/tames collar
+/tames collar notag
+/tames collar system
+Lists your tames with collar tags (or without via notag), including their Protection tier.
+Protection I-XII is crafted by surrounding a collar tag with the tier material.
+Protection II-XII must be upgraded sequentially from the previous tier.
+Every collar tag grants 5 base armor points, in addition to its Protection effect.
+Each level reduces post-armor damage by 4%.
+
+SINISTER CARROT
+---------------
+Found as one item in Woodland Mansion chests. The default chance is 30% per generated chest and can be changed with sinister_carrot_loot_chance.
+A registered tamed rabbit also drops one after a real death if it completed at least 18 active survival days.
+Duel and ranked eliminations do not produce a Sinister Carrot.
+Use it on your tamed rabbit to turn it into the evil rabbit variant, or on a zombie horse to convert it into a skeleton horse.
+Eating it gives Wither for 5 seconds.
+
+INSPECT
+-------
+/tames inspect <pet>
+/tames inspect <pet> long
+The base inspect command now shows the long inspect view directly.
+Includes current base stats, class profile, exact known offensive ability numbers, support/heal mechanics, attributes, and recent level rewards.
+
+SEARCH
+------
+/tames search ability <id>
+/tames search attribute <id>
+/tames search class <id>
+Searches your registered tames by ability, attribute, or tame class.
+
+ARENA
+-----
+/tames duel arena
+/tames duel arena create <arenaName>
+/tames duel arena <arenaName> setA|setB|setWaitingA|setWaitingB
+/tames duel arena <arenaName> hidetames true|false
+/tames duel arena <arenaName> duel|duelSession|duelSessionFFA <spec>
+Arenas store spawn and waiting points used by duel commands. hidetames makes idle duelSession tames disappear instead of waiting.
+If an arena is reserved for ranked, /tames duel arena cannot use or edit it.
+Use /tames admin ranked ... to edit a ranked-reserved arena.
+
+DUEL
+----
+/tames duel <selection> [vs <selection>]
+/tames info duel duel
+/tames info duel accept
+/tames info duel duelleaderboard
+Duels are TL's ranked PvP/PvE team-fight system for both players and tames.
+A duel can be same-owner practice, direct player-vs-player, or multi-player team duels depending on the selectors used.
+Use the duel subtopics for the exact command forms.
+
+DUELSESSION
+-----------
+/tames duelSession <left selection> vs <right selection>
+/tames duel session accept <player> vs <your selection>
+/tames duelSession add <selection>
+/tames duelSession pull <selection>
+/tames duelSession ff
+Runs repeated round-based duels between two sides.
+pull is blocked for tames currently active in the running round.
+
+DUELSESSIONFFA
+--------------
+/tames duelSessionFFA <selection>
+/tames duel sessionffa accept <player> vs <your selection>
+/tames duelSessionFFA add <selection>
+/tames duelSessionFFA pull <selection>
+/tames duelSessionFFA ff
+Runs repeated FFA-based rounds with dynamic team generation.
+
+RANKED
+------
+/tames ranked
+/tames ranked system
+/tames ranked leaderboard [<number>|all]
+/tames ranked leaderboard owned [<number>|all]
+/tames ranked leaderboard type <type> [owned] [<number>|all]
+/tames ranked participants [owned|active]
+/tames ranked add <selection>
+/tames ranked pull <selection>
+/tames ranked dailyBonus [done|hasntdone]
+/tames admin ranked setArena <arenaName>
+/tames admin ranked pullAllParticipants
+/tames admin ranked setA|setB|setWaitingA|setWaitingB
+Ranked is a continuously running duelSessionFFA on the configured ranked arena.
+Tames must be level 10 or higher and have at least one stored food item before they can be added.
+A tame is pulled from ranked after a round if its food inventory is empty.
+There is no duel or ranked entry payment. During rounds, tames consume ordinary food at one hundredth of their normal rate.
+Each tame's first three ranked matches per Minecraft day grant uncapped normal duel XP, even on a loss. Later ranked XP is win-only and capped normally.
+dailyBonus reports owned tames that have or have not completed those three matches.
+Only tames whose owners are online are selected into rounds.
+Offline-owner tames stay idle at waiting until their owner is online again.
+When no round is active and enough eligible participants are waiting, the next ranked round starts after 1 second.
+/tames ranked leaderboard uses the full duel leaderboard. /tames ranked participants lists only the current ranked pool.
+The ranked arena is reserved and cannot be used through /tames duel arena.
+
+DUEL START
+----------
+/tames duel selection <left selection> vs <right selection>
+/tames duel invite <player>
+/tames duel <selection>
+/tames duel nearby [radius]
+/tames duel cancel
+Selections support comma-separated tame names, groups, types, and movement states.
+Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.
+After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20.
+
+DUEL ACCEPT
+-----------
+/tames duel accept <player> vs <your selection>
+/tames duel accept <playerName> vs group <group>, name <pet>
+Accepts a pending duel invite and supplies your side's selection.
+The right side after 'vs' is your roster.
+The duel starts once every invited player has accepted.
+
+DUEL DECLINE
+------------
+/tames duel decline <player>
+Declines a pending duel invite from that player.
+
+DUEL FORFEIT
+------------
+/tames duel ff
+/tames duel tp
+These commands are available only during an active duel.
+
+DUEL DUELLEADERBOARD
+--------------------
+/tames duel leaderboard
+Shows duel ranking for players and tames with at least 1 duel.
+Default is top 10 across all players.
+
+DEBUG
+-----
+/tames debug duel generall|duelAssists|duelKill|duelRanked|duelSumm <true|false>
+/tames debug inventory lowOnFood|noFood|sum <true|false>
+/tames debug inventory sumMin <minutes>
+/tames debug combat assists|kills|death <true|false>
+/tames debug other NewTame|respawnedAutomatically|generall <true|false>
+Toggles owner-local tame, duel, combat, and hunger notifications. Settings are saved per player.
+
+BEWEREAGER CURSE
+---------------
+A Bewereager transformed from your tamed wolf is hostile and cannot be controlled
+or permanently tamed with a Sinister Carrot. It retains the wolf's attributes,
+abilities, and base stat bonuses. When killed, it returns as the wolf,
+automatically restores available saved highest progression for free, and gains
+10 whole levels with normal level rewards. Partial XP is preserved.
+Returning at dawn does not grant these bonus levels.
+
+CHUNK SELECTION COMMANDS (OPERATOR)
+-----------------------------------
+/deleteChunks setA       Save the first corner at your current position.
+/deleteChunks setB       Save the opposite corner at your current position.
+/deleteChunks settings   Show the selected area and pending confirmation status.
+/deleteChunks delete     Request validation of the selected area.
+/deleteChunks confirm    Confirm the pending selection.
+Actual chunk deletion is disabled in the current implementation.
+
+SOURCE
+------
+Command registrations: src/main/java/com/github/alexthe668/
+domesticationinnovation/server/tameslevel/*Commands.java
+Mechanic pages: TameCommands.infoDetail.
+This is a snapshot; use in-game help and completion after updating the mod.
