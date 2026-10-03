@@ -1,7 +1,6 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.compat;
 
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
-import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
@@ -17,7 +16,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.*;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.TickEvent;
@@ -34,7 +32,6 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID)
 public final class BewereagerCompat {
     public static final String TEMPORARY = "TLTemporaryBewereager";
-    public static final String PERMANENT = "TLPermanentBewereager";
     private static final ResourceLocation TYPE = new ResourceLocation("species", "bewereager");
     private BewereagerCompat() {}
     public static boolean isTemporary(Entity entity) { return entity != null && entity.getPersistentData().getBoolean(TEMPORARY); }
@@ -170,10 +167,21 @@ public final class BewereagerCompat {
         data.bewereagerState = new CompoundTag();
         data.bewereagerState.putString("Notification", pendingNotification);
         TameRegistry.bindEntityToData(wolf, data);
+        if (killed) {
+            LevelSystem.restoreHighestProgressWithoutXpCost(wolf, data);
+            // Run normal level rewards while preserving the wolf's partial XP.
+            for (int i = 0; i < 10; i++) {
+                int partialXp = data.xp;
+                data.xp = LevelSystem.xpRequiredForLevel(data.level);
+                LevelSystem.checkLevelUp(wolf, data);
+                data.xp = partialXp;
+            }
+            wolf.setHealth(wolf.getMaxHealth());
+        }
         data.entitySnapshot = new CompoundTag(); wolf.save(data.entitySnapshot);
         data.lastKnownDimension = level.dimension().location().toString();
         data.lastKnownX = wolf.blockPosition().getX(); data.lastKnownY = wolf.blockPosition().getY(); data.lastKnownZ = wolf.blockPosition().getZ();
-        notify(data, level.getServer(), data.name + (killed ? " was killed as a Bewereager and respawned as a wolf." : " returned to wolf form at dawn."));
+        notify(data, level.getServer(), data.name + (killed ? " was killed as a Bewereager and respawned as a wolf, reincarnated for free with 10 extra levels." : " returned to wolf form at dawn."));
         TameRegistry.markDirty();
     }
 
@@ -182,25 +190,7 @@ public final class BewereagerCompat {
         if (!(event.getEntity() instanceof ServerPlayer player) || !(event.getTarget() instanceof Mob beast)
                 || !isTemporary(beast) || !event.getItemStack().is(DIItemRegistry.SINISTER_CARROT.get())) return;
         event.setCanceled(true); event.setCancellationResult(InteractionResult.CONSUME);
-        TameData data = dataFor(beast);
-        if (data == null || !player.getUUID().equals(data.ownerUUID)) return;
-        if (beast.getHealth() >= 60.0F) {
-            player.sendSystemMessage(Component.literal("Its health must be below 60 HP to tame it.")); return;
-        }
-        if (!(beast instanceof ModifedToBeTameable tame)) return;
-        beast.getPersistentData().remove(TEMPORARY);
-        tame.setTame(true); tame.setTameOwnerUUID(player.getUUID());
-        ((com.github.alexthe666.citadel.server.entity.IComandableMob) beast).setCommand(2);
-        beast.setTarget(null); beast.getNavigation().stop();
-        data.bewereagerState = new CompoundTag();
-        TameRegistry.rebindEntityUuid(data, beast.getUUID());
-        TameRegistry.bindEntityToData(beast, data);
-        data.type = TYPE.toString(); data.movementOrder = 0;
-        LevelSystem.refreshTrackedHealthBonus(beast, data);
-        data.entitySnapshot = new CompoundTag(); beast.save(data.entitySnapshot);
-        if (!player.getAbilities().instabuild) event.getItemStack().shrink(1);
-        notify(data, player.getServer(), data.name + " is now a permanently tamed Bewereager, with its level and stats preserved.");
-        TameRegistry.markDirty();
+        // The curse cannot be converted into a permanent pet, even at low health.
     }
 
     private static void notify(TameData data, MinecraftServer server, String message) {
@@ -218,21 +208,4 @@ public final class BewereagerCompat {
         }
     }
 
-    public static final class PetMovementGoal extends Goal {
-        private final Mob mob;
-        private final ModifedToBeTameable pet;
-        public PetMovementGoal(Mob mob) {
-            this.mob = mob; this.pet = (ModifedToBeTameable) mob;
-            setFlags(EnumSet.of(Flag.MOVE, Flag.JUMP));
-        }
-        public boolean canUse() {
-            return pet.isTame() && (pet.isStayingStill() || pet.isFollowingOwner() && mob.getTarget() == null
-                    && pet.getTameOwner() != null && mob.distanceToSqr(pet.getTameOwner()) > 16);
-        }
-        public void tick() {
-            if (pet.isStayingStill()) mob.getNavigation().stop();
-            else if (pet.getTameOwner() != null) mob.getNavigation().moveTo(pet.getTameOwner(), 1.2D);
-        }
-        public void stop() { mob.getNavigation().stop(); }
-    }
 }

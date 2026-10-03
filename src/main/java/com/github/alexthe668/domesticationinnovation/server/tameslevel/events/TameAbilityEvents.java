@@ -274,8 +274,11 @@ public class TameAbilityEvents {
             }
 
             LivingEntity targetTame = event.getEntity();
-            if (!TameEntityAdapter.isTame(targetTame)) return;
-            TameData targetData = TameRegistry.get(targetTame.getUUID());
+            boolean cursedTarget = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(targetTame);
+            if (!TameEntityAdapter.isTame(targetTame) && !cursedTarget) return;
+            TameData targetData = cursedTarget
+                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(targetTame)
+                    : TameRegistry.get(targetTame.getUUID());
             if (targetData == null) return;
 
             if (!TameEntityAdapter.isStayingStill(targetTame) && !INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
@@ -2522,7 +2525,10 @@ public class TameAbilityEvents {
             if (direct instanceof WitherSkull) noteDamageContributor("wither_skull");
             if (direct instanceof EvokerFangs) noteDamageContributor("evoker_fangs");
             LivingEntity tame = resolveProjectileOwner(direct);
-            TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+            TameData data = tame == null ? null
+                    : com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)
+                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
+                    : TameRegistry.get(tame.getUUID());
             int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data,
                     direct instanceof NoGriefLargeFireball ? "ghast_fireball"
                             : direct instanceof WitherSkull ? "wither_skull"
@@ -2540,7 +2546,10 @@ public class TameAbilityEvents {
         if (direct instanceof ShulkerBullet) {
             noteDamageContributor("shulker_bullet");
             LivingEntity tame = resolveProjectileOwner(direct);
-            TameData data = tame == null ? null : TameRegistry.get(tame.getUUID());
+            TameData data = tame == null ? null
+                    : com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)
+                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
+                    : TameRegistry.get(tame.getUUID());
             int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data, "shulker_bullet"));
             if (data != null) {
                 event.setAmount(offensiveAbilityCastDamage(data, "shulker_bullet", level));
@@ -2558,7 +2567,8 @@ public class TameAbilityEvents {
         if (direct instanceof net.minecraft.world.entity.projectile.Projectile projectile) {
             owner = TameEntityAdapter.owner(projectile);
         }
-        return owner instanceof LivingEntity tame && TameEntityAdapter.isTame(tame) ? tame : null;
+        return owner instanceof LivingEntity tame && (TameEntityAdapter.isTame(tame)
+                || com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) ? tame : null;
     }
 
     private static void setProjectileDamage(Entity projectile, String abilityId, float damage) {
