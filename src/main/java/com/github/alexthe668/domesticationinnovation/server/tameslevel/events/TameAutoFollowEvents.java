@@ -237,13 +237,9 @@ public class TameAutoFollowEvents {
         if (owner == null || owner.server == null || tameUuid == null) {
             return null;
         }
-        for (ServerLevel level : owner.server.getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof LivingEntity tame) || !TameEntityAdapter.isTame(tame)) continue;
-            if (!owner.getUUID().equals(TameEntityAdapter.ownerUuid(tame))) continue;
-            return tame;
-        }
-        return null;
+        TameData data = TameRegistry.get(tameUuid);
+        LivingEntity tame = TameEntityAdapter.findLoaded(owner.server, tameUuid, data == null ? null : data.tlId);
+        return tame != null && owner.getUUID().equals(TameEntityAdapter.ownerUuid(tame)) ? tame : null;
     }
 
     private static void teleportLoadedTame(ServerPlayer owner, LivingEntity living, TameData data, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot) {

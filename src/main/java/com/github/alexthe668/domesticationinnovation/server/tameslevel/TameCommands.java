@@ -13016,6 +13016,7 @@ public class TameCommands {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
+        if (TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId) != null) return RespawnResult.fail("tame already exists in a loaded entity section");
 
         String typeId = recoverEntityTypeId(data);
         if (typeId.isBlank()) return RespawnResult.fail("missing saved entity type");
@@ -13410,6 +13411,7 @@ public class TameCommands {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
+        if (TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId) != null) return RespawnResult.fail("tame already exists in a loaded entity section");
 
         String typeId = recoverEntityTypeId(data);
         if (typeId.isBlank()) return RespawnResult.fail("missing saved entity type");
@@ -13774,6 +13776,7 @@ public class TameCommands {
         if (data != null && data.horseType) return RecoverResult.fail("horse-type tames cannot be recovered");
         if (p == null || data == null) return RecoverResult.fail("invalid context");
         if (data.uuid == null) return RecoverResult.fail("missing tame UUID");
+        if (TameEntityAdapter.findLoaded(p.getServer(), data.uuid, data.tlId) != null) return RecoverResult.fail("tame already exists in a loaded entity section");
         clearGuardianAnchor(data);
         if (isDeadEntry(data.uuid)) return RecoverResult.fail("tame is marked dead");
         String logicalKey = logicalTameKey(data);
@@ -13846,6 +13849,7 @@ public class TameCommands {
             return RecoverResult.fail("invalid context");
         }
         MinecraftServer server = target.level.getServer();
+        if (TameEntityAdapter.findLoaded(server, data.uuid, data.tlId) != null) return RecoverResult.fail("tame already exists in a loaded entity section");
         UUID resolvedOwnerId = owner != null ? owner.getUUID() : data.ownerUUID;
         if (resolvedOwnerId == null) {
             return RecoverResult.fail("missing owner");
@@ -28909,38 +28913,21 @@ public class TameCommands {
 
     private static TamableAnimal findLoadedOwnedTameByUuid(CommandSourceStack source, UUID owner, UUID tameUuid) {
         if (source == null || source.getServer() == null || owner == null || tameUuid == null) return null;
-        for (var level : source.getServer().getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof TamableAnimal ta) || !ta.isTame()) continue;
-            TameData registered = TameRegistry.get(tameUuid);
-            if (!owner.equals(ta.getOwnerUUID())) {
-                if (registered == null || !owner.equals(registered.ownerUUID)) continue;
-                ta.setOwnerUUID(owner);
-            }
-            if (registered != null && registered.tlId != null) {
-                TameData.syncTlIdToEntity(ta, registered.tlId);
-            }
-            return ta;
+        LivingEntity entity = TameEntityAdapter.findLoaded(source.getServer(), tameUuid, null);
+        if (!(entity instanceof TamableAnimal ta)) return null;
+        TameData registered = TameRegistry.get(tameUuid);
+        if (!owner.equals(ta.getOwnerUUID())) {
+            if (registered == null || !owner.equals(registered.ownerUUID)) return null;
+            ta.setOwnerUUID(owner);
         }
-        return null;
+        if (registered != null && registered.tlId != null) TameData.syncTlIdToEntity(ta, registered.tlId);
+        return ta;
     }
 
     private static LivingEntity findLoadedOwnedLivingTameByUuid(CommandSourceStack source, UUID owner, UUID tameUuid) {
         if (source == null || source.getServer() == null || owner == null || tameUuid == null) return null;
-        for (ServerLevel level : source.getServer().getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof LivingEntity living) || !living.isAlive()) continue;
-            if (living instanceof TamableAnimal tamable) {
-                if (tamable.isTame() && owner.equals(tamable.getOwnerUUID())) return tamable;
-                continue;
-            }
-            if (living instanceof ModifedToBeTameable modified
-                    && modified.isTame()
-                    && owner.equals(modified.getTameOwnerUUID())) {
-                return living;
-            }
-        }
-        return null;
+        LivingEntity living = TameEntityAdapter.findLoaded(source.getServer(), tameUuid, null);
+        return living != null && owner.equals(TameEntityAdapter.ownerUuid(living)) ? living : null;
     }
 
     private static LivingEntity findLoadedOwnedLivingTameByIdentity(CommandSourceStack source, UUID owner, TameData data) {
@@ -28949,22 +28936,12 @@ public class TameCommands {
     }
 
     private static TamableAnimal findLoadedTameByUuid(CommandSourceStack source, UUID tameUuid) {
-        for (var level : source.getServer().getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof TamableAnimal ta) || !ta.isTame()) continue;
-            return ta;
-        }
-        return null;
+        return source == null ? null : findLoadedTameByUuid(source.getServer(), tameUuid);
     }
 
     private static TamableAnimal findLoadedTameByUuid(MinecraftServer server, UUID tameUuid) {
-        if (server == null || tameUuid == null) return null;
-        for (ServerLevel level : server.getAllLevels()) {
-            Entity entity = level.getEntity(tameUuid);
-            if (!(entity instanceof TamableAnimal ta) || !ta.isTame()) continue;
-            return ta;
-        }
-        return null;
+        LivingEntity living = TameEntityAdapter.findLoaded(server, tameUuid, null);
+        return living instanceof TamableAnimal ta ? ta : null;
     }
 
     private static TamableAnimal findLoadedOwnedTameByName(CommandSourceStack source, UUID owner, String name) {

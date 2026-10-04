@@ -9,7 +9,7 @@ Run the isolated Forge GameTest server from the repository root:
 The init script includes these test sources and the empty structure only for this
 run. The server uses `build/tame-performance-gametest`, separate from normal worlds.
 
-The seventeen tests cover:
+The twenty tests cover:
 
 - Taming after entity join, stable identity changes, replacement bodies, delayed
   removal events, repeated missing lookups, death, and unload.
@@ -36,6 +36,9 @@ The seventeen tests cover:
 - Offline guardian commands, spaced names, five-per-owner FIFO selection,
   persistent posts, ownership transfer, actual entity-ticking chunk tickets,
   startup restoration, cancellation, and pet-bed respawns with offline owners.
+- Real entity-section transitions from ticking to hidden, stable identity changes
+  while hidden, actual unload without a second tracking-end event, rejected UUID
+  additions, and cross-dimension recovery/respawn guards against existing bodies.
 
 These are correctness regressions, not a server performance benchmark. Compare a
 new Spark capture under the same workload to measure the actual improvement.
