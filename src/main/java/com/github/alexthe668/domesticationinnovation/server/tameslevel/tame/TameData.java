@@ -134,6 +134,7 @@ public class TameData {
     public boolean hungerLastFoodNotified = false;
     public boolean hungerAutopickup = false;
     public boolean lastConsumedFoodPreferred = true;
+    public boolean lastConsumedFoodEternalSteak = false;
     public long rankedDailyBonusDay = -1L;
     public int rankedDailyMatches = 0;
 
@@ -345,6 +346,7 @@ public class TameData {
         tag.putBoolean("hungerLastFoodNotified", hungerLastFoodNotified);
         tag.putBoolean("hungerAutopickup", hungerAutopickup);
         tag.putBoolean("lastConsumedFoodPreferred", lastConsumedFoodPreferred);
+        tag.putBoolean("lastConsumedFoodEternalSteak", lastConsumedFoodEternalSteak);
         tag.putLong("rankedDailyBonusDay", rankedDailyBonusDay);
         tag.putInt("rankedDailyMatches", Math.max(0, rankedDailyMatches));
         ListTag hungerInventoryTag = new ListTag();
@@ -568,6 +570,7 @@ public class TameData {
         data.hungerAutopickup = tag.getBoolean("hungerAutopickup");
         data.lastConsumedFoodPreferred = !tag.contains("lastConsumedFoodPreferred", Tag.TAG_BYTE)
                 || tag.getBoolean("lastConsumedFoodPreferred");
+        data.lastConsumedFoodEternalSteak = tag.getBoolean("lastConsumedFoodEternalSteak");
         data.rankedDailyBonusDay = tag.contains("rankedDailyBonusDay", Tag.TAG_LONG) ? tag.getLong("rankedDailyBonusDay") : -1L;
         data.rankedDailyMatches = Math.max(0, tag.getInt("rankedDailyMatches"));
         data.hungerInventory.clear();

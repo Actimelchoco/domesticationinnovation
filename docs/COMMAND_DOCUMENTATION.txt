@@ -718,7 +718,8 @@ Preferred food: 200% of its base saturation.
 Gluttonous non-preferred edible food: 50% of base saturation.
 Preferred food therefore provides 4x the saturation of Gluttonous non-preferred food with the same nutrition.
 Superfood always counts as preferred food.
-Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected.
+Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected except Eternal Steak.
+Artifacts Eternal Steak counts as meat and can feed any tame without being consumed. Preferred Steak gives 200% saturation; non-preferred Steak gives 50%, even without Gluttonous.
 One displayed food point equals 100 saturation.
 === How feeding works ===
 Tames store up to 18 food stacks. When their saturation buffer cannot cover a cost, they eat stored items until it can.
@@ -730,6 +731,7 @@ Duels and ranked have no separate food entry payment.
 Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.
 Natural regeneration costs saturation. Command teleports do not.
 After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.
+Non-preferred Eternal Steak reduces base regeneration to 25% speed (one heal every 20 seconds outside duels), twice as slow as ordinary non-preferred food. Eating another food replaces this effect; regeneration abilities keep their existing rates.
 === Food collection and refill ===
 /tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.
 Place a container above a drum: every second it feeds loaded tames of all owners. Base range is 25/5; each horizontally adjacent drum adds 10/2.

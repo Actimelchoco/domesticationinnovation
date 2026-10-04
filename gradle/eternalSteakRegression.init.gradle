@@ -1,0 +1,32 @@
+// Run with tamePerformanceRegression.init.gradle and -PeternalSteakModsDir=<mods directory>.
+allprojects {
+    afterEvaluate {
+        def modsDir = project.findProperty('eternalSteakModsDir')
+        if (!modsDir) throw new GradleException('Set eternalSteakModsDir to the Artifacts dependency directory.')
+        def jars = project.fileTree(modsDir) {
+            include 'artifacts-forge-9.5.16.jar'
+            include 'curios-forge-5.14.1+1.20.1.jar'
+            include 'cloth-config-11.1.136-forge.jar'
+            include 'architectury-9.2.14-forge.jar'
+        }.files
+        if (jars.size() != 4) throw new GradleException('Expected Artifacts and its three external dependency JARs.')
+        repositories.flatDir { dirs modsDir }
+        jars.each { jar ->
+            dependencies.add('implementation', fg.deobf("eternalsteak-test:${jar.name.substring(0, jar.name.length() - 4)}:local"))
+        }
+        // Explicitly deobfuscate the nested dependency for development mappings.
+        def nestedDir = project.file('build/eternal-steak-test-dependencies')
+        nestedDir.mkdirs()
+        def artifactJar = jars.find { it.name.startsWith('artifacts-') }
+        def archive = new java.util.zip.ZipFile(artifactJar)
+        try {
+            def nested = archive.getEntry('META-INF/jars/expandability-forge-9.0.4.jar')
+            archive.getInputStream(nested).withCloseable { input ->
+                new File(nestedDir, 'expandability-forge-9.0.4.jar').withOutputStream { output -> output << input }
+            }
+        } finally { archive.close() }
+        repositories.flatDir { dirs nestedDir }
+        dependencies.add('implementation', fg.deobf('eternalsteak-test:expandability-forge-9.0.4:local'))
+        sourceSets.main.java.srcDir('src/test/artifacts/java')
+    }
+}

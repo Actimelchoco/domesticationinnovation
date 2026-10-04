@@ -43,6 +43,10 @@ public final class TameFoodManager {
 
     private TameFoodManager() { }
 
+    public static boolean isEternalSteak(ItemStack stack) {
+        return stack != null && !stack.isEmpty() && itemId(stack).equals("artifacts:eternal_steak");
+    }
+
     public static void tick(LivingEntity tame, TameData data) {
         if (!(tame instanceof Animal animal) || data == null || tame.getServer() == null) return;
         init(tame.getServer());
@@ -71,6 +75,8 @@ public final class TameFoodManager {
         MinecraftServer server = tame == null ? null : tame.getServer();
         if (server != null) init(server);
         String type = typeId(tame, data);
+        // Artifacts omits the meat flag; use cooked steak's native diet predicate.
+        if (isEternalSteak(stack) && accepts(new ItemStack(net.minecraft.world.item.Items.COOKED_BEEF), data, tame)) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.isPrimitiveType(type)
                 && itemId(stack).equals("primitive_mobs:dodo")) return true;
         if (tame instanceof Animal animal) {
@@ -393,7 +399,7 @@ public final class TameFoodManager {
         if (!rule.startsWith("#")) return rule.equals(itemId(stack));
         String id = itemId(stack).toLowerCase(Locale.ROOT);
         return switch (rule) {
-            case "#meat" -> stack.getItem().getFoodProperties() != null && stack.getItem().getFoodProperties().isMeat();
+            case "#meat" -> isEternalSteak(stack) || stack.getItem().getFoodProperties() != null && stack.getItem().getFoodProperties().isMeat();
             case "#fish" -> id.contains("fish") || id.contains("cod") || id.contains("salmon");
             case "#fruit" -> id.contains("apple") || id.contains("berry") || id.contains("melon") || id.contains("fruit");
             case "#vegetable" -> id.contains("carrot") || id.contains("potato") || id.contains("beetroot") || id.contains("vegetable");

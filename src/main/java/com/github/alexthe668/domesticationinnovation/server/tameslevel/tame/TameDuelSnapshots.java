@@ -73,6 +73,7 @@ public final class TameDuelSnapshots {
         into.hungerLastFoodNotified = from.hungerLastFoodNotified;
         into.hungerAutopickup = from.hungerAutopickup;
         into.lastConsumedFoodPreferred = from.lastConsumedFoodPreferred;
+        into.lastConsumedFoodEternalSteak = from.lastConsumedFoodEternalSteak;
         into.rankedDailyBonusDay = from.rankedDailyBonusDay;
         into.rankedDailyMatches = from.rankedDailyMatches;
         into.hungerInventory.clear();

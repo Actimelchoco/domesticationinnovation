@@ -22855,9 +22855,10 @@ public class TameCommands {
         if (selected < 0) return false;
         ItemStack stack = data.hungerInventory.get(selected);
         data.lastConsumedFoodPreferred = isPreferredDistributionFood(stack, data, tame);
+        data.lastConsumedFoodEternalSteak = TameFoodManager.isEternalSteak(stack);
         int foodSaturation = hungerFoodSaturation(stack, data, tame);
         applyStoredFoodToNativeHunger(tame, stack, data.lastConsumedFoodPreferred);
-        stack.shrink(1);
+        if (!data.lastConsumedFoodEternalSteak) stack.shrink(1);
         data.hungerSaturation = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.hungerSaturation) + foodSaturation);
         if (stack.isEmpty()) data.hungerInventory.remove(selected);
         int remainingFoodPoints = totalHungerFoodPoints(data);
@@ -22912,9 +22913,11 @@ public class TameCommands {
         boolean normalFood = TameFoodManager.accepts(stack, data, tame);
         boolean gluttonous = data != null && data.attributeLevels.getOrDefault("gluttonous", 0) > 0;
         boolean breadFallback = stack.is(Items.BREAD);
-        if (!normalFood && !gluttonous && !breadFallback) return 0;
+        boolean eternalSteak = TameFoodManager.isEternalSteak(stack);
+        if (!normalFood && !gluttonous && !breadFallback && !eternalSteak) return 0;
         long saturation = (long) points * TAME_HUNGER_SATURATION_PER_FOOD_POINT;
         if (normalFood) return (int) Math.min(Integer.MAX_VALUE, (long) saturation * 2L);
+        if (eternalSteak) return (int) Math.min(Integer.MAX_VALUE, Math.max(1, saturation / 2));
         if (gluttonous) return (int) Math.min(Integer.MAX_VALUE, Math.max(1, saturation / 2));
         return (int) Math.min(Integer.MAX_VALUE, Math.max(1, saturation / 10));
     }

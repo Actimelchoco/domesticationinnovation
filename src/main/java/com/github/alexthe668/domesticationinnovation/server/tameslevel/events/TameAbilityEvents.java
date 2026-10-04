@@ -1109,7 +1109,8 @@ public class TameAbilityEvents {
 
     private static long passiveHealInterval(LivingEntity tame, TameData data) {
         long interval = tame != null && TameDuelManager.isEntityInDuel(tame.getUUID()) ? 200L : 100L;
-        return data != null && !data.lastConsumedFoodPreferred ? interval * 2L : interval;
+        if (data == null || data.lastConsumedFoodPreferred) return interval;
+        return interval * (data.lastConsumedFoodEternalSteak ? 4L : 2L);
     }
 
     private static void handleComfort(LivingEntity tame, TameData data, long now) {
