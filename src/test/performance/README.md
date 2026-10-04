@@ -9,7 +9,7 @@ Run the isolated Forge GameTest server from the repository root:
 The init script includes these test sources and the empty structure only for this
 run. The server uses `build/tame-performance-gametest`, separate from normal worlds.
 
-The ten tests cover:
+The twelve tests cover:
 
 - Taming after entity join, stable identity changes, replacement bodies, delayed
   removal events, repeated missing lookups, death, and unload.
@@ -29,6 +29,8 @@ The ten tests cover:
   unchanged setters, removal before flushing, and immutable sent payloads.
 - Progress preview updates, ignoring zero levels, skipping unchanged previews,
   and clearing previews when progression is removed.
+- Daily care XP eligibility, preserving food, preventing retroactive rewards,
+  saved day markers, restarts, time rewinds, skipped days, and normal level-ups.
 
 These are correctness regressions, not a server performance benchmark. Compare a
 new Spark capture under the same workload to measure the actual improvement.

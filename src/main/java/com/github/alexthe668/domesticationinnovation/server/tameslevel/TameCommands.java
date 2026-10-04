@@ -17999,6 +17999,7 @@ public class TameCommands {
         keeper.assists = Math.max(keeper.assists, duplicate.assists);
         keeper.deaths = Math.max(keeper.deaths, duplicate.deaths);
         keeper.bornDayTime = keeper.bornDayTime <= 0L ? duplicate.bornDayTime : Math.min(keeper.bornDayTime, duplicate.bornDayTime);
+        keeper.lastDailyCareDay = Math.max(keeper.lastDailyCareDay, duplicate.lastDailyCareDay);
 
         keeper.bonusHealth = Math.max(keeper.bonusHealth, duplicate.bonusHealth);
         keeper.bonusDamage = Math.max(keeper.bonusDamage, duplicate.bonusDamage);
@@ -22872,6 +22873,14 @@ public class TameCommands {
         ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(food.getItem());
         boolean hearty = itemId != null && itemId.toString().equals("saintsdragons:hearty_dragon_meal");
         bridge.domesticationinnovation$applyStoredFoodToNativeHunger(hearty ? 20 : preferred ? 10 : 1);
+    }
+
+    public static boolean hasEdibleStoredFood(LivingEntity tame, TameData data) {
+        if (tame == null || data == null) return false;
+        for (ItemStack stack : data.hungerInventory) {
+            if (hungerFoodSaturation(stack, data, tame) > 0) return true;
+        }
+        return false;
     }
 
     private static int hungerFoodPoints(ItemStack stack, TameData data, LivingEntity tame) {

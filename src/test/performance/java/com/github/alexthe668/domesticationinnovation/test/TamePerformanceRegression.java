@@ -7,6 +7,7 @@ import com.github.alexthe668.domesticationinnovation.server.entity.TameTagSync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameDailyCareEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.*;
 import net.minecraft.core.BlockPos;
@@ -37,6 +38,98 @@ public final class TamePerformanceRegression {
 
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
+    }
+
+    private static void dailyTick(GameTestHelper helper, long dayTime) {
+        var server = helper.getLevel().getServer();
+        server.getWorldData().overworldData().setDayTime(dayTime);
+        TameDailyCareEvents.tick(new TickEvent.ServerTickEvent(TickEvent.Phase.END, () -> true, server));
+    }
+
+    @GameTest(template = "empty")
+    public static void dailyCareEligibility(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        long originalTime = server.overworld().getDayTime();
+        var fixtures = new java.util.ArrayList<Wolf>();
+        try {
+            server.getWorldData().overworldData().setDayTime(23999);
+            TameDailyCareEvents.started(new net.minecraftforge.event.server.ServerStartedEvent(server));
+            for (int i = 0; i < 8; i++) {
+                Wolf tame = scheduledWolf(helper, 1);
+                fixtures.add(tame);
+                tame.setHealth(tame.getMaxHealth());
+                TameData data = TameRegistry.get(tame.getUUID());
+                data.bornDayTime = 0;
+                data.hungerInventory.add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BEEF));
+            }
+            fixtures.get(1).setHealth(fixtures.get(1).getMaxHealth() - 1);
+            TameRegistry.get(fixtures.get(2).getUUID()).hungerInventory.clear();
+            TameRegistry.get(fixtures.get(3).getUUID()).hungerInventory.set(0,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIRT));
+            TameRegistry.get(fixtures.get(4).getUUID()).bornDayTime = 24000;
+            TameRegistry.get(fixtures.get(5).getUUID()).dead = true;
+            TameRegistry.get(fixtures.get(6).getUUID()).stored = true;
+            fixtures.get(7).remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+            dailyTick(helper, 23999);
+            check(TameRegistry.get(fixtures.get(0).getUUID()).xp == 0, "reward must wait for dawn");
+            dailyTick(helper, 24000);
+            for (int i = 0; i < fixtures.size(); i++) {
+                TameData data = TameRegistry.get(fixtures.get(i).getUUID());
+                check(data.xp == (i == 0 ? 1 : 0), "only a loaded, living, unstored, healthy, fed tame from yesterday qualifies");
+            }
+            check(TameRegistry.get(fixtures.get(0).getUUID()).hungerInventory.get(0).getCount() == 1,
+                    "daily care must not consume food");
+            fixtures.get(1).setHealth(fixtures.get(1).getMaxHealth());
+            dailyTick(helper, 24001);
+            check(TameRegistry.get(fixtures.get(1).getUUID()).xp == 0, "healing after dawn must not retroactively qualify");
+        } finally {
+            for (Wolf tame : fixtures) {
+                TameRegistry.remove(tame.getUUID());
+                tame.discard();
+            }
+            server.getWorldData().overworldData().setDayTime(originalTime);
+            TameDailyCareEvents.started(new net.minecraftforge.event.server.ServerStartedEvent(server));
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void dailyCarePersistenceAndLevelUp(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        long originalTime = server.overworld().getDayTime();
+        Wolf tame = scheduledWolf(helper, 1);
+        TameData data = TameRegistry.get(tame.getUUID());
+        try {
+            data.bornDayTime = 0;
+            data.hasSavedProgress = true;
+            data.savedLevel = 10;
+            data.hungerInventory.add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BEEF));
+            tame.setHealth(tame.getMaxHealth());
+            server.getWorldData().overworldData().setDayTime(23999);
+            TameDailyCareEvents.started(new net.minecraftforge.event.server.ServerStartedEvent(server));
+            dailyTick(helper, 24000);
+            check(data.xp == 1, "the fixed daily reward must not be doubled by recovery XP");
+            data = TameData.fromTag(data.toTag());
+            TameRegistry.register(data);
+            check(data.lastDailyCareDay == 1, "daily evaluation marker must survive saving and loading");
+            TameDailyCareEvents.started(new net.minecraftforge.event.server.ServerStartedEvent(server));
+            dailyTick(helper, 24001);
+            check(data.xp == 1, "restarting in the same day must not grant XP");
+            dailyTick(helper, 0);
+            dailyTick(helper, 24000);
+            check(data.xp == 1, "rewinding time must not duplicate a reward");
+            dailyTick(helper, 120000);
+            check(data.xp == 2, "skipped days must grant only one reward at the observed boundary");
+            data.xp = LevelSystem.xpRequiredForLevel(data.level) - 1;
+            dailyTick(helper, 144000);
+            check(data.level == 2 && data.xp == 0, "daily XP must trigger normal level-up rewards");
+        } finally {
+            TameRegistry.remove(tame.getUUID());
+            tame.discard();
+            server.getWorldData().overworldData().setDayTime(originalTime);
+            TameDailyCareEvents.started(new net.minecraftforge.event.server.ServerStartedEvent(server));
+        }
+        helper.succeed();
     }
 
     @GameTest(template = "empty")

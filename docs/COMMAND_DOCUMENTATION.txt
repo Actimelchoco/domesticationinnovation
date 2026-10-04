@@ -1051,6 +1051,14 @@ automatically restores available saved highest progression for free, and gains
 10 whole levels with normal level rewards. Partial XP is preserved.
 Returning at dawn does not grant these bonus levels.
 
+DAILY CARE XP
+-------------
+At dawn, loaded living tames from a previous day receive exactly 1 XP if they
+have full health and food they can eat in their food inventory. Food is not
+consumed. Stored or dead tames do not qualify. Sleeping counts as a day ending.
+Rewards occur once per day, without catch-up XP for skipped or offline days,
+and can trigger normal level-ups.
+
 CHUNK SELECTION COMMANDS (OPERATOR)
 -----------------------------------
 /deleteChunks setA       Save the first corner at your current position.

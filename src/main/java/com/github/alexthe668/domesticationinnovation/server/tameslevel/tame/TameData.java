@@ -37,6 +37,7 @@ public class TameData {
     public int activeSurvivalDays = 0;
     public long adminSurvivalStart = Long.MIN_VALUE;
     public long lastActiveSurvivalDay = Long.MIN_VALUE;
+    public long lastDailyCareDay = Long.MIN_VALUE;
 
     public int kills = 0;
     public int assists = 0;
@@ -217,6 +218,7 @@ public class TameData {
         tag.putInt("activeSurvivalDays", activeSurvivalDays);
         tag.putLong("adminSurvivalStart", adminSurvivalStart);
         tag.putLong("lastActiveSurvivalDay", lastActiveSurvivalDay);
+        tag.putLong("lastDailyCareDay", lastDailyCareDay);
         tag.putInt("kills", kills);
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
@@ -411,6 +413,7 @@ public class TameData {
         data.activeSurvivalDays = Math.max(0, tag.getInt("activeSurvivalDays"));
         data.adminSurvivalStart = tag.contains("adminSurvivalStart") ? tag.getLong("adminSurvivalStart") : Long.MIN_VALUE;
         data.lastActiveSurvivalDay = tag.contains("lastActiveSurvivalDay", Tag.TAG_LONG) ? tag.getLong("lastActiveSurvivalDay") : Long.MIN_VALUE;
+        data.lastDailyCareDay = tag.contains("lastDailyCareDay", Tag.TAG_LONG) ? tag.getLong("lastDailyCareDay") : Long.MIN_VALUE;
         data.kills = Math.max(0, tag.getInt("kills"));
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
