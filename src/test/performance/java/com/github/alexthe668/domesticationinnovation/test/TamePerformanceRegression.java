@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.test;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.*;
 import net.minecraft.core.BlockPos;
@@ -12,6 +13,11 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Wolf;
 import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.fml.LogicalSide;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
@@ -28,6 +34,112 @@ public final class TamePerformanceRegression {
 
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
+    }
+
+    private static Wolf scheduledWolf(GameTestHelper helper, int snapshotSlot) {
+        Wolf wolf = EntityType.WOLF.create(helper.getLevel());
+        UUID uuid;
+        do { uuid = UUID.randomUUID(); } while (Math.floorMod(uuid.hashCode(), 30) != snapshotSlot);
+        wolf.setUUID(uuid);
+        wolf.setTame(true);
+        wolf.setOwnerUUID(UUID.randomUUID());
+        wolf.setCustomName(Component.literal("Persistence Test"));
+        wolf.moveTo(helper.absolutePos(new BlockPos(1, 1, 1)), 0, 0);
+        TameSpawnEvents.beginTameReconstruction();
+        try { check(helper.getLevel().addFreshEntity(wolf), "scheduled fixture must spawn"); }
+        finally { TameSpawnEvents.endTameReconstruction(); }
+        TameRegistry.register(new TameData(wolf));
+        return wolf;
+    }
+
+    private static void persistenceTick(ServerLevel level, long time) {
+        level.getServer().getWorldData().overworldData().setGameTime(time);
+        TamePersistenceEvents.onLevelTick(new TickEvent.LevelTickEvent(
+                LogicalSide.SERVER, TickEvent.Phase.END, level, () -> true));
+    }
+
+    @GameTest(template = "empty")
+    public static void persistenceSnapshotsAreStaggered(GameTestHelper helper) {
+        var level = helper.getLevel();
+        long originalTime = level.getGameTime();
+        Wolf first = scheduledWolf(helper, 1);
+        Wolf second = scheduledWolf(helper, 2);
+        TameData firstData = TameRegistry.get(first.getUUID());
+        TameData secondData = TameRegistry.get(second.getUUID());
+        try {
+            int firstSnapshots = 0, secondSnapshots = 0;
+            for (int time = 0; time < 1200; time++) {
+                first.getPersistentData().putInt("PersistenceProbe", time);
+                second.getPersistentData().putInt("PersistenceProbe", time);
+                CompoundTag beforeFirst = firstData.entitySnapshot;
+                CompoundTag beforeSecond = secondData.entitySnapshot;
+                persistenceTick(level, time);
+                if (firstData.entitySnapshot != beforeFirst) {
+                    firstSnapshots++;
+                    check(time == 40, "first fixture must snapshot in slot one");
+                }
+                if (secondData.entitySnapshot != beforeSecond) {
+                    secondSnapshots++;
+                    check(time == 80, "second fixture must snapshot in slot two");
+                }
+            }
+            check(firstSnapshots == 1 && secondSnapshots == 1, "each tame must snapshot once per 1200 ticks");
+            check(firstData.entitySnapshot.getCompound("ForgeData").getInt("PersistenceProbe") == 40,
+                    "snapshot must contain the actual entity state from its scheduled tick");
+            check(secondData.entitySnapshot.getCompound("ForgeData").getInt("PersistenceProbe") == 80,
+                    "second snapshot must contain its own scheduled state");
+            persistenceTick(level, 1240);
+            check(firstData.entitySnapshot.getCompound("ForgeData").getInt("PersistenceProbe") == 1199,
+                    "snapshot must repeat in the next minute");
+        } finally {
+            level.getServer().getWorldData().overworldData().setGameTime(originalTime);
+            TameRegistry.remove(first.getUUID());
+            TameRegistry.remove(second.getUUID());
+            first.discard();
+            second.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void persistenceLocationAndRecovery(GameTestHelper helper) {
+        var level = helper.getLevel();
+        long originalTime = level.getGameTime();
+        Wolf wolf = scheduledWolf(helper, 2);
+        Wolf missing = scheduledWolf(helper, 3);
+        TameData data = TameRegistry.get(wolf.getUUID());
+        try {
+            int initialX = data.lastKnownX;
+            data.entitySnapshot = new CompoundTag();
+            wolf.setPos(wolf.getX() + 1, wolf.getY(), wolf.getZ());
+            persistenceTick(level, 1);
+            check(data.lastKnownX == initialX && data.entitySnapshot.isEmpty(), "ordinary ticks must skip persistence work");
+            persistenceTick(level, 40);
+            check(data.lastKnownX == wolf.blockPosition().getX(), "maintenance must update location");
+            check(!data.entitySnapshot.isEmpty(), "maintenance must recover a missing snapshot without waiting a minute");
+            persistenceTick(level, 200);
+            check(data.lastKnownGameTime == 200, "location changes between save ticks must still be persisted");
+
+            TameRegistry.remove(missing.getUUID());
+            persistenceTick(level, 560);
+            check(TameRegistry.get(missing.getUUID()) == null, "backfill must respect its own interval");
+            persistenceTick(level, 600);
+            check(TameRegistry.get(missing.getUUID()) != null, "indexed backfill must restore an unregistered tame");
+
+            wolf.setPos(wolf.getX() + 1, wolf.getY(), wolf.getZ());
+            int finalX = wolf.blockPosition().getX();
+            level.getServer().getWorldData().overworldData().setGameTime(601);
+            wolf.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+            check(data.lastKnownX == finalX && data.lastKnownGameTime == 601, "unload must retain the final location");
+            check(!LoadedTameIndex.snapshotForLevel(level).contains(wolf), "unloaded tames must leave the level index");
+        } finally {
+            level.getServer().getWorldData().overworldData().setGameTime(originalTime);
+            TameRegistry.remove(wolf.getUUID());
+            TameRegistry.remove(missing.getUUID());
+            wolf.discard();
+            missing.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(template = "empty")

@@ -13,7 +13,11 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -26,7 +30,9 @@ public final class LoadedTameIndex {
     private static final Map<UUID, LivingEntity> BY_TL_ID = new HashMap<>();
     private static final Map<LivingEntity, Ids> IDS = new IdentityHashMap<>();
 
-    private record Ids(UUID uuid, UUID tlId) { }
+    private static final Map<ServerLevel, Set<LivingEntity>> BY_LEVEL = new IdentityHashMap<>();
+
+    private record Ids(UUID uuid, UUID tlId, ServerLevel level) { }
 
     private LoadedTameIndex() { }
 
@@ -40,6 +46,7 @@ public final class LoadedTameIndex {
         BY_UUID.clear();
         BY_TL_ID.clear();
         IDS.clear();
+        BY_LEVEL.clear();
         indexedServer = null;
     }
 
@@ -50,14 +57,15 @@ public final class LoadedTameIndex {
     }
 
     private static void track(LivingEntity entity, MinecraftServer server) {
-        if (!TameEntityAdapter.isSupported(entity)) return;
+        if (!TameEntityAdapter.isSupported(entity) || !(entity.level() instanceof ServerLevel level)) return;
         useServer(server);
         UUID uuid = entity.getUUID();
         UUID tlId = TameData.getTlId(entity);
         Ids old = IDS.get(entity);
-        if (old != null && old.uuid().equals(uuid) && java.util.Objects.equals(old.tlId(), tlId)) return;
+        if (old != null && old.uuid().equals(uuid) && java.util.Objects.equals(old.tlId(), tlId) && old.level() == level) return;
         forget(entity);
-        IDS.put(entity, new Ids(uuid, tlId));
+        IDS.put(entity, new Ids(uuid, tlId, level));
+        BY_LEVEL.computeIfAbsent(level, ignored -> Collections.newSetFromMap(new IdentityHashMap<>())).add(entity);
         BY_UUID.put(uuid, entity);
         if (tlId != null) BY_TL_ID.put(tlId, entity);
     }
@@ -66,6 +74,11 @@ public final class LoadedTameIndex {
         Ids old = IDS.remove(entity);
         if (old == null) return;
         // A departing old body must not remove a respawned body's entry.
+        Set<LivingEntity> levelEntities = BY_LEVEL.get(old.level());
+        if (levelEntities != null) {
+            levelEntities.remove(entity);
+            if (levelEntities.isEmpty()) BY_LEVEL.remove(old.level());
+        }
         BY_UUID.remove(old.uuid(), entity);
         if (old.tlId() != null) BY_TL_ID.remove(old.tlId(), entity);
     }
@@ -75,6 +88,18 @@ public final class LoadedTameIndex {
                 && level.getServer() == server && !entity.isRemoved()
                 && level.getEntity(entity.getUUID()) == entity
                 && entity.isAlive() && TameEntityAdapter.isTame(entity);
+    }
+
+    /** Copy before processing: persistence can remove or rebind entities during the pass. */
+    public static List<LivingEntity> snapshotForLevel(ServerLevel level) {
+        useServer(level.getServer());
+        Set<LivingEntity> entities = BY_LEVEL.get(level);
+        if (entities == null || entities.isEmpty()) return List.of();
+        List<LivingEntity> result = new ArrayList<>(entities.size());
+        for (LivingEntity entity : entities) {
+            if (entity.level() == level && usable(entity, level.getServer())) result.add(entity);
+        }
+        return result;
     }
 
     public static LivingEntity find(MinecraftServer server, UUID uuid, UUID tlId) {

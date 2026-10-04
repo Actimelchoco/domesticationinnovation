@@ -4,6 +4,7 @@ import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LoadedTameIndex;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameBedRegistrySync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
@@ -23,6 +24,8 @@ import java.util.UUID;
 public class TamePersistenceEvents {
     private static final java.util.regex.Pattern LEVEL_PREFIX =
             java.util.regex.Pattern.compile("^\\[lvl\\s*\\d+\\]\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final long MAINTENANCE_INTERVAL_TICKS = 40L; // 2 seconds
+    private static final Set<UUID> PENDING_LOCATION_SAVES = new HashSet<>();
     private static final long LOCATION_SAVE_INTERVAL_TICKS = 200L; // 10 seconds
     private static final long FULL_SNAPSHOT_INTERVAL_TICKS = 1200L; // 60 seconds
     private static final long QUEUE_SCRUB_INTERVAL_TICKS = 100L; // 5 seconds
@@ -30,11 +33,18 @@ public class TamePersistenceEvents {
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
+        PENDING_LOCATION_SAVES.clear();
         TameRegistry.init(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        for (ServerLevel level : event.getServer().getAllLevels()) {
+            for (var entity : LoadedTameIndex.snapshotForLevel(level)) {
+                if (entity instanceof TamableAnimal tame) saveFinalLocation(level, tame);
+            }
+        }
+        PENDING_LOCATION_SAVES.clear();
         TameRegistry.markDirty();
     }
 
@@ -42,19 +52,20 @@ public class TamePersistenceEvents {
     public static void onLevelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ServerLevel level)) return;
-        boolean maintenanceTick = (level.getGameTime() % 40L) == 0L;
-        boolean saveLocationTick = (level.getGameTime() % LOCATION_SAVE_INTERVAL_TICKS) == 0L;
-        boolean saveSnapshotTick = (level.getGameTime() % FULL_SNAPSHOT_INTERVAL_TICKS) == 0L;
-        boolean queueScrubTick = (level.getGameTime() % QUEUE_SCRUB_INTERVAL_TICKS) == 0L;
-        boolean backfillScanTick = (level.getGameTime() % BACKFILL_SCAN_INTERVAL_TICKS) == 0L;
+        long now = level.getGameTime();
+        boolean maintenanceTick = (now % MAINTENANCE_INTERVAL_TICKS) == 0L;
+        boolean saveLocationTick = (now % LOCATION_SAVE_INTERVAL_TICKS) == 0L;
+        boolean queueScrubTick = (now % QUEUE_SCRUB_INTERVAL_TICKS) == 0L;
+        boolean backfillScanTick = (now % BACKFILL_SCAN_INTERVAL_TICKS) == 0L;
+        // Full snapshots are distributed across maintenance ticks, not a global minute boundary.
+        if (!maintenanceTick && !saveLocationTick && !queueScrubTick && !backfillScanTick) return;
         if (maintenanceTick && level.getServer() != null && level == level.getServer().overworld()) {
             TameDuelManager.tick(level.getServer());
         }
 
         boolean changed = false;
         Set<UUID> loadedAliveTameIds = queueScrubTick ? new HashSet<>() : Set.of();
-        Set<UUID> seenLoaded = maintenanceTick ? new HashSet<>() : Set.of();
-        for (Entity entity : level.getAllEntities()) {
+        for (var entity : LoadedTameIndex.snapshotForLevel(level)) {
             if (!(entity instanceof TamableAnimal tame)) continue;
             if (!tame.isTame() || !tame.isAlive()) continue;
             TameData data = TameRegistry.get(tame.getUUID());
@@ -68,42 +79,15 @@ public class TamePersistenceEvents {
                 }
                 changed = true;
             }
-            if (maintenanceTick) {
-                seenLoaded.add(data.uuid);
-            }
             if (queueScrubTick) {
                 loadedAliveTameIds.add(data.uuid);
                 if (data.tlId != null) {
                     loadedAliveTameIds.add(data.tlId);
                 }
             }
-            if (syncLoadedTame(level, tame, data, maintenanceTick, saveLocationTick, saveSnapshotTick)) {
+            if (syncLoadedTame(level, tame, data, maintenanceTick, saveLocationTick,
+                    maintenanceTick && snapshotDue(tame.getUUID(), now))) {
                 changed = true;
-            }
-        }
-
-        if (maintenanceTick && backfillScanTick) {
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof TamableAnimal tame)) continue;
-                if (!tame.isTame() || !tame.isAlive()) continue;
-                UUID tameId = tame.getUUID();
-                if (seenLoaded.contains(tameId)) continue;
-
-                TameData data = TameRegistry.get(tameId);
-                if (data == null) {
-                    data = TameSpawnEvents.registerOrRestoreTame(tame, false);
-                    if (data == null) continue;
-                    changed = true;
-                }
-                if (queueScrubTick) {
-                    loadedAliveTameIds.add(tameId);
-                    if (data.tlId != null) {
-                        loadedAliveTameIds.add(data.tlId);
-                    }
-                }
-                if (syncLoadedTame(level, tame, data, true, saveLocationTick, saveSnapshotTick)) {
-                    changed = true;
-                }
             }
         }
 
@@ -120,14 +104,22 @@ public class TamePersistenceEvents {
         }
     }
 
+    private static boolean snapshotDue(UUID uuid, long gameTime) {
+        long slots = FULL_SNAPSHOT_INTERVAL_TICKS / MAINTENANCE_INTERVAL_TICKS;
+        return Math.floorMod(Math.floorDiv(gameTime, MAINTENANCE_INTERVAL_TICKS), slots)
+                == Math.floorMod(uuid.hashCode(), slots);
+    }
+
     public static void onTameEntityLeave(TamableAnimal tame) {
-        if (tame == null || tame.level().isClientSide) {
+        if (tame == null || !(tame.level() instanceof ServerLevel level)) {
             return;
         }
         if (tame.getPersistentData().getBoolean(TameCombatEvents.DEATH_REMOVAL_TAG)) {
             tame.getPersistentData().remove(TameCombatEvents.DEATH_REMOVAL_TAG);
+            PENDING_LOCATION_SAVES.remove(tame.getUUID());
             return;
         }
+        if (saveFinalLocation(level, tame)) TameRegistry.markDirty();
         if (!isTemporarySummonTame(tame)) {
             return;
         }
@@ -165,6 +157,17 @@ public class TamePersistenceEvents {
         TameRegistry.removeDeathsForIdentity(byUuid.uuid, byUuid.tlId);
     }
 
+    private static boolean saveFinalLocation(ServerLevel level, TamableAnimal tame) {
+        TameData data = TameRegistry.get(tame.getUUID());
+        boolean pendingLocation = PENDING_LOCATION_SAVES.remove(tame.getUUID());
+        if (data != null && !data.dead && tame.getHealth() > 0
+                && (updateLiveLocation(level, tame, data) || pendingLocation)) {
+            data.lastKnownGameTime = level.getGameTime();
+            return true;
+        }
+        return false;
+    }
+
     private static boolean syncLoadedTame(ServerLevel level, TamableAnimal tame, TameData data, boolean maintenanceTick, boolean saveLocationTick, boolean saveSnapshotTick) {
         boolean changed = false;
         if (data.dead) {
@@ -174,8 +177,8 @@ public class TamePersistenceEvents {
         if (maintenanceTick && level.getServer() != null && TameDuelManager.isEntityInDuel(tame.getUUID())) {
             TameDuelManager.refreshLoadedDuelParticipant(level.getServer(), tame);
         }
-        boolean locationChanged = updateLiveLocation(level, tame, data);
-        if (saveLocationTick && locationChanged) {
+        if (updateLiveLocation(level, tame, data)) PENDING_LOCATION_SAVES.add(data.uuid);
+        if (saveLocationTick && PENDING_LOCATION_SAVES.remove(data.uuid)) {
             data.lastKnownGameTime = level.getGameTime();
             changed = true;
         }

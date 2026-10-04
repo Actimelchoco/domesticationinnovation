@@ -1,4 +1,4 @@
-# Tame lookup and effect regression tests
+# Tame performance regression tests
 
 Run the isolated Forge GameTest server from the repository root:
 
@@ -9,7 +9,7 @@ Run the isolated Forge GameTest server from the repository root:
 The init script includes these test sources and the empty structure only for this
 run. The server uses `build/tame-performance-gametest`, separate from normal worlds.
 
-The four tests cover:
+The six tests cover:
 
 - Taming after entity join, stable identity changes, replacement bodies, delayed
   removal events, repeated missing lookups, death, and unload.
@@ -18,6 +18,9 @@ The four tests cover:
   always ticking because the test server has no players there.
 - Every known ability/attribute ID, external input normalization, level bounds,
   unknown ID behavior, and immediate effect changes after progression edits.
+- Full snapshots distributed across maintenance ticks, once per minute per tame.
+- Skipping ordinary ticks, recovering missing snapshots and registry rows,
+  saving pending location changes, and preserving the final location on unload.
 
 These are correctness regressions, not a server performance benchmark. Compare a
 new Spark capture under the same workload to measure the actual improvement.
