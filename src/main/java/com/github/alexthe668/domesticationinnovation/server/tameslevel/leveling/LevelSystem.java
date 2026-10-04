@@ -245,17 +245,23 @@ public class LevelSystem {
         }
     }
 
+    private static final Map<String, AbilityReward> ABILITY_REWARDS_BY_ID;
+    private static final Map<String, AttributeReward> ATTRIBUTE_REWARDS_BY_ID;
     private static final Set<String> KNOWN_ABILITIES;
     private static final Set<String> KNOWN_ATTRIBUTES;
     private static final Map<String, String> ABILITY_ALIASES;
     static {
+        Map<String, AbilityReward> abilityRewards = new HashMap<>();
+        Map<String, AttributeReward> attributeRewards = new HashMap<>();
         Set<String> ids = new LinkedHashSet<>();
         for (AbilityReward value : AbilityReward.values()) {
             ids.add(value.id);
+            abilityRewards.put(value.id, value);
         }
         Set<String> attributes = new LinkedHashSet<>();
         for (AttributeReward value : AttributeReward.values()) {
             attributes.add(value.id);
+            attributeRewards.put(value.id, value);
         }
         Map<String, String> aliases = new HashMap<>();
 
@@ -265,6 +271,8 @@ public class LevelSystem {
         }});
         KNOWN_ATTRIBUTES = Collections.unmodifiableSet(attributes);
         ABILITY_ALIASES = Collections.unmodifiableMap(aliases);
+        ABILITY_REWARDS_BY_ID = Collections.unmodifiableMap(abilityRewards);
+        ATTRIBUTE_REWARDS_BY_ID = Collections.unmodifiableMap(attributeRewards);
     }
 
     // ===============================
@@ -461,7 +469,8 @@ public class LevelSystem {
         if (data == null || attributeId == null) {
             return 0;
         }
-        String id = attributeId.trim().toLowerCase(java.util.Locale.ROOT);
+        String id = ATTRIBUTE_REWARDS_BY_ID.containsKey(attributeId)
+                ? attributeId : attributeId.trim().toLowerCase(java.util.Locale.ROOT);
         return clampAttributeLevel(id, data.attributeLevels.getOrDefault(id, 0));
     }
 
@@ -1342,22 +1351,11 @@ public class LevelSystem {
     }
 
     private static AbilityReward byAbilityId(String id) {
-        id = canonicalAbilityId(id);
-        for (AbilityReward reward : AbilityReward.values()) {
-            if (reward.id.equals(id)) {
-                return reward;
-            }
-        }
-        return null;
+        return ABILITY_REWARDS_BY_ID.get(canonicalAbilityId(id));
     }
 
     private static AttributeReward byAttributeId(String id) {
-        for (AttributeReward reward : AttributeReward.values()) {
-            if (reward.id.equals(id)) {
-                return reward;
-            }
-        }
-        return null;
+        return ATTRIBUTE_REWARDS_BY_ID.get(id);
     }
 
     private static BaseStatReward byBaseStatId(String id) {
@@ -1375,6 +1373,8 @@ public class LevelSystem {
         if (id == null) {
             return "";
         }
+        // Internal callers already use canonical IDs. Normalize external input only.
+        if (ABILITY_REWARDS_BY_ID.containsKey(id)) return id;
         String normalized = id.trim().toLowerCase(java.util.Locale.ROOT);
         return ABILITY_ALIASES.getOrDefault(normalized, normalized);
     }

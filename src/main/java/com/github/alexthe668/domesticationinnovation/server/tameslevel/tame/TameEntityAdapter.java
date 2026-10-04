@@ -4,7 +4,6 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -84,19 +83,7 @@ public final class TameEntityAdapter {
     }
 
     public static LivingEntity findLoaded(MinecraftServer server, UUID entityUuid, UUID tlId) {
-        if (server == null) return null;
-        for (ServerLevel level : server.getAllLevels()) {
-            if (entityUuid != null) {
-                Entity exact = level.getEntity(entityUuid);
-                if (exact instanceof LivingEntity living && living.isAlive() && isTame(living)) return living;
-            }
-            if (tlId == null) continue;
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof LivingEntity living) || !living.isAlive() || !isTame(living)) continue;
-                if (tlId.equals(TameData.getTlId(living))) return living;
-            }
-        }
-        return null;
+        return LoadedTameIndex.find(server, entityUuid, tlId);
     }
 
     public static LivingEntity findLoadedOwned(MinecraftServer server, TameData data, UUID ownerUuid, boolean repairIdentity) {

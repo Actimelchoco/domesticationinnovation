@@ -415,6 +415,7 @@ public class CommonProxy {
         enforceNoGriefMutantCreeperMinion(event.getEntity());
         int frozenTime = TameableUtils.getFrozenTime(event.getEntity());
         if (TameableUtils.couldBeTamed(event.getEntity()) && canTickCollar(event.getEntity())) {
+            TameData collarData = diEffectData(event.getEntity());
             if (!event.getEntity().level().isClientSide && event.getEntity().tickCount % 20 == 0) {
                 TameableUtils.syncVisualCollarEnchants(event.getEntity());
             }
@@ -431,11 +432,11 @@ public class CommonProxy {
             if (event.getEntity().hasEffect(MobEffects.POISON) && TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.POISON_RESISTANCE)) {
                 event.getEntity().removeEffect(MobEffects.POISON);
             }
-            int amphibiousLevel = getDiEffectLevel(event.getEntity(), "amphibious");
+            int amphibiousLevel = getDiEffectLevel(collarData, "amphibious");
             if (amphibiousLevel > 0) {
                 event.getEntity().setAirSupply(event.getEntity().getMaxAirSupply());
             }
-            int magneticLevel = getDiEffectLevel(event.getEntity(), "magnetic");
+            int magneticLevel = getDiEffectLevel(collarData, "magnetic");
             boolean magneticVisual = TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.MAGNETIC);
             if (event.getEntity() instanceof Mob mob && ((magneticLevel > 0 && !mob.level().isClientSide) || magneticVisual)) {
                 Entity sucking = TameableUtils.getPetAttackTarget(mob);
@@ -477,7 +478,7 @@ public class CommonProxy {
                     }
                 }
             }
-            int shadowHandsLevel = getAbilityOrEnchantLevel(event.getEntity(), "shadow_hands");
+            int shadowHandsLevel = getDiEffectLevel(collarData, "shadow_hands");
             if (shadowHandsLevel > 0 && event.getEntity() instanceof Mob mob) {
                 DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), TameableUtils.getShadowPunchTimes(mob));
                 if (!mob.level().isClientSide) {
@@ -578,7 +579,7 @@ public class CommonProxy {
                 }
                 DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), new int[0]);
             }
-            int discJockeyLevel = getDiEffectLevel(event.getEntity(), "disc_jockey");
+            int discJockeyLevel = getDiEffectLevel(collarData, "disc_jockey");
             if (discJockeyLevel > 0 && !event.getEntity().level().isClientSide && event.getEntity().tickCount % 10 == 0) {
                 UUID uuid = TameableUtils.getPetJukeboxUUID(event.getEntity());
                 if (uuid == null || !(((ServerLevel) event.getEntity().level()).getEntity(uuid) instanceof FollowingJukeboxEntity)) {
@@ -589,31 +590,31 @@ public class CommonProxy {
                     TameableUtils.setPetJukeboxUUID(event.getEntity(), follower.getUUID());
                 }
             }
-            int linkedInventoryLevel = getDiEffectLevel(event.getEntity(), "linked_inventory");
+            int linkedInventoryLevel = getDiEffectLevel(collarData, "linked_inventory");
             if (linkedInventoryLevel > 0 && event.getEntity() instanceof Mob mob) {
                 if (!mob.canPickUpLoot()) {
                     mob.setCanPickUpLoot(true);
                 }
             }
-            int shepherdLvl = getDiEffectLevel(event.getEntity(), "herding");
+            int shepherdLvl = getDiEffectLevel(collarData, "herding");
             if (shepherdLvl > 0) {
                 TameableUtils.attractAnimals(event.getEntity(), shepherdLvl * 3);
             }
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.INFAMY_CURSE)) {
                 TameableUtils.aggroRandomMonsters(event.getEntity());
             }
-            int intimidationLevel = getDiEffectLevel(event.getEntity(), "intimidation");
+            int intimidationLevel = getDiEffectLevel(collarData, "intimidation");
             if (intimidationLevel > 0) {
                 TameableUtils.scareRandomMonsters(event.getEntity(), intimidationLevel);
             }
             if (TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.BLIGHT_CURSE)) {
                 TameableUtils.destroyRandomPlants(event.getEntity());
             }
-            int rejuvenationLevel = getDiEffectLevel(event.getEntity(), "rejuvenation");
+            int rejuvenationLevel = getDiEffectLevel(collarData, "rejuvenation");
             if (rejuvenationLevel > 0) {
                 TameableUtils.absorbExpOrbs(event.getEntity(), rejuvenationLevel);
             }
-            int voidCloudLevel = getDiEffectLevel(event.getEntity(), "void_cloud");
+            int voidCloudLevel = getDiEffectLevel(collarData, "void_cloud");
             if (voidCloudLevel > 0
                     && TameRegistry.isVoidCloudEnabled(TameableUtils.getOwnerUUIDOf(event.getEntity()))
                     && !event.getEntity().isInWaterOrBubble() && event.getEntity().fallDistance > 3.0F && !event.getEntity().onGround()) {
@@ -637,9 +638,9 @@ public class CommonProxy {
                     ((ServerLevel) event.getEntity().level()).sendParticles(ParticleTypes.REVERSE_PORTAL, event.getEntity().getRandomX(1.5F), event.getEntity().getY() - event.getEntity().getRandom().nextFloat(), event.getEntity().getRandomZ(1.5F), 0, 0, -0.2F, 0, 1.0D);
                 }
             }
-            int oreLvl = getDiEffectLevel(event.getEntity(), "ore_scenting");
+            int oreLvl = getDiEffectLevel(collarData, "ore_scenting");
             if (oreLvl > 0 && !event.getEntity().level().isClientSide) {
-                TameData tameData = TameRegistry.get(event.getEntity().getUUID());
+                TameData tameData = collarData;
                 String preferredOreId = tameData == null ? "" : tameData.oreScentingOreId;
                 if (preferredOreId == null || preferredOreId.isBlank()) {
                     preferredOreId = "";
@@ -661,7 +662,7 @@ public class CommonProxy {
                     mob.getNavigation().moveTo(mob.getTarget(), 1.0D);
                 }
             }
-            int psychicWallLevel = getAbilityOrEnchantLevel(event.getEntity(), "psychic_wall");
+            int psychicWallLevel = getDiEffectLevel(collarData, "psychic_wall");
             if (psychicWallLevel > 0 && event.getEntity() instanceof Mob mob && !event.getEntity().level().isClientSide) {
                 int cooldown = TameableUtils.getPsychicWallCooldown(mob);
                 if (cooldown > 0) {
@@ -705,7 +706,7 @@ public class CommonProxy {
                     }
                 }
             }
-            int blazingProtectionLevel = getDiEffectLevel(event.getEntity(), "blazing_protection");
+            int blazingProtectionLevel = getDiEffectLevel(collarData, "blazing_protection");
             if (blazingProtectionLevel > 0 && !event.getEntity().level().isClientSide) {
                 int bars = TameableUtils.getBlazingProtectionBars(event.getEntity());
                 if (bars < blazingProtectionBarCap(blazingProtectionLevel)) {
@@ -720,7 +721,7 @@ public class CommonProxy {
                 }
                 spawnBlazingProtectionFallbackParticles((ServerLevel) event.getEntity().level(), event.getEntity(), TameableUtils.getBlazingProtectionBars(event.getEntity()));
             }
-            int healingAuraLevel = getAbilityOrEnchantLevel(event.getEntity(), "healing_aura");
+            int healingAuraLevel = getDiEffectLevel(collarData, "healing_aura");
             if (healingAuraLevel > 0 && !event.getEntity().level().isClientSide) {
                 int time = TameableUtils.getHealingAuraTime(event.getEntity());
                 if (time > 0) {
@@ -2449,15 +2450,18 @@ public class CommonProxy {
         if (entity == null || effectId == null || effectId.isBlank()) {
             return 0;
         }
-        int abilityLevel = 0;
-        int attributeLevel = 0;
-        if (entity instanceof TamableAnimal tame && tame.isTame()) {
-            TameData data = TameRegistry.get(tame.getUUID());
-            if (data != null) {
-                abilityLevel = Math.max(0, LevelSystem.getAbilityLevel(data, effectId));
-                attributeLevel = Math.max(0, LevelSystem.getAttributeLevel(data, effectId));
-            }
-        }
+        return getDiEffectLevel(diEffectData(entity), effectId);
+    }
+
+    private static TameData diEffectData(LivingEntity entity) {
+        return entity instanceof TamableAnimal tame && tame.isTame()
+                ? TameRegistry.get(tame.getUUID()) : null;
+    }
+
+    private static int getDiEffectLevel(TameData data, String effectId) {
+        if (data == null) return 0;
+        int abilityLevel = Math.max(0, LevelSystem.getAbilityLevel(data, effectId));
+        int attributeLevel = Math.max(0, LevelSystem.getAttributeLevel(data, effectId));
 
         if ("psychic_wall".equals(effectId)) {
             abilityLevel = psychicAbilityToEnchantScale(abilityLevel);

@@ -659,6 +659,7 @@ public class TameData {
         }
         UUID created = UUID.randomUUID();
         data.putUUID(TL_ID_TAG, created);
+        LoadedTameIndex.refresh(tame);
         return created;
     }
 
@@ -667,6 +668,7 @@ public class TameData {
             return;
         }
         tame.getPersistentData().putUUID(TL_ID_TAG, tlId);
+        LoadedTameIndex.refresh(tame);
     }
 
     private TameData() {

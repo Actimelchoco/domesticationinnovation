@@ -1,0 +1,21 @@
+allprojects {
+    afterEvaluate {
+        sourceSets.main.java.srcDir('src/test/performance/java')
+        sourceSets.main.resources.srcDir('src/test/performance/resources')
+        minecraft.runs {
+            gameTestServer {
+                workingDirectory project.file('build/tame-performance-gametest')
+                property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+                property 'mixin.env.remapRefMap', 'true'
+                property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+                arg '-mixin.config=citadel.mixins.json'
+                arg '-mixin.config=domesticationinnovation.mixins.json'
+                mods {
+                    domesticationinnovation {
+                        source sourceSets.main
+                    }
+                }
+            }
+        }
+    }
+}

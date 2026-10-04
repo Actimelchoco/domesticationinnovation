@@ -1,0 +1,128 @@
+package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
+
+import com.github.alexthe668.domesticationinnovation.DomesticationMod;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.UUID;
+
+/** Server-thread-only index. Supported untamed entities are retained so later taming needs no scan. */
+@Mod.EventBusSubscriber(modid = DomesticationMod.MODID)
+public final class LoadedTameIndex {
+    private static MinecraftServer indexedServer;
+    private static final Map<UUID, LivingEntity> BY_UUID = new HashMap<>();
+    private static final Map<UUID, LivingEntity> BY_TL_ID = new HashMap<>();
+    private static final Map<LivingEntity, Ids> IDS = new IdentityHashMap<>();
+
+    private record Ids(UUID uuid, UUID tlId) { }
+
+    private LoadedTameIndex() { }
+
+    private static void useServer(MinecraftServer server) {
+        if (indexedServer == server) return;
+        clear();
+        indexedServer = server;
+    }
+
+    private static void clear() {
+        BY_UUID.clear();
+        BY_TL_ID.clear();
+        IDS.clear();
+        indexedServer = null;
+    }
+
+    public static void refresh(LivingEntity entity) {
+        if (!(entity.level() instanceof ServerLevel level)
+                || level.getEntity(entity.getUUID()) != entity) return;
+        track(entity, level.getServer());
+    }
+
+    private static void track(LivingEntity entity, MinecraftServer server) {
+        if (!TameEntityAdapter.isSupported(entity)) return;
+        useServer(server);
+        UUID uuid = entity.getUUID();
+        UUID tlId = TameData.getTlId(entity);
+        Ids old = IDS.get(entity);
+        if (old != null && old.uuid().equals(uuid) && java.util.Objects.equals(old.tlId(), tlId)) return;
+        forget(entity);
+        IDS.put(entity, new Ids(uuid, tlId));
+        BY_UUID.put(uuid, entity);
+        if (tlId != null) BY_TL_ID.put(tlId, entity);
+    }
+
+    private static void forget(LivingEntity entity) {
+        Ids old = IDS.remove(entity);
+        if (old == null) return;
+        // A departing old body must not remove a respawned body's entry.
+        BY_UUID.remove(old.uuid(), entity);
+        if (old.tlId() != null) BY_TL_ID.remove(old.tlId(), entity);
+    }
+
+    private static boolean usable(LivingEntity entity, MinecraftServer server) {
+        return entity != null && entity.level() instanceof ServerLevel level
+                && level.getServer() == server && !entity.isRemoved()
+                && level.getEntity(entity.getUUID()) == entity
+                && entity.isAlive() && TameEntityAdapter.isTame(entity);
+    }
+
+    public static LivingEntity find(MinecraftServer server, UUID uuid, UUID tlId) {
+        if (server == null) return null;
+        useServer(server);
+        LivingEntity exact = uuid == null ? null : BY_UUID.get(uuid);
+        if (usable(exact, server) && uuid.equals(exact.getUUID())) return exact;
+        // Check UUID in every dimension before falling back to the stable identity.
+        // This also handles lookups during another mod's entity-join callback.
+        if (uuid != null) {
+            for (ServerLevel level : server.getAllLevels()) {
+                Entity entity = level.getEntity(uuid);
+                if (entity instanceof LivingEntity living && usable(living, server)) {
+                    track(living, server);
+                    return living;
+                }
+            }
+        }
+        LivingEntity byIdentity = tlId == null ? null : BY_TL_ID.get(tlId);
+        if (usable(byIdentity, server) && tlId.equals(TameData.getTlId(byIdentity))) return byIdentity;
+        return null;
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void join(EntityJoinLevelEvent event) {
+        if (!event.isCanceled() && event.getLevel() instanceof ServerLevel level
+                && event.getEntity() instanceof LivingEntity living) track(living, level.getServer());
+    }
+
+    @SubscribeEvent
+    public static void leave(EntityLeaveLevelEvent event) {
+        if (!event.getLevel().isClientSide && event.getEntity() instanceof LivingEntity living) forget(living);
+    }
+
+    @SubscribeEvent
+    public static void started(ServerStartedEvent event) {
+        clear();
+        useServer(event.getServer());
+        // One startup backfill; steady-state lookups never enumerate world entities.
+        for (ServerLevel level : event.getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (entity instanceof LivingEntity living) track(living, event.getServer());
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public static void stopped(ServerStoppedEvent event) {
+        if (indexedServer == event.getServer()) clear();
+    }
+}
