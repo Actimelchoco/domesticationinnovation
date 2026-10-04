@@ -9,7 +9,7 @@ Run the isolated Forge GameTest server from the repository root:
 The init script includes these test sources and the empty structure only for this
 run. The server uses `build/tame-performance-gametest`, separate from normal worlds.
 
-The six tests cover:
+The eight tests cover:
 
 - Taming after entity join, stable identity changes, replacement bodies, delayed
   removal events, repeated missing lookups, death, and unload.
@@ -21,6 +21,10 @@ The six tests cover:
 - Full snapshots distributed across maintenance ticks, once per minute per tame.
 - Skipping ordinary ticks, recovering missing snapshots and registry rows,
   saving pending location changes, and preserving the final location on unload.
+- Duel participant lookup by UUID and stable identity, excluding unrelated tames,
+  and safe iteration when a duel ends during processing.
+- Cached optional hiding-method lookup, changing hiding timers, and the vanilla
+  visibility fallback when a method is missing or throws.
 
 These are correctness regressions, not a server performance benchmark. Compare a
 new Spark capture under the same workload to measure the actual improvement.

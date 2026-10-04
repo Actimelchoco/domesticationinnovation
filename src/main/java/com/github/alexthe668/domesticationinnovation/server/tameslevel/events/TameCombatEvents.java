@@ -75,6 +75,16 @@ public class TameCombatEvents {
     private static final Map<UUID, PendingInstantRespawn> PENDING_INSTANT_RESPAWNS = new HashMap<>();
     private static final Map<UUID, Integer> DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS = new HashMap<>();
     private static final Set<UUID> DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE = new HashSet<>();
+    private static final ClassValue<java.util.Optional<Method>> RAPTOR_HIDE_METHODS = new ClassValue<>() {
+        @Override
+        protected java.util.Optional<Method> computeValue(Class<?> type) {
+            try {
+                return java.util.Optional.of(type.getMethod("getHideFor"));
+            } catch (NoSuchMethodException | SecurityException ignored) {
+                return java.util.Optional.empty();
+            }
+        }
+    };
     private static boolean processingDeaths = false;
     private static long serverTick = 0L;
 
@@ -374,29 +384,31 @@ public class TameCombatEvents {
         if (server == null) {
             return;
         }
+        List<LivingEntity> participants = TameDuelManager.loadedDuelParticipants(server);
+        if (participants.isEmpty()) {
+            // An unloaded participant may still be in a duel: retain its transition state.
+            DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.keySet().removeIf(id -> !TameDuelManager.isTameInDuel(id));
+            DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.removeIf(id -> !TameDuelManager.isTameInDuel(id));
+            return;
+        }
         Set<UUID> seenDuelRaptors = new HashSet<>();
-        for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof LivingEntity tame)) {
-                    continue;
+        for (LivingEntity tame : participants) {
+            if (!isAlexsCavesVallumraptor(tame) || !tame.isAlive() || !TameDuelManager.isTameInDuel(tame.getUUID())) {
+                continue;
+            }
+            UUID tameId = tame.getUUID();
+            seenDuelRaptors.add(tameId);
+            boolean invisible = isVallumraptorHiding(tame);
+            boolean wasInvisible = DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.contains(tameId);
+            if (invisible && !wasInvisible) {
+                int count = DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.getOrDefault(tameId, 0) + 1;
+                DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.put(tameId, count);
+                DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.add(tameId);
+                if (count % 3 == 0) {
+                    killDuelVallumraptorForInvisibility(tame);
                 }
-                if (!isAlexsCavesVallumraptor(tame) || !tame.isAlive() || !TameDuelManager.isTameInDuel(tame.getUUID())) {
-                    continue;
-                }
-                UUID tameId = tame.getUUID();
-                seenDuelRaptors.add(tameId);
-                boolean invisible = isVallumraptorHiding(tame);
-                boolean wasInvisible = DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.contains(tameId);
-                if (invisible && !wasInvisible) {
-                    int count = DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.getOrDefault(tameId, 0) + 1;
-                    DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.put(tameId, count);
-                    DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.add(tameId);
-                    if (count % 3 == 0) {
-                        killDuelVallumraptorForInvisibility(tame);
-                    }
-                } else if (!invisible && wasInvisible) {
-                    DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.remove(tameId);
-                }
+            } else if (!invisible && wasInvisible) {
+                DUEL_VALLUMRAPTORS_CURRENTLY_INVISIBLE.remove(tameId);
             }
         }
         DUEL_VALLUMRAPTOR_INVISIBILITY_COUNTS.keySet().removeIf(id -> !seenDuelRaptors.contains(id) && !TameDuelManager.isTameInDuel(id));
@@ -423,7 +435,8 @@ public class TameCombatEvents {
             return false;
         }
         try {
-            Method method = tame.getClass().getMethod("getHideFor");
+            Method method = RAPTOR_HIDE_METHODS.get(tame.getClass()).orElse(null);
+            if (method == null) return tame.isInvisible();
             Object value = method.invoke(tame);
             if (value instanceof Number number) {
                 return number.intValue() > 0;

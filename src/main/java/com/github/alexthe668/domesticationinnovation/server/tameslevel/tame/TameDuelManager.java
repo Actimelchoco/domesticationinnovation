@@ -263,6 +263,17 @@ public final class TameDuelManager {
         return isEntityInDuel(tameId);
     }
 
+    /** Snapshot so eliminations during processing cannot invalidate iteration. */
+    public static synchronized List<LivingEntity> loadedDuelParticipants(MinecraftServer server) {
+        if (server == null || BATTLE_ID_BY_ENTITY.isEmpty()) return List.of();
+        List<LivingEntity> loaded = new ArrayList<>(BATTLE_ID_BY_ENTITY.size());
+        for (UUID id : BATTLE_ID_BY_ENTITY.keySet()) {
+            LivingEntity entity = findLoadedLivingParticipant(server, id);
+            if (entity != null && !entity.isRemoved() && entity.isAlive()) loaded.add(entity);
+        }
+        return loaded;
+    }
+
     public static synchronized boolean consumeRecentDuelElimination(UUID entityId) {
         UUID resolved = resolveActiveParticipantId(entityId);
         boolean consumed = entityId != null && RECENT_DUEL_ELIMINATIONS.remove(entityId);

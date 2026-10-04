@@ -4,6 +4,7 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.*;
 import net.minecraft.core.BlockPos;
@@ -34,6 +35,66 @@ public final class TamePerformanceRegression {
 
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
+    }
+
+    public static final class HidingWolf extends Wolf {
+        int hideFor;
+        boolean broken;
+
+        public HidingWolf(ServerLevel level) { super(EntityType.WOLF, level); }
+
+        public int getHideFor() {
+            if (broken) throw new IllegalStateException("optional compatibility method failed");
+            return hideFor;
+        }
+    }
+
+    @GameTest(template = "empty")
+    public static void cachedHidingCompatibility(GameTestHelper helper) throws Exception {
+        var method = TameCombatEvents.class.getDeclaredMethod("isVallumraptorHiding", net.minecraft.world.entity.LivingEntity.class);
+        method.setAccessible(true);
+        Wolf ordinary = EntityType.WOLF.create(helper.getLevel());
+        HidingWolf hiding = new HidingWolf(helper.getLevel());
+        check(!(boolean) method.invoke(null, ordinary), "missing optional method must use vanilla visibility");
+        ordinary.setInvisible(true);
+        check((boolean) method.invoke(null, ordinary), "cached missing method must still read current visibility");
+        hiding.hideFor = 5;
+        check((boolean) method.invoke(null, hiding), "optional hiding timer must detect hiding");
+        hiding.hideFor = 0;
+        hiding.setInvisible(true);
+        check(!(boolean) method.invoke(null, hiding), "cached method must read changing timer and take precedence");
+        hiding.broken = true;
+        check((boolean) method.invoke(null, hiding), "failed optional invocation must fall back to vanilla visibility");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void duelParticipantSnapshots(GameTestHelper helper) {
+        var server = helper.getLevel().getServer();
+        Wolf first = scheduledWolf(helper, 1);
+        Wolf second = scheduledWolf(helper, 2);
+        Wolf unrelated = scheduledWolf(helper, 3);
+        TameData firstData = TameRegistry.get(first.getUUID());
+        try {
+            check(TameDuelManager.loadedDuelParticipants(server).isEmpty(), "no active duel must return no participants");
+            TameDuelManager.startTeamDuel(server, first.getOwnerUUID(),
+                    java.util.Set.of(firstData.tlId), second.getOwnerUUID(), java.util.Set.of(second.getUUID()));
+            var snapshot = TameDuelManager.loadedDuelParticipants(server);
+            check(snapshot.size() == 2 && snapshot.contains(first) && snapshot.contains(second),
+                    "duel snapshot must resolve both stable identities and entity UUIDs");
+            check(!snapshot.contains(unrelated), "unrelated loaded tames must be excluded");
+            TameDuelManager.endDuelForTame(server, second.getUUID());
+            check(snapshot.size() == 2, "elimination must not mutate a previously returned snapshot");
+            check(TameDuelManager.loadedDuelParticipants(server).isEmpty(), "finished duel must return no participants");
+        } finally {
+            TameDuelManager.endDuelsForOwner(server, first.getOwnerUUID());
+            TameDuelManager.endDuelsForOwner(server, second.getOwnerUUID());
+            for (Wolf fixture : java.util.List.of(first, second, unrelated)) {
+                TameRegistry.remove(fixture.getUUID());
+                fixture.discard();
+            }
+        }
+        helper.succeed();
     }
 
     private static Wolf scheduledWolf(GameTestHelper helper, int snapshotSlot) {
