@@ -12,7 +12,7 @@ The extra GameTest exercises the transformed native Relics damage listener and
 our compatibility listener with real Curios equipment. It checks zero through
 three equipped belts with different training values, vanilla wolves and tamed
 foxes, training XP, removing belts, and excluding inventory/cosmetic copies.
-It runs alongside the twelve existing tame regression tests.
+It runs alongside the existing tame regression tests.
 
 Afterward, build the release with separate normal invocations:
 

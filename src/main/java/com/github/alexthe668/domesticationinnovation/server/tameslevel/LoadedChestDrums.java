@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.server.tameslevel;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.block.DrumBlockEntity;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.ChunkPos;
@@ -28,6 +29,9 @@ import java.util.UUID;
 public final class LoadedChestDrums {
     public static final int RANGE = 25;
     public static final int HEIGHT = 5;
+    public static final int RANGE_PER_DRUM = 10;
+    public static final int HEIGHT_PER_DRUM = 2;
+    private static final int MAX_RANGE = RANGE + 4 * RANGE_PER_DRUM;
     private static final Map<ServerLevel, Map<BlockPos, DrumBlockEntity>> LOADED = new IdentityHashMap<>();
 
     private static final Map<ServerLevel, Map<BlockPos, BlockPos>> LAST_BLOCKERS = new IdentityHashMap<>();
@@ -36,8 +40,11 @@ public final class LoadedChestDrums {
         public boolean active() { return blocker == null; }
     }
 
-    public record Chest(BlockEntity blockEntity, IItemHandler inventory, UUID owner) {
+    public record Chest(BlockEntity blockEntity, IItemHandler inventory, UUID owner, int extraDrums) {
         public BlockPos pos() { return blockEntity.getBlockPos(); }
+        public int range() { return RANGE + extraDrums * RANGE_PER_DRUM; }
+        public int height() { return HEIGHT + extraDrums * HEIGHT_PER_DRUM; }
+        public boolean inRange(BlockPos target) { return LoadedChestDrums.inRange(pos(), target, range(), height()); }
     }
 
     private LoadedChestDrums() { }
@@ -75,25 +82,37 @@ public final class LoadedChestDrums {
             BlockEntity container = chunk.getBlockEntity(pos);
             if (container == null || container.isRemoved()) continue;
             IItemHandler inventory = container.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
-            if (inventory != null) result.add(new Chest(container, inventory, drum.getPlacerUUID()));
+            if (inventory != null) result.add(new Chest(container, inventory, drum.getPlacerUUID(), adjacentDrums(level, drums, drum.getBlockPos())));
         }
         result.sort(java.util.Comparator.comparingLong(chest -> chest.pos().asLong()));
         return result;
     }
 
+    private static int adjacentDrums(ServerLevel level, Map<BlockPos, DrumBlockEntity> drums, BlockPos center) {
+        int count = 0;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos pos = center.relative(direction);
+            DrumBlockEntity drum = drums.get(pos);
+            if (drum == null || drum.isRemoved()) continue;
+            var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            if (chunk != null && chunk.getBlockEntity(pos) == drum) count++;
+        }
+        return count;
+    }
+
     /** Fixed position priority prevents two drums from disabling each other, including after reload. */
     public static List<Status> statuses(ServerLevel level) {
         List<Status> result = new ArrayList<>();
-        Map<Long, List<BlockPos>> activeByChunk = new HashMap<>();
+        Map<Long, List<Chest>> activeByChunk = new HashMap<>();
         for (Chest chest : chests(level)) {
             BlockPos pos = chest.pos();
             BlockPos blocker = null;
             search:
-            for (int x = (pos.getX() - RANGE) >> 4; x <= (pos.getX() + RANGE) >> 4; x++) {
-                for (int z = (pos.getZ() - RANGE) >> 4; z <= (pos.getZ() + RANGE) >> 4; z++) {
-                    for (BlockPos active : activeByChunk.getOrDefault(ChunkPos.asLong(x, z), List.of())) {
-                        if (inRange(active, pos)) {
-                            blocker = active;
+            for (int x = (pos.getX() - MAX_RANGE) >> 4; x <= (pos.getX() + MAX_RANGE) >> 4; x++) {
+                for (int z = (pos.getZ() - MAX_RANGE) >> 4; z <= (pos.getZ() + MAX_RANGE) >> 4; z++) {
+                    for (Chest active : activeByChunk.getOrDefault(ChunkPos.asLong(x, z), List.of())) {
+                        if (active.inRange(pos)) {
+                            blocker = active.pos();
                             break search;
                         }
                     }
@@ -101,7 +120,7 @@ public final class LoadedChestDrums {
             }
             result.add(new Status(chest, blocker));
             if (blocker == null) activeByChunk.computeIfAbsent(
-                    ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), ignored -> new ArrayList<>()).add(pos);
+                    ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), ignored -> new ArrayList<>()).add(chest);
         }
         return result;
     }
@@ -135,9 +154,13 @@ public final class LoadedChestDrums {
     }
 
     public static boolean inRange(BlockPos chest, BlockPos tame) {
-        return Math.abs((long) chest.getX() - tame.getX()) <= RANGE
-                && Math.abs((long) chest.getZ() - tame.getZ()) <= RANGE
-                && Math.abs((long) chest.getY() - tame.getY()) <= HEIGHT;
+        return inRange(chest, tame, RANGE, HEIGHT);
+    }
+
+    private static boolean inRange(BlockPos chest, BlockPos tame, int range, int height) {
+        return Math.abs((long) chest.getX() - tame.getX()) <= range
+                && Math.abs((long) chest.getZ() - tame.getZ()) <= range
+                && Math.abs((long) chest.getY() - tame.getY()) <= height;
     }
 
     @SubscribeEvent

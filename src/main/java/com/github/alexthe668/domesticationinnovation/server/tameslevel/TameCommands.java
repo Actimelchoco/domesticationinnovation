@@ -4247,7 +4247,7 @@ public class TameCommands {
                 if (!Objects.equals(ownerUuid, chest.owner())) continue;
                 BlockPos pos = chest.pos();
                 valid.add(new DrumRange(level.dimension().location().toString(),
-                        pos.getX(), pos.getY(), pos.getZ(), LoadedChestDrums.RANGE, LoadedChestDrums.HEIGHT));
+                        pos.getX(), pos.getY(), pos.getZ(), chest.range(), chest.height()));
             }
         }
         return valid;
@@ -5228,7 +5228,7 @@ public class TameCommands {
                     "When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.",
                     "Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.",
                     "Containers above loaded drums automatically refill nearby tames of all owners every second until they reach green.",
-                    "Chest x drums distribute preferred foods first, then compatible fallback foods, within 25 blocks horizontally and 5 vertically.",
+                    "Chest x drums distribute preferred foods first, then compatible fallback foods. Base range is 25/5; each horizontally adjacent drum adds 10/2.",
                     "Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it."
             );
         }
@@ -5265,7 +5265,7 @@ public class TameCommands {
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "=== Food collection and refill ===",
                     "/tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.",
-                    "Place a container above a drum: every second it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.",
+                    "Place a container above a drum: every second it feeds loaded tames of all owners. Base range is 25/5; each horizontally adjacent drum adds 10/2.",
                     "Preferred food is distributed first, then compatible fallback food. Refill stops at 500 stored food points (green).",
                     "/tames chestxdrum lists loaded chest x drums within 250 blocks; /tames chestxdrum system explains feeding.",
                     "=== Notifications ===",
@@ -5279,11 +5279,12 @@ public class TameCommands {
                     "/tames chestxdrum lists loaded chest x drums within 250 blocks in your dimension, nearest first.",
                     "/tames chestxdrum system shows this help.",
                     "/tames chestxdrum deactivated lists nearby deactivated setups and the drum blocking each one.",
-                    "A chest within another active chest x drum's fixed range is deactivated. Fixed position priority selects the active setup.",
+                    "A chest within another active chest x drum's current range is deactivated. Fixed position priority selects the active setup.",
                     "It reactivates automatically when the blocking setup is removed or unloaded. Deactivation changes are announced nearby.",
                     "Place a container directly above any drum. No registration or ownership requirement is needed for feeding.",
                     "Every second, each loaded chest x drum refills nearby loaded tames belonging to any owner.",
-                    "The fixed area extends 25 blocks in both X/Z directions and 5 blocks up/down from the container: 51 x 51 x 11 blocks.",
+                    "The base area extends 25 blocks in X/Z and 5 blocks up/down from the container.",
+                    "Each drum touching a horizontal side of the supporting drum adds 10 blocks in X/Z and 2 up/down. Four extra drums give a range of 65/13. Diagonals and chains do not count.",
                     "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
                     "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory."
             );
@@ -14043,6 +14044,8 @@ public class TameCommands {
             BlockPos pos = status.chest().pos();
             player.sendSystemMessage(Component.literal("- " + formatBlockLocation(player.level().dimension().location().toString(), pos)
                     + " (" + Math.round(Math.sqrt(player.blockPosition().distSqr(pos))) + " blocks away): "
+                    + "range " + status.chest().range() + "/" + status.chest().height()
+                    + " (" + status.chest().extraDrums() + " extra drums); "
                     + (status.active() ? "active" : "deactivated; in range of " + status.blocker().toShortString()))
                     .withStyle(status.active() ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         }
@@ -23076,11 +23079,11 @@ public class TameCommands {
                 }
                 if (occupiedSlots.isEmpty()) continue;
                 BlockPos pos = chest.pos();
-                AABB area = new AABB(pos).inflate(LoadedChestDrums.RANGE, LoadedChestDrums.HEIGHT, LoadedChestDrums.RANGE);
+                AABB area = new AABB(pos).inflate(chest.range(), chest.height(), chest.range());
                 List<DrumFeedTarget> nearby = new ArrayList<>();
                 // Minecraft's section index finds local entities without scanning blocks or all registered tames.
                 for (LivingEntity tame : level.getEntitiesOfClass(LivingEntity.class, area,
-                        entity -> entity.isAlive() && LoadedChestDrums.inRange(pos, entity.blockPosition()))) {
+                        entity -> entity.isAlive() && chest.inRange(entity.blockPosition()))) {
                     TameData data = TameRegistry.get(tame.getUUID());
                     if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
                     if (data == null || data.dead || data.stored) continue;

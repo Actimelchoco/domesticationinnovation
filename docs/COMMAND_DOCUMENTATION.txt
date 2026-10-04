@@ -697,7 +697,7 @@ Inventory distribute snapshots the chest and selected loaded tames, plans in the
 When a tame has no saturation and no food, it is set to sit and abilities stop until food is added.
 Food autopickup moves every compatible food-valued drop from kills into the tame inventory before it appears, including configured preferred items that are not vanilla food.
 Containers above loaded drums automatically refill nearby tames of all owners every second until they reach green.
-Chest x drums distribute preferred foods first, then compatible fallback foods, within 25 blocks horizontally and 5 vertically.
+Chest x drums distribute preferred foods first, then compatible fallback foods. Base range is 25/5; each horizontally adjacent drum adds 10/2.
 Preferred food gives 200% saturation. Gluttonous tames can eat other edible food for 50% saturation, including fallback bread; without Gluttonous, non-preferred bread gives 10%. Sneak-right-click with empty main hand opens the food inventory; sneak-right-click with food deposits it.
 
 COLLAR PROTECTION
@@ -732,7 +732,7 @@ Natural regeneration costs saturation. Command teleports do not.
 After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.
 === Food collection and refill ===
 /tames inventory autopickup true enables kill-drop food pickup for selected tames. Selection supports all, group, type, follow, sit, wander, unloaded, state, and name.
-Place a container above a drum: every second it feeds loaded tames of all owners within 25 blocks in X/Z and 5 in Y.
+Place a container above a drum: every second it feeds loaded tames of all owners. Base range is 25/5; each horizontally adjacent drum adds 10/2.
 Preferred food is distributed first, then compatible fallback food. Refill stops at 500 stored food points (green).
 /tames chestxdrum lists loaded chest x drums within 250 blocks; /tames chestxdrum system explains feeding.
 === Notifications ===
@@ -745,11 +745,14 @@ CHEST X DRUM SYSTEM
 /tames chestxdrum lists loaded chest x drums within 250 blocks in your dimension, nearest first.
 /tames chestxdrum system shows this help.
 /tames chestxdrum deactivated lists nearby deactivated setups and the drum blocking each one.
-A chest within another active chest x drum's fixed range is deactivated. Fixed position priority selects the active setup.
+A chest within another active chest x drum's current range is deactivated. Fixed position priority selects the active setup.
 It reactivates automatically when the blocking setup is removed or unloaded. Deactivation changes are announced nearby.
 Place a container directly above any drum. No registration or ownership requirement is needed for feeding.
 Every second, each loaded chest x drum refills nearby loaded tames belonging to any owner.
-The fixed area extends 25 blocks in both X/Z directions and 5 blocks up/down from the container: 51 x 51 x 11 blocks.
+The base area extends 25 blocks in X/Z and 5 blocks up/down from the container.
+Each drum touching a horizontal side of the supporting drum adds 10 blocks in X/Z and 2 up/down.
+Four extra drums give 65/13 range. Diagonals, chains, and vertical neighbors do not count.
+The chestxdrum listing shows each setup's current range and number of extra drums.
 First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.
 Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory.
 
