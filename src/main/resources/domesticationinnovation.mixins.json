@@ -53,6 +53,7 @@
     "PrimitiveRocketExplosionMixin",
     "PrimitiveTntMixin",
     "RabbitMixin",
+    "RelicsHunterBeltEventsMixin",
     "SaintsDragonsDragonEntityMixin",
     "SaintsDragonsRaevyxMixin",
     "SaintsDragonsStegonautMixin",

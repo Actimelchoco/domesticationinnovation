@@ -1051,6 +1051,13 @@ automatically restores available saved highest progression for free, and gains
 10 whole levels with normal level rewards. Partial XP is preserved.
 Returning at dawn does not grant these bonus levels.
 
+HUNTER BELT STACKING (RELICS)
+---------------------------
+Every actively equipped Hunter Belt adds its own training damage bonus to pet
+attacks. Two belts with +50% each give +100% damage; three give +150%.
+Belts in ordinary inventory or cosmetic Curios slots do not add damage.
+This works for vanilla pets and the mod's added tameable species.
+
 DAILY CARE XP
 -------------
 At dawn, loaded living tames from a previous day receive exactly 1 XP if they

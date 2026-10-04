@@ -1016,75 +1016,11 @@ public class CommonProxy {
         event.setAmount(event.getAmount() * (1.0F - reduction));
     }
 
-    private static boolean hunterBeltCompatibilityFailureReported;
-
-    private static LivingEntity resolveInterfaceBeltAttacker(Entity source) {
-        Entity attacker = source;
-        if (source instanceof net.minecraft.world.entity.projectile.Projectile projectile) {
-            attacker = projectile.getOwner();
-        } else if (source instanceof net.minecraft.world.entity.projectile.EvokerFangs fangs) {
-            attacker = fangs.getOwner();
-        } else if (!(source instanceof LivingEntity) && source instanceof net.minecraft.world.entity.OwnableEntity ownable) {
-            attacker = ownable.getOwner();
-        }
-        return attacker instanceof LivingEntity living
-                && !(attacker instanceof TamableAnimal)
-                && attacker instanceof ModifedToBeTameable
-                && TameEntityAdapter.isTame(attacker) ? living : null;
-    }
-
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onInterfaceTameHunterBeltDamage(LivingHurtEvent event) {
-        // Relics already handles a vanilla tame supplied as the causing entity.
+        // Vanilla tame damage is handled once inside the optional Relics listener mixin.
         if (event.getSource().getEntity() instanceof TamableAnimal) return;
-        LivingEntity living = resolveInterfaceBeltAttacker(event.getSource().getEntity());
-        if (living == null) living = resolveInterfaceBeltAttacker(event.getSource().getDirectEntity());
-        if (living == null) return;
-        // Fox trust slots can retain a breeder/previous owner. The registry is the
-        // authoritative owner for TL tames; never borrow another trusted player's belt.
-        TameData data = TameRegistry.get(living.getUUID());
-        if (data == null) {
-            UUID tlId = TameData.getTlId(living);
-            if (tlId != null) data = TameRegistry.getByTlId(tlId);
-        }
-        UUID ownerId = data != null && data.ownerUUID != null
-                ? data.ownerUUID : TameEntityAdapter.ownerUuid(living);
-        Player player = ownerId == null || living.getServer() == null ? null
-                : living.getServer().getPlayerList().getPlayer(ownerId);
-        if (player == null) {
-            return;
-        }
-        Item hunterBelt = ForgeRegistries.ITEMS.getValue(new ResourceLocation("relics", "hunter_belt"));
-        if (hunterBelt == null || hunterBelt == Items.AIR) {
-            return;
-        }
-        try {
-            Class<?> entityUtils = Class.forName("it.hurts.sskirillss.relics.utils.EntityUtils");
-            Method findEquipped = entityUtils.getMethod("findEquippedCurio", Entity.class, Item.class);
-            Object equippedResult = findEquipped.invoke(null, player, hunterBelt);
-            if (!(equippedResult instanceof ItemStack equipped) || equipped.isEmpty()) {
-                return;
-            }
-            Object relic = equipped.getItem();
-            Class<?> relicInterface = Class.forName("it.hurts.sskirillss.relics.items.relics.base.IRelicItem");
-            if (!relicInterface.isInstance(relic)) return;
-            Method getAbilityValue = relicInterface.getMethod("getAbilityValue", ItemStack.class, String.class, String.class);
-            Object value = getAbilityValue.invoke(relic, equipped, "training", "damage");
-            if (value instanceof Number multiplier) {
-                event.setAmount((float) (event.getAmount() * multiplier.doubleValue()));
-            }
-            try {
-                Method spreadExperience = relicInterface.getMethod("spreadExperience", LivingEntity.class, ItemStack.class, int.class);
-                spreadExperience.invoke(relic, player, equipped, 1);
-            } catch (ReflectiveOperationException | LinkageError ignored) {
-                // Belt damage must still work if optional Relics XP bookkeeping changes.
-            }
-        } catch (ReflectiveOperationException | LinkageError ignored) {
-            if (!hunterBeltCompatibilityFailureReported) {
-                hunterBeltCompatibilityFailureReported = true;
-                System.err.println("[TamesLevel] Hunter Belt compatibility failed: " + ignored);
-            }
-        }
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HunterBeltCompat.applyDamage(event);
     }
 
     @SubscribeEvent

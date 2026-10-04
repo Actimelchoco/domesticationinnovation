@@ -389,7 +389,11 @@ public final class TamePerformanceRegression {
         TameData.syncTlIdToEntity(original, identity);
         check(TameEntityAdapter.findLoaded(server, original.getUUID(), identity) == null, "untamed body must be rejected");
         original.setTame(true);
-        check(TameEntityAdapter.findLoaded(server, null, identity) == original, "later taming must need no world scan");
+        check(TameEntityAdapter.findLoaded(server, null, identity) == original,
+                "later taming must need no world scan: alive=" + original.isAlive()
+                        + ", removed=" + original.isRemoved() + ", tame=" + original.isTame()
+                        + ", visible=" + (level.getEntity(original.getUUID()) == original)
+                        + ", entityIdentity=" + TameData.getTlId(original) + ", requestedIdentity=" + identity);
         UUID newIdentity = UUID.randomUUID();
         TameData.syncTlIdToEntity(original, newIdentity);
         check(TameEntityAdapter.findLoaded(server, null, identity) == null, "old identity must be invalidated");
