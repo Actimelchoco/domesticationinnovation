@@ -68,6 +68,13 @@ public final class TameDuelSnapshots {
         into.duelCount = from.duelCount;
         into.duelPoints = from.duelPoints;
         into.hungerSaturation = from.hungerSaturation;
+        into.offlineGuardianOrder = from.offlineGuardianOrder;
+        into.offlineGuardianDeployed = from.offlineGuardianDeployed;
+        into.offlineGuardianNeedsDeployment = from.offlineGuardianNeedsDeployment;
+        into.offlineGuardianDimension = from.offlineGuardianDimension;
+        into.offlineGuardianX = from.offlineGuardianX;
+        into.offlineGuardianY = from.offlineGuardianY;
+        into.offlineGuardianZ = from.offlineGuardianZ;
         into.hungerEmptyNotified = from.hungerEmptyNotified;
         into.hungerLowNotified = from.hungerLowNotified;
         into.hungerLastFoodNotified = from.hungerLastFoodNotified;

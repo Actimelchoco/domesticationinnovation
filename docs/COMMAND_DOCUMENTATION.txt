@@ -233,6 +233,22 @@ PLAYER COMMAND SYNTAX
 /tames wander group <name>
 /tames wander type <name>
 /tames wander state <name>
+/tames offlineGuardian
+/tames offlineGuardian set <name>
+/tames offlineGuardian deploy
+/tames offlineGuardian deploy <name>
+
+Offline Guardian: set saves your current position as the named tame's post.
+Deploy without a name activates all saved offline guardians; named deploy activates one.
+Each player may save five. Setting a sixth removes the oldest assignment, keeping the tame.
+Updating an existing saved tame keeps its place in the list. Assignments survive restarts.
+Deployed guardians and their posts keep ticking while the owner is offline.
+Normal pet-bed respawn rules apply; respawned guardians return to their saved post offline too.
+Normal food requirements and combat modes remain in effect.
+Regular movement commands cancel deployment but retain the saved assignment.
+Stored tames and duel participants cannot deploy. Ownership transfer clears the assignment.
+The base command prints the rules and your saved guardians, oldest first.
+
 /tames guardian deployGroup <setName> all
 /tames guardian deployGroup <setName> <name>
 /tames guardian deployGroup <setName> group <name>

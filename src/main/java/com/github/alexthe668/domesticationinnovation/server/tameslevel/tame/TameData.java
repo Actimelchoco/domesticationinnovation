@@ -118,6 +118,11 @@ public class TameData {
     public int protectionZ = 0;
     public int protectionRadius = 16;
     public final Map<String, CompoundTag> guardianSetAnchors = new LinkedHashMap<>();
+    public long offlineGuardianOrder = 0L;
+    public boolean offlineGuardianDeployed = false;
+    public boolean offlineGuardianNeedsDeployment = false;
+    public String offlineGuardianDimension = "";
+    public int offlineGuardianX, offlineGuardianY, offlineGuardianZ;
 
     public final Set<String> abilities = new LinkedHashSet<>();
     public final Map<String, Integer> abilityLevels = new LinkedHashMap<>();
@@ -320,6 +325,13 @@ public class TameData {
             }
         });
         tag.put("guardianSetAnchors", guardianSetsTag);
+        tag.putLong("offlineGuardianOrder", offlineGuardianOrder);
+        tag.putBoolean("offlineGuardianDeployed", offlineGuardianDeployed);
+        tag.putBoolean("offlineGuardianNeedsDeployment", offlineGuardianNeedsDeployment);
+        tag.putString("offlineGuardianDimension", offlineGuardianDimension);
+        tag.putInt("offlineGuardianX", offlineGuardianX);
+        tag.putInt("offlineGuardianY", offlineGuardianY);
+        tag.putInt("offlineGuardianZ", offlineGuardianZ);
 
         ListTag abilityList = new ListTag();
         for (String ability : abilities) {
@@ -519,6 +531,13 @@ public class TameData {
         data.protectionZ = tag.getInt("protectionZ");
         data.protectionRadius = tag.contains("protectionRadius") ? Math.max(4, tag.getInt("protectionRadius")) : 16;
         data.guardianSetAnchors.clear();
+        data.offlineGuardianOrder = Math.max(0L, tag.getLong("offlineGuardianOrder"));
+        data.offlineGuardianDeployed = tag.getBoolean("offlineGuardianDeployed");
+        data.offlineGuardianNeedsDeployment = tag.getBoolean("offlineGuardianNeedsDeployment");
+        data.offlineGuardianDimension = tag.getString("offlineGuardianDimension");
+        data.offlineGuardianX = tag.getInt("offlineGuardianX");
+        data.offlineGuardianY = tag.getInt("offlineGuardianY");
+        data.offlineGuardianZ = tag.getInt("offlineGuardianZ");
         if (tag.contains("guardianSetAnchors", Tag.TAG_COMPOUND)) {
             CompoundTag guardianSetsTag = tag.getCompound("guardianSetAnchors");
             for (String key : guardianSetsTag.getAllKeys()) {

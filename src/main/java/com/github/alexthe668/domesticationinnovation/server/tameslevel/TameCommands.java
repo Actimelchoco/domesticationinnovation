@@ -2223,6 +2223,17 @@ public class TameCommands {
                                         .suggests((ctx, b) -> suggestInfoTopics(b))
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
+                        .then(Commands.literal("offlineGuardian")
+                                .executes(ctx -> offlineGuardianRules(ctx.getSource()))
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> offlineGuardianSet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                                .then(Commands.literal("deploy")
+                                        .executes(ctx -> offlineGuardianDeploy(ctx.getSource(), null))
+                                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> offlineGuardianDeploy(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("equipment")
@@ -13514,6 +13525,7 @@ public class TameCommands {
 
     private static void applyBedRespawnMovement(MinecraftServer server, TameData data) {
         if (server == null || data == null) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.returnAfterRespawn(server, data)) return;
         LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (respawned == null || !respawned.isAlive()) return;
         boolean deployGuardian = data.movementOrder == 3 && data.hasHome;
@@ -22367,6 +22379,75 @@ public class TameCommands {
             normalized = normalized.substring("entity.".length());
         }
         return normalized.startsWith("legendary_monsters:");
+    }
+
+    private static int offlineGuardianRules(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        player.sendSystemMessage(Component.literal("Offline Guardian rules:\n"
+                + "/tames offlineGuardian set <name> saves your current position as that tame's guard post.\n"
+                + "/tames offlineGuardian deploy <name> deploys one saved guardian; deploy without a name deploys all saved guardians.\n"
+                + "Maximum 5 per player. Setting a sixth removes the oldest assignment, not the tame. Updating a saved tame keeps its place in the list.\n"
+                + "Deployed posts stay loaded and guardians remain active while you are offline. Assignments survive server restarts.\n"
+                + "Normal food, combat modes and pet-bed respawn rules apply. After respawning, deployed guardians return to their saved posts even while you are offline.\n"
+                + "Regular movement commands cancel deployment; the saved assignment remains available to deploy again. Stored tames and duel participants cannot be deployed.")
+                .withStyle(ChatFormatting.AQUA));
+        List<TameData> selected = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.selected(player.getUUID());
+        player.sendSystemMessage(Component.literal("Saved offline guardians (" + selected.size() + "/5, oldest first): "
+                + (selected.isEmpty() ? "none" : selected.stream().map(data -> tameDisplayName(data)
+                        + (data.offlineGuardianDeployed ? " [deployed]" : " [set]")).collect(Collectors.joining(", ")))));
+        return 1;
+    }
+
+    private static int offlineGuardianSet(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        TameData data = findOwnedTameAny(player.getUUID(), name);
+        if (data == null) return error(player, "You do not own a tame named '" + name + "'.");
+        if (data.stored || data.horseType || isDuelLocked(data.uuid)) return error(player, "That tame cannot be assigned a guardian post right now.");
+        TameData evicted = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.set(data, player.serverLevel(), player.blockPosition());
+        player.sendSystemMessage(Component.literal("Set " + tameDisplayName(data) + " as an offline guardian at your current position. Use /tames offlineGuardian deploy " + name + ".")
+                .withStyle(ChatFormatting.GREEN));
+        if (evicted != null) player.sendSystemMessage(Component.literal("Removed the oldest offline guardian assignment: " + tameDisplayName(evicted) + ". The tame is kept.")
+                .withStyle(ChatFormatting.YELLOW));
+        return 1;
+    }
+
+    private static int offlineGuardianDeploy(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        List<TameData> selected;
+        if (name == null) selected = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.selected(player.getUUID());
+        else {
+            TameData data = findOwnedTameAny(player.getUUID(), name);
+            if (data == null || data.offlineGuardianOrder <= 0) return error(player, "Set that owned tame with /tames offlineGuardian set <name> first.");
+            selected = List.of(data);
+        }
+        if (selected.isEmpty()) return error(player, "No offline guardians are set.");
+        int deployed = 0;
+        for (TameData data : selected) {
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.deploy(source.getServer(), data)) deployed++;
+        }
+        player.sendSystemMessage(Component.literal("Activated " + deployed + " offline guardian(s). Unloaded tames will deploy when their saved chunks load; dead guardians return after their normal respawn.")
+                .withStyle(deployed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+        return deployed;
+    }
+
+    public static boolean deployOfflineGuardianToPost(MinecraftServer server, TameData data, LivingEntity tame) {
+        if (server == null || data == null || tame == null || !tame.isAlive() || data.dead || data.stored || isDuelLocked(data.uuid)) return false;
+        ServerLevel target = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.postLevel(server, data);
+        if (target == null) return false;
+        double x = data.offlineGuardianX + 0.5D, y = data.offlineGuardianY, z = data.offlineGuardianZ + 0.5D;
+        LivingEntity moved;
+        if (tame instanceof TamableAnimal tamable) {
+            TameTransferService.TransferResult result = TameTransferService.transferToLocation(tamable, target, x, y, z, tame.getYRot(), tame.getXRot(), data);
+            if (!result.success()) return false;
+            moved = result.entity();
+        } else moved = TameTransferService.transferInterfaceToLocation(tame, target, x, y, z, tame.getYRot(), tame.getXRot(), data, false);
+        if (moved == null) return false;
+        data.offlineGuardianNeedsDeployment = false;
+        applyGuardianAnchor(data.offlineGuardianDimension, data.offlineGuardianX, data.offlineGuardianY, data.offlineGuardianZ, moved, data);
+        return true;
     }
 
     private static void setGuardianAnchor(ServerPlayer player, LivingEntity tame, TameData data) {

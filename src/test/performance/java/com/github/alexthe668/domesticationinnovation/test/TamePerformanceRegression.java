@@ -33,7 +33,13 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class TamePerformanceRegression {
     private static Wolf wolf(GameTestHelper helper) {
-        return helper.spawn(EntityType.WOLF, new BlockPos(1, 1, 1));
+        // No real players drive entity visibility in the GameTest server.
+        Wolf wolf = new Wolf(EntityType.WOLF, helper.getLevel()) {
+            @Override public boolean isAlwaysTicking() { return true; }
+        };
+        wolf.moveTo(helper.absolutePos(new BlockPos(1, 1, 1)), 0, 0);
+        check(helper.getLevel().addFreshEntity(wolf), "wolf fixture must spawn");
+        return wolf;
     }
 
     private static void check(boolean condition, String message) {
@@ -274,7 +280,9 @@ public final class TamePerformanceRegression {
     }
 
     private static Wolf scheduledWolf(GameTestHelper helper, int snapshotSlot) {
-        Wolf wolf = EntityType.WOLF.create(helper.getLevel());
+        Wolf wolf = new Wolf(EntityType.WOLF, helper.getLevel()) {
+            @Override public boolean isAlwaysTicking() { return true; }
+        };
         UUID uuid;
         do { uuid = UUID.randomUUID(); } while (Math.floorMod(uuid.hashCode(), 30) != snapshotSlot);
         wolf.setUUID(uuid);
