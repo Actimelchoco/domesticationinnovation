@@ -128,6 +128,7 @@ public class TameData {
     public int hungerSaturation = 1000;
     public final List<ItemStack> hungerInventory = new ArrayList<>();
     public final List<ItemStack> armorInventory = new ArrayList<>();
+    public final List<ItemStack> animightEquipmentInventory = new ArrayList<>();
     public boolean hungerForcedSit = false;
     public boolean hungerEmptyNotified = false;
     public boolean hungerLowNotified = false;
@@ -362,6 +363,11 @@ public class TameData {
             armorInventoryTag.add(stack.save(new CompoundTag()));
         }
         tag.put("armorInventory", armorInventoryTag);
+        ListTag equipmentReserveTag = new ListTag();
+        for (ItemStack stack : animightEquipmentInventory) {
+            equipmentReserveTag.add((stack == null ? ItemStack.EMPTY : stack).save(new CompoundTag()));
+        }
+        tag.put("animightEquipmentInventory", equipmentReserveTag);
 
         tag.putBoolean("hasSavedProgress", hasSavedProgress);
         tag.putInt("savedProgressCost", savedProgressCost);
@@ -584,6 +590,10 @@ public class TameData {
             }
         }
         data.armorInventory.clear();
+        ListTag equipmentReserveTag = tag.getList("animightEquipmentInventory", Tag.TAG_COMPOUND);
+        for (int i = 0; i < Math.min(27, equipmentReserveTag.size()); i++) {
+            data.animightEquipmentInventory.add(ItemStack.of(equipmentReserveTag.getCompound(i)));
+        }
         ListTag armorInventoryTag = tag.contains("armorInventory", Tag.TAG_LIST)
                 ? tag.getList("armorInventory", Tag.TAG_COMPOUND) : new ListTag();
         for (int i = 0; i < 4; i++) {

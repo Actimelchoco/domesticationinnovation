@@ -139,7 +139,7 @@ tasks.matching { it.name == 'runClient' }.configureEach {
 }
 
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
+    minecraft "net.minecraftforge:forge:1.20.1-${findProperty('tameRegressionForgeVersion') ?: '47.2.0'}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     implementation fg.deobf("curse.maven:citadel-331936:4848887")
     def localWaystonesJar = fileTree('C:/Users/bruns/Documents/linggango server/mods') {

@@ -2225,6 +2225,10 @@ public class TameCommands {
 
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
+                                .then(Commands.literal("equipment")
+                                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .executes(ctx -> animightEquipmentInventoryOpen(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("superfood")
                                         .executes(ctx -> hungerInventorySuperfood(ctx.getSource())))
                                 .then(Commands.literal("prefferedFood")
@@ -23167,6 +23171,15 @@ public class TameCommands {
         }
         TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
         return openHungerInventory(player, data, tame) ? 1 : 0;
+    }
+
+    private static int animightEquipmentInventoryOpen(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        TameData data = findOwnedTame(player.getUUID(), name);
+        if (data == null) return error(player, "You do not own a living tame named '" + name + "'.");
+        LivingEntity tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.openInventory(player, tame, data)
+                ? 1 : error(player, "Equipment reserves require a loaded Animight outside a duel.");
     }
 
     public static boolean openHungerInventory(ServerPlayer player, LivingEntity tame) {

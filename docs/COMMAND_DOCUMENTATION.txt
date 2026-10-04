@@ -720,6 +720,17 @@ Preferred food therefore provides 4x the saturation of Gluttonous non-preferred 
 Superfood always counts as preferred food.
 Without Gluttonous, fallback bread gives only 10% of base saturation; other non-preferred foods are rejected except Eternal Steak.
 Artifacts Eternal Steak counts as meat and can feed any tame without being consumed. Preferred Steak gives 200% saturation; non-preferred Steak gives 50%, even without Gluttonous.
+
+Animights equipment reserve:
+/tl inventory equipment <name> opens an owned, loaded Animight's 27-slot equipment reserve outside duels.
+Armor at 10% remaining durability or less is removed and stored; armor endangered by the next hit is rescued before that hit.
+Sealed items from L2 Hostility and Dungeon Now Loading item scraps are retained, including scraps spawned by break protection.
+Armor dropped by an Animight's kills is collected independently of food autopickup. Non-armor kill drops are unchanged.
+Native armor slots use the strongest valid, sufficiently durable reserve piece: armor value, then toughness, Protection level, and remaining durability.
+Stronger collected or player-added armor replaces weaker worn armor; displaced armor is kept in reserve. Equally ranked pieces do not swap. Nearly broken armor, seals, and scraps are never automatically equipped.
+On each mob kill, all valid L2 Hostility seals in the reserve return to their original items with their saved enchantments, durability, and item counts. Stronger restored armor is equipped immediately; non-armor originals stay in reserve. This also works on kills with no loot. DNL scraps and malformed seals remain unchanged.
+Equipment checks run every half second and on damage/armor loot. Reserve contents survive saving, respawning, and duel snapshot restoration; automatic equipment changes are suspended during duels.
+Full reserves leave excess loot on the ground; removed worn items that cannot fit are dropped rather than lost.
 One displayed food point equals 100 saturation.
 === How feeding works ===
 Tames store up to 18 food stacks. When their saturation buffer cannot cover a cost, they eat stored items until it can.

@@ -170,6 +170,7 @@ public class CommonProxy {
         tlIntegrationRegistered = true;
         DomesticationMod.LOGGER.info("Registering TL integration handlers in DomesticationMod.");
         MinecraftForge.EVENT_BUS.register(TameCombatEvents.class);
+        MinecraftForge.EVENT_BUS.register(com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.class);
         MinecraftForge.EVENT_BUS.register(TameCrittersEvents.class);
         MinecraftForge.EVENT_BUS.register(GuardianToolEvents.class);
         MinecraftForge.EVENT_BUS.register(TameAbilityEvents.class);

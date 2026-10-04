@@ -25,6 +25,16 @@ import java.util.function.Predicate;
 @Mixin(Entity.class)
 public class EntityMixin {
 
+    @Inject(method = "spawnAtLocation(Lnet/minecraft/world/item/ItemStack;F)Lnet/minecraft/world/entity/item/ItemEntity;",
+            at = @At("HEAD"), cancellable = true)
+    private void tl$storeAnimightBreakProtection(net.minecraft.world.item.ItemStack stack, float offset,
+                                                CallbackInfoReturnable<net.minecraft.world.entity.item.ItemEntity> cir) {
+        if ((Object) this instanceof LivingEntity tame
+                && com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.captureRecoveryDrop(tame, stack)) {
+            cir.setReturnValue(null);
+        }
+    }
+
     @Inject(
             method = {"Lnet/minecraft/world/entity/Entity;fireImmune()Z"},
             remap = true,

@@ -83,6 +83,10 @@ public final class TameDuelSnapshots {
             }
         }
         into.armorInventory.clear();
+        into.animightEquipmentInventory.clear();
+        for (ItemStack stack : from.animightEquipmentInventory) {
+            into.animightEquipmentInventory.add(stack == null ? ItemStack.EMPTY : stack.copy());
+        }
         for (ItemStack stack : from.armorInventory) {
             into.armorInventory.add(stack == null ? ItemStack.EMPTY : stack.copy());
         }

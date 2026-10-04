@@ -1,0 +1,31 @@
+// Include alongside tamePerformanceRegression.init.gradle; release builds do not use this script.
+allprojects {
+    beforeEvaluate {
+        // Animights requires Forge >=47.2.30. Keep the normal release target unchanged.
+        project.ext.set('tameRegressionForgeVersion', '47.4.16')
+    }
+    afterEvaluate {
+        def modsDir = project.findProperty('animightModsDir')
+        if (!modsDir) throw new GradleException('Set animightModsDir to the Animights and Dungeon Now Loading mod directory.')
+        def jars = project.fileTree(modsDir) {
+            include 'animights-forge-1.20.1-1.0.0.jar'
+            include 'Dungeon Now Loading-forge-1.20.1-2.11.jar'
+            include 'geckolib-forge-1.20.1-4.8.2.jar'
+            include 'knightlib-forge-1.20.1-1.4.3.jar'
+        }.files
+        if (jars.size() != 4) throw new GradleException('Expected Animights, Dungeon Now Loading, GeckoLib, and KnightLib JARs.')
+        repositories.flatDir { dirs modsDir }
+        def testDir = project.file('build/animight-test-dependencies')
+        testDir.mkdirs()
+        repositories.flatDir { dirs testDir }
+        jars.each { jar ->
+            def name = jar.name.substring(0, jar.name.length() - 4)
+            if (name.contains(' ')) {
+                name = name.replace(' ', '-')
+                java.nio.file.Files.copy(jar.toPath(), new File(testDir, name + '.jar').toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            dependencies.add('implementation', fg.deobf("animight-test:${name}:local"))
+        }
+        sourceSets.main.java.srcDir('src/test/animights/java')
+    }
+}
