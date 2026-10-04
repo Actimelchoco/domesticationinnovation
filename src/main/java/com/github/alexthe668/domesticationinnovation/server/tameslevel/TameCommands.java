@@ -16105,6 +16105,7 @@ public class TameCommands {
                 tame.getId(), tame.getAttributes().getSyncableAttributes()));
         sendClientPacket(viewer, createEquipmentPacket(tame));
         sendClientPacket(viewer, new ClientboundTeleportEntityPacket(tame));
+        com.github.alexthe668.domesticationinnovation.server.entity.TameTagSync.sendCurrent(viewer, tame);
     }
 
     private static ClientboundSetEquipmentPacket createEquipmentPacket(LivingEntity tame) {

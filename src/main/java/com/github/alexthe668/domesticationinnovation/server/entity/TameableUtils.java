@@ -504,15 +504,13 @@ public class TameableUtils {
             return;
         }
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
-        CompoundTag attr = levelTagFromMap(data.attributeLevels);
-        CompoundTag abil = levelTagFromMap(data.abilityLevels);
-        CompoundTag prevAttr = tag.contains(TL_ATTRIBUTE_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ATTRIBUTE_LEVELS_SYNC) : new CompoundTag();
-        CompoundTag prevAbil = tag.contains(TL_ABILITY_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ABILITY_LEVELS_SYNC) : new CompoundTag();
-        if (attr.equals(prevAttr) && abil.equals(prevAbil)) {
+        CompoundTag prevAttr = tag.contains(TL_ATTRIBUTE_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ATTRIBUTE_LEVELS_SYNC) : null;
+        CompoundTag prevAbil = tag.contains(TL_ABILITY_LEVELS_SYNC, Tag.TAG_COMPOUND) ? tag.getCompound(TL_ABILITY_LEVELS_SYNC) : null;
+        if (levelTagMatchesMap(prevAttr, data.attributeLevels) && levelTagMatchesMap(prevAbil, data.abilityLevels)) {
             return;
         }
-        tag.put(TL_ATTRIBUTE_LEVELS_SYNC, attr);
-        tag.put(TL_ABILITY_LEVELS_SYNC, abil);
+        tag.put(TL_ATTRIBUTE_LEVELS_SYNC, levelTagFromMap(data.attributeLevels));
+        tag.put(TL_ABILITY_LEVELS_SYNC, levelTagFromMap(data.abilityLevels));
         sync(entity, tag);
         syncVisualCollarEnchants(entity);
     }
@@ -719,6 +717,7 @@ public class TameableUtils {
 
     public static void setImmuneTime(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(IMMUNITY_TIME_TAG) == time) return;
         tag.putInt(IMMUNITY_TIME_TAG, time);
         sync(enchanted, tag);
     }
@@ -730,6 +729,7 @@ public class TameableUtils {
 
     public static void setImmuneCooldown(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(IMMUNITY_COOLDOWN_TAG) == time) return;
         tag.putInt(IMMUNITY_COOLDOWN_TAG, time);
         sync(enchanted, tag);
     }
@@ -752,6 +752,7 @@ public class TameableUtils {
 
     public static void setFrozenTimeTag(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(FROZEN_TIME_TAG) == time) return;
         tag.putInt(FROZEN_TIME_TAG, time);
         sync(enchanted, tag);
     }
@@ -763,6 +764,7 @@ public class TameableUtils {
 
     public static void setFrozenLevel(LivingEntity enchanted, int level) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(FROZEN_LEVEL_TAG) == Math.max(0, level)) return;
         tag.putInt(FROZEN_LEVEL_TAG, Math.max(0, level));
         sync(enchanted, tag);
     }
@@ -860,6 +862,7 @@ public class TameableUtils {
 
     public static void setPsychicWallCooldown(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(PSYCHIC_WALL_COOLDOWN) == time) return;
         tag.putInt(PSYCHIC_WALL_COOLDOWN, time);
         sync(enchanted, tag);
     }
@@ -871,6 +874,7 @@ public class TameableUtils {
 
     public static void setIntimidationCooldown(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(INTIMIDATION_COOLDOWN) == time) return;
         tag.putInt(INTIMIDATION_COOLDOWN, time);
         sync(enchanted, tag);
     }
@@ -882,6 +886,7 @@ public class TameableUtils {
 
     public static void setBlazingProtectionCooldown(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(BLAZING_PROTECTION_COOLDOWN) == time) return;
         tag.putInt(BLAZING_PROTECTION_COOLDOWN, time);
         sync(enchanted, tag);
     }
@@ -893,6 +898,7 @@ public class TameableUtils {
 
     public static void setHealingAuraTime(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(HEALING_AURA_TIME) == time) return;
         tag.putInt(HEALING_AURA_TIME, time);
         sync(enchanted, tag);
     }
@@ -905,6 +911,7 @@ public class TameableUtils {
 
     public static void setHealingAuraImpulse(LivingEntity enchanted, boolean impulse) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getBoolean(HEALING_AURA_IMPULSE) == impulse) return;
         tag.putBoolean(HEALING_AURA_IMPULSE, impulse);
         sync(enchanted, tag);
     }
@@ -916,6 +923,7 @@ public class TameableUtils {
 
     public static void setBlazingProtectionBars(LivingEntity enchanted, int time) {
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (tag.getInt(BLAZING_PROTECTION_BARS) == time) return;
         tag.putInt(BLAZING_PROTECTION_BARS, time);
         sync(enchanted, tag);
     }
@@ -923,7 +931,7 @@ public class TameableUtils {
     private static void sync(LivingEntity enchanted, CompoundTag tag) {
         CitadelEntityData.setCitadelTag(enchanted, tag);
         if (!enchanted.level().isClientSide) {
-            Citadel.sendMSGToAll(new PropertiesMessage("CitadelTagUpdate", tag, enchanted.getId()));
+            TameTagSync.queue(enchanted);
         } else {
             Citadel.sendMSGToServer(new PropertiesMessage("CitadelTagUpdate", tag, enchanted.getId()));
         }
@@ -962,6 +970,19 @@ public class TameableUtils {
             out.putInt(entry.getKey(), entry.getValue());
         }
         return out;
+    }
+
+    private static boolean levelTagMatchesMap(CompoundTag tag, Map<String, Integer> levels) {
+        int count = 0;
+        if (levels != null) {
+            for (Map.Entry<String, Integer> entry : levels.entrySet()) {
+                String key = entry.getKey();
+                if (key == null || key.isBlank() || entry.getValue() <= 0) continue;
+                if (tag == null || !tag.contains(key, Tag.TAG_INT) || tag.getInt(key) != entry.getValue()) return false;
+                count++;
+            }
+        }
+        return count == (tag == null ? 0 : tag.size());
     }
 
     private static Map<String, Integer> levelMapFromTag(CompoundTag tag) {

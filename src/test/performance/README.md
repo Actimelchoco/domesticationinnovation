@@ -9,7 +9,7 @@ Run the isolated Forge GameTest server from the repository root:
 The init script includes these test sources and the empty structure only for this
 run. The server uses `build/tame-performance-gametest`, separate from normal worlds.
 
-The eight tests cover:
+The ten tests cover:
 
 - Taming after entity join, stable identity changes, replacement bodies, delayed
   removal events, repeated missing lookups, death, and unload.
@@ -25,6 +25,10 @@ The eight tests cover:
   and safe iteration when a duel ends during processing.
 - Cached optional hiding-method lookup, changing hiding timers, and the vanilla
   visibility fallback when a method is missing or throws.
+- Combining tag updates into one final payload per entity, immediate local state,
+  unchanged setters, removal before flushing, and immutable sent payloads.
+- Progress preview updates, ignoring zero levels, skipping unchanged previews,
+  and clearing previews when progression is removed.
 
 These are correctness regressions, not a server performance benchmark. Compare a
 new Spark capture under the same workload to measure the actual improvement.

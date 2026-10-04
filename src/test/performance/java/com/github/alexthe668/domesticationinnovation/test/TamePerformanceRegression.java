@@ -2,6 +2,8 @@ package com.github.alexthe668.domesticationinnovation.test;
 
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.CommonProxy;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.entity.TameTagSync;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents;
@@ -35,6 +37,87 @@ public final class TamePerformanceRegression {
 
     private static void check(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
+    }
+
+    @GameTest(template = "empty")
+    public static void batchedTagUpdates(GameTestHelper helper) throws Exception {
+        var server = helper.getLevel().getServer();
+        Wolf first = wolf(helper);
+        Wolf removed = wolf(helper);
+        var flush = TameTagSync.class.getDeclaredMethod("flush", net.minecraft.server.MinecraftServer.class,
+                java.util.function.BiConsumer.class);
+        flush.setAccessible(true);
+        java.util.Map<net.minecraft.world.entity.LivingEntity, CompoundTag> sent = new java.util.IdentityHashMap<>();
+        java.util.function.BiConsumer<net.minecraft.world.entity.LivingEntity, CompoundTag> sink = (entity, tag) -> {
+            check(sent.put(entity, tag) == null, "one entity must produce at most one payload per flush");
+        };
+        // Flush previous tests' work before examining this fixture's payloads.
+        flush.invoke(null, server, (java.util.function.BiConsumer<net.minecraft.world.entity.LivingEntity, CompoundTag>) (entity, tag) -> { });
+        try {
+            TameableUtils.setImmuneTime(first, 30);
+            TameableUtils.setImmuneTime(first, 29);
+            TameableUtils.setBlazingProtectionBars(first, 4);
+            TameableUtils.setHealingAuraTime(first, 200);
+            check(TameableUtils.getImmuneTime(first) == 29 && TameableUtils.getBlazingProtectionBars(first) == 4,
+                    "gameplay must observe updates before packets flush");
+            TameableUtils.setImmuneTime(removed, 10);
+            removed.discard();
+            flush.invoke(null, server, sink);
+            check(sent.size() == 1 && sent.containsKey(first), "removed entities must not send stale payloads");
+            CompoundTag payload = sent.get(first);
+            check(payload.getInt("PetImmunityTimer") == 29 && payload.getInt("PetBlazingProtectionBars") == 4
+                    && payload.getInt("PetHealingAuraTime") == 200, "one payload must contain the final combined state");
+            sent.clear();
+            TameableUtils.setImmuneTime(first, 29);
+            TameableUtils.setBlazingProtectionBars(first, 4);
+            TameableUtils.setHealingAuraTime(first, 200);
+            flush.invoke(null, server, sink);
+            check(sent.isEmpty(), "unchanged setters must not produce another packet");
+            TameableUtils.setImmuneTime(first, 28);
+            check(payload.getInt("PetImmunityTimer") == 29, "queued future updates must not mutate a sent payload");
+            flush.invoke(null, server, sink);
+            check(sent.get(first).getInt("PetImmunityTimer") == 28, "the next update must still send");
+        } finally {
+            first.discard();
+            removed.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void unchangedProgressPreview(GameTestHelper helper) throws Exception {
+        Wolf tame = scheduledWolf(helper, 1);
+        TameData data = TameRegistry.get(tame.getUUID());
+        var flush = TameTagSync.class.getDeclaredMethod("flush", net.minecraft.server.MinecraftServer.class,
+                java.util.function.BiConsumer.class);
+        flush.setAccessible(true);
+        java.util.List<CompoundTag> sent = new java.util.ArrayList<>();
+        java.util.function.BiConsumer<net.minecraft.world.entity.LivingEntity, CompoundTag> sink = (entity, tag) -> {
+            if (entity == tame) sent.add(tag);
+        };
+        try {
+            data.attributeLevels.put("strength", 3);
+            data.abilityLevels.put("snowball", 2);
+            TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
+            flush.invoke(null, helper.getLevel().getServer(), sink);
+            check(sent.size() == 1 && sent.get(0).getCompound("TLAttributeLevelsSync").getInt("strength") == 3,
+                    "changed progression must reach the client payload");
+            sent.clear();
+            data.attributeLevels.put("ignored_zero", 0);
+            TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
+            flush.invoke(null, helper.getLevel().getServer(), sink);
+            check(sent.isEmpty(), "unchanged normalized progression must not send");
+            data.attributeLevels.remove("strength");
+            data.abilityLevels.clear();
+            TameableUtils.syncAbilityAttributeProgressPreview(tame, data);
+            flush.invoke(null, helper.getLevel().getServer(), sink);
+            check(sent.size() == 1 && sent.get(0).getCompound("TLAbilityLevelsSync").isEmpty()
+                    && sent.get(0).getCompound("TLAttributeLevelsSync").isEmpty(), "removing progression must clear the client preview");
+        } finally {
+            TameRegistry.remove(tame.getUUID());
+            tame.discard();
+        }
+        helper.succeed();
     }
 
     public static final class HidingWolf extends Wolf {
