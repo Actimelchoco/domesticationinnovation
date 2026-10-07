@@ -15,6 +15,7 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobType;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -22,7 +23,13 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.SwordItem;
+import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
@@ -125,6 +132,70 @@ public final class AnimightEquipmentEvents {
                 && armor.getEquipmentSlot() == slot && stack.canEquip(slot, tame) && !isRecoveryItem(stack);
     }
 
+    /** Both native Animights companions share the same melee/bow attack implementation. */
+    private static boolean usesWeapons(LivingEntity tame) {
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return id != null && id.getNamespace().equals("animights")
+                && (id.getPath().equals("canito") || id.getPath().equals("catwain"));
+    }
+
+    public static boolean validWeapon(LivingEntity tame, ItemStack stack) {
+        if (!usesWeapons(tame) || stack == null || stack.isEmpty() || isRecoveryItem(stack)
+                || !stack.canEquip(EquipmentSlot.MAINHAND, tame)) return false;
+        if (stack.getItem() instanceof BowItem || stack.getItem() instanceof SwordItem || stack.getItem() instanceof AxeItem) return true;
+        // Include modded melee weapons exposing attack modifiers, but not armor or unsupported ranged items.
+        return !(stack.getItem() instanceof ArmorItem) && !(stack.getItem() instanceof ProjectileWeaponItem)
+                && stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE)
+                        .stream().anyMatch(modifier -> modifier.getAmount() > 0);
+    }
+
+    public static boolean acceptsEquipment(LivingEntity tame, ItemStack stack) {
+        return stack != null && !stack.isEmpty()
+                && (stack.getItem() instanceof ArmorItem || isRecoveryItem(stack) || validWeapon(tame, stack));
+    }
+
+    /** Expected direct damage against a neutral target; attack speed and conditional abilities do not rank gear. */
+    public static double weaponDamage(LivingEntity tame, ItemStack stack) {
+        if (stack.getItem() instanceof BowItem bow) {
+            int power = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, stack);
+            // Native companions use a full-strength mob arrow and launch it at speed 1.6.
+            double base = 2.0D + tame.level().getDifficulty().getId() * 0.11D;
+            if (power > 0) base += power * 0.5D + 0.5D;
+            // Vanilla and Too Many Bows inherit this no-op hook: avoid allocating a probe for them.
+            if (CUSTOM_ARROWS.get(bow.getClass())) {
+                Arrow probe = new Arrow(tame.level(), tame);
+                probe.setBaseDamage(base);
+                AbstractArrow custom = bow.customArrow(probe);
+                if (custom != null) base = custom.getBaseDamage();
+            }
+            return Math.max(0, base * 1.6D);
+        }
+        var instance = tame.getAttribute(Attributes.ATTACK_DAMAGE);
+        if (instance == null) return 0;
+        var held = tame.getMainHandItem().getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE);
+        java.util.Set<java.util.UUID> replaced = new java.util.HashSet<>();
+        held.forEach(modifier -> replaced.add(modifier.getId()));
+        var candidate = stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE);
+        candidate.forEach(modifier -> replaced.add(modifier.getId()));
+        java.util.List<AttributeModifier> modifiers = new java.util.ArrayList<>();
+        instance.getModifiers().stream().filter(modifier -> !replaced.contains(modifier.getId())).forEach(modifiers::add);
+        modifiers.addAll(candidate);
+        double value = instance.getBaseValue();
+        for (AttributeModifier modifier : modifiers) if (modifier.getOperation() == AttributeModifier.Operation.ADDITION) value += modifier.getAmount();
+        double base = value;
+        for (AttributeModifier modifier : modifiers) if (modifier.getOperation() == AttributeModifier.Operation.MULTIPLY_BASE) value += base * modifier.getAmount();
+        for (AttributeModifier modifier : modifiers) if (modifier.getOperation() == AttributeModifier.Operation.MULTIPLY_TOTAL) value *= 1.0D + modifier.getAmount();
+        return Math.max(0, Attributes.ATTACK_DAMAGE.sanitizeValue(value)
+                + EnchantmentHelper.getDamageBonus(stack, MobType.UNDEFINED));
+    }
+
+    private static final ClassValue<Boolean> CUSTOM_ARROWS = new ClassValue<>() {
+        protected Boolean computeValue(Class<?> type) {
+            try { return type.getMethod("customArrow", AbstractArrow.class).getDeclaringClass() != BowItem.class; }
+            catch (NoSuchMethodException ex) { return false; }
+        }
+    };
+
     private static double attribute(ItemStack stack, EquipmentSlot slot, Attribute attribute) {
         double additions = 0, multiplyBase = 0, multiplyTotal = 1;
         for (AttributeModifier modifier : stack.getAttributeModifiers(slot).get(attribute)) {
@@ -182,6 +253,54 @@ public final class AnimightEquipmentEvents {
                 TameRegistry.markDirty();
             }
         }
+        if (usesWeapons(tame)) maintainWeapon(tame, data);
+    }
+
+    private static void maintainWeapon(LivingEntity tame, TameData data) {
+        ItemStack held = tame.getMainHandItem();
+        // Preserve unrelated hand items such as shields and utility items.
+        if (!held.isEmpty() && !validWeapon(tame, held) && !isRecoveryItem(held)) return;
+        boolean unusable = !held.isEmpty() && (isRecoveryItem(held) || tooWorn(held, 0));
+        ItemStack offhand = tame.getOffhandItem();
+        boolean reserveOffhand = !offhand.isEmpty() && (validWeapon(tame, offhand) || isRecoveryItem(offhand));
+        int best = -1;
+        ItemStack bestStack = unusable ? ItemStack.EMPTY : held;
+        double bestDamage = bestStack.isEmpty() ? Double.NEGATIVE_INFINITY : weaponDamage(tame, bestStack);
+        // The native ranged goal checks both hands. Keep the selected weapon in the main hand,
+        // otherwise a weaker offhand bow could override a stronger selected melee weapon.
+        if (reserveOffhand && validWeapon(tame, offhand) && !tooWorn(offhand, 0)) {
+            double damage = weaponDamage(tame, offhand);
+            if (damage > bestDamage || (damage == bestDamage && !bestStack.isEmpty()
+                    && offhand.getMaxDamage() - offhand.getDamageValue() > bestStack.getMaxDamage() - bestStack.getDamageValue())) {
+                best = -2; bestStack = offhand; bestDamage = damage;
+            }
+        }
+        for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
+            ItemStack candidate = data.animightEquipmentInventory.get(i);
+            if (!validWeapon(tame, candidate) || tooWorn(candidate, 0)) continue;
+            double damage = weaponDamage(tame, candidate);
+            if (damage > bestDamage || (damage == bestDamage && !bestStack.isEmpty()
+                    && candidate.getMaxDamage() - candidate.getDamageValue() > bestStack.getMaxDamage() - bestStack.getDamageValue())) {
+                best = i; bestStack = candidate; bestDamage = damage;
+            }
+        }
+        if (best == -1 && !unusable && !reserveOffhand) return;
+        // Free the candidate's slot before storing the displaced weapon, including a full reserve.
+        boolean replaceMainhand = best != -1 || unusable;
+        ItemStack replacement = best == -1 ? ItemStack.EMPTY : bestStack.split(1);
+        if (best >= 0 && bestStack.isEmpty()) data.animightEquipmentInventory.set(best, ItemStack.EMPTY);
+        if (tame.isUsingItem() && (replaceMainhand || reserveOffhand)) tame.stopUsingItem();
+        if (reserveOffhand) tame.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+        if (replaceMainhand) tame.setItemSlot(EquipmentSlot.MAINHAND, replacement);
+        if (replaceMainhand && !held.isEmpty()) {
+            store(data, held);
+            if (!held.isEmpty()) tame.spawnAtLocation(held);
+        }
+        if (reserveOffhand && !offhand.isEmpty()) {
+            store(data, offhand);
+            if (!offhand.isEmpty()) tame.spawnAtLocation(offhand);
+        }
+        TameRegistry.markDirty();
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -191,7 +310,7 @@ public final class AnimightEquipmentEvents {
         if (!isAnimight(killer)) return;
         TameData data = data(killer);
         if (!active(killer, data)) return;
-        // Include seals still occupying armor slots before the next periodic check.
+        // Include seals still occupying equipment slots before the next periodic check.
         maintain(killer, data);
         if (restoreSealedItems(data) > 0) maintain(killer, data);
     }
@@ -213,7 +332,7 @@ public final class AnimightEquipmentEvents {
         if (!active(killer, data)) return;
         event.getDrops().removeIf(drop -> {
             ItemStack stack = drop.getItem();
-            if (!(stack.getItem() instanceof ArmorItem)) return false;
+            if (!acceptsEquipment(killer, stack)) return false;
             store(data, stack);
             return stack.isEmpty();
         });
@@ -248,7 +367,7 @@ public final class AnimightEquipmentEvents {
         public void setItem(int slot, ItemStack stack) { data.animightEquipmentInventory.set(slot, stack); setChanged(); }
         public void setChanged() { TameRegistry.markDirty(); }
         public boolean stillValid(Player player) { return active(tame, data) && player.getUUID().equals(data.ownerUUID); }
-        public boolean canPlaceItem(int slot, ItemStack stack) { return stack.getItem() instanceof ArmorItem || isRecoveryItem(stack); }
+        public boolean canPlaceItem(int slot, ItemStack stack) { return acceptsEquipment(tame, stack); }
         public void clearContent() { data.animightEquipmentInventory.replaceAll(ignored -> ItemStack.EMPTY); setChanged(); }
         public void stopOpen(Player player) { maintain(tame, data); }
     }

@@ -41,6 +41,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 public class LevelSystem {
     private static final UUID COLLAR_ARMOR_UUID = UUID.fromString("e6e52fdd-8e14-4c0d-9ac1-8fbc60f3dd01");
+    private static final UUID LEVEL_ARMOR_UUID = UUID.fromString("acbe2d2a-bb17-4f8a-881b-8de25c182adf");
     private static final UUID COLLAR_ARMOR_TOUGHNESS_UUID = UUID.fromString("f2f6c7ab-8a73-4d1c-95e4-07f171ddca8f");
     private static final UUID LEGENDARY_MONSTERS_HEALTH_BONUS_UUID = UUID.fromString("5d39f5cd-0d9d-4308-96d5-76aef6c72601");
     private static final UUID LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID = UUID.fromString("f8d8b4d9-7d04-4e0c-90d9-76b8f5485cc7");
@@ -1526,6 +1527,7 @@ public class LevelSystem {
         if (entity == null || data == null || TameRegistry.isSummonType(entity)) {
             return;
         }
+        syncLevelArmor(entity, data);
         String name = PlayerDebugSettings.hideLevelInName(data.ownerUUID)
                 ? data.name
                 : "[Lvl " + data.level + "] " + data.name;
@@ -1831,7 +1833,7 @@ public class LevelSystem {
         scrubUnknownModifiers(tame, Attributes.MAX_HEALTH, LEGENDARY_MONSTERS_HEALTH_BONUS_UUID);
         scrubUnknownModifiers(tame, Attributes.ATTACK_DAMAGE, LEGENDARY_MONSTERS_DAMAGE_BONUS_UUID);
         scrubUnknownModifiers(tame, Attributes.MOVEMENT_SPEED);
-        scrubUnknownModifiers(tame, Attributes.ARMOR, COLLAR_ARMOR_UUID);
+        scrubUnknownModifiers(tame, Attributes.ARMOR, COLLAR_ARMOR_UUID, LEVEL_ARMOR_UUID);
         scrubUnknownModifiers(tame, Attributes.ARMOR_TOUGHNESS, COLLAR_ARMOR_TOUGHNESS_UUID);
         scrubUnknownModifiers(tame, Attributes.ATTACK_KNOCKBACK);
         scrubUnknownModifiers(tame, Attributes.KNOCKBACK_RESISTANCE);
@@ -1874,6 +1876,17 @@ public class LevelSystem {
             return;
         }
         instance.addPermanentModifier(new AttributeModifier(id, name, amount, AttributeModifier.Operation.ADDITION));
+    }
+
+    /** Derived from the current level, so restores and level reductions never accumulate bonuses. */
+    public static void syncLevelArmor(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || tame.level().isClientSide || TameRegistry.isSummonType(tame)) return;
+        AttributeInstance armor = tame.getAttribute(Attributes.ARMOR);
+        if (armor == null) return;
+        double amount = Math.max(0, data.level);
+        AttributeModifier existing = armor.getModifier(LEVEL_ARMOR_UUID);
+        if (existing != null && existing.getAmount() == amount) return;
+        applyManagedAdditionModifier(tame, Attributes.ARMOR, LEVEL_ARMOR_UUID, amount, "tl_level_armor");
     }
 
     private static void trackBonus(TameData data, BaseStatReward reward) {

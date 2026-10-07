@@ -720,7 +720,8 @@ COLLAR PROTECTION
 -----------------
 Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.
 Every collar tag also grants 5 armor points, regardless of Protection level.
-Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.
+Protection tiers scale evenly by about 5.5833% per tier. Protection XII reduces that remaining damage by 67%.
+Every tame gains 1 armor point per current level, in addition to its native armor, equipment, rewards, and the collar's 5 points. Existing tames receive this automatically; level reductions also reduce this bonus. Minecraft's normal effective armor cap still applies.
 Craft a collar in the center with eight matching materials around it:
 Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.
 I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.
@@ -741,11 +742,13 @@ Animights equipment reserve:
 /tl inventory equipment <name> opens an owned, loaded Animight's 27-slot equipment reserve outside duels.
 Armor at 10% remaining durability or less is removed and stored; armor endangered by the next hit is rescued before that hit.
 Sealed items from L2 Hostility and Dungeon Now Loading item scraps are retained, including scraps spawned by break protection.
-Armor dropped by an Animight's kills is collected independently of food autopickup. Non-armor kill drops are unchanged.
+Armor and recovery items dropped by an Animight's kills are collected independently of food autopickup. Canitos and Catwains also collect melee weapons and bows; unrelated kill drops are unchanged.
 Native armor slots use the strongest valid, sufficiently durable reserve piece: armor value, then toughness, Protection level, and remaining durability.
 Stronger collected or player-added armor replaces weaker worn armor; displaced armor is kept in reserve. Equally ranked pieces do not swap. Nearly broken armor, seals, and scraps are never automatically equipped.
-On each mob kill, all valid L2 Hostility seals in the reserve return to their original items with their saved enchantments, durability, and item counts. Stronger restored armor is equipped immediately; non-armor originals stay in reserve. This also works on kills with no loot. DNL scraps and malformed seals remain unchanged.
-Equipment checks run every half second and on damage/armor loot. Reserve contents survive saving, respawning, and duel snapshot restoration; automatic equipment changes are suspended during duels.
+Canitos and Catwains accept weapons and bows in the equipment reserve and automatically equip the usable main-hand item with the most expected direct damage per hit against a neutral target. Melee ranking includes attack-damage modifiers and Sharpness; bow ranking includes Power and custom-arrow base damage at the companion's native launch speed. Attack speed, conditional abilities, Smite/Bane target bonuses, and later damage-over-time effects do not rank gear. Modded player-only weapon abilities or bow effects are not enabled by this feature.
+Weapons at 10% remaining durability or less are removed and stored; stronger collected or player-added weapons replace weaker held weapons, retaining the displaced item. Equal damage uses remaining durability as a tie-break. Offhand weapons are considered too; the selected weapon is kept in the main hand and spare offhand weapons move to reserve, so a weaker offhand bow cannot override melee attacks. Unsupported ranged items such as crossbows are not automatically selected. Offhand shields and unrelated main-hand utility items are preserved.
+On each mob kill, all valid L2 Hostility seals in the reserve return to their original items with their saved enchantments, durability, and item counts. Stronger restored armor and usable weapons are equipped immediately; unrelated originals stay in reserve. This also works on kills with no loot. DNL scraps and malformed seals remain unchanged.
+Equipment checks run every half second and on damage/equipment loot. Reserve contents survive saving, respawning, and duel snapshot restoration; automatic equipment changes are suspended during duels.
 Full reserves leave excess loot on the ground; removed worn items that cannot fit are dropped rather than lost.
 One displayed food point equals 100 saturation.
 === How feeding works ===
@@ -939,7 +942,7 @@ Lists your tames with collar tags (or without via notag), including their Protec
 Protection I-XII is crafted by surrounding a collar tag with the tier material.
 Protection II-XII must be upgraded sequentially from the previous tier.
 Every collar tag grants 5 base armor points, in addition to its Protection effect.
-Each level reduces post-armor damage by 4%.
+Protection tiers scale evenly to 67% post-armor damage reduction at XII. Every tame level also grants 1 armor point, subject to Minecraft's normal effective armor cap.
 
 SINISTER CARROT
 ---------------

@@ -349,6 +349,10 @@ public class TameableUtils {
         }
     }
 
+    public static float collarProtectionReduction(int level) {
+        return Mth.clamp(level, 0, 12) * (0.67F / 12.0F);
+    }
+
     private static float[] mapProtectionToArmorStats(int protectionLevel) {
         // Every collar supplies its flat base armor. Protection remains a separate
         // post-armor damage reduction and does not add armor toughness.

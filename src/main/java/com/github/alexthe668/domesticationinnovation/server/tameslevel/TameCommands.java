@@ -5251,7 +5251,7 @@ public class TameCommands {
             sendInfoPage(p, "Collar Protection",
                     "Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.",
                     "Every collar tag also grants 5 armor points, regardless of Protection level.",
-                    "Each Protection level reduces that remaining damage by 4%. Protection XII reduces it by 48%.",
+                    "Protection scales evenly by about 5.5833% per tier, up to 67% at Protection XII. Tames also gain 1 armor point per current level (subject to the normal armor cap).",
                     "Craft a collar in the center with eight matching materials around it:",
                     "Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.",
                     "I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.",
@@ -5496,7 +5496,7 @@ public class TameCommands {
                     "Protection I-XII is crafted by surrounding a collar tag with the tier material.",
                     "Protection II-XII must be upgraded sequentially from the previous tier.",
                     "Every collar tag grants 5 base armor points, in addition to its Protection effect.",
-                    "Each level reduces post-armor damage by 4%."
+                    "Protection tiers scale evenly to 67% post-armor damage reduction at XII. Each tame level also adds 1 armor point (subject to the normal armor cap)."
             );
         }
         else if (key.equals("sinistercarrot") || key.equals("sinestercarrot") || key.equals("sinister carrot") || key.equals("sinester carrot")) {
@@ -9310,7 +9310,8 @@ public class TameCommands {
         double actualHp = getBaseAttributeValue(loaded, Attributes.MAX_HEALTH);
         double actualDmg = getBaseAttributeValue(loaded, Attributes.ATTACK_DAMAGE);
         double actualSpd = getBaseAttributeValue(loaded, Attributes.MOVEMENT_SPEED);
-        double actualArm = getBaseAttributeValue(loaded, Attributes.ARMOR);
+        double actualArm = loaded != null && loaded.getAttribute(Attributes.ARMOR) != null
+                ? loaded.getAttributeValue(Attributes.ARMOR) : Double.NaN;
         double actualTgh = getBaseAttributeValue(loaded, Attributes.ARMOR_TOUGHNESS);
         double actualKb = getBaseAttributeValue(loaded, Attributes.ATTACK_KNOCKBACK);
         double actualKbr = getBaseAttributeValue(loaded, Attributes.KNOCKBACK_RESISTANCE);
@@ -9319,7 +9320,7 @@ public class TameCommands {
                 + " ARM" + fmtStat(actualArm) + " TGH" + fmtStat(actualTgh)
                 + " KB" + fmtStat(actualKb) + " KBR" + fmtStat(actualKbr)).withStyle(ChatFormatting.GRAY));
         receiver.sendSystemMessage(Component.literal("Base HP+" + fmt(d.bonusHealth) + " DMG+" + fmt(d.bonusDamage) + " SPD+" + fmt(d.bonusSpeed)
-                + " ARM+" + fmt(d.bonusArmor) + " TGH+" + fmt(d.bonusArmorToughness)
+                + " ARM+" + fmt(d.bonusArmor) + " Level ARM+" + Math.max(0, d.level) + " TGH+" + fmt(d.bonusArmorToughness)
                 + " KB+" + fmt(d.bonusKnockback) + " KBR+" + fmt(d.bonusKnockbackResist)).withStyle(ChatFormatting.GRAY));
         receiver.sendSystemMessage(Component.literal("Attributes: " + formatLevelsCompact(d.attributeLevels)).withStyle(ChatFormatting.LIGHT_PURPLE));
         if (includeCollarTier) {

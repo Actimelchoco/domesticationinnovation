@@ -15,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -200,8 +201,8 @@ public final class AnimightEquipmentRegression {
             check(upgraded.is(Items.NETHERITE_HELMET) && upgraded.getDamageValue() == 3
                     && upgraded.isEnchanted() && upgraded.getTag().getString("RegressionMarker").equals("original-armor"),
                     "unsealed upgrade must preserve the original armor data");
-            check(reserves(data, Items.DIAMOND_HELMET) == 1 && reserves(data, Items.DIAMOND_SWORD) == 1
-                    && reserves(data, Items.COD) == 32, "kill must restore every valid seal, including nonarmor stacks");
+            check(reserves(data, Items.DIAMOND_HELMET) == 1 && tame.getMainHandItem().is(Items.DIAMOND_SWORD)
+                    && reserves(data, Items.COD) == 32, "kill must restore every valid seal and equip the restored weapon");
             check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isSealedItem).count() == 1
                     && reserves(data, scrapItem) == 1, "malformed seal and DNL scrap must remain intact");
             check(AnimightEquipmentEvents.restoreSealedItems(data) == 0, "repeated restoration must not duplicate originals");
@@ -212,6 +213,129 @@ public final class AnimightEquipmentRegression {
             AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim, helper.getLevel().damageSources().mobAttack(tame)));
             check(tame.getItemBySlot(EquipmentSlot.CHEST).is(Items.NETHERITE_CHESTPLATE)
                     && reserves(data, Items.DIAMOND_CHESTPLATE) == 1, "full reserve must unseal in place and store displaced armor in the freed slot");
+        } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void weaponsUsePerHitDamageAndPreserveReplacements(GameTestHelper helper) {
+        TamableAnimal tame = companion(helper);
+        TameData data = TameRegistry.get(tame.getUUID());
+        try {
+            tame.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(2);
+            tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            var menu = new AnimightEquipmentEvents.ReserveContainer(tame, data);
+            check(menu.canPlaceItem(0, new ItemStack(Items.DIAMOND_SWORD))
+                    && menu.canPlaceItem(0, new ItemStack(Items.BOW)) && !menu.canPlaceItem(0, new ItemStack(Items.APPLE)),
+                    "equipment inventory must accept weapons and bows but reject unrelated items");
+            ItemStack enchanted = new ItemStack(Items.IRON_SWORD);
+            enchanted.enchant(Enchantments.SHARPNESS, 5);
+            menu.setItem(0, enchanted);
+            menu.setItem(1, new ItemStack(Items.DIAMOND_SWORD));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.IRON_SWORD) && tame.getMainHandItem().isEnchanted(),
+                    "Sharpness must let lower-tier weapon beat plain diamond by hit damage");
+            menu.setItem(2, new ItemStack(Items.DIAMOND_AXE));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.DIAMOND_AXE), "slower axe must beat swords when it hits harder");
+            check(reserves(data, Items.IRON_SWORD) == 2 && reserves(data, Items.DIAMOND_SWORD) == 1,
+                    "each displaced weapon must be retained once");
+            // Apply vanilla held attributes to verify that comparison doesn't double count the current weapon.
+            tame.getAttributes().addTransientAttributeModifiers(tame.getMainHandItem().getAttributeModifiers(EquipmentSlot.MAINHAND));
+            double diamondDamage = AnimightEquipmentEvents.weaponDamage(tame, new ItemStack(Items.DIAMOND_SWORD));
+            check(Math.abs(diamondDamage - 8.0D) < 0.001D, "candidate must replace current weapon modifiers, not add to them");
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.DIAMOND_AXE) && reserves(data, Items.IRON_SWORD) == 2,
+                    "unchanged reserve must not repeatedly swap or duplicate weapons");
+        } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void bowPowerAndCrossTypeRanking(GameTestHelper helper) {
+        TamableAnimal tame = companion(helper);
+        TameData data = TameRegistry.get(tame.getUUID());
+        try {
+            tame.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(2);
+            tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            tame.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
+            ItemStack weaker = new ItemStack(Items.BOW);
+            weaker.enchant(Enchantments.POWER_ARROWS, 1);
+            ItemStack stronger = new ItemStack(Items.BOW);
+            stronger.enchant(Enchantments.POWER_ARROWS, 5);
+            AnimightEquipmentEvents.store(data, weaker);
+            AnimightEquipmentEvents.store(data, stronger);
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.BOW)
+                    && net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, tame.getMainHandItem()) == 5,
+                    "best Power bow must beat weaker bow and weaker melee weapon");
+            check(tame.getOffhandItem().is(Items.SHIELD), "automatic weapon selection must preserve the shield");
+            AnimightEquipmentEvents.store(data, new ItemStack(Items.NETHERITE_AXE));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.NETHERITE_AXE) && reserves(data, Items.BOW) == 2,
+                    "harder-hitting melee weapon must replace bow and retain both bows");
+            tame.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.BOW));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.NETHERITE_AXE) && tame.getOffhandItem().isEmpty() && reserves(data, Items.BOW) == 3,
+                    "weaker offhand bow must move to reserve instead of overriding selected melee attack");
+            var customBow = ForgeRegistries.ITEMS.getValue(new ResourceLocation("domesticationinnovation", "regression_damage_bow"));
+            tame.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(customBow));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(customBow) && tame.getOffhandItem().isEmpty(),
+                    "strongest offhand bow must move to mainhand and customArrow damage must participate in ranking");
+            var victim = EntityType.ZOMBIE.create(helper.getLevel());
+            victim.moveTo(tame.getX() + 5, tame.getY(), tame.getZ());
+            ((net.minecraft.world.entity.monster.RangedAttackMob) tame).performRangedAttack(victim, 1.0F);
+            var arrows = helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.AbstractArrow.class,
+                    tame.getBoundingBox().inflate(2), arrow -> arrow.getOwner() == tame);
+            check(arrows.size() == 1 && arrows.get(0).getBaseDamage() >= 11,
+                    "native ranged attack must actually use the selected bow's customArrow damage");
+            arrows.forEach(net.minecraft.world.entity.Entity::discard);
+        } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void weaponLootWearSealsAndFullReserve(GameTestHelper helper) {
+        TamableAnimal tame = companion(helper);
+        TameData data = TameRegistry.get(tame.getUUID());
+        try {
+            tame.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(2);
+            data.hungerAutopickup = false;
+            tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+            var victim = EntityType.ZOMBIE.create(helper.getLevel());
+            List<ItemEntity> drops = new ArrayList<>();
+            for (var item : List.of(Items.DIAMOND_SWORD, Items.IRON_AXE, Items.BOW, Items.APPLE)) {
+                drops.add(new ItemEntity(helper.getLevel(), 0, 0, 0, new ItemStack(item)));
+            }
+            MinecraftForge.EVENT_BUS.post(new LivingDropsEvent(victim, helper.getLevel().damageSources().mobAttack(tame), drops, 0, true));
+            check(tame.getMainHandItem().is(Items.IRON_AXE) && drops.size() == 1 && drops.get(0).getItem().is(Items.APPLE),
+                    "kill must collect weapons/bows and choose the hardest hitter independently of food pickup");
+            tame.getMainHandItem().setDamageValue(tame.getMainHandItem().getMaxDamage() - 1);
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.DIAMOND_SWORD) && reserves(data, Items.IRON_AXE) == 1,
+                    "nearly broken weapon must be retained and replaced with a usable spare");
+            ItemStack original = new ItemStack(Items.NETHERITE_AXE);
+            original.enchant(Enchantments.SHARPNESS, 4);
+            original.getOrCreateTag().putString("RegressionMarker", "saved-weapon");
+            tame.setItemSlot(EquipmentSlot.MAINHAND, sealed(original));
+            MinecraftForge.EVENT_BUS.post(new LivingDeathEvent(victim, helper.getLevel().damageSources().mobAttack(tame)));
+            check(tame.getMainHandItem().is(Items.NETHERITE_AXE) && tame.getMainHandItem().isEnchanted()
+                    && tame.getMainHandItem().getTag().getString("RegressionMarker").equals("saved-weapon"),
+                    "kill must store/unseal held weapon and equip its restored original with NBT intact");
+            data.animightEquipmentInventory.clear();
+            for (int i = 0; i < 27; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_SWORD));
+            data.animightEquipmentInventory.set(26, new ItemStack(Items.NETHERITE_AXE));
+            tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
+            AnimightEquipmentEvents.maintain(tame, data);
+            check(tame.getMainHandItem().is(Items.NETHERITE_AXE) && reserves(data, Items.WOODEN_SWORD) == 1,
+                    "full reserve must free replacement slot before retaining the old weapon");
+            ItemStack breaking = worn(new ItemStack(Items.DIAMOND_SWORD));
+            data.animightEquipmentInventory.set(25, ItemStack.EMPTY);
+            breaking.enchant(DNLEnchantments.BREAK_PROTECTION.get(), 1);
+            breaking.hurtAndBreak(10000, tame, ignored -> {});
+            check(breaking.isEmpty() && data.animightEquipmentInventory.stream().anyMatch(AnimightEquipmentEvents::isRecoveryItem),
+                    "DNL weapon scrap must be captured just like armor scrap");
         } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
         helper.succeed();
     }

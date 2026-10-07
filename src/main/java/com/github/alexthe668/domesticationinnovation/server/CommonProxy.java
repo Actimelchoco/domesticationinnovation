@@ -979,9 +979,8 @@ public class CommonProxy {
             int protection = Mth.clamp(TameableUtils.getEnchantLevel(
                     event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION), 0, 12);
             if (protection > 0) {
-                // LivingDamageEvent runs after armor/toughness absorption. Match vanilla
-                // Protection's four percent per effective protection point on what remains.
-                event.setAmount(event.getAmount() * (1.0F - protection * 0.04F));
+                // LivingDamageEvent runs after armor/toughness absorption; XII caps at 67%.
+                event.setAmount(event.getAmount() * (1.0F - TameableUtils.collarProtectionReduction(protection)));
             }
         }
         if (event.getSource().getEntity() instanceof LivingEntity && TameableUtils.isTamed(event.getSource().getEntity())) {

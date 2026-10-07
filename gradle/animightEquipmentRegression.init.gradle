@@ -1,4 +1,5 @@
-// Include alongside tamePerformanceRegression.init.gradle; release builds do not use this script.
+// Run alone for isolated Animights tests, or alongside tamePerformanceRegression.init.gradle.
+// Release builds do not use this script.
 allprojects {
     beforeEvaluate {
         // Animights requires Forge >=47.2.30. Keep the normal release target unchanged.
@@ -27,5 +28,17 @@ allprojects {
             dependencies.add('implementation', fg.deobf("animight-test:${name}:local"))
         }
         sourceSets.main.java.srcDir('src/test/animights/java')
+        sourceSets.main.resources.srcDir('src/test/performance/resources')
+        minecraft.runs {
+            gameTestServer {
+                workingDirectory project.file('build/animight-equipment-gametest')
+                property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+                property 'mixin.env.remapRefMap', 'true'
+                property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+                arg '-mixin.config=citadel.mixins.json'
+                arg '-mixin.config=domesticationinnovation.mixins.json'
+                mods { domesticationinnovation { source sourceSets.main } }
+            }
+        }
     }
 }
