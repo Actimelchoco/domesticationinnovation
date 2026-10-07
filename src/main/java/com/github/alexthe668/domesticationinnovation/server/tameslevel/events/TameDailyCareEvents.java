@@ -56,7 +56,7 @@ public final class TameDailyCareEvents {
                 changed = true;
                 if (tame.getHealth() < tame.getMaxHealth() || !TameCommands.hasEdibleStoredFood(tame, data)) continue;
                 // This fixed care reward is not recovery XP or an armor-mending payment.
-                data.xp = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.xp) + 1L);
+                data.xp = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.xp) + com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonusXp(data, 1));
                 LevelSystem.checkLevelUp(tame, data);
             }
         }

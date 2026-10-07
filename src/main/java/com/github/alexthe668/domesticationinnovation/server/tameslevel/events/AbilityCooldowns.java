@@ -22,7 +22,8 @@ final class AbilityCooldowns {
                 attackNerfMultiplier = 1.0D + percent * (Math.log(abilityCount) / Math.log(2.0D));
             }
         }
-        return attackNerfMultiplier * LevelSystem.quickyCooldownMultiplier(data);
+        return attackNerfMultiplier * LevelSystem.quickyCooldownMultiplier(data)
+                * com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.modifiers(data).cooldownMultiplier();
     }
 
     private static int countOwnedAttackAbilities(TameData data) {

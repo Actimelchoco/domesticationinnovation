@@ -402,8 +402,8 @@ public class LevelSystem {
             Entity entity = dead.level() instanceof ServerLevel serverLevel ? serverLevel.getEntity(tameId) : null;
             if (gainedXP > 0.0D) {
                 int adjustedXp = scaleRecoveryXpGain(data, gainedXP);
-                data.xp += TameStoredArmorEvents.repairWithMending(
-                        entity instanceof LivingEntity living ? living : null, data, adjustedXp);
+                data.xp = (int) Math.min(Integer.MAX_VALUE, (long) data.xp + TameStoredArmorEvents.repairWithMending(
+                        entity instanceof LivingEntity living ? living : null, data, adjustedXp));
             }
             if (entity instanceof LivingEntity tame) {
                 checkLevelUp(tame, data);
@@ -445,6 +445,8 @@ public class LevelSystem {
         updateTameName(tame, data);
         if (applyPenaltyAndCountDeath) {
             data.deaths++;
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.recordDeath(
+                    data, Math.floorDiv(tame.getServer().overworld().getDayTime(), 24000L));
         }
         TameRegistry.markDirty();
     }
@@ -590,7 +592,7 @@ public class LevelSystem {
         }
         int adjusted = amount > 0 ? scaleRecoveryXpGain(data, amount) : amount;
         if (adjusted > 0) adjusted = TameStoredArmorEvents.repairWithMending(tame, data, adjusted);
-        data.xp = Math.max(0, data.xp + adjusted);
+        data.xp = (int) Math.max(0, Math.min(Integer.MAX_VALUE, (long) data.xp + adjusted));
         checkLevelUp(tame, data);
         TameRegistry.markDirty();
     }
@@ -851,7 +853,8 @@ public class LevelSystem {
             return 0;
         }
         double scaled = isRegainingLevels(data) ? baseAmount * RECOVERY_XP_MULTIPLIER : baseAmount;
-        return Math.max(1, (int) Math.round(scaled));
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonusXp(data,
+                (int) Math.min(Integer.MAX_VALUE, Math.max(1L, Math.round(scaled))));
     }
 
     private static void recordLevelReward(TameData data, int level, LevelRewardResult reward, long gameTime) {

@@ -2276,6 +2276,10 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
 
+                        .then(Commands.literal("pack")
+                                .then(Commands.argument("name", StringArgumentType.string())
+                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                        .executes(ctx -> packStatus(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                         .then(buildOrganizedLeaderboardCommand())
                         .then(Commands.literal("_leaderboardOld")
                                 .requires(source -> false)
@@ -4219,7 +4223,7 @@ public class TameCommands {
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null || !data.dead || data.uuid == null || !ownerUuid.equals(data.ownerUUID)) continue;
             if (data.hasPetBed && data.petBedDimension != null && !data.petBedDimension.isBlank()) continue;
-            if (isDuelLocked(data.uuid) || diedOnCurrentGameDay(server, data)) continue;
+            if (isDuelLocked(data.uuid)) continue;
             if (findLoadedLivingTameByIdentity(server, data.uuid, data.tlId) != null) continue;
             result.add(data);
         }
@@ -4371,9 +4375,6 @@ public class TameCommands {
             if (isDuelLocked(data.uuid)) {
                 continue;
             }
-            if (diedOnCurrentGameDay(server, data)) {
-                continue;
-            }
             if (ownerUuid != null && !ownerUuid.equals(data.ownerUUID)) {
                 continue;
             }
@@ -4417,7 +4418,7 @@ public class TameCommands {
     private static int reviveXpCost(TameData data, ReviveMode mode) {
         int baseCost = Math.max(0, LevelSystem.estimateInvestedXp(data));
         if (mode == ReviveMode.ARISE) {
-            return Math.max(1, saturatingMultiply(baseCost, 5));
+            return Math.max(1, saturatingMultiply(baseCost, 2));
         }
         return baseCost;
     }
@@ -4614,51 +4615,8 @@ public class TameCommands {
                                 .executes(ctx -> adminCanEatChange(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type2").toString(), ResourceLocationArgument.getId(ctx, "food2").toString(), false)))));
     }
 
-    private static int ariseUsesToday(ServerPlayer player) {
-        if (player == null || player.getServer() == null || player.getServer().overworld() == null) {
-            return 0;
-        }
-        long currentDay = player.getServer().overworld().getGameTime() / 24000L;
-        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-        if (stats == null) {
-            return 0;
-        }
-        if (stats.ariseCostDay != currentDay) {
-            stats.ariseCostDay = currentDay;
-            stats.ariseUsesToday = 0;
-            TameRegistry.markDirty();
-        }
-        return Math.max(0, stats.ariseUsesToday);
-    }
-
-    private static void recordAriseUse(ServerPlayer player) {
-        int uses = ariseUsesToday(player);
-        PlayerDuelStats stats = TameRegistry.getOrCreatePlayerDuelStats(player.getUUID(), player.getGameProfile().getName());
-        if (stats != null) {
-            stats.ariseUsesToday = uses == Integer.MAX_VALUE ? Integer.MAX_VALUE : uses + 1;
-            TameRegistry.markDirty();
-        }
-    }
-
-    private static int applyAriseDailyMultiplier(int cost, int usesToday) {
-        int scaled = Math.max(0, cost);
-        for (int i = 0; i < Math.max(0, usesToday) && scaled < Integer.MAX_VALUE; i++) {
-            scaled = saturatingMultiply(scaled, 2);
-        }
-        return scaled;
-    }
-
     private static int saturatingMultiply(int value, int multiplier) {
         return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) value * Math.max(0, multiplier)));
-    }
-
-    private static boolean diedOnCurrentGameDay(MinecraftServer server, TameData data) {
-        if (server == null || server.overworld() == null || data == null || data.deadGameTime <= 0L) {
-            return false;
-        }
-        long currentGameTime = server.overworld().getGameTime();
-        return currentGameTime >= data.deadGameTime
-                && currentGameTime / 24000L == data.deadGameTime / 24000L;
     }
 
     private static int reviveApprovedItemCost(TameData data, ReviveMode mode) {
@@ -4669,9 +4627,33 @@ public class TameCommands {
                 && !data.petBedDimension.isBlank()) {
             return 1;
         }
+        if (mode == ReviveMode.ARISE) return saturatingMultiply(reviveApprovedItemCost(data, ReviveMode.RESPAWN), 2);
         int level = Math.max(1, data == null ? 1 : data.level);
-        double divisor = mode == ReviveMode.ARISE ? 10.0D : 20.0D;
-        return Math.max(1, (int) Math.ceil(level / divisor));
+        return Math.max(1, (int) Math.ceil(level / 20.0D));
+    }
+
+    private static int packStatus(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        TameData data = findOwnedTame(player.getUUID(), name);
+        if (data == null) return error(player, "No owned tame found with that name.");
+        var bonuses = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonuses(data);
+        player.sendSystemMessage(Component.literal("Pack: " + data.name + " | nearby combat packmates (updated every 3s): " + bonuses.members().size()));
+        if (bonuses == com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.Bonuses.LONELY)
+            player.sendSystemMessage(Component.literal("Lonely bonus: +50% damage; +10% saturation consumption."));
+        for (var member : bonuses.members()) player.sendSystemMessage(Component.literal("  " + member.name() + " | " + member.type() + " | level " + member.level()));
+        player.sendSystemMessage(Component.literal(String.format(java.util.Locale.ROOT,
+                "Healing speed +%.1f%%; healing amount %.1f%%; cooldown -%.1f%%; damage +%.1f%%; damage reduction %.1f%%",
+                bonuses.healingSpeed()*100, bonuses.healingAmount()*100, bonuses.cooldownReduction()*100,
+                bonuses.damageBonus()*100, bonuses.defense()*100)));
+        long day = Math.floorDiv(source.getServer().overworld().getDayTime(), 24000L);
+        player.sendSystemMessage(Component.literal(String.format(java.util.Locale.ROOT,
+                "XP +%.1f%% (daily +%.1f%%, lowest-level +%.1f%%); saturation %.2fx; survival streak %d mornings; deaths today %d",
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.xpBonus(data)*100,
+                data.dailyPackXpBonus*100, bonuses.xpBonus()*100,
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.saturationMultiplier(data),
+                data.packAliveDays, data.packDeathDay == day ? data.packDeathsToday : 0)));
+        return 1;
     }
 
     private static int highestRecordedLevel(TameData data) {
@@ -5430,11 +5412,11 @@ public class TameCommands {
             );
         }
         else if (key.equals("arise")) {
-            sendInfoPage(p, "Arise (5xPrice)",
+            sendInfoPage(p, "Arise (2xPrice)",
                     "/tames arise <name|all|group <name>|type <name>>",
                     "Arise respawns the tame at your current position.",
-                    "Payment options: five times invested XP, or ceil(level/10) approved items, or 1 vanilla Totem of Undying in main hand.",
-                    "Each successful Arise doubles every payment price again for the rest of the same Minecraft day. The price resets the next day."
+                    "Payment options: twice invested XP, twice the normal respawn approved-item cost, or 2 vanilla Totems of Undying in main hand.",
+                    "Arise always costs twice the normal respawn price; repeated uses do not increase its price."
             );
         }
         else if (key.equals("arisereincarnated")) {
@@ -7368,13 +7350,31 @@ public class TameCommands {
         int normalizedXp = Math.max(0, xpCost);
         int normalizedItems = Math.max(1, approvedItemCost);
         int normalizedTotems = Math.max(1, totemCost);
-        if (isReincarnationTotem(held) && held.getCount() >= normalizedTotems) {
+        int availableTotems = isReincarnationTotem(held) ? held.getCount() : 0;
+        if (availableTotems > 0) {
+            for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+                ItemStack stack = player.getInventory().getItem(slot);
+                if (stack != held && isReincarnationTotem(stack)) availableTotems += stack.getCount();
+            }
+        }
+        if (isReincarnationTotem(held) && availableTotems >= normalizedTotems) {
             if (consume) {
-                held.shrink(normalizedTotems);
+                int remaining = normalizedTotems;
+                int fromHand = Math.min(remaining, held.getCount());
+                held.shrink(fromHand);
+                remaining -= fromHand;
+                for (int slot = 0; slot < player.getInventory().getContainerSize() && remaining > 0; slot++) {
+                    ItemStack stack = player.getInventory().getItem(slot);
+                    if (stack == held || !isReincarnationTotem(stack)) continue;
+                    int taken = Math.min(remaining, stack.getCount());
+                    stack.shrink(taken);
+                    remaining -= taken;
+                }
+                player.getInventory().setChanged();
             }
             return PaymentResult.ok(normalizedTotems + " vanilla totem" + (normalizedTotems == 1 ? "" : "s"));
         }
-        int requiredPaymentPoints = normalizedItems * FOOD_POINTS_PER_APPROVED_ITEM;
+        int requiredPaymentPoints = saturatingMultiply(normalizedItems, FOOD_POINTS_PER_APPROVED_ITEM);
         int heldPaymentPoints = approvedOrFoodPaymentPoints(held);
         if (heldPaymentPoints >= requiredPaymentPoints) {
             if (consume) {
@@ -12777,8 +12777,6 @@ public class TameCommands {
         List<String> respawnedNames = new ArrayList<>();
         List<String> failReasons = new ArrayList<>();
         List<String> unaffordable = new ArrayList<>();
-        List<String> diedTodayNames = new ArrayList<>();
-        int ariseUses = mode == ReviveMode.ARISE ? ariseUsesToday(player) : 0;
 
         for (TameData data : candidates) {
             if (data == null || data.uuid == null) {
@@ -12794,11 +12792,6 @@ public class TameCommands {
             if (!isDeadEntry(data.uuid)) {
                 continue;
             }
-            if (mode == ReviveMode.RESPAWN && diedOnCurrentGameDay(source.getServer(), data)) {
-                failed++;
-                diedTodayNames.add(data.name == null || data.name.isBlank() ? "unknown" : data.name);
-                continue;
-            }
             if (findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid) != null) {
                 failed++;
                 failReasons.add(data.name + " (already loaded)");
@@ -12808,9 +12801,7 @@ public class TameCommands {
             int approvedItemCost = reviveApprovedItemCost(data, mode);
             int totemCost = 1;
             if (mode == ReviveMode.ARISE) {
-                xpCost = applyAriseDailyMultiplier(xpCost, ariseUses);
-                approvedItemCost = applyAriseDailyMultiplier(approvedItemCost, ariseUses);
-                totemCost = applyAriseDailyMultiplier(totemCost, ariseUses);
+                totemCost = 2;
             }
             if (reincarnateAfter && data.hasSavedProgress && data.level < data.savedLevel) {
                 xpCost += LevelSystem.reincarnationXpCost(data);
@@ -12849,18 +12840,7 @@ public class TameCommands {
                 }
             }
             success++;
-            if (mode == ReviveMode.ARISE) {
-                recordAriseUse(player);
-                if (ariseUses < Integer.MAX_VALUE) {
-                    ariseUses++;
-                }
-            }
             respawnedNames.add(tameDisplayName(data));
-        }
-
-        if (!diedTodayNames.isEmpty()) {
-            failReasons.add(String.join(", ", diedTodayNames)
-                    + " died today; use arise(5xPrice) or wait until tomorrow.");
         }
 
         if (success <= 0) {
@@ -22746,6 +22726,7 @@ public class TameCommands {
                 changed = true;
             }
             changed |= updateHungerWarningState(server, data);
+            double previousPackRemainder = data.packSaturationRemainder;
             int drain = hungerDrainPerSecond(tame, data, now);
             if (drain <= 0) {
                 if (data.hungerEmptyNotified && totalHungerFoodPoints(data) > 0) {
@@ -22755,6 +22736,7 @@ public class TameCommands {
                 continue;
             }
             if (!ensureHungerSaturation(data, tame, drain)) {
+                data.packSaturationRemainder = previousPackRemainder;
                 if (handleDuelHungerFailure(server, data)) {
                     changed = true;
                     continue;
@@ -22927,7 +22909,8 @@ public class TameCommands {
         int level = data == null ? 1 : Math.max(1, data.level);
         double weightedLevels = saturationWeightedLevels(level)
                 + saturationWeightedLevels(com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.hungerExtraLevels(data));
-        return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, Math.round(baseCost * (1.0D + weightedLevels / 100.0D))));
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.saturationCost(
+                data, Math.max(1L, Math.round(baseCost * (1.0D + weightedLevels / 100.0D))));
     }
 
     private static double saturationWeightedLevels(double remainingLevels) {
@@ -23004,8 +22987,10 @@ public class TameCommands {
         if (data == null || saturationCost <= 0) {
             return true;
         }
+        double previousPackRemainder = data.packSaturationRemainder;
         int scaledCost = scaleSaturationCost(data, saturationCost);
         if (!ensureHungerSaturation(data, tame, scaledCost)) {
+            data.packSaturationRemainder = previousPackRemainder;
             return false;
         }
         data.hungerSaturation = Math.max(0, data.hungerSaturation - scaledCost);

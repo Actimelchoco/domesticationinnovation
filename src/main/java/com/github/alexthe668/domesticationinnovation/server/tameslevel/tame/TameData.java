@@ -38,6 +38,16 @@ public class TameData {
     public long adminSurvivalStart = Long.MIN_VALUE;
     public long lastActiveSurvivalDay = Long.MIN_VALUE;
     public long lastDailyCareDay = Long.MIN_VALUE;
+    public double dailyPackXpBonus = 0;
+    public long packLastMorning = Long.MIN_VALUE;
+    public int packAliveDays = 0;
+    public long packDeathDay = Long.MIN_VALUE;
+    public int packDeathsToday = 0;
+    public double packXpRemainder = 0;
+    public double packSaturationRemainder = 0;
+    public transient TamePackService.Modifiers packModifiers = TamePackService.Modifiers.NONE;
+    public transient TamePackService.Modifiers packRestModifiers = TamePackService.Modifiers.NONE;
+
 
     public int kills = 0;
     public int assists = 0;
@@ -229,6 +239,14 @@ public class TameData {
         tag.putLong("adminSurvivalStart", adminSurvivalStart);
         tag.putLong("lastActiveSurvivalDay", lastActiveSurvivalDay);
         tag.putLong("lastDailyCareDay", lastDailyCareDay);
+        tag.putDouble("dailyPackXpBonus", dailyPackXpBonus);
+        tag.putLong("packLastMorning", packLastMorning);
+        tag.putInt("packAliveDays", packAliveDays);
+        tag.putLong("packDeathDay", packDeathDay);
+        tag.putInt("packDeathsToday", packDeathsToday);
+        tag.putDouble("packXpRemainder", packXpRemainder);
+        tag.putDouble("packSaturationRemainder", packSaturationRemainder);
+
         tag.putInt("kills", kills);
         tag.putInt("assists", assists);
         tag.putInt("deaths", deaths);
@@ -440,6 +458,14 @@ public class TameData {
         data.adminSurvivalStart = tag.contains("adminSurvivalStart") ? tag.getLong("adminSurvivalStart") : Long.MIN_VALUE;
         data.lastActiveSurvivalDay = tag.contains("lastActiveSurvivalDay", Tag.TAG_LONG) ? tag.getLong("lastActiveSurvivalDay") : Long.MIN_VALUE;
         data.lastDailyCareDay = tag.contains("lastDailyCareDay", Tag.TAG_LONG) ? tag.getLong("lastDailyCareDay") : Long.MIN_VALUE;
+        data.dailyPackXpBonus = tag.contains("dailyPackXpBonus") ? tag.getDouble("dailyPackXpBonus") : 0;
+        data.packLastMorning = tag.contains("packLastMorning") ? tag.getLong("packLastMorning") : Long.MIN_VALUE;
+        data.packAliveDays = tag.contains("packAliveDays") ? tag.getInt("packAliveDays") : 0;
+        data.packDeathDay = tag.contains("packDeathDay") ? tag.getLong("packDeathDay") : Long.MIN_VALUE;
+        data.packDeathsToday = tag.contains("packDeathsToday") ? tag.getInt("packDeathsToday") : 0;
+        data.packXpRemainder = tag.contains("packXpRemainder") ? tag.getDouble("packXpRemainder") : 0;
+        data.packSaturationRemainder = tag.contains("packSaturationRemainder") ? tag.getDouble("packSaturationRemainder") : 0;
+
         data.kills = Math.max(0, tag.getInt("kills"));
         data.assists = Math.max(0, tag.getInt("assists"));
         data.deaths = Math.max(0, tag.getInt("deaths"));
@@ -667,6 +693,7 @@ public class TameData {
             }
         }
 
+        TamePackService.updateModifiers(data);
         return data;
     }
 

@@ -258,7 +258,8 @@ public final class OwnerProtectionAbilityModule {
 
     private static void setAbilityCooldown(TameData data, String key, long now, long baseTicks) {
         long ticks = Math.max(1L, baseTicks);
-        ticks = Math.max(1L, Math.round(ticks * LevelSystem.quickyCooldownMultiplier(data)));
+        ticks = Math.max(1L, Math.round(ticks * LevelSystem.quickyCooldownMultiplier(data)
+                * com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.modifiers(data).cooldownMultiplier()));
         setCooldown(data, key, now + ticks);
     }
 

@@ -1100,6 +1100,11 @@ public class TameAbilityEvents {
                 heal += Math.max(1, LevelSystem.getAbilityLevel(supporterData, "revitalizing_presence"));
             }
         }
+        heal *= (float) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.modifiers(data).healingAmount();
+        if (heal <= 0) {
+            setCooldown(data, "passive_heal_tick", now + passiveHealInterval(tame, data));
+            return;
+        }
         if (!TameCommands.consumeHungerForPassiveHeal(data, tame, heal)) {
             return;
         }
@@ -1109,6 +1114,8 @@ public class TameAbilityEvents {
 
     private static long passiveHealInterval(LivingEntity tame, TameData data) {
         long interval = tame != null && TameDuelManager.isEntityInDuel(tame.getUUID()) ? 200L : 100L;
+        interval = Math.max(1L, Math.round(interval *
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.modifiers(data).healingIntervalMultiplier()));
         if (data == null || data.lastConsumedFoodPreferred) return interval;
         return interval * (data.lastConsumedFoodEternalSteak ? 4L : 2L);
     }

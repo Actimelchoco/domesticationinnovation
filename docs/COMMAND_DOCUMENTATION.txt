@@ -885,12 +885,12 @@ Morning auto-respawn is split by pet bed color.
 All dead tames with colored pet beds respawn the next morning.
 White pet beds use the TL graveyard/respawn-order queue, and only 1 white-bed tame per owner respawns each morning.
 
-ARISE (5XPRICE)
+ARISE (2XPRICE)
 ---------------
 /tames arise <name|all|group <name>|type <name>>
 Arise respawns the tame at your current position.
-Payment options: five times invested XP, or ceil(level/10) approved items, or 1 vanilla Totem of Undying in main hand.
-Each successful Arise doubles every payment price again for the rest of the same Minecraft day. The price resets the next day.
+Payment options: twice invested XP, twice the normal respawn approved-item cost, or 2 vanilla Totems of Undying in main hand.
+Arise always costs twice the normal respawn price; repeated uses do not increase its price.
 
 ARISE REINCARNATED
 ------------------
@@ -1119,3 +1119,19 @@ Command registrations: src/main/java/com/github/alexthe668/
 domesticationinnovation/server/tameslevel/*Commands.java
 Mechanic pages: TameCommands.infoDetail.
 This is a snapshot; use in-game help and completion after updating the mod.
+
+PACK BONUSES
+------------
+/tames pack <name>
+Shows your tame's qualifying packmates, healing, cooldown, damage, defense and XP modifiers, saturation cost, survival streak and deaths today.
+Pack eligibility and derived multipliers refresh every 60 game ticks (3 seconds at 20 TPS). Combat/XP/hunger events read cached multipliers; the status command displays that cache without forcing a scan. Membership/range/target changes can take up to 3 seconds to apply. Daily streaks and death resets update their cached XP and saturation values when changed.
+Only living, loaded, unstored combat tames qualify. The owner must be online, in the same dimension, within 67 blocks. Packmates must be within 32 blocks of the receiving tame. A living enemy target qualifies, with a 5-second grace period after losing it. Duels do not grant combat pack bonuses. Each tame excludes itself from packmate counts.
+Same species: +20% base passive healing speed per same-type packmate, minus 30 percentage points per different-type packmate, floored at zero bonus. More than 11 total same-type members reduce base passive healing amount by 20 percentage points per excess member, floored at zero healing. Existing food healing modifiers still apply.
+Diversity: each different-type packmate reduces cooldown by 10%, then 7.5%, then 5.625%, etc. Total reduction = 40% * (1 - 0.75^count), approaching 40%. Duplicate species do not cancel diversity; each tame counts its own different-type packmates.
+When all local members including the tame are within a 10-level range: +10% damage per packmate. Every tied lowest-level member also gains +10% incoming XP per packmate.
+Same mod, different species: +5% damage reduction per matching-mod, different-type packmate, minus 30 percentage points per foreign-mod packmate. Clamped to 0-30% damage reduction.
+Each Minecraft morning alive adds +10 percentage points incoming XP with the owner online, or +5 offline, capped at +100%. Stored/dead tames do not qualify; skipped mornings are not awarded retroactively. Death resets this streak and daily XP bonus. Fractional bonus XP accumulates across rewards.
+The second and every later non-duel death that Minecraft day lowers the saved highest-level record by 1, never below current level after the normal death penalty. Level-reward memory is retained. Respawn is allowed even after dying that same day.
+Saturation costs add +10% per active bonus category, plus the total incoming XP bonus percentage. Daily XP is one category; its bonus and any lowest-level XP bonus add together. For example, three active categories and +40% XP mean 1.70x normal saturation consumption. Fractional extra saturation consumption carries forward.
+
+Lonely bonus: a combat-eligible tame with zero qualifying packmates gains +50% damage and +10% saturation consumption. The normal owner distance, combat eligibility, grace period, and 3-second cached refresh apply. It replaces pack damage bonuses when alone; daily XP bonuses still apply. /tames pack <name> identifies the lonely bonus.

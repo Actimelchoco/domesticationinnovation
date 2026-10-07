@@ -17,6 +17,15 @@ public final class TameDuelSnapshots {
         into.kills = from.kills;
         into.assists = from.assists;
         into.deaths = from.deaths;
+        into.dailyPackXpBonus = from.dailyPackXpBonus;
+        TamePackService.updateModifiers(into);
+        into.packLastMorning = from.packLastMorning;
+        into.packAliveDays = from.packAliveDays;
+        into.packDeathDay = from.packDeathDay;
+        into.packDeathsToday = from.packDeathsToday;
+        into.packXpRemainder = from.packXpRemainder;
+        into.packSaturationRemainder = from.packSaturationRemainder;
+
         into.bonusHealth = from.bonusHealth;
         into.bonusDamage = from.bonusDamage;
         into.bonusSpeed = from.bonusSpeed;
