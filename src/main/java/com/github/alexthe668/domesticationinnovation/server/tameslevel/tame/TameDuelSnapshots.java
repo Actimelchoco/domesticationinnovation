@@ -68,6 +68,9 @@ public final class TameDuelSnapshots {
         into.duelCount = from.duelCount;
         into.duelPoints = from.duelPoints;
         into.hungerSaturation = from.hungerSaturation;
+        into.guardianResting = from.guardianResting;
+        into.guardianHungerHomeDeadline = from.guardianHungerHomeDeadline;
+        into.guardianRestHome = from.guardianRestHome.copy();
         into.offlineGuardianOrder = from.offlineGuardianOrder;
         into.offlineGuardianDeployed = from.offlineGuardianDeployed;
         into.offlineGuardianNeedsDeployment = from.offlineGuardianNeedsDeployment;

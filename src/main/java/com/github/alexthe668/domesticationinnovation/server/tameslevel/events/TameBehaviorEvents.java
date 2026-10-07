@@ -93,6 +93,11 @@ public class TameBehaviorEvents {
         TameFoodManager.tick(tame, activeData);
         if (tame.tickCount % 10 == 0) TameStoredArmorEvents.retireLegacyArmor(tame, activeData);
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
+        if ((tame.tickCount + tame.getId()) % 10 == 0) {
+            if (activeData.movementOrder == 3 || activeData.guardianResting) syncArtificialMovementFollowGoals(tame, activeData);
+            if (TameCommands.processGuardianRest(tame, activeData)) return;
+        }
+        if (activeData.guardianResting) return;
         if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
                 && tame.getTarget() != null
                 && !TameGoalSupport.isAssasinTarget(activeData.ownerUUID, tame.getTarget())) {
@@ -153,6 +158,11 @@ public class TameBehaviorEvents {
             TamePerformanceProfiler.run("behavior.guardian_return", () -> handleGuardianMovement(tame, activeData));
         }
 
+    }
+
+    @SubscribeEvent
+    public static void onGuardianOwnerLogin(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) TameCommands.loadRestingGuardiansForOwner(player);
     }
 
     @SubscribeEvent

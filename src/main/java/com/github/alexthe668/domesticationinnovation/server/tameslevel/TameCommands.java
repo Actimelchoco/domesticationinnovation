@@ -2238,7 +2238,7 @@ public class TameCommands {
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("equipment")
                                         .then(Commands.argument("name", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
+                                                .suggests((ctx, b) -> suggestOwnedAnimightNames(ctx.getSource(), b))
                                                 .executes(ctx -> animightEquipmentInventoryOpen(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
                                 .then(Commands.literal("superfood")
                                         .executes(ctx -> hungerInventorySuperfood(ctx.getSource())))
@@ -13528,9 +13528,10 @@ public class TameCommands {
 
     private static void applyBedRespawnMovement(MinecraftServer server, TameData data) {
         if (server == null || data == null) return;
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.returnAfterRespawn(server, data)) return;
         LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (respawned == null || !respawned.isAlive()) return;
+        if (processGuardianRest(respawned, data)) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.returnAfterRespawn(server, data)) return;
         boolean deployGuardian = data.movementOrder == 3 && data.hasHome;
         String guardianDimension = data.homeDimension;
         int guardianX = data.homeX;
@@ -13577,6 +13578,7 @@ public class TameCommands {
             LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
             if (tame == null || !tame.isAlive()) continue;
             applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+            processGuardianRest(tame, data);
             iterator.remove();
         }
     }
@@ -22471,6 +22473,8 @@ public class TameCommands {
     }
 
     private static void applyGuardianAnchor(String dimensionId, int x, int y, int z, LivingEntity tame, TameData data) {
+        data.guardianResting = false;
+        data.guardianHungerHomeDeadline = 0L;
         data.hasHome = true;
         data.homeDimension = dimensionId == null ? "" : dimensionId;
         data.homeX = x;
@@ -22483,6 +22487,7 @@ public class TameCommands {
         data.guardianTargetStuckTicks = 0;
         data.guardianTargetBestDistanceSq = 0.0D;
         applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        cacheGuardianRestHome(tame, data);
         if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         TameRegistry.markDirty();
     }
@@ -22544,6 +22549,9 @@ public class TameCommands {
             return;
         }
         data.hasHome = false;
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
+        data.guardianResting = false;
+        data.guardianHungerHomeDeadline = 0L;
         data.homeDimension = "";
         data.homeX = 0;
         data.homeY = 0;
@@ -22728,7 +22736,7 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (data.hungerForcedSit && totalHungerFoodPoints(data) > 0) {
+            if (data.hungerForcedSit && !data.guardianResting && totalHungerFoodPoints(data) > 0) {
                 if (data.hasHome) {
                     applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
                 } else {
@@ -22768,7 +22776,114 @@ public class TameCommands {
         }
     }
 
+    private static void cacheGuardianRestHome(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || tame.getServer() == null) return;
+        MinecraftServer server = tame.getServer();
+        ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
+        SpawnTarget home = owner == null ? resolveAutomaticRespawnBedTarget(server, data)
+                : resolveRespawnTarget(owner.createCommandSourceStack(), owner, data, false);
+        if (home == null || home.level == null || home.pos == null) return;
+        CompoundTag cached = new CompoundTag();
+        cached.putString("dimension", home.level.dimension().location().toString());
+        cached.putDouble("x", home.pos.x); cached.putDouble("y", home.pos.y); cached.putDouble("z", home.pos.z);
+        if (!cached.equals(data.guardianRestHome)) {
+            data.guardianRestHome = cached;
+            TameRegistry.markDirty();
+        }
+    }
+
+    private static SpawnTarget guardianRestDestination(MinecraftServer server, TameData data) {
+        CompoundTag cached = data.guardianRestHome;
+        ResourceLocation id = ResourceLocation.tryParse(cached.getString("dimension"));
+        ServerLevel level = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+        if (level != null) return new SpawnTarget(level,
+                new Vec3(cached.getDouble("x"), cached.getDouble("y"), cached.getDouble("z")), 0, 0);
+        return resolveAdminPlayerRespawnTarget(server.createCommandSourceStack(), data.ownerUUID, data, ReviveMode.RESPAWN);
+    }
+
+    private static LivingEntity transferGuardian(LivingEntity tame, TameData data, SpawnTarget destination) {
+        if (destination == null || destination.level == null || destination.pos == null) return null;
+        if (tame instanceof TamableAnimal animal) {
+            var result = TameTransferService.transferToLocation(animal, destination.level, destination.pos.x,
+                    destination.pos.y, destination.pos.z, tame.getYRot(), tame.getXRot(), data, true);
+            return result.success() ? result.entity() : null;
+        }
+        return TameTransferService.transferInterfaceToLocation(tame, destination.level, destination.pos.x,
+                destination.pos.y, destination.pos.z, tame.getYRot(), tame.getXRot(), data, true);
+    }
+
+    /** Suspends guarding without changing the saved post or charging food for emergency travel. */
+    public static boolean processGuardianRest(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || !tame.isAlive() || tame.getServer() == null || data.dead || data.stored
+                || isDuelLocked(data.uuid) || !data.hasHome
+                || (data.movementOrder != 3 && !data.guardianResting && !data.hungerForcedSit)) return false;
+        MinecraftServer server = tame.getServer();
+        boolean offline = data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null;
+        // Explicit offlineGuardian deployments retain their original offline duty.
+        offline &= !data.offlineGuardianDeployed;
+        boolean hungry = data.hungerSaturation <= 0 && !hasEdibleStoredFood(tame, data);
+        if (!offline && !hungry) {
+            if (!data.guardianResting) { cacheGuardianRestHome(tame, data); return false; }
+            LivingEntity moved = transferGuardian(tame, data, spawnTargetFromGuardianHome(server, data));
+            if (moved == null) return true;
+            data.guardianResting = false;
+            data.guardianHungerHomeDeadline = 0L;
+            data.hungerForcedSit = false;
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
+            applyLivingMovementOverride(moved, data, MovementOrder.GUARDIAN);
+            TameRegistry.markDirty();
+            return true;
+        }
+        if (!data.guardianResting) {
+            cacheGuardianRestHome(tame, data);
+            data.guardianResting = true;
+            data.guardianHungerHomeDeadline = hungry ? server.overworld().getGameTime() + 1200L : 0L;
+            TameRegistry.markDirty();
+        }
+        data.hungerForcedSit = hungry;
+        if (hungry && data.guardianHungerHomeDeadline == 0L) {
+            data.guardianHungerHomeDeadline = server.overworld().getGameTime() + 1200L;
+            TameRegistry.markDirty();
+        }
+        SpawnTarget home = guardianRestDestination(server, data);
+        if (home == null || home.level == null || home.pos == null) return true;
+        boolean atHome = tame.level() == home.level && tame.distanceToSqr(home.pos) <= 1.0D;
+        long now = server.overworld().getGameTime();
+        if (!atHome && (offline || (data.guardianHungerHomeDeadline > 0 && now >= data.guardianHungerHomeDeadline))) {
+            LivingEntity moved = transferGuardian(tame, data, home);
+            if (moved == null) return true;
+            tame = moved; atHome = true;
+        }
+        if (tame instanceof net.minecraft.world.entity.Mob mob) mob.setTarget(null);
+        if (isLivingTameSitting(tame) != atHome) {
+            applyDuelMovementOrder(tame, !atHome);
+            data.movementOrder = 3;
+        }
+        if (atHome && tame instanceof net.minecraft.world.entity.Mob mob) mob.getNavigation().stop();
+        else if (tame instanceof net.minecraft.world.entity.PathfinderMob mob && tame.level() == home.level) {
+            mob.getNavigation().moveTo(home.pos.x, home.pos.y, home.pos.z, 1.1D);
+        }
+        if (atHome) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
+        else com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.holdRestWalk(data, tame);
+        return true;
+    }
+
+    public static void loadRestingGuardiansForOwner(ServerPlayer owner) {
+        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
+            if (!data.guardianResting || data.dead || data.stored) continue;
+            SpawnTarget home = guardianRestDestination(owner.getServer(), data);
+            if (home != null && home.level != null) home.level.getChunkAt(BlockPos.containing(home.pos));
+            ResourceLocation last = ResourceLocation.tryParse(data.lastKnownDimension);
+            ServerLevel lastLevel = last == null ? null : owner.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, last));
+            if (lastLevel != null) lastLevel.getChunkAt(new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ));
+        }
+    }
+
     private static void applyHungerForcedSit(LivingEntity tame, TameData data) {
+        if (data.hasHome && (data.movementOrder == 3 || data.guardianResting) && !isDuelLocked(data.uuid)) {
+            processGuardianRest(tame, data);
+            return;
+        }
         // Sitting normally clears the guardian anchor; hunger only suspends it.
         boolean hasHome = data.hasHome;
         String dimension = data.homeDimension;
@@ -23263,6 +23378,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), name);
         if (data == null) return error(player, "You do not own a living tame named '" + name + "'.");
+        if (!isAnimightEquipmentType(data)) return error(player, "Equipment reserves are only available for Animights.");
         LivingEntity tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
         return com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.openInventory(player, tame, data)
                 ? 1 : error(player, "Equipment reserves require a loaded Animight outside a duel.");
@@ -29022,6 +29138,22 @@ public class TameCommands {
             suggestCommandString(b, d.name);
         }
         return b.buildFuture();
+    }
+
+    static CompletableFuture<Suggestions> suggestOwnedAnimightNames(CommandSourceStack source, SuggestionsBuilder builder) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return builder.buildFuture();
+        for (TameData data : TameRegistry.TAMES.values()) {
+            if (player.getUUID().equals(data.ownerUUID) && !data.dead && !data.stored && isAnimightEquipmentType(data)) {
+                suggestCommandString(builder, data.name);
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    public static boolean isAnimightEquipmentType(TameData data) {
+        ResourceLocation id = data == null ? null : ResourceLocation.tryParse(recoverEntityTypeId(data));
+        return id != null && id.getNamespace().equals("animights");
     }
 
     private static CompletableFuture<Suggestions> suggestRecoverablePetNames(CommandSourceStack source, SuggestionsBuilder b) {

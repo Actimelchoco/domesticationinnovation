@@ -34,6 +34,7 @@ public final class OfflineGuardianService {
     private record ChunkTicket(ResourceKey<Level> dimension, int x, int z) { }
     private static final Set<UUID> DEPLOYED = new HashSet<>();
     private static final Map<UUID, Set<ChunkTicket>> TICKETS = new HashMap<>();
+    private static final Map<UUID, UUID> REST_WALK_TICKETS = new HashMap<>();
     private static MinecraftServer activeServer;
 
     private OfflineGuardianService() { }
@@ -96,6 +97,7 @@ public final class OfflineGuardianService {
 
     public static void forget(TameData data) {
         if (data == null || data.tlId == null) return;
+        releaseRestWalk(data);
         DEPLOYED.remove(data.tlId);
         syncTickets(data.tlId, Set.of());
     }
@@ -137,6 +139,7 @@ public final class OfflineGuardianService {
     }
 
     private static void update(MinecraftServer server, TameData data) {
+        // Homeward walkers use separate tickets so they never replace a deployed post's tickets.
         if (data == null || data.offlineGuardianOrder <= 0 || !data.offlineGuardianDeployed) return;
         if (data.stored) { deactivate(data); return; }
         if (TameDuelManager.isTameInDuel(data.uuid)) { syncTickets(data.tlId, Set.of()); return; }
@@ -159,6 +162,7 @@ public final class OfflineGuardianService {
         }
         syncTickets(data.tlId, desired);
         if (body == null || !body.isAlive() || data.dead) return;
+        if (data.guardianResting) return;
         if (data.offlineGuardianNeedsDeployment) {
             TameCommands.deployOfflineGuardianToPost(server, data, body);
         } else if (!matchesPost(data)) {
@@ -184,16 +188,41 @@ public final class OfflineGuardianService {
                 && data.homeX == data.offlineGuardianX && data.homeY == data.offlineGuardianY && data.homeZ == data.offlineGuardianZ;
     }
 
+    /** Holds only a homeward walker's current 3x3 area, never its entire route. */
+    public static void holdRestWalk(TameData data, LivingEntity body) {
+        activeServer = body.getServer();
+        UUID identity = REST_WALK_TICKETS.computeIfAbsent(data.ensureTlId(), id ->
+                UUID.nameUUIDFromBytes(("guardian_rest_walk:" + id).getBytes(StandardCharsets.UTF_8)));
+        Set<ChunkTicket> desired = new HashSet<>();
+        around(desired, (ServerLevel) body.level(), body.blockPosition());
+        syncTickets(identity, desired);
+    }
+
+    public static void releaseRestWalk(TameData data) {
+        if (data == null || data.tlId == null) return;
+        UUID identity = REST_WALK_TICKETS.remove(data.tlId);
+        if (identity != null) syncTickets(identity, Set.of());
+    }
+
     /** Restores active deployments after the generic Forge startup ticket cleanup. */
     public static void rebuild(MinecraftServer server) {
         for (UUID id : new ArrayList<>(TICKETS.keySet())) syncTickets(id, Set.of());
-        DEPLOYED.clear(); TICKETS.clear(); activeServer = server;
+        DEPLOYED.clear(); TICKETS.clear(); REST_WALK_TICKETS.clear(); activeServer = server;
         for (TameData data : TameRegistry.TAMES.values()) remember(data);
         maintain(server);
     }
 
     public static void maintain(MinecraftServer server) {
         activeServer = server;
+        for (UUID id : new ArrayList<>(REST_WALK_TICKETS.keySet())) {
+            TameData data = TameRegistry.getByTlId(id);
+            LivingEntity body = data == null ? null : LoadedTameIndex.find(server, data.uuid, data.tlId);
+            if (data == null || data.dead || data.stored || !data.guardianResting || body == null || !body.isAlive()
+                    || TameDuelManager.isTameInDuel(data.uuid)) {
+                UUID identity = REST_WALK_TICKETS.remove(id);
+                syncTickets(identity, Set.of());
+            }
+        }
         for (UUID id : new ArrayList<>(DEPLOYED)) {
             TameData data = TameRegistry.getByTlId(id);
             if (data == null || !data.offlineGuardianDeployed || data.offlineGuardianOrder <= 0) {
@@ -213,6 +242,6 @@ public final class OfflineGuardianService {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void stopping(ServerStoppingEvent event) {
         for (UUID id : new ArrayList<>(TICKETS.keySet())) syncTickets(id, Set.of());
-        DEPLOYED.clear(); TICKETS.clear(); activeServer = null;
+        DEPLOYED.clear(); TICKETS.clear(); REST_WALK_TICKETS.clear(); activeServer = null;
     }
 }

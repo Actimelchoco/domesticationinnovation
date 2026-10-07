@@ -135,6 +135,9 @@ public class TameData {
     public final List<ItemStack> armorInventory = new ArrayList<>();
     public final List<ItemStack> animightEquipmentInventory = new ArrayList<>();
     public boolean hungerForcedSit = false;
+    public boolean guardianResting = false;
+    public long guardianHungerHomeDeadline = 0L;
+    public CompoundTag guardianRestHome = new CompoundTag();
     public boolean hungerEmptyNotified = false;
     public boolean hungerLowNotified = false;
     public boolean hungerLastFoodNotified = false;
@@ -354,6 +357,9 @@ public class TameData {
         tag.put("bewereagerState", bewereagerState.copy());
         tag.putInt("hungerSaturation", Math.max(0, hungerSaturation));
         tag.putBoolean("hungerForcedSit", hungerForcedSit);
+        tag.putBoolean("guardianResting", guardianResting);
+        tag.putLong("guardianHungerHomeDeadline", guardianHungerHomeDeadline);
+        tag.put("guardianRestHome", guardianRestHome.copy());
         tag.putBoolean("hungerEmptyNotified", hungerEmptyNotified);
         tag.putBoolean("hungerLowNotified", hungerLowNotified);
         tag.putBoolean("hungerLastFoodNotified", hungerLastFoodNotified);
@@ -589,6 +595,9 @@ public class TameData {
         }
         data.hungerSaturation = tag.contains("hungerSaturation", Tag.TAG_INT) ? Math.max(0, tag.getInt("hungerSaturation")) : 1000;
         data.hungerForcedSit = tag.getBoolean("hungerForcedSit");
+        data.guardianResting = tag.getBoolean("guardianResting");
+        data.guardianHungerHomeDeadline = tag.getLong("guardianHungerHomeDeadline");
+        data.guardianRestHome = tag.getCompound("guardianRestHome").copy();
         data.hungerEmptyNotified = tag.getBoolean("hungerEmptyNotified");
         data.hungerLowNotified = tag.getBoolean("hungerLowNotified");
         data.hungerLastFoodNotified = tag.getBoolean("hungerLastFoodNotified");

@@ -740,6 +740,9 @@ Artifacts Eternal Steak counts as meat and can feed any tame without being consu
 
 Animights equipment reserve:
 /tl inventory equipment <name> opens an owned, loaded Animight's 27-slot equipment reserve outside duels.
+Equipment name suggestions list only owned living Animights, and non-Animights are explicitly rejected.
+Ordinary guardians teleport to their TPHome destination and sit while their owner is offline, including after respawn. Their guard post is retained and they return when the owner reconnects and food or saturation is available. Explicitly deployed offlineGuardians continue guarding offline.
+Guardians with no food and no saturation walk toward their TPHome destination for up to 1200 game ticks (one minute), then teleport there if still away and sit. They return to the saved guard post after food or saturation becomes available, subject to the owner-online rule. Emergency home travel is free and does not require food. These temporary rest states survive saving and loading; manual movement commands cancel them.
 Armor at 10% remaining durability or less is removed and stored; armor endangered by the next hit is rescued before that hit.
 Sealed items from L2 Hostility and Dungeon Now Loading item scraps are retained, including scraps spawned by break protection.
 Armor and recovery items dropped by an Animight's kills are collected independently of food autopickup. Canitos and Catwains also collect melee weapons and bows; unrelated kill drops are unchanged.

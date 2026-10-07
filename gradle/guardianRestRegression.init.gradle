@@ -1,0 +1,8 @@
+// Include after animightEquipmentRegression.init.gradle for an isolated guardian/equipment run.
+allprojects {
+    afterEvaluate {
+        sourceSets.main.java.srcDir('src/test/guardianrest/java')
+        tasks.compileJava.source(project.file('src/test/performance/java/com/github/alexthe668/domesticationinnovation/test/OfflineGuardianRegression.java'))
+        minecraft.runs.gameTestServer.workingDirectory = project.file('build/guardian-rest-gametest')
+    }
+}
