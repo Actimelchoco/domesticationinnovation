@@ -1,0 +1,36 @@
+// Builds a standalone replacement for the original Bigger Vanilla Trees JAR.
+// .\gradlew.bat -I gradle/biggerTreesSaplingOnly.init.gradle reobfBiggerTreesSaplingOnlyJar --offline -PbiggerTreesJar=<original jar>
+allprojects {
+    afterEvaluate {
+        def originalPath = project.findProperty('biggerTreesJar')
+        if (!originalPath) throw new GradleException('Set biggerTreesJar to the original Bigger Vanilla Trees JAR.')
+        def original = project.file(originalPath)
+        if (!original.isFile()) throw new GradleException("Missing Bigger Vanilla Trees JAR: ${original}")
+        sourceSets {
+            biggerTreesCompat {
+                java.srcDir 'src/compat/biggertrees/java'
+                compileClasspath = sourceSets.main.compileClasspath
+            }
+        }
+        tasks.register('biggerTreesSaplingOnlyJar', Jar) {
+            archiveFileName = 'bigger_vanilla_trees-forge-1.20-1.0-saplings-only.jar'
+            destinationDirectory = project.layout.buildDirectory.dir('bigger-trees')
+            from(sourceSets.biggerTreesCompat.output)
+            from(project.zipTree(original)) {
+                exclude 'data/minecraft/worldgen/configured_feature/**'
+                exclude 'META-INF/MANIFEST.MF'
+                exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+                includeEmptyDirs = false
+            }
+            from(project.zipTree(original)) {
+                include 'data/minecraft/worldgen/configured_feature/**'
+                eachFile { details -> details.path = details.path.replace('data/minecraft/', 'data/bigger_vanilla_trees/') }
+                includeEmptyDirs = false
+            }
+            manifest { attributes('Bigger-Trees-Mode': 'saplings-only') }
+            doFirst { manifest.attributes.remove('MixinConfigs') }
+        }
+        tasks.matching { it.name == 'addMixinsToBiggerTreesSaplingOnlyJar' }.configureEach { enabled = false }
+        reobf { biggerTreesSaplingOnlyJar { } }
+    }
+}

@@ -1,0 +1,73 @@
+// Standalone FTB Chunks replacement; original input JARs are read only.
+// Build with finishClaimedFireProtectionJar (it preserves original third-party bytecode).
+allprojects {
+    afterEvaluate {
+        def modsPath = project.findProperty('claimedFireModsDir')
+        if (!modsPath) throw new GradleException('Set claimedFireModsDir to the FTB Chunks dependency directory.')
+        def modsDir = project.file(modsPath)
+        def chunkJar = new File(modsDir, 'ftb-chunks-forge-2001.3.8.jar')
+        if (!chunkJar.isFile()) throw new GradleException("Missing ${chunkJar}")
+        repositories.flatDir { dirs modsDir }
+        ['ftb-chunks-forge-2001.3.8', 'ftb-library-forge-2001.2.13', 'ftb-teams-forge-2001.3.2'].each { name ->
+            if (!new File(modsDir, name + '.jar').isFile()) throw new GradleException("Missing ${name}.jar")
+            dependencies.add('compileOnly', fg.deobf("claim-fire-build:${name}:local"))
+        }
+        sourceSets {
+            claimedFireCompat {
+                java.srcDir 'src/compat/claimedfire/java'
+                resources.srcDir 'src/compat/claimedfire/resources'
+                compileClasspath = sourceSets.main.compileClasspath
+                annotationProcessorPath = sourceSets.main.annotationProcessorPath
+            }
+        }
+        mixin.add(sourceSets.claimedFireCompat, 'ftbchunks-claim-fire.refmap.json')
+        def originalAttributes
+        def archive = new java.util.zip.ZipFile(chunkJar)
+        try {
+            archive.getInputStream(archive.getEntry('META-INF/MANIFEST.MF')).withCloseable { input ->
+                originalAttributes = new java.util.jar.Manifest(input).mainAttributes.collectEntries { key, value -> [(key.toString()): value.toString()] }
+            }
+        } finally { archive.close() }
+        def configs = originalAttributes['MixinConfigs'] + ',ftbchunks-claim-fire.mixins.json'
+        tasks.register('claimedFireProtectionJar', Jar) {
+            archiveFileName = 'ftb-chunks-forge-2001.3.8-no-claimed-fire.jar'
+            destinationDirectory = project.layout.buildDirectory.dir('claimed-fire')
+            from(sourceSets.claimedFireCompat.output)
+            from(project.layout.buildDirectory.file('tmp/compileClaimedFireCompatJava/ftbchunks-claim-fire.refmap.json'))
+            from(project.zipTree(chunkJar)) {
+                exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+                includeEmptyDirs = false
+            }
+            manifest { attributes(originalAttributes); attributes('MixinConfigs': configs, 'Claim-Fire-Protection': 'claimed-destinations-only') }
+            doFirst { manifest.attributes['MixinConfigs'] = configs }
+        }
+        tasks.matching { it.name == 'addMixinsToClaimedFireProtectionJar' }.configureEach { enabled = false }
+        reobf { claimedFireProtectionJar { } }
+        // Reobfuscation must never rewrite existing third-party class files.
+        tasks.register('finishClaimedFireProtectionJar') {
+            dependsOn 'reobfClaimedFireProtectionJar'
+            doLast {
+                def output = tasks.claimedFireProtectionJar.archiveFile.get().asFile
+                def entries = [:]
+                [output, chunkJar].each { file ->
+                    def zip = new java.util.zip.ZipFile(file)
+                    try {
+                        zip.entries().each { entry ->
+                            if (!entry.directory && (file == output || entry.name != 'META-INF/MANIFEST.MF')
+                                    && !(entry.name ==~ /META-INF\/.*\.(SF|RSA|DSA)/)) {
+                                entries[entry.name] = zip.getInputStream(entry).withCloseable { it.bytes }
+                            }
+                        }
+                    } finally { zip.close() }
+                }
+                def temp = new File(output.parentFile, output.name + '.tmp')
+                new java.util.zip.ZipOutputStream(new FileOutputStream(temp)).withCloseable { zip ->
+                    entries.each { name, bytes ->
+                        zip.putNextEntry(new java.util.zip.ZipEntry(name)); zip.write(bytes); zip.closeEntry()
+                    }
+                }
+                java.nio.file.Files.move(temp.toPath(), output.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
+}

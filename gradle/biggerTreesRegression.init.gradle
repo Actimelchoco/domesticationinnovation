@@ -1,0 +1,24 @@
+// Run after building the standalone saplings-only JAR.
+allprojects {
+    afterEvaluate {
+        def dir = project.file('build/bigger-trees')
+        if (!new File(dir, 'bigger_vanilla_trees-forge-1.20-1.0-saplings-only.jar').isFile()) {
+            throw new GradleException('Build the saplings-only replacement JAR first.')
+        }
+        repositories.flatDir { dirs dir }
+        dependencies.add('implementation', fg.deobf('bigger-trees-test:bigger_vanilla_trees-forge-1.20-1.0-saplings-only:local'))
+        sourceSets.main.java.srcDir('src/test/biggertrees/java')
+        sourceSets.main.resources.srcDir('src/test/biggertrees/resources')
+        minecraft.runs {
+            gameTestServer {
+                workingDirectory project.file('build/bigger-trees-gametest')
+                property 'forge.enabledGameTestNamespaces', 'bigger_vanilla_trees'
+                property 'mixin.env.remapRefMap', 'true'
+                property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+                arg '-mixin.config=citadel.mixins.json'
+                arg '-mixin.config=domesticationinnovation.mixins.json'
+                mods { domesticationinnovation { source sourceSets.main } }
+            }
+        }
+    }
+}

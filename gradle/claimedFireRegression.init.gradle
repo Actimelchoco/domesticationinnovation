@@ -1,0 +1,22 @@
+// Run with '-PtameRegressionForgeVersion=47.4.16' for the installed FTB Library.
+allprojects {
+    afterEvaluate {
+        def modsDir = project.file(project.findProperty('claimedFireModsDir'))
+        repositories.flatDir { dirs project.file('build/claimed-fire'), modsDir }
+        ['ftb-chunks-forge-2001.3.8-no-claimed-fire', 'ftb-library-forge-2001.2.13', 'ftb-teams-forge-2001.3.2', 'architectury-9.2.14-forge'].each {
+            dependencies.add('implementation', fg.deobf("claim-fire-test:${it}:verified"))
+        }
+        sourceSets.main.java.srcDir('src/test/claimedfire/java')
+        sourceSets.main.resources.srcDir('src/test/claimedfire/resources')
+        minecraft.runs { gameTestServer {
+            workingDirectory project.file('build/claimed-fire-gametest')
+            property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+            arg '-mixin.config=citadel.mixins.json'
+            arg '-mixin.config=domesticationinnovation.mixins.json'
+            arg '-mixin.config=ftbchunks-claim-fire.mixins.json'
+            mods { domesticationinnovation { source sourceSets.main } }
+        } }
+    }
+}
