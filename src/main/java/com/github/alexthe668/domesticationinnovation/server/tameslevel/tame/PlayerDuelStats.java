@@ -23,6 +23,8 @@ public class PlayerDuelStats {
     public int rankedSaturation = 0;
     public long ariseCostDay = Long.MIN_VALUE;
     public int ariseUsesToday = 0;
+    public int bodyguardRange = 12;
+    public final java.util.List<UUID> bodyguards = new java.util.ArrayList<>();
     /** Successful Animights creations, keyed by the resulting entity type. */
     public final Map<String, Integer> animightConversions = new HashMap<>();
 
@@ -43,6 +45,10 @@ public class PlayerDuelStats {
         tag.putInt("rankedSaturation", Math.max(0, rankedSaturation));
         tag.putLong("ariseCostDay", ariseCostDay);
         tag.putInt("ariseUsesToday", Math.max(0, ariseUsesToday));
+        tag.putInt("bodyguardRange", bodyguardRange);
+        net.minecraft.nbt.ListTag guards = new net.minecraft.nbt.ListTag();
+        for (UUID id : bodyguards) guards.add(net.minecraft.nbt.StringTag.valueOf(id.toString()));
+        tag.put("bodyguards", guards);
         CompoundTag animightTag = new CompoundTag();
         animightConversions.forEach((type, count) -> {
             if (type != null && !type.isBlank() && count != null && count > 0) {
@@ -79,6 +85,11 @@ public class PlayerDuelStats {
                 data.ariseCostDay = tag.getLong("ariseCostDay");
             }
             data.ariseUsesToday = Math.max(0, tag.getInt("ariseUsesToday"));
+            data.bodyguardRange = tag.contains("bodyguardRange") ? Math.max(1, Math.min(22, tag.getInt("bodyguardRange"))) : 12;
+            for (var entry : tag.getList("bodyguards", Tag.TAG_STRING)) {
+                try { UUID id = UUID.fromString(entry.getAsString()); if (data.bodyguards.size() < 3 && !data.bodyguards.contains(id)) data.bodyguards.add(id); }
+                catch (IllegalArgumentException ignored) { }
+            }
             if (tag.contains("animightConversions", Tag.TAG_COMPOUND)) {
                 CompoundTag animightTag = tag.getCompound("animightConversions");
                 for (String type : animightTag.getAllKeys()) {

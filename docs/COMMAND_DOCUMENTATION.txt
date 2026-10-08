@@ -1134,4 +1134,16 @@ Each Minecraft morning alive adds +10 percentage points incoming XP with the own
 The second and every later non-duel death that Minecraft day lowers the saved highest-level record by 1, never below current level after the normal death penalty. Level-reward memory is retained. Respawn is allowed even after dying that same day.
 Saturation costs add +10% per active bonus category, plus the total incoming XP bonus percentage. Daily XP is one category; its bonus and any lowest-level XP bonus add together. For example, three active categories and +40% XP mean 1.70x normal saturation consumption. Fractional extra saturation consumption carries forward.
 
-Lonely bonus: a combat-eligible tame with zero qualifying packmates gains +50% damage and +10% saturation consumption. The normal owner distance, combat eligibility, grace period, and 3-second cached refresh apply. It replaces pack damage bonuses when alone; daily XP bonuses still apply. /tames pack <name> identifies the lonely bonus.
+Lonely bonus: a combat-eligible tame with zero qualifying packmates gains +50% damage, +200% base healing speed, and +20% saturation consumption. The normal owner distance, combat eligibility, grace period, and 3-second cached refresh apply. It replaces pack damage bonuses when alone; daily XP bonuses still apply. /tames pack <name> identifies the lonely bonus.
+
+SMALL PACK HEALING
+Solo combat-eligible tames gain +200% base healing speed; duos +100%; trios +50%. These add to the same-species healing bonus after its penalties are clamped. Four or more receive no small-pack size bonus. Faster passive healing performs more paid heals, consuming more saturation over time; full-health tames do not spend saturation on healing.
+
+BODYGUARD ROSTER
+/tames bodyguard (or /tames Bodyguard): system rules and roster.
+/tames bodyguard info: assigned guards, alive/dead status and range.
+/tames bodyguard add/remove <name>: maximum three assignments, including dead guards. The add command disappears at three; removing frees a slot. Guards retain assignment across respawns. Removal sends a living guard home and sits it, without teleport payment.
+/tames bodyguard setRange <1-22>: shared roster range. /tames mode <name> bodyguard <range> also accepts only 1-22, but roster guards use the shared command and cannot change out of bodyguard mode.
+Roster guards follow their owner; below 5 health they use close movement, reverting when the owner recovers. Unloaded living guards are recovered through their saved chunk and teleported to the owner; missing originals are never reconstructed by this recovery path. Stored guards are not recovered.
+If no edible food remains in the guard inventory and its own saturation is insufficient for an action, it consumes owner saturation at exactly 1 owner saturation = 1 tame food point (100 tame saturation units). Borrowing requires an online owner and sufficient saturation; it does not drain the owner's food level.
+One/two/three living roster guards receive +200%/+100%/+50% base healing speed respectively, including outside combat. These stack additively with pack healing. Full-health owners give their living roster guards +50% incoming XP. Healing and XP count as active bonus categories, and faster healing consumes saturation more often. Roster bonuses refresh every 60 ticks.

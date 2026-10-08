@@ -22,7 +22,7 @@ public final class TamePackService {
     public record Bonuses(List<Member> members, double healingSpeed, double healingAmount,
                           double cooldownReduction, double damageBonus, double xpBonus, double defense) {
         public static final Bonuses NONE = new Bonuses(List.of(), 0, 1, 0, 0, 0, 0);
-        public static final Bonuses LONELY = new Bonuses(List.of(), 0, 1, 0, .5, 0, 0);
+        public static final Bonuses LONELY = new Bonuses(List.of(), 2, 1, 0, .5, 0, 0);
         public int categories() {
             return (healingSpeed > 0 ? 1 : 0) + (cooldownReduction > 0 ? 1 : 0)
                     + (damageBonus > 0 ? 1 : 0) + (xpBonus > 0 ? 1 : 0) + (defense > 0 ? 1 : 0);
@@ -51,13 +51,17 @@ public final class TamePackService {
     /** Called only when pack membership, daily XP, or persisted stats change. */
     public static void updateModifiers(TameData data) {
         double daily = Math.max(0, Math.min(1, data.dailyPackXpBonus));
-        data.packRestModifiers = daily == 0 ? Modifiers.NONE
-                : new Modifiers(1, 1, 1, 1, 1, daily, 1.1 + daily);
+        double guardXp = Math.max(0, data.bodyguardXpBonus);
+        double guardHeal = Math.max(0, data.bodyguardHealingBonus);
+        int restCategories = (daily > 0 ? 1 : 0) + (guardXp > 0 ? 1 : 0) + (guardHeal > 0 ? 1 : 0);
+        double restXp = daily + guardXp;
+        data.packRestModifiers = new Modifiers(1 / (1 + guardHeal), 1, 1, 1, 1,
+                restXp, 1 + .1 * restCategories + restXp);
         Bonuses pack = bonuses(data);
         data.packModifiers = pack == Bonuses.NONE ? data.packRestModifiers
-                : new Modifiers(1 / (1 + pack.healingSpeed()), pack.healingAmount(), 1 - pack.cooldownReduction(),
-                        1 + pack.damageBonus(), 1 - pack.defense(), daily + pack.xpBonus(),
-                        1 + .1 * (pack.categories() + (daily > 0 ? 1 : 0)) + daily + pack.xpBonus());
+                : new Modifiers(1 / (1 + pack.healingSpeed() + guardHeal), pack.healingAmount(), 1 - pack.cooldownReduction(),
+                        1 + pack.damageBonus(), 1 - pack.defense(), restXp + pack.xpBonus(),
+                        1 + .1 * (pack.categories() + restCategories) + restXp + pack.xpBonus());
     }
     public static double cooldownReduction(int packmates) {
         return .4 * (1 - Math.pow(.75, Math.max(0, packmates)));
@@ -75,7 +79,8 @@ public final class TamePackService {
             else foreignMod++;
             min = Math.min(min, member.level()); max = Math.max(max, member.level());
         }
-        double speed = Math.max(0, .2 * same - .3 * different);
+        double sizeBonus = others.size() == 1 ? 1 : others.size() == 2 ? .5 : 0;
+        double speed = sizeBonus + Math.max(0, .2 * same - .3 * different);
         // The twelfth member of one species is the first to reduce healing amount.
         double amount = Math.max(0, 1 - .2 * Math.max(0, same + 1 - 11));
         boolean levelsMatch = max - min <= 10;

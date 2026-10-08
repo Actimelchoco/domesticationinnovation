@@ -33,7 +33,7 @@ public class PackBonusRegression {
         close(result.damageBonus(), .2, "inclusive ten-level range");
         close(result.xpBonus(), .2, "lowest level XP");
         close(result.defense(), .1, "same-mod diversity defense");
-        close(result.healingSpeed(), 0, "different species cannot yield negative speed");
+        close(result.healingSpeed(), .5, "trio size bonus survives different-species penalties");
         check(result.members().size() == 2, "self must not count");
         result = TamePackService.calculate(self, List.of(member("animights:canito", 10), member("minecraft:wolf", 21)));
         close(result.cooldownReduction(), .1, "duplicates do not cancel partial diversity");
@@ -125,7 +125,7 @@ public class PackBonusRegression {
                 check(data.packModifiers==cached,"status command must not bypass throttle");
                 schedule.invoke(null,helper.getLevel().getServer(),60L);
                 close(data.packModifiers.damageMultiplier(),1.5,"sixty-tick refresh switches to lonely damage");
-                close(data.packModifiers.saturationMultiplier(),1.1,"lonely bonus costs one saturation category");
+                close(data.packModifiers.saturationMultiplier(),1.2,"lonely damage and healing cost two saturation categories");
                 check(TamePackService.bonuses(data).members().isEmpty(),"sixty-tick refresh updates membership");
                 var lonelyHit=new LivingHurtEvent(enemy,helper.getLevel().damageSources().mobAttack(first),10);
                 TamePackService.hurt(lonelyHit);close(lonelyHit.getAmount(),15,"real lonely damage multiplier");
@@ -139,7 +139,7 @@ public class PackBonusRegression {
             var interval = Class.forName("com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents")
                     .getDeclaredMethod("passiveHealInterval", net.minecraft.world.entity.LivingEntity.class, TameData.class);
             interval.setAccessible(true);
-            check((long)interval.invoke(null,first,data)==83,"same-species passive healing interval");
+            check((long)interval.invoke(null,first,data)==45,"same-species passive healing interval");
             var action=TameCommands.class.getDeclaredMethod("consumeHungerForAction",TameData.class,net.minecraft.world.entity.LivingEntity.class,int.class);
             action.setAccessible(true);data.hungerSaturation=1000;
             for(int i=0;i<10;i++) check((boolean)action.invoke(null,data,first,1),"pack saturation action succeeds");

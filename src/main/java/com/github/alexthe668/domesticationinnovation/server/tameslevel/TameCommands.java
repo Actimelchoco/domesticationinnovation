@@ -30,6 +30,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.No
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDuelStats;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameArenaRegistry;
@@ -2276,6 +2277,8 @@ public class TameCommands {
                                                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
 
+                        .then(buildBodyguardCommand("bodyguard"))
+                        .then(buildBodyguardCommand("Bodyguard"))
                         .then(Commands.literal("pack")
                                 .then(Commands.argument("name", StringArgumentType.string())
                                         .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
@@ -4632,6 +4635,112 @@ public class TameCommands {
         return Math.max(1, (int) Math.ceil(level / 20.0D));
     }
 
+    private static LiteralArgumentBuilder<CommandSourceStack> buildBodyguardCommand(String literal) {
+        return Commands.literal(literal)
+                .executes(ctx -> bodyguardInfo(ctx.getSource(), true))
+                .then(Commands.literal("info").executes(ctx -> bodyguardInfo(ctx.getSource(), false)))
+                .then(Commands.literal("add")
+                        .requires(source -> source.getPlayer() != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(source.getPlayer()).bodyguards.size() < 3)
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .suggests((ctx,b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), true))))
+                .then(Commands.literal("remove").then(Commands.argument("name", StringArgumentType.string())
+                        .suggests((ctx,b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                        .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), false))))
+                .then(Commands.literal("setRange").then(Commands.argument("range", IntegerArgumentType.integer(1,22))
+                        .executes(ctx -> bodyguardRange(ctx.getSource(), IntegerArgumentType.getInteger(ctx,"range")))));
+    }
+    private static int bodyguardInfo(CommandSourceStack source, boolean rules) {
+        ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
+        var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
+        if (rules) {
+            owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <name>, info, setRange <1-22>. Maximum 3 assigned tames; dead guards keep their slots and return after respawning."));
+            owner.sendSystemMessage(Component.literal("Always bodyguard mode and follow movement; owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
+            owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
+        }
+        owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "/3; range " + roster.bodyguardRange));
+        for (TameData data : com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.members(roster))
+            owner.sendSystemMessage(Component.literal(data.name + " | " + (data.dead ? "dead" : data.stored ? "stored" : "alive")));
+        return 1;
+    }
+    private static int bodyguardRange(CommandSourceStack source, int range) {
+        ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
+        var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
+        roster.bodyguardRange = range;
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.refresh(source.getServer());
+        TameRegistry.markDirty();
+        owner.sendSystemMessage(Component.literal("Bodyguard range set to " + range)); return 1;
+    }
+    private static int bodyguardChange(CommandSourceStack source, String name, boolean add) {
+        ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
+        TameData data = findOwnedTameAny(owner.getUUID(), name);
+        if (data == null) return error(owner, "Owned tame not found.");
+        if (isDuelLocked(data)) return error(owner, "That tame is in a duel.");
+        var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
+        UUID id = data.ensureTlId();
+        if (add) {
+            if (roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
+            if (roster.bodyguards.size() >= 3) return error(owner, "Maximum 3 bodyguards.");
+            if (data.stored) return error(owner, "Unstore the tame before adding it.");
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.removeAssignment(data);
+            data.bodyguardPreviousClose = data.closeMovement;
+            roster.bodyguards.add(id); data.rosterBodyguard = true;
+            data.mode = TameMode.BODYGUARD.id(); data.bodyguardRange = roster.bodyguardRange;
+            clearGuardianAnchor(data);
+        } else {
+            if (!roster.bodyguards.remove(id)) return error(owner, "Not an assigned bodyguard.");
+            clearPendingImmediateChunkTeleport(data);
+            data.rosterBodyguard = false; data.mode = TameMode.DEFAULT.id();
+            data.closeMovement = data.bodyguardPreviousClose;
+            data.bodyguardHealingBonus = 0; data.bodyguardXpBonus = 0;
+            TamePackService.updateModifiers(data);
+            if (!data.dead && !data.stored) {
+                SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
+                LivingEntity body = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+                data.movementOrder = 1;
+                if (body != null) {
+                    LivingEntity moved = transferGuardian(body, data, home);
+                    if (moved != null) applyLivingMovementOverride(moved, data, MovementOrder.SIT);
+                } else queueRosterBodyguardTransfer(source.getServer(), data, home);
+            }
+        }
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.refresh(source.getServer());
+        TameRegistry.markDirty();
+        // Refresh Brigadier's permission-filtered tree so add disappears/reappears at the limit.
+        if (owner.connection != null) source.getServer().getCommands().sendCommands(owner);
+        owner.sendSystemMessage(Component.literal((add ? "Added " : "Removed ") + data.name + " as bodyguard.")); return 1;
+    }
+    private static void queueRosterBodyguardTransfer(MinecraftServer server, TameData data, SpawnTarget target) {
+        if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) return;
+        ResourceLocation id = ResourceLocation.tryParse(data.lastKnownDimension); if (id == null) return;
+        ServerLevel origin = server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+        if (origin != null) queueImmediateChunkTeleport(origin,
+                new BlockPos(data.lastKnownX,data.lastKnownY,data.lastKnownZ),data,target,true,true);
+    }
+    public static void maintainRosterBodyguard(ServerPlayer owner, TameData data) {
+        LivingEntity body = findLoadedLivingTameByIdentity(owner.getServer(), data.uuid, data.tlId);
+        boolean close = owner.getHealth() < 5 || data.bodyguardPreviousClose;
+        data.closeMovement = close;
+        if (body == null) {
+            queueRosterBodyguardTransfer(owner.getServer(), data,
+                    new SpawnTarget(owner.serverLevel(),owner.position(),owner.getYRot(),owner.getXRot()));
+            return;
+        }
+        if (data.hungerForcedSit && (hasEdibleStoredFood(body,data) || owner.getFoodData().getSaturationLevel() > 0)) {
+            data.hungerForcedSit = false;
+        }
+        if (!data.hungerForcedSit && (data.movementOrder != 0 || TameEntityAdapter.isStayingStill(body) || data.hasHome
+                || body instanceof TamableAnimal tamable && tamable.isOrderedToSit())) {
+            if (body instanceof TamableAnimal tamable) {
+                tamable.setOrderedToSit(false);
+                tamable.setInSittingPose(false);
+            }
+            applyLivingMovementOverride(body,data,MovementOrder.FOLLOW);
+        }
+        if (body.level() != owner.level() || body.distanceToSqr(owner) > data.bodyguardRange * data.bodyguardRange)
+            teleportLivingTameToPlayer(body,owner);
+    }
+
     private static int packStatus(CommandSourceStack source, String name) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
@@ -4640,17 +4749,17 @@ public class TameCommands {
         var bonuses = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonuses(data);
         player.sendSystemMessage(Component.literal("Pack: " + data.name + " | nearby combat packmates (updated every 3s): " + bonuses.members().size()));
         if (bonuses == com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.Bonuses.LONELY)
-            player.sendSystemMessage(Component.literal("Lonely bonus: +50% damage; +10% saturation consumption."));
+            player.sendSystemMessage(Component.literal("Lonely bonus: +50% damage, +200% base healing speed; +20% saturation consumption."));
         for (var member : bonuses.members()) player.sendSystemMessage(Component.literal("  " + member.name() + " | " + member.type() + " | level " + member.level()));
         player.sendSystemMessage(Component.literal(String.format(java.util.Locale.ROOT,
                 "Healing speed +%.1f%%; healing amount %.1f%%; cooldown -%.1f%%; damage +%.1f%%; damage reduction %.1f%%",
-                bonuses.healingSpeed()*100, bonuses.healingAmount()*100, bonuses.cooldownReduction()*100,
+                (bonuses.healingSpeed() + data.bodyguardHealingBonus)*100, bonuses.healingAmount()*100, bonuses.cooldownReduction()*100,
                 bonuses.damageBonus()*100, bonuses.defense()*100)));
         long day = Math.floorDiv(source.getServer().overworld().getDayTime(), 24000L);
         player.sendSystemMessage(Component.literal(String.format(java.util.Locale.ROOT,
-                "XP +%.1f%% (daily +%.1f%%, lowest-level +%.1f%%); saturation %.2fx; survival streak %d mornings; deaths today %d",
+                "XP +%.1f%% (daily +%.1f%%, lowest-level +%.1f%%, bodyguard +%.1f%%); saturation %.2fx; survival streak %d mornings; deaths today %d",
                 com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.xpBonus(data)*100,
-                data.dailyPackXpBonus*100, bonuses.xpBonus()*100,
+                data.dailyPackXpBonus*100, bonuses.xpBonus()*100, data.bodyguardXpBonus*100,
                 com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.saturationMultiplier(data),
                 data.packAliveDays, data.packDeathDay == day ? data.packDeathsToday : 0)));
         return 1;
@@ -9978,7 +10087,8 @@ public class TameCommands {
         Integer bodyguardRange = null;
         if (mode == TameMode.BODYGUARD && tokens.length >= 2) {
             try {
-                bodyguardRange = Math.max(1, Integer.parseInt(tokens[1]));
+                bodyguardRange = Integer.parseInt(tokens[1]);
+                if (bodyguardRange < 1 || bodyguardRange > 22 || tokens.length > 2) return null;
             } catch (NumberFormatException ignored) {
                 return null;
             }
@@ -9989,6 +10099,10 @@ public class TameCommands {
     }
 
     private static void applyModeSpec(TameData data, TameMode mode, Integer bodyguardRange) {
+        if (data.rosterBodyguard) {
+            data.mode = TameMode.BODYGUARD.id();
+            return;
+        }
         data.mode = mode.id();
         if (mode == TameMode.BODYGUARD && bodyguardRange != null) {
             data.bodyguardRange = bodyguardRange;
@@ -10010,6 +10124,7 @@ public class TameCommands {
         ModeSpec spec = parseModeSpec(modeName);
         if (spec == null) return error(p, "Invalid mode.");
         TameMode mode = spec.mode();
+        if (d.rosterBodyguard) return error(p, "Roster bodyguards stay in bodyguard mode; use /tames bodyguard setRange or remove.");
         applyModeSpec(d, mode, spec.bodyguardRange());
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Mode set to " + modeLabel(mode, d) + " for " + d.name + "."));
@@ -22716,6 +22831,11 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
+            if (data.hungerForcedSit && data.rosterBodyguard && totalHungerFoodPoints(data) > 0) {
+                data.hungerForcedSit = false;
+                applyLivingMovementOverride(tame, data, MovementOrder.FOLLOW);
+                changed = true;
+            }
             if (data.hungerForcedSit && !data.guardianResting && totalHungerFoodPoints(data) > 0) {
                 if (data.hasHome) {
                     applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
@@ -22932,14 +23052,15 @@ public class TameCommands {
         }
         while (data.hungerSaturation < required) {
             if (!consumeOneHungerFood(data, tame)) {
-                return false;
+                return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.feedFromOwner(data, tame, required);
             }
         }
         return true;
     }
 
     public static boolean isHungerBlockingAbilities(TameData data) {
-        return data != null && data.hungerSaturation <= 0 && totalHungerFoodPoints(data) <= 0;
+        return data != null && data.hungerSaturation <= 0 && totalHungerFoodPoints(data) <= 0
+                && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.ownerCanFeed(data, net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer());
     }
 
     public static boolean hasFoodForDuel(TameData data) {

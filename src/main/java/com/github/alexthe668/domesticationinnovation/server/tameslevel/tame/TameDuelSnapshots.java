@@ -17,6 +17,11 @@ public final class TameDuelSnapshots {
         into.kills = from.kills;
         into.assists = from.assists;
         into.deaths = from.deaths;
+        into.rosterBodyguard = from.rosterBodyguard;
+        into.bodyguardRange = from.bodyguardRange;
+        into.bodyguardPreviousClose = from.bodyguardPreviousClose;
+        into.bodyguardHealingBonus = from.bodyguardHealingBonus;
+        into.bodyguardXpBonus = from.bodyguardXpBonus;
         into.dailyPackXpBonus = from.dailyPackXpBonus;
         TamePackService.updateModifiers(into);
         into.packLastMorning = from.packLastMorning;
