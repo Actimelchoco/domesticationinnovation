@@ -64,32 +64,45 @@ PLAYER COMMAND SYNTAX
 /tames rerollClass confirm
 /tames rerollClass cancel
 /tames rerollClass <name>
-/tames settings doNotAttack
-/tames settings doNotAttack remove <mobtype>
-/tames settings doNotAttack <mobtype>
-/tames settings doNotAttackAnimals
-/tames settings doNotAttackAnimals <enabled>
-/tames settings doNotAttackOwner
-/tames settings doNotAttackOwner add <player>
-/tames settings doNotAttackOwner remove <player>
-/tames settings enterPortalsByThemselves <enabled>
-/tames settings healthSiphon <enabled>
-/tames settings enableVoidCloud <enabled>
-/tames settings hideLevelInName <enabled>
-/tames settings noAutoSetBed <enabled>
-/tames settings friendlyFire
-/tames settings friendlyFire <enabled>
-/tames settings tamesFriendly
-/tames settings tamesFriendly <enabled>
-/tames settings orescenting <name> <oreId>
-/tames settings excludeFromAll
-/tames settings excludeFromAll info
-/tames settings excludeFromAll add tame <name>
-/tames settings excludeFromAll add group <name>
-/tames settings excludeFromAll add type <name>
-/tames settings excludeFromAll remove tame <name>
-/tames settings excludeFromAll remove group <name>
-/tames settings excludeFromAll remove type <name>
+/tames settings
+/tames settings combat
+/tames settings movement
+/tames settings abilities
+/tames settings display
+/tames settings beds
+/tames settings selection
+
+Settings are grouped into categories. Run the base command for clickable category
+help, or a category command for its settings. Tab completion shows that category's
+options. Admin-only settings keep their existing permissions. Use the categorized
+paths below in place of the former flat /tames settings <option> commands.
+
+/tames settings combat doNotAttack
+/tames settings combat doNotAttack remove <mobtype>
+/tames settings combat doNotAttack <mobtype>
+/tames settings combat doNotAttackAnimals
+/tames settings combat doNotAttackAnimals <enabled>
+/tames settings combat doNotAttackOwner
+/tames settings combat doNotAttackOwner add <player>
+/tames settings combat doNotAttackOwner remove <player>
+/tames settings movement enterPortalsByThemselves <enabled>
+/tames settings abilities healthSiphon <enabled>
+/tames settings abilities enableVoidCloud <enabled>
+/tames settings display hideLevelInName <enabled>
+/tames settings beds noAutoSetBed <enabled>
+/tames settings combat friendlyFire
+/tames settings combat friendlyFire <enabled>
+/tames settings combat tamesFriendly
+/tames settings combat tamesFriendly <enabled>
+/tames settings abilities orescenting <name> <oreId>
+/tames settings selection excludeFromAll
+/tames settings selection excludeFromAll info
+/tames settings selection excludeFromAll add tame <name>
+/tames settings selection excludeFromAll add group <name>
+/tames settings selection excludeFromAll add type <name>
+/tames settings selection excludeFromAll remove tame <name>
+/tames settings selection excludeFromAll remove group <name>
+/tames settings selection excludeFromAll remove type <name>
 /tames chestxdrum
 /tames chestxdrum deactivated
 /tames chestxdrum system
@@ -403,8 +416,8 @@ world. Read command feedback and confirmation prompts before using them.
 Add/remove/clear ability and attribute commands modify the selected tame's
 progression. fixStats, repair, and normalize commands are maintenance tools.
 
-/tames settings herding <enabled>
-/tames settings sitOnChairs <enabled>
+/tames settings abilities herding <enabled>
+/tames settings movement sitOnChairs <enabled>
 /tames admin reset primitiveMobs
 /tames admin prefferedFood lowPrefferedFood
 /tames admin prefferedFood lowPreferredFood
@@ -616,17 +629,17 @@ Dead-tame commands use all, name, group, and type because a loaded movement-stat
 
 SETTINGS
 --------
-/tames settings doNotAttack [remove] <mobtype>
-/tames settings doNotAttackAnimals <true|false>
-/tames settings enterPortalsByThemselves <true|false>
-/tames settings healthSiphon <true|false>
-/tames settings enableVoidCloud <true|false>
-/tames settings hideLevelInName <true|false>
-/tames settings noAutoSetBed <true|false>
+/tames settings combat doNotAttack [remove] <mobtype>
+/tames settings combat doNotAttackAnimals <true|false>
+/tames settings movement enterPortalsByThemselves <true|false>
+/tames settings abilities healthSiphon <true|false>
+/tames settings abilities enableVoidCloud <true|false>
+/tames settings display hideLevelInName <true|false>
+/tames settings beds noAutoSetBed <true|false>
 /tames chestxdrum system
-/tames settings friendlyFire <true|false>
-/tames settings orescenting <tame> <ore id>
-/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>
+/tames settings combat friendlyFire <true|false>
+/tames settings abilities orescenting <tame> <ore id>
+/tames settings selection excludeFromAll [info|add|remove] <tame|group|type> <name>
 excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.
 hideLevelInName defaults false. When true, loaded entity nameplates show only the tame's name.
 Manual inventory distribution always prioritizes native/configured preferred foods.
@@ -911,20 +924,20 @@ Auto reincarnation uses the player bed material check by default. Tames with a b
 
 HEALTHSIPHON
 ------------
-/tames settings healthSiphon <true|false>
+/tames settings abilities healthSiphon <true|false>
 Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.
 This is owner-local and persists for your tame registry.
 
 ENTERPORTALSBYTHEMSELVES
 ------------------------
-/tames settings enterPortalsByThemselves <true|false>
+/tames settings movement enterPortalsByThemselves <true|false>
 Default is false.
 False: your tames cannot enter portals on their own.
 They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport.
 
 SITONCHAIRS
 -----------
-/tames settings sitOnChairs <true|false>
+/tames settings movement sitOnChairs <true|false>
 Admin runtime toggle (default false).
 false: tames are blocked from mounting seat/chair entities (including Create seats/chairs).
 true: that seat/chair mount block is disabled.

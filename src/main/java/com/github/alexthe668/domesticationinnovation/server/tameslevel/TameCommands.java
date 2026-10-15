@@ -1008,7 +1008,76 @@ public class TameCommands {
         return buildSettingsCommand("settings");
     }
 
+    private record SettingsCategory(String id, String description, List<String> settings) { }
+
+    private static final List<SettingsCategory> SETTINGS_CATEGORIES = List.of(
+            new SettingsCategory("combat", "Target rules and friendly fire", List.of(
+                    "doNotAttack", "doNotAttackAnimals", "doNotAttackOwner", "friendlyFire", "tamesFriendly")),
+            new SettingsCategory("movement", "Portals and chairs", List.of("enterPortalsByThemselves", "sitOnChairs")),
+            new SettingsCategory("abilities", "Ability preferences and ore scenting", List.of(
+                    "healthSiphon", "enableVoidCloud", "orescenting", "herding")),
+            new SettingsCategory("display", "Tame nameplates", List.of("hideLevelInName")),
+            new SettingsCategory("beds", "Automatic bed assignment", List.of("noAutoSetBed")),
+            new SettingsCategory("selection", "Exclusions from all-tame commands", List.of("excludeFromAll"))
+    );
+
+    private static final Map<String, String> SETTINGS_USAGE = Map.ofEntries(
+            Map.entry("doNotAttack", "[remove] <mobtype>"),
+            Map.entry("doNotAttackAnimals", "[true|false]"),
+            Map.entry("doNotAttackOwner", "[add|remove <player>]"),
+            Map.entry("friendlyFire", "[true|false]"),
+            Map.entry("tamesFriendly", "[true|false]"),
+            Map.entry("enterPortalsByThemselves", "<true|false>"),
+            Map.entry("sitOnChairs", "<true|false> (admin)"),
+            Map.entry("healthSiphon", "<true|false>"),
+            Map.entry("enableVoidCloud", "<true|false>"),
+            Map.entry("orescenting", "<name> <oreId>"),
+            Map.entry("herding", "<true|false> (admin)"),
+            Map.entry("hideLevelInName", "<true|false>"),
+            Map.entry("noAutoSetBed", "<true|false>"),
+            Map.entry("excludeFromAll", "[info|add|remove] <tame|group|type> <name>")
+    );
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsCommand(String literal) {
+        var options = buildSettingsOptions(literal).build();
+        var root = Commands.literal(literal).executes(ctx -> settingsMenu(ctx.getSource(), null));
+        for (SettingsCategory category : SETTINGS_CATEGORIES) {
+            var branch = Commands.literal(category.id()).executes(ctx -> settingsMenu(ctx.getSource(), category.id()));
+            for (String setting : category.settings()) {
+                var node = options.getChild(setting);
+                if (node == null) throw new IllegalStateException("Unregistered setting: " + setting);
+                branch.then(node);
+            }
+            root.then(branch);
+        }
+        return root;
+    }
+
+    private static int settingsMenu(CommandSourceStack source, String categoryId) {
+        source.sendSuccess(() -> Component.literal(categoryId == null ? "Tame settings — choose a category:" : "Tame settings: " + categoryId)
+                .withStyle(ChatFormatting.GOLD), false);
+        var options = source.getServer().getCommands().getDispatcher().getRoot().getChild("tames").getChild("settings");
+        for (SettingsCategory category : SETTINGS_CATEGORIES) {
+            if (categoryId == null) {
+                String command = "/tames settings " + category.id();
+                source.sendSuccess(() -> Component.literal(command + " — " + category.description())
+                        .withStyle(ChatFormatting.AQUA).withStyle(style -> style.withClickEvent(
+                                new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, command))), false);
+            } else if (category.id().equals(categoryId)) {
+                var branch = options.getChild(category.id());
+                for (String setting : category.settings()) {
+                    if (!branch.getChild(setting).canUse(source)) continue;
+                    String command = "/tames settings " + category.id() + " " + setting;
+                    source.sendSuccess(() -> Component.literal(command + " " + SETTINGS_USAGE.get(setting))
+                            .withStyle(ChatFormatting.AQUA).withStyle(style -> style.withClickEvent(
+                                    new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.SUGGEST_COMMAND, command + " "))), false);
+                }
+            }
+        }
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildSettingsOptions(String literal) {
         return Commands.literal(literal)
                 .then(Commands.literal("doNotAttack")
                         .executes(ctx -> listDoNotAttack(ctx.getSource()))
@@ -5225,23 +5294,7 @@ public class TameCommands {
             );
         }
         else if (key.equals("settings")) {
-            sendInfoPage(p, "Settings",
-                    "/tames settings doNotAttack [remove] <mobtype>",
-                    "/tames settings doNotAttackAnimals <true|false>",
-                    "/tames settings enterPortalsByThemselves <true|false>",
-                    "/tames settings healthSiphon <true|false>",
-                    "/tames settings enableVoidCloud <true|false>",
-                    "/tames settings hideLevelInName <true|false>",
-                    "/tames settings noAutoSetBed <true|false>",
-                    "/tames chestxdrum system",
-                    "/tames settings friendlyFire <true|false>",
-                    "/tames settings orescenting <tame> <ore id>",
-                    "/tames settings excludeFromAll [info|add|remove] <tame|group|type> <name>",
-                    "excludeFromAll keeps matching tames out of commands whose default/all selection honors exclusions.",
-                    "hideLevelInName defaults false. When true, loaded entity nameplates show only the tame's name.",
-                    "Manual inventory distribution always prioritizes native/configured preferred foods.",
-                    "Chest x drum foodPreferences defaults true, restricting refill to preferred food. Reverse-pull rules are configured per owned tame type and default to disabled."
-            );
+            return settingsMenu(p.createCommandSourceStack(), null);
         }
         else if (key.equals("leaderboard")) {
             sendInfoPage(p, "Leaderboard",
@@ -5546,14 +5599,14 @@ public class TameCommands {
         }
         else if (key.equals("healthsiphon") || key.equals("health_siphon")) {
             sendInfoPage(p, "HealthSiphon",
-                    "/tames settings healthSiphon <true|false>",
+                    "/tames settings abilities healthSiphon <true|false>",
                     "Toggles whether your tames may redirect incoming damage to you through the health_siphon attribute.",
                     "This is owner-local and persists for your tame registry."
             );
         }
         else if (key.equals("enterportalsbythemselves") || key.equals("enter_portals_by_themselves")) {
             sendInfoPage(p, "EnterPortalsByThemselves",
-                    "/tames settings enterPortalsByThemselves <true|false>",
+                    "/tames settings movement enterPortalsByThemselves <true|false>",
                     "Default is false.",
                     "False: your tames cannot enter portals on their own.",
                     "They only change dimension through owner-triggered tethered teleport follow when following and having tethered_teleport."
@@ -5561,7 +5614,7 @@ public class TameCommands {
         }
         else if (key.equals("sitonchairs") || key.equals("sit_on_chairs")) {
             sendInfoPage(p, "SitOnChairs",
-                    "/tames settings sitOnChairs <true|false>",
+                    "/tames settings movement sitOnChairs <true|false>",
                     "Admin runtime toggle (default false).",
                     "false: tames are blocked from mounting seat/chair entities (including Create seats/chairs).",
                     "true: that seat/chair mount block is disabled."
@@ -9822,7 +9875,7 @@ public class TameCommands {
             case "poison_resistance" -> id + " L" + level + ": immediately clears Poison when applied; binary protection";
             case "comfort" -> id + " L" + level + ": when out of battle, heals " + fmt(level) + " every 5.0s";
             case "wall_climber" -> id + ": spider-style wall climbing while pressing into vertical surfaces";
-            case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames settings healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
+            case "health_siphon" -> id + " L" + level + ": redirects incoming tame damage to owner while enabled by /tames settings abilities healthSiphon; owner range " + fmt(Math.min(128.0D, 32.0D + 16.0D * Math.max(0, level - 1)));
             case "bubbling" -> id + " L" + level + ": vs enemies under the HP cap, " + fmt(Math.min(0.60D, 0.15D * level) * 100.0D) + "% proc to trap them in a giant bubble";
             case "herding" -> id + " L" + level + ": utility herding aura; range scales by level (roughly 8 at L1, 12 at L3, 16 at L5)";
             case "amphibious" -> id + " L" + level + ": cancels drown/dry-out damage and grants extra land speed while aquatic";
