@@ -1,0 +1,20 @@
+Synthetic benchmark and validation, 2026-10-15.
+Forge 47.4.16, Java 17.0.18, development machine; not a full modpack TPS test.
+500 guardian data records, 40 player objects; 10 warm-up passes, 50 measured passes.
+Uncached runs deliberately change the post height to bypass the per-guardian cache.
+The distant case skips distant cells; dense case evaluates all 40 candidate players.
+Production proximity values are cached for two seconds; queue maintenance is spread
+across ticks with a 32-record limit and soft 0.5 ms scheduling deadline.
+No measurement includes 500 ticking mob AIs, combat/pathfinding or disk load time.
+
+[15Okt.2026 23:06:36.518] [Server thread/INFO] [com.github.alexthe668.domesticationinnovation.test.GuardianProximityRegression/]: [GuardianProximityBenchmark] 500 guardians x 40 distant players: uncached spatial queries 0.14242000000000002 ms/pass (two-second cache); cached 0.048361999999999995 ms/pass. Proximity only, excludes AI, IO and combat.
+[15Okt.2026 23:06:36.519] [Server thread/INFO] [com.github.alexthe668.domesticationinnovation.test.GuardianProximityRegression/]: [GuardianProximityBenchmark] 500 guardians x 40 nearby candidate players, all rejected by distance: 2.545522 ms/pass (two-second cache).
+[15Okt.2026 23:06:37.042] [Server thread/INFO] [com.github.alexthe668.domesticationinnovation.test.GuardianProximityRegression/]: [GuardianBudgetRegression] 500 missing-chunk requests scheduled one ticket in 0.8049 ms without waiting for chunks.
+[15Okt.2026 23:06:37.787] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: All 18 required tests passed :)
+
+All 18 required GameTests passed, including bounded queue progress over 500 records,
+shared tick/rate limits, one ticket from 500 missing-chunk requests in a tick,
+cold-bed lookup deferral, four walking-ticket groups from 500 hungry guardians,
+and existing guardian/hunger/bodyguard/equipment behavior.
+Gradle reported its recurring daemon shutdown error after the GameTest server
+completed and saved the test world. The release JAR is built separately.

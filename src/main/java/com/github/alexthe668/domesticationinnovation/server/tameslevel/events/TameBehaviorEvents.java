@@ -95,7 +95,7 @@ public class TameBehaviorEvents {
         if (TameDuelManager.isTameInDuel(tame.getUUID())) return;
         if ((tame.tickCount + tame.getId()) % 10 == 0) {
             if (activeData.movementOrder == 3 || activeData.guardianResting) syncArtificialMovementFollowGoals(tame, activeData);
-            if (TameCommands.processGuardianRest(tame, activeData)) return;
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.processRestThrottled(tame, activeData)) return;
         }
         if (activeData.guardianResting) return;
         if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
@@ -427,7 +427,7 @@ public class TameBehaviorEvents {
             tame.setTarget(priority);
             return;
         }
-        double radius = mode == TameMode.MONSTER_HUNTER ? 10.0D
+        double radius = mode == TameMode.MONSTER_HUNTER ? TameGoalSupport.MONSTER_HUNTER_DETECTION_RADIUS
                 : mode == TameMode.BODYGUARD ? Math.max(4, data.bodyguardRange) : 24.0D;
         LivingEntity best = null;
         double bestDistance = Double.MAX_VALUE;

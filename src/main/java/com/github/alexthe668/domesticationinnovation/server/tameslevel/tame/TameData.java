@@ -132,6 +132,7 @@ public class TameData {
     public int protectionZ = 0;
     public int protectionRadius = 16;
     public final Map<String, CompoundTag> guardianSetAnchors = new LinkedHashMap<>();
+    // Legacy save fields, read only to migrate old deployed posts to ordinary guardians.
     public long offlineGuardianOrder = 0L;
     public boolean offlineGuardianDeployed = false;
     public boolean offlineGuardianNeedsDeployment = false;

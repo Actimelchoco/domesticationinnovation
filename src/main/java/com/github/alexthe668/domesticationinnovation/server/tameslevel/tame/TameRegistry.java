@@ -280,7 +280,7 @@ public class TameRegistry {
             removeFromIndexes(previous);
         }
         addToIndexes(data);
-        OfflineGuardianService.remember(data);
+        GuardianActivityService.remember(data);
         markDirty();
     }
 
@@ -297,7 +297,7 @@ public class TameRegistry {
 
     public static void remove(UUID id) {
         TameData removed = TAMES.remove(id);
-        if (removed != null) OfflineGuardianService.forget(removed);
+        if (removed != null) GuardianActivityService.forget(removed);
         if (removed != null) {
             removeFromIndexes(removed);
             markDirty();
@@ -325,7 +325,7 @@ public class TameRegistry {
                 }
             }
         }
-        OfflineGuardianService.removeAssignment(data);
+        GuardianActivityService.removeAssignment(data);
         data.ownerUUID = newOwner;
         OWNER_TO_TAMES.computeIfAbsent(newOwner, k -> new HashSet<>()).add(tameUuid);
         migrateDeathOwnership(tameUuid, oldOwner, newOwner);

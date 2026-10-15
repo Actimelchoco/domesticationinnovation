@@ -30,7 +30,7 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
 
     @Override
     protected void tickMode(ServerLevel level, TameData data) {
-        TameGoalSupport.setHunterTarget(level, tame, 10.0D);
+        TameGoalSupport.setHunterTarget(level, tame, TameGoalSupport.MONSTER_HUNTER_DETECTION_RADIUS);
     }
 
     @Override
@@ -71,7 +71,7 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
             trackedLivingTarget = current.getUUID();
             if (++combatRescanTicks >= 200) {
                 combatRescanTicks = 0;
-                LivingEntity closer = TameGoalSupport.nearestHunterHostile(level, tame, 10.0D);
+                LivingEntity closer = TameGoalSupport.nearestHunterHostile(level, tame, TameGoalSupport.MONSTER_HUNTER_DETECTION_RADIUS);
                 if (closer != null && closer != current && tame.distanceToSqr(closer) < tame.distanceToSqr(current)) {
                     TameGoalSupport.setNativeCombatTarget(tame, closer);
                     trackedLivingTarget = closer.getUUID();

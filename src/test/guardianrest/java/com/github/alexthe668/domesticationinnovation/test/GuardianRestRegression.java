@@ -78,8 +78,9 @@ public class GuardianRestRegression {
         UUID ownerId = UUID.randomUUID(); Wolf wolf = fixture(helper, ownerId);
         TameData data = TameRegistry.get(wolf.getUUID());
         var players = online(helper);
-        // Explicit offline deployments stay active without an online owner; hunger still suspends them.
-        data.offlineGuardianDeployed = true;
+        // Hunger rest behavior remains unchanged with the owner online.
+        var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(ownerId, "rest_hungry"));
+        players.put(ownerId, owner);
         try {
             data.hungerSaturation = 0; data.hungerInventory.clear();
             var forced = helper.getLevel().getDataStorage().computeIfAbsent(
@@ -101,11 +102,10 @@ public class GuardianRestRegression {
                     "home arrival must release temporary walking tickets");
             data.hungerInventory.add(new ItemStack(Items.COOKED_BEEF));
             TameCommands.processGuardianRest(wolf, data);
-            check(!data.guardianResting && !wolf.isOrderedToSit(), "stored food must resume deployed offline guardian duty");
-            data.offlineGuardianDeployed = false;
+            check(!data.guardianResting && !wolf.isOrderedToSit(), "stored food must resume guardian duty");
+            players.remove(ownerId);
             TameCommands.processGuardianRest(wolf, data);
             data.hungerSaturation = 0; data.hungerInventory.clear();
-            var owner = FakePlayerFactory.get(helper.getLevel(), new GameProfile(ownerId, "rest_hungry"));
             players.put(ownerId, owner);
             TameCommands.processGuardianRest(wolf, data);
             check(data.guardianResting && wolf.isOrderedToSit(), "login must not resume guarding while still hungry");

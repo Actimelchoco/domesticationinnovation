@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class TameGoalSupport {
+    public static final double MONSTER_HUNTER_DETECTION_RADIUS = 10.0D;
     private static final Map<BossTargetKey, UUID> SHARED_BOSS_TARGETS = new HashMap<>();
     private static final Map<UUID, AssasinTarget> ASSASIN_TARGETS = new HashMap<>();
 

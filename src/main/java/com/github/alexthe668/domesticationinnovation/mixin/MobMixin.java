@@ -101,13 +101,21 @@ public abstract class MobMixin extends LivingEntity {
             cancellable = true
     )
     private void di_pickUpItem(ItemEntity item, CallbackInfo ci) {
-        if(TameableUtils.isTamed(this) && TameableUtils.hasEnchant(this, DIEnchantmentRegistry.LINKED_INVENTORY)){
-            Entity owner = TameableUtils.getOwnerOf(this);
-            if(owner instanceof Player){
-                ci.cancel();
-                if(((Player) owner).addItem(item.getItem())){
+        if(TameableUtils.isTamed(this) && (TameableUtils.hasEnchant(this, DIEnchantmentRegistry.LINKED_INVENTORY)
+                || com.github.alexthe668.domesticationinnovation.server.CommonProxy.getAbilityOrEnchantLevelForCompat(this, "linked_inventory") > 0)){
+            // Never let vanilla equipment pickup consume linked items when the owner is absent.
+            ci.cancel();
+            var ownerId = TameableUtils.getOwnerUUIDOf(this);
+            Entity owner = getServer() == null || ownerId == null ? null : getServer().getPlayerList().getPlayer(ownerId);
+            if(owner instanceof Player player && !item.isRemoved()){
+                // Inventory.add can succeed after inserting only part of a stack.
+                // Work on a copy and retain the exact remainder in the world.
+                var remaining = item.getItem().copy();
+                player.addItem(remaining);
+                if(remaining.isEmpty()){
                     item.discard();
                 }else{
+                    item.setItem(remaining);
                     item.copyPosition(owner);
                 }
             }

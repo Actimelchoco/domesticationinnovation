@@ -2224,17 +2224,6 @@ public class TameCommands {
                                         .suggests((ctx, b) -> suggestInfoTopics(b))
                                         .executes(ctx -> infoDetail(ctx.getSource(), StringArgumentType.getString(ctx, "command")))))
 
-                        .then(Commands.literal("offlineGuardian")
-                                .executes(ctx -> offlineGuardianRules(ctx.getSource()))
-                                .then(Commands.literal("set")
-                                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                                .executes(ctx -> offlineGuardianSet(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
-                                .then(Commands.literal("deploy")
-                                        .executes(ctx -> offlineGuardianDeploy(ctx.getSource(), null))
-                                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                                .suggests((ctx, b) -> suggestOwnedPetNamesAll(ctx.getSource(), b))
-                                                .executes(ctx -> offlineGuardianDeploy(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))))
                         .then(Commands.literal("inventory")
                                 .executes(ctx -> hungerInventoryList(ctx.getSource()))
                                 .then(Commands.literal("equipment")
@@ -4655,7 +4644,7 @@ public class TameCommands {
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
         if (rules) {
             owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <name>, info, setRange <1-22>. Maximum 3 assigned tames; dead guards keep their slots and return after respawning."));
-            owner.sendSystemMessage(Component.literal("Always bodyguard mode and follow movement; owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
+            owner.sendSystemMessage(Component.literal("Always bodyguard mode and automatic follow movement; manual movement commands skip roster guards. Inventory, abilities, attributes and other non-movement settings remain editable. Owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
             owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
         }
         owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "/3; range " + roster.bodyguardRange));
@@ -4682,7 +4671,7 @@ public class TameCommands {
             if (roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
             if (roster.bodyguards.size() >= 3) return error(owner, "Maximum 3 bodyguards.");
             if (data.stored) return error(owner, "Unstore the tame before adding it.");
-            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.removeAssignment(data);
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
             data.bodyguardPreviousClose = data.closeMovement;
             roster.bodyguards.add(id); data.rosterBodyguard = true;
             data.mode = TameMode.BODYGUARD.id(); data.bodyguardRange = roster.bodyguardRange;
@@ -10218,6 +10207,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         String profile = parseMovementProfile(profileName);
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         applyMovementProfile(data, profile);
@@ -10232,6 +10222,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
+            if (data.rosterBodyguard) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10246,6 +10237,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
+            if (data.rosterBodyguard) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10260,6 +10252,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
+            if (data.rosterBodyguard) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10278,6 +10271,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
+            if (data.rosterBodyguard) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10290,6 +10284,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10302,6 +10297,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10314,6 +10310,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10328,6 +10325,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchor(player, tame, data);
@@ -10342,6 +10340,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchorWithoutRemember(player, tame, data);
@@ -10356,6 +10355,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
@@ -10372,6 +10372,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchor(player, tame, data);
@@ -10386,6 +10387,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchorWithoutRemember(player, tame, data);
@@ -10400,6 +10402,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
+            if (data.rosterBodyguard) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
@@ -10420,6 +10423,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
+            if (data.rosterBodyguard) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10435,6 +10439,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
+            if (data.rosterBodyguard) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10466,6 +10471,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
+            if (data.rosterBodyguard) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10479,6 +10485,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
+            if (data.rosterBodyguard) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10528,6 +10535,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         String normalizedSet = normalizeGuardianSetName(setName);
         if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
@@ -10730,6 +10738,7 @@ public class TameCommands {
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : members) {
+            if (data != null && data.rosterBodyguard) continue;
             if (data.dead) {
                 skippedDead++;
                 continue;
@@ -10853,6 +10862,7 @@ public class TameCommands {
         int crossDimension = 0;
 
         for (TameData data : requested) {
+            if (data != null && data.rosterBodyguard) continue;
             if (data == null || data.uuid == null) {
                 continue;
             }
@@ -11136,6 +11146,8 @@ public class TameCommands {
         int count = 0;
         for (TamableAnimal tame : selected) {
             if (tame == null || !tame.isAlive()) continue;
+            TameData data = TameRegistry.get(tame.getUUID());
+            if (data != null && data.rosterBodyguard) continue;
             applyMovementOverride(tame, order);
             count++;
         }
@@ -11772,6 +11784,7 @@ public class TameCommands {
         }
         int count = 0;
         for (TameData data : selected) {
+            if (data != null && data.rosterBodyguard) continue;
             putGuardianSetAnchor(data, target.setName(), dimensionId, pos.getX(), pos.getY(), pos.getZ());
             count++;
         }
@@ -12048,6 +12061,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
+            if (d.rosterBodyguard) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (tame == null || d.horseType) continue;
             if (isDuelLocked(d)) { skippedDuel++; continue; }
@@ -12064,6 +12078,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
+            if (d.rosterBodyguard) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (tame == null || d.horseType) continue;
             if (isDuelLocked(d)) { skippedDuel++; continue; }
@@ -12080,12 +12095,15 @@ public class TameCommands {
         MovementOrder selectedState = parseMovementOrder(stateName);
         if (selectedState == null) return error(p, "Invalid state. Use follow, wander, or sit.");
         List<LivingEntity> selected = loadedOwnedStateLivingTames(source, p.getUUID(), selectedState);
+        int changed = 0;
         for (LivingEntity tame : selected) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+            if (data != null && data.rosterBodyguard) continue;
             applyLivingMovementOverride(tame, data, targetOrder);
+            changed++;
         }
-        p.sendSystemMessage(Component.literal("Set " + selected.size() + " loaded " + movementLabel(selectedState) + " tames to " + movementLabel(targetOrder) + "."));
+        p.sendSystemMessage(Component.literal("Set " + changed + " loaded " + movementLabel(selectedState) + " tames to " + movementLabel(targetOrder) + "."));
         return 1;
     }
 
@@ -12093,6 +12111,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
+        if (d.rosterBodyguard) return error(p, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
         if (tame == null) return error(p, "Pet is not loaded.");
         if (d.horseType) return error(p, "Horse-type tames cannot use follow, wander, or sit commands.");
@@ -12106,6 +12125,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
         data.wanderLock = enabled;
         TameRegistry.markDirty();
         String state = enabled ? "enabled" : "disabled";
@@ -12118,6 +12138,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData data : ownedTames(p.getUUID())) {
+            if (data.rosterBodyguard) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
             if (tame == null || data.horseType || (nearbyOnly && tame.distanceToSqr(p) > 32.0D * 32.0D)) continue;
             if (isDuelLocked(data)) { skippedDuel++; continue; }
@@ -12134,6 +12155,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData data : ownedTames(p.getUUID())) {
+            if (data.rosterBodyguard) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
             if (tame == null || data.horseType) continue;
             if (isDuelLocked(data)) { skippedDuel++; continue; }
@@ -12225,6 +12247,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to send it home.");
         if (isDuelLocked(data)) return error(player, tameDisplayName(data) + " is in a duel. Use /tames dueltp.");
         if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
@@ -13626,7 +13649,6 @@ public class TameCommands {
         LivingEntity respawned = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
         if (respawned == null || !respawned.isAlive()) return;
         if (processGuardianRest(respawned, data)) return;
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.returnAfterRespawn(server, data)) return;
         boolean deployGuardian = data.movementOrder == 3 && data.hasHome;
         String guardianDimension = data.homeDimension;
         int guardianX = data.homeX;
@@ -13673,6 +13695,7 @@ public class TameCommands {
             LivingEntity tame = findLoadedLivingTameByIdentity(server, data.uuid, data.tlId);
             if (tame == null || !tame.isAlive()) continue;
             applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
             processGuardianRest(tame, data);
             iterator.remove();
         }
@@ -15341,6 +15364,7 @@ public class TameCommands {
         boolean movementChanged = false;
 
         for (TameData data : requested) {
+            if (data != null && data.rosterBodyguard) continue;
             if (data == null || data.uuid == null) {
                 continue;
             }
@@ -21679,7 +21703,7 @@ public class TameCommands {
     }
 
     private static void applyMovementProfile(TameData data, String profile) {
-        if (data == null) {
+        if (data == null || data.rosterBodyguard) {
             return;
         }
         data.skeletonMovement = "skeleton".equals(profile);
@@ -22483,75 +22507,6 @@ public class TameCommands {
         return normalized.startsWith("legendary_monsters:");
     }
 
-    private static int offlineGuardianRules(CommandSourceStack source) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        player.sendSystemMessage(Component.literal("Offline Guardian rules:\n"
-                + "/tames offlineGuardian set <name> saves your current position as that tame's guard post.\n"
-                + "/tames offlineGuardian deploy <name> deploys one saved guardian; deploy without a name deploys all saved guardians.\n"
-                + "Maximum 5 per player. Setting a sixth removes the oldest assignment, not the tame. Updating a saved tame keeps its place in the list.\n"
-                + "Deployed posts stay loaded and guardians remain active while you are offline. Assignments survive server restarts.\n"
-                + "Normal food, combat modes and pet-bed respawn rules apply. After respawning, deployed guardians return to their saved posts even while you are offline.\n"
-                + "Regular movement commands cancel deployment; the saved assignment remains available to deploy again. Stored tames and duel participants cannot be deployed.")
-                .withStyle(ChatFormatting.AQUA));
-        List<TameData> selected = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.selected(player.getUUID());
-        player.sendSystemMessage(Component.literal("Saved offline guardians (" + selected.size() + "/5, oldest first): "
-                + (selected.isEmpty() ? "none" : selected.stream().map(data -> tameDisplayName(data)
-                        + (data.offlineGuardianDeployed ? " [deployed]" : " [set]")).collect(Collectors.joining(", ")))));
-        return 1;
-    }
-
-    private static int offlineGuardianSet(CommandSourceStack source, String name) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        TameData data = findOwnedTameAny(player.getUUID(), name);
-        if (data == null) return error(player, "You do not own a tame named '" + name + "'.");
-        if (data.stored || data.horseType || isDuelLocked(data.uuid)) return error(player, "That tame cannot be assigned a guardian post right now.");
-        TameData evicted = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.set(data, player.serverLevel(), player.blockPosition());
-        player.sendSystemMessage(Component.literal("Set " + tameDisplayName(data) + " as an offline guardian at your current position. Use /tames offlineGuardian deploy " + name + ".")
-                .withStyle(ChatFormatting.GREEN));
-        if (evicted != null) player.sendSystemMessage(Component.literal("Removed the oldest offline guardian assignment: " + tameDisplayName(evicted) + ". The tame is kept.")
-                .withStyle(ChatFormatting.YELLOW));
-        return 1;
-    }
-
-    private static int offlineGuardianDeploy(CommandSourceStack source, String name) {
-        ServerPlayer player = source.getPlayer();
-        if (player == null) return 0;
-        List<TameData> selected;
-        if (name == null) selected = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.selected(player.getUUID());
-        else {
-            TameData data = findOwnedTameAny(player.getUUID(), name);
-            if (data == null || data.offlineGuardianOrder <= 0) return error(player, "Set that owned tame with /tames offlineGuardian set <name> first.");
-            selected = List.of(data);
-        }
-        if (selected.isEmpty()) return error(player, "No offline guardians are set.");
-        int deployed = 0;
-        for (TameData data : selected) {
-            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.deploy(source.getServer(), data)) deployed++;
-        }
-        player.sendSystemMessage(Component.literal("Activated " + deployed + " offline guardian(s). Unloaded tames will deploy when their saved chunks load; dead guardians return after their normal respawn.")
-                .withStyle(deployed > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
-        return deployed;
-    }
-
-    public static boolean deployOfflineGuardianToPost(MinecraftServer server, TameData data, LivingEntity tame) {
-        if (server == null || data == null || tame == null || !tame.isAlive() || data.dead || data.stored || isDuelLocked(data.uuid)) return false;
-        ServerLevel target = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.postLevel(server, data);
-        if (target == null) return false;
-        double x = data.offlineGuardianX + 0.5D, y = data.offlineGuardianY, z = data.offlineGuardianZ + 0.5D;
-        LivingEntity moved;
-        if (tame instanceof TamableAnimal tamable) {
-            TameTransferService.TransferResult result = TameTransferService.transferToLocation(tamable, target, x, y, z, tame.getYRot(), tame.getXRot(), data);
-            if (!result.success()) return false;
-            moved = result.entity();
-        } else moved = TameTransferService.transferInterfaceToLocation(tame, target, x, y, z, tame.getYRot(), tame.getXRot(), data, false);
-        if (moved == null) return false;
-        data.offlineGuardianNeedsDeployment = false;
-        applyGuardianAnchor(data.offlineGuardianDimension, data.offlineGuardianX, data.offlineGuardianY, data.offlineGuardianZ, moved, data);
-        return true;
-    }
-
     private static void setGuardianAnchor(ServerPlayer player, LivingEntity tame, TameData data) {
         if (player == null || tame == null || data == null) {
             return;
@@ -22568,6 +22523,7 @@ public class TameCommands {
     }
 
     private static void applyGuardianAnchor(String dimensionId, int x, int y, int z, LivingEntity tame, TameData data) {
+        if (data.rosterBodyguard && !isDuelLocked(data)) return;
         data.guardianResting = false;
         data.guardianHungerHomeDeadline = 0L;
         data.hasHome = true;
@@ -22582,13 +22538,14 @@ public class TameCommands {
         data.guardianTargetStuckTicks = 0;
         data.guardianTargetBestDistanceSq = 0.0D;
         applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
         cacheGuardianRestHome(tame, data);
         if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         TameRegistry.markDirty();
     }
 
     private static boolean restorePreviousGuardianAnchor(LivingEntity tame, TameData data) {
-        if (tame == null || data == null || !data.hasPreviousHome) {
+        if (tame == null || data == null || data.rosterBodyguard || !data.hasPreviousHome) {
             return false;
         }
         boolean hadCurrent = data.hasHome;
@@ -22623,6 +22580,7 @@ public class TameCommands {
             data.previousHomeZ = 0;
         }
         applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
         if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
         TameRegistry.markDirty();
         return true;
@@ -22644,7 +22602,7 @@ public class TameCommands {
             return;
         }
         data.hasHome = false;
-        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.forget(data);
         data.guardianResting = false;
         data.guardianHungerHomeDeadline = 0L;
         data.homeDimension = "";
@@ -22839,6 +22797,7 @@ public class TameCommands {
             if (data.hungerForcedSit && !data.guardianResting && totalHungerFoodPoints(data) > 0) {
                 if (data.hasHome) {
                     applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
                 } else {
                     BlockPos pos = tame.blockPosition();
                     applyGuardianAnchor(tame.level().dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ(), tame, data);
@@ -22878,13 +22837,21 @@ public class TameCommands {
         }
     }
 
-    private static void cacheGuardianRestHome(LivingEntity tame, TameData data) {
-        if (tame == null || data == null || tame.getServer() == null) return;
+    private static boolean cacheGuardianRestHome(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || tame.getServer() == null) return false;
         MinecraftServer server = tame.getServer();
+        // Bed validation calls getChunk internally. Schedule a cold bed first,
+        // so hundreds of rest transitions cannot synchronously read it from disk.
+        if (data.hasPetBed) {
+            ResourceLocation id = ResourceLocation.tryParse(data.petBedDimension);
+            ServerLevel bedLevel = id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+            if (bedLevel != null && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(
+                    bedLevel, new Vec3(data.petBedX + 0.5D, data.petBedY, data.petBedZ + 0.5D))) return false;
+        }
         ServerPlayer owner = data.ownerUUID == null ? null : server.getPlayerList().getPlayer(data.ownerUUID);
         SpawnTarget home = owner == null ? resolveAutomaticRespawnBedTarget(server, data)
                 : resolveRespawnTarget(owner.createCommandSourceStack(), owner, data, false);
-        if (home == null || home.level == null || home.pos == null) return;
+        if (home == null || home.level == null || home.pos == null) return true;
         CompoundTag cached = new CompoundTag();
         cached.putString("dimension", home.level.dimension().location().toString());
         cached.putDouble("x", home.pos.x); cached.putDouble("y", home.pos.y); cached.putDouble("z", home.pos.z);
@@ -22892,6 +22859,7 @@ public class TameCommands {
             data.guardianRestHome = cached;
             TameRegistry.markDirty();
         }
+        return true;
     }
 
     private static SpawnTarget guardianRestDestination(MinecraftServer server, TameData data) {
@@ -22920,24 +22888,32 @@ public class TameCommands {
                 || isDuelLocked(data.uuid) || !data.hasHome
                 || (data.movementOrder != 3 && !data.guardianResting && !data.hungerForcedSit)) return false;
         MinecraftServer server = tame.getServer();
-        boolean offline = data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null;
-        // Explicit offlineGuardian deployments retain their original offline duty.
-        offline &= !data.offlineGuardianDeployed;
+        boolean ownerOffline = data.ownerUUID == null || server.getPlayerList().getPlayer(data.ownerUUID) == null;
+        // Ordinary guardians also work for nearby visitors while their owner is offline.
+        boolean offline = ownerOffline && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.hasNearbyPlayer(server, data);
         boolean hungry = data.hungerSaturation <= 0 && !hasEdibleStoredFood(tame, data);
         if (!offline && !hungry) {
-            if (!data.guardianResting) { cacheGuardianRestHome(tame, data); return false; }
-            LivingEntity moved = transferGuardian(tame, data, spawnTargetFromGuardianHome(server, data));
+            if (!data.guardianResting) {
+                if (data.guardianRestHome.isEmpty()
+                        && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) cacheGuardianRestHome(tame, data);
+                return false;
+            }
+            SpawnTarget post = spawnTargetFromGuardianHome(server, data);
+            if (post == null || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(post.level, post.pos)
+                    || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) return true;
+            LivingEntity moved = transferGuardian(tame, data, post);
             if (moved == null) return true;
             data.guardianResting = false;
             data.guardianHungerHomeDeadline = 0L;
             data.hungerForcedSit = false;
-            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.releaseRestWalk(data);
             applyLivingMovementOverride(moved, data, MovementOrder.GUARDIAN);
             TameRegistry.markDirty();
             return true;
         }
         if (!data.guardianResting) {
-            cacheGuardianRestHome(tame, data);
+            if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) return true;
+            if (!cacheGuardianRestHome(tame, data)) return true;
             data.guardianResting = true;
             data.guardianHungerHomeDeadline = hungry ? server.overworld().getGameTime() + 1200L : 0L;
             TameRegistry.markDirty();
@@ -22952,6 +22928,8 @@ public class TameCommands {
         boolean atHome = tame.level() == home.level && tame.distanceToSqr(home.pos) <= 1.0D;
         long now = server.overworld().getGameTime();
         if (!atHome && (offline || (data.guardianHungerHomeDeadline > 0 && now >= data.guardianHungerHomeDeadline))) {
+            if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(home.level, home.pos)
+                    || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) return true;
             LivingEntity moved = transferGuardian(tame, data, home);
             if (moved == null) return true;
             tame = moved; atHome = true;
@@ -22965,20 +22943,13 @@ public class TameCommands {
         else if (tame instanceof net.minecraft.world.entity.PathfinderMob mob && tame.level() == home.level) {
             mob.getNavigation().moveTo(home.pos.x, home.pos.y, home.pos.z, 1.1D);
         }
-        if (atHome) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.releaseRestWalk(data);
-        else com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.OfflineGuardianService.holdRestWalk(data, tame);
+        if (atHome) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.releaseRestWalk(data);
+        else com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.holdRestWalk(data, tame);
         return true;
     }
 
     public static void loadRestingGuardiansForOwner(ServerPlayer owner) {
-        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
-            if (!data.guardianResting || data.dead || data.stored) continue;
-            SpawnTarget home = guardianRestDestination(owner.getServer(), data);
-            if (home != null && home.level != null) home.level.getChunkAt(BlockPos.containing(home.pos));
-            ResourceLocation last = ResourceLocation.tryParse(data.lastKnownDimension);
-            ServerLevel lastLevel = last == null ? null : owner.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, last));
-            if (lastLevel != null) lastLevel.getChunkAt(new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ));
-        }
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.requestOwnerWake(owner);
     }
 
     private static void applyHungerForcedSit(LivingEntity tame, TameData data) {

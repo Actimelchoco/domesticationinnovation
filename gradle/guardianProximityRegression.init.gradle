@@ -1,0 +1,31 @@
+// Isolated guardian tests against the locally installed companion dependencies.
+allprojects {
+    beforeEvaluate { project.ext.set('tameRegressionForgeVersion', '47.4.16') }
+    afterEvaluate {
+        def dependencyDir = project.file(project.findProperty('guardianModsDir'))
+        def staging = project.file('build/guardian-proximity-dependencies')
+        staging.mkdirs()
+        repositories.flatDir { dirs staging }
+        ['animights-forge-1.20.1-*.jar', 'Dungeon Now Loading-forge-1.20.1-*.jar',
+         'geckolib-forge-1.20.1-*.jar', 'knightlib-forge-1.20.1-*.jar'].each { pattern ->
+            def jars = project.fileTree(dependencyDir) { include pattern }.files
+            if (jars.size() != 1) throw new GradleException("Expected exactly one ${pattern} in ${dependencyDir}")
+            def input = jars.first()
+            def name = input.name.substring(0, input.name.length() - 4).replace(' ', '-')
+            java.nio.file.Files.copy(input.toPath(), new File(staging, name + '.jar').toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            dependencies.add('implementation', fg.deobf("guardian-proximity-test:${name}:local"))
+        }
+        sourceSets.main.java.srcDir('src/test/guardianrest/java')
+        tasks.compileJava.source(project.file('src/test/performance/java/com/github/alexthe668/domesticationinnovation/test/GuardianProximityRegression.java'))
+        sourceSets.main.resources.srcDir('src/test/performance/resources')
+        minecraft.runs { gameTestServer {
+            workingDirectory project.file('build/guardian-proximity-gametest')
+            property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+            arg '-mixin.config=citadel.mixins.json'
+            arg '-mixin.config=domesticationinnovation.mixins.json'
+            mods { domesticationinnovation { source sourceSets.main } }
+        } }
+    }
+}

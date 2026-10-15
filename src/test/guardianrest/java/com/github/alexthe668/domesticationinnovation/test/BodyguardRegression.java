@@ -16,6 +16,38 @@ import java.util.*;
 @GameTestHolder("domesticationinnovation")
 @PrefixGameTestTemplate(false)
 public class BodyguardRegression {
+    @GameTest(template="empty")
+    public static void movementCommandsSkipGuardsButOtherSettingsWork(GameTestHelper helper) throws Exception {
+        UUID id=UUID.randomUUID();var owner=FakePlayerFactory.get(helper.getLevel(),new GameProfile(id,"GuardCommands"));
+        var pos=helper.absolutePos(new BlockPos(2,2,2));owner.setPos(pos.getX(),pos.getY(),pos.getZ());
+        players(helper).put(id,owner);
+        Wolf guard=wolf(helper,owner,"LockGuard"),ordinary=wolf(helper,owner,"NormalPet");
+        TameData data=TameRegistry.get(guard.getUUID()),normal=TameRegistry.get(ordinary.getUUID());
+        var dispatcher=helper.getLevel().getServer().getCommands().getDispatcher();var source=owner.createCommandSourceStack();
+        try {
+            check(dispatcher.execute("tames bodyguard add LockGuard",source)==1,"assign roster guard");
+            for(String command:List.of("tames sit LockGuard","tames wander LockGuard","tames guardian set LockGuard","tames movement LockGuard close","tames tphome LockGuard")) {
+                check(dispatcher.execute(command,source)==0,"movement command explicitly rejects roster guard: "+command);
+                check(data.movementOrder==0&&!data.hasHome&&!data.closeMovement&&!guard.isOrderedToSit(),"guard unchanged immediately");
+            }
+            check(dispatcher.execute("tames sit all",source)==1,"bulk movement command still works");
+            check(data.movementOrder==0&&!guard.isOrderedToSit(),"bulk movement skips roster guard");
+            check(normal.movementOrder==1&&ordinary.isOrderedToSit(),"ordinary pet still accepts movement");
+            check(dispatcher.execute("tames movement all skeleton",source)==1,"bulk profile command works");
+            check(!data.skeletonMovement&&normal.skeletonMovement,"bulk profiles skip only roster guards");
+            check(dispatcher.execute("tames inventory autopickup true LockGuard",source)==1,"non-movement setting accepted");
+            check(data.hungerAutopickup,"inventory setting applied to bodyguard");
+            BodyguardService.refresh(helper.getLevel().getServer());
+            check(data.hungerAutopickup,"bodyguard maintenance preserves non-movement settings");
+            var drum=TameCommands.class.getDeclaredMethod("drumApplyMovementCommand",ServerPlayer.class,List.class,int.class);drum.setAccessible(true);
+            check((int)drum.invoke(null,owner,List.of(guard,ordinary),1)==1,"drum applies movement to ordinary tame only");
+            check(data.movementOrder==0&&!guard.isOrderedToSit(),"drum does not move roster guard");
+        } finally {
+            players(helper).remove(id);BodyguardService.roster(owner).bodyguards.clear();TameRegistry.removePlayerDuelStats(id);
+            guard.discard();ordinary.discard();TameRegistry.remove(data.uuid);TameRegistry.remove(normal.uuid);
+        }
+        helper.succeed();
+    }
     @SuppressWarnings("unchecked")
     @GameTest(template="empty")
     public static void missingOriginalRecoveryNeverCreatesDuplicate(GameTestHelper helper) throws Exception {

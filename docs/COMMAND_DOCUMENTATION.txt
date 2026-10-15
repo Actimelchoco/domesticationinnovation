@@ -233,21 +233,14 @@ PLAYER COMMAND SYNTAX
 /tames wander group <name>
 /tames wander type <name>
 /tames wander state <name>
-/tames offlineGuardian
-/tames offlineGuardian set <name>
-/tames offlineGuardian deploy
-/tames offlineGuardian deploy <name>
-
-Offline Guardian: set saves your current position as the named tame's post.
-Deploy without a name activates all saved offline guardians; named deploy activates one.
-Each player may save five. Setting a sixth removes the oldest assignment, keeping the tame.
-Updating an existing saved tame keeps its place in the list. Assignments survive restarts.
-Deployed guardians and their posts keep ticking while the owner is offline.
-Normal pet-bed respawn rules apply; respawned guardians return to their saved post offline too.
-Normal food requirements and combat modes remain in effect.
-Regular movement commands cancel deployment but retain the saved assignment.
-Stored tames and duel participants cannot deploy. Ownership transfer clears the assignment.
-The base command prints the rules and your saved guardians, oldest first.
+Offline guardian activity is automatic for ordinary guardian posts. With the owner
+offline, a living non-spectator player within 20 blocks of the saved post activates
+the guardian (twice Monster Hunter's 10-block detection radius). The radius is
+spherical and dimension-specific, with cached checks roughly every two seconds. Hungry guardians
+still rest. Guard posts do not force-load chunks; dormant guardians resume through a bounded queue when
+a nearby visitor loads the post. Large cold groups can take longer to wake.
+Chunk wake requests are asynchronous and capped at two per second globally. Old deployed offlineGuardian posts migrate to
+ordinary guardian posts. The offlineGuardian commands and five-tame quota are removed.
 
 /tames guardian deployGroup <setName> all
 /tames guardian deployGroup <setName> <name>
@@ -741,7 +734,7 @@ Artifacts Eternal Steak counts as meat and can feed any tame without being consu
 Animights equipment reserve:
 /tl inventory equipment <name> opens an owned, loaded Animight's 27-slot equipment reserve outside duels.
 Equipment name suggestions list only owned living Animights, and non-Animights are explicitly rejected.
-Ordinary guardians teleport to their TPHome destination and sit while their owner is offline, including after respawn. Their guard post is retained and they return when the owner reconnects and food or saturation is available. Explicitly deployed offlineGuardians continue guarding offline.
+Ordinary guardians rest at their TPHome destination while their owner is offline and no living non-spectator player is within 20 blocks of the saved post. Their post is retained; they resume when a player approaches the post or their owner reconnects, provided food or saturation is available. No persistent guard-post chunk tickets are used.
 Guardians with no food and no saturation walk toward their TPHome destination for up to 1200 game ticks (one minute), then teleport there if still away and sit. They return to the saved guard post after food or saturation becomes available, subject to the owner-online rule. Emergency home travel is free and does not require food. These temporary rest states survive saving and loading; manual movement commands cancel them.
 Armor at 10% remaining durability or less is removed and stored; armor endangered by the next hit is rescued before that hit.
 Sealed items from L2 Hostility and Dungeon Now Loading item scraps are retained, including scraps spawned by break protection.
@@ -1147,3 +1140,5 @@ BODYGUARD ROSTER
 Roster guards follow their owner; below 5 health they use close movement, reverting when the owner recovers. Unloaded living guards are recovered through their saved chunk and teleported to the owner; missing originals are never reconstructed by this recovery path. Stored guards are not recovered.
 If no edible food remains in the guard inventory and its own saturation is insufficient for an action, it consumes owner saturation at exactly 1 owner saturation = 1 tame food point (100 tame saturation units). Borrowing requires an online owner and sufficient saturation; it does not drain the owner's food level.
 One/two/three living roster guards receive +200%/+100%/+50% base healing speed respectively, including outside combat. These stack additively with pack healing. Full-health owners give their living roster guards +50% incoming XP. Healing and XP count as active bonus categories, and faster healing consumes saturation more often. Roster bonuses refresh every 60 ticks.
+
+Roster bodyguards ignore manual follow/sit/wander/guardian orders, movement profiles, home teleport and wander-lock commands, including group/type/all selectors and drum movement orders. Individual commands report the movement lock; bulk movement commands skip them. Inventory, attributes, abilities, groups, names and other non-movement settings remain editable. The earlier always-bodyguard combat-mode rule is retained; bodyguard setRange/remove and automatic hunger, close movement, respawn and duel handling still work.
