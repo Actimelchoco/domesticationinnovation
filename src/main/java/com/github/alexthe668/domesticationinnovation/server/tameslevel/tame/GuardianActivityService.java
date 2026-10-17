@@ -134,7 +134,9 @@ public final class GuardianActivityService {
         if (now < work.nextRestCheck) return data.guardianResting;
         work.nextRestCheck = now + CHECK_INTERVAL + Math.floorMod(data.uuid.hashCode(), 10);
         if (TameCommands.processGuardianMorningReturn(body, data)) return true;
-        return TameCommands.processGuardianRest(body, data);
+        boolean resting = TameCommands.processGuardianRest(body, data);
+        if (!resting) TameCommands.enforceGuardianCommandLock(body, data);
+        return resting;
     }
 
     /** At most two different guardians may start a rest/teleport transition per tick. */

@@ -266,11 +266,6 @@ ordinary guardian posts. The offlineGuardian commands and five-tame quota are re
 /tames guardian deployGroup <setName> type <name>
 /tames guardian deployGroup <setName> state <name>
 /tames guardian deploy <selection>
-/tames guardian clearDeploys all
-/tames guardian clearDeploys <name>
-/tames guardian clearDeploys group <name>
-/tames guardian clearDeploys type <name>
-/tames guardian clearDeploys state <name>
 /tames guardian addCurrentToGroup <setName>
 /tames guardian addToGroup <setName> <selection>
 /tames guardian manageGroup delete <setName>
@@ -813,7 +808,7 @@ FOLLOW, SIT AND WANDER
 ----------------------
 /tames follow|sit|wander [<name>|all|group <group>|type <type>|state <follow|wander|sit>]
 These are the main movement-state selectors for batch commands.
-Changing a tame to follow, sit, or wander clears its current guardian anchor.
+Assigned guardians ignore ordinary movement, mode, teleport, and drum commands. Release them explicitly to change their duty; inventory and abilities remain editable.
 Use /tames wander <name> lock [true|false] for modded tames that ignore normal follow/sit/wander state but should not auto-teleport back to the owner when unloaded.
 
 GUARDIAN
@@ -821,7 +816,8 @@ GUARDIAN
 /tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>
 /tames guardian deploy <selection>
 /tames guardian deployGroup <guardianGroup> <selection>
-/tames guardian clearDeploys <selection>
+/tames guardian release <selection> (home + sit)
+/tames release follow|tp|tphome|sit <selection>
 /tames guardian addCurrentToGroup <guardianGroup>
 /tames guardian addToGroup <guardianGroup> <tame selection>
 A guardian anchor is a return point. After combat, the tame paths back there.
@@ -830,7 +826,10 @@ At each Overworld dawn, guardians also return once to their saved guardian post.
 Morning returns use the shared limit of two guardian transitions per tick, cost no food, and retain pending work across saves. Unloaded guardians wait until naturally loaded; morning returns never load their source chunks. Hungry/resting guardians and offline guardians without nearby players retain the existing rest rules. Assigned bodyguards and active duel participants are excluded.
 'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.
 'deploy' activates the current guardian locations for the selected tames.
-deployGroup activates the saved locations from one guardian group; clearDeploys removes active guardian deployments from selected tames.
+deployGroup activates saved locations for unassigned tames. Release assigned guardians before redeployment. clearDeploys now directs you to the release commands.
+Release selections support owned tame names, all, group <name>, type <type>, state <state>, and comma-separated terms.
+Guardian release and release tphome send tames to their normal home and sit them; release tp teleports to the owner and follows; follow/sit change movement in place. No teleport food or XP is charged.
+Unloaded follow/sit releases are saved and applied on natural load; unloaded teleport releases use the existing original-entity lookup queue. Bodyguard rosters still use /tames bodyguard remove <name>.
 Guardian groups store per-tame guardian positions under a shared name.
 
 GUARDIANARROW

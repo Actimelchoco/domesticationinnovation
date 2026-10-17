@@ -87,6 +87,7 @@ public class TameData {
     public int previousHomeZ = 0;
     public int guardianReturnTicks = 0;
     public long guardianMorningReturnDay = Long.MIN_VALUE;
+    public int guardianReleaseMovementPending = -1;
     public boolean guardianRelaxing = false;
     public long guardianNextPhaseTick = 0L;
     public UUID guardianTargetUuid = null;
@@ -303,6 +304,7 @@ public class TameData {
         tag.putInt("previousHomeZ", previousHomeZ);
         tag.putInt("guardianReturnTicks", guardianReturnTicks);
         tag.putLong("guardianMorningReturnDay", guardianMorningReturnDay);
+        tag.putInt("guardianReleaseMovementPending", guardianReleaseMovementPending);
         tag.putBoolean("guardianRelaxing", guardianRelaxing);
         tag.putLong("guardianNextPhaseTick", guardianNextPhaseTick);
         if (guardianTargetUuid != null) {
@@ -535,6 +537,7 @@ public class TameData {
         data.previousHomeZ = tag.getInt("previousHomeZ");
         data.guardianReturnTicks = tag.getInt("guardianReturnTicks");
         data.guardianMorningReturnDay = tag.contains("guardianMorningReturnDay") ? tag.getLong("guardianMorningReturnDay") : Long.MIN_VALUE;
+        data.guardianReleaseMovementPending = tag.contains("guardianReleaseMovementPending") ? tag.getInt("guardianReleaseMovementPending") : -1;
         data.guardianRelaxing = tag.getBoolean("guardianRelaxing");
         data.guardianNextPhaseTick = tag.contains("guardianNextPhaseTick", Tag.TAG_LONG) ? tag.getLong("guardianNextPhaseTick") : 0L;
         data.guardianTargetUuid = tag.hasUUID("guardianTargetUuid") ? tag.getUUID("guardianTargetUuid") : null;

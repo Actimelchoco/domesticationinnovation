@@ -2356,6 +2356,7 @@ public class TameCommands {
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
 
                         .then(buildBodyguardCommand("bodyguard"))
+                        .then(buildGuardianReleaseCommand())
                         .then(buildPackCommand())
                         .then(buildOrganizedLeaderboardCommand())
                         .then(Commands.literal("_leaderboardOld")
@@ -2664,6 +2665,10 @@ public class TameCommands {
                                                         MovementOrder.WANDER
                                                 )))))
                         .then(Commands.literal("guardian")
+                                .then(Commands.literal("release")
+                                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                                .suggests((ctx, b) -> suggestGuardianReleaseSelection(ctx.getSource(), b))
+                                                .executes(ctx -> releaseGuardians(ctx.getSource(), "tphome", StringArgumentType.getString(ctx, "selection")))))
                                 .then(Commands.literal("tool")
                                         .requires(source -> false)
                                         .then(Commands.literal("confirm")
@@ -4709,6 +4714,118 @@ public class TameCommands {
         return Math.max(1, (int) Math.ceil(level / 20.0D));
     }
 
+    private static boolean isAssignedGuardian(TameData data) {
+        return data != null && data.hasHome && !data.rosterBodyguard;
+    }
+
+    private static boolean isManualMovementLocked(TameData data) {
+        return data != null && (data.rosterBodyguard || isAssignedGuardian(data));
+    }
+
+    private static String movementLockMessage(TameData data) {
+        return isAssignedGuardian(data)
+                ? "Guardian commands are locked. Use /tames guardian release <selection> or /tames release follow|tp|tphome|sit <selection>."
+                : "Bodyguard movement is automatic; remove it from the roster to change movement.";
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildGuardianReleaseCommand() {
+        var command = Commands.literal("release");
+        for (String action : List.of("follow", "tp", "tphome", "sit")) {
+            command.then(Commands.literal(action).then(Commands.argument("selection", StringArgumentType.greedyString())
+                    .suggests((ctx, b) -> suggestGuardianReleaseSelection(ctx.getSource(), b))
+                    .executes(ctx -> releaseGuardians(ctx.getSource(), action, StringArgumentType.getString(ctx, "selection")))));
+        }
+        return command;
+    }
+
+    private static CompletableFuture<Suggestions> suggestGuardianReleaseSelection(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) return b.buildFuture();
+        Set<String> options = new LinkedHashSet<>();
+        String remaining = b.getRemaining().toLowerCase(Locale.ROOT);
+        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
+            if (!isAssignedGuardian(data) || data.dead || data.stored) continue;
+            if (remaining.startsWith("group ")) { if (data.group != null && !data.group.isBlank()) options.add(data.group); }
+            else if (remaining.startsWith("type ")) { if (data.type != null && !data.type.isBlank()) options.add(data.type); }
+            else if (data.name != null) options.add(data.name);
+        }
+        if (remaining.startsWith("group ")) return SharedSuggestionProvider.suggest(options, b.createOffset(b.getStart() + 6));
+        if (remaining.startsWith("type ")) return SharedSuggestionProvider.suggest(options, b.createOffset(b.getStart() + 5));
+        if (remaining.startsWith("name ")) return SharedSuggestionProvider.suggest(options, b.createOffset(b.getStart() + 5));
+        options.addAll(List.of("all", "group", "type", "name"));
+        return SharedSuggestionProvider.suggest(options, b);
+    }
+
+    private static int releaseGuardians(CommandSourceStack source, String action, String raw) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) return 0;
+        Map<UUID, TameData> selected = new LinkedHashMap<>();
+        for (String term : raw.split(",")) {
+            String value = term.trim();
+            if (value.startsWith("\"") && value.endsWith("\"") && value.length() > 1) value = value.substring(1, value.length() - 1);
+            DuelSelection selector = parseCompactDuelSelector(value);
+            if (selector == null) continue;
+            for (TameData data : resolveOwnedTameDataSelection(owner.getUUID(), selector)) {
+                if (data == null || data.dead || data.stored || (selector.kind == DuelSelectionKind.ALL && isRemovedFromAll(owner.getUUID(), data))) continue;
+                selected.put(data.uuid, data);
+            }
+        }
+        int released = 0, skipped = 0;
+        for (TameData data : selected.values()) {
+            if (!isAssignedGuardian(data) || isDuelLocked(data)) { skipped++; continue; }
+            LivingEntity body = findLoadedOwnedLivingTameByIdentity(source, owner.getUUID(), data);
+            MovementOrder order = action.equals("sit") || action.equals("tphome") ? MovementOrder.SIT : MovementOrder.FOLLOW;
+            boolean teleport = action.equals("tp") || action.equals("tphome");
+            if (teleport) {
+                SpawnTarget destination = action.equals("tp")
+                        ? new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot())
+                        : resolveRespawnTarget(source, owner, data, false);
+                if (destination == null || destination.level == null || destination.pos == null) { skipped++; continue; }
+                if (body != null) {
+                    LivingEntity moved = transferGuardian(body, data, destination);
+                    if (moved == null) { skipped++; continue; }
+                    body = moved;
+                    clearPendingImmediateChunkTeleport(data);
+                } else {
+                    ResourceLocation originId = data.lastKnownDimension == null ? null : ResourceLocation.tryParse(data.lastKnownDimension);
+                    ServerLevel origin = originId == null ? null : source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, originId));
+                    if (origin == null) { skipped++; continue; }
+                    clearPendingImmediateChunkTeleport(data);
+                    var queued = queueImmediateChunkTeleport(origin, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ), data, destination, true, true);
+                    if (!queued.success) { skipped++; continue; }
+                }
+            } else clearPendingImmediateChunkTeleport(data);
+            clearGuardianAnchor(data);
+            if (data.tlId != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.tlId);
+            if (data.uuid != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.uuid);
+            data.guardianMorningReturnDay = Long.MIN_VALUE;
+            data.movementOrder = order == MovementOrder.SIT ? 1 : 0;
+            data.hungerForcedSit = false;
+            data.guardianReleaseMovementPending = body == null ? data.movementOrder : -1;
+            if (body != null) applyLivingMovementOverride(body, data, order);
+            released++;
+        }
+        if (released == 0) return error(owner, "No eligible guardians were released. Select your assigned guardians outside a duel.");
+        TameRegistry.markDirty();
+        owner.sendSystemMessage(Component.literal("Released " + released + " guardian(s): " + action + (skipped > 0 ? "; skipped " + skipped : "") + ".").withStyle(ChatFormatting.GREEN));
+        return released;
+    }
+
+    public static void applyPendingGuardianRelease(LivingEntity tame, TameData data) {
+        if (data.guardianReleaseMovementPending < 0 || isDuelLocked(data)) return;
+        int pending = data.guardianReleaseMovementPending;
+        data.guardianReleaseMovementPending = -1;
+        if (!data.hasHome && !data.rosterBodyguard) applyLivingMovementOverride(tame, data, pending == 1 ? MovementOrder.SIT : MovementOrder.FOLLOW);
+        TameRegistry.markDirty();
+    }
+
+    public static void enforceGuardianCommandLock(LivingEntity tame, TameData data) {
+        if (!isAssignedGuardian(data) || data.guardianResting || data.hungerForcedSit || isDuelLocked(data)) return;
+        boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit()
+                : tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
+        if (sitting || data.movementOrder != 3) applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+    }
+
     private static LiteralArgumentBuilder<CommandSourceStack> buildBodyguardCommand(String literal) {
         return Commands.literal(literal)
                 .executes(ctx -> bodyguardInfo(ctx.getSource(), true))
@@ -4753,6 +4870,7 @@ public class TameCommands {
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
         UUID id = data.ensureTlId();
         if (add) {
+            if (isAssignedGuardian(data)) return error(owner, movementLockMessage(data));
             if (roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
             if (roster.bodyguards.size() >= 3) return error(owner, "Maximum 3 bodyguards.");
             if (data.stored) return error(owner, "Unstore the tame before adding it.");
@@ -5552,14 +5670,16 @@ public class TameCommands {
                     "/tames guardian set <name|all|group <group>|type <type>|state <follow|wander|sit>>",
                     "/tames guardian deploy <selection>",
                     "/tames guardian deployGroup <guardianGroup> <selection>",
-                    "/tames guardian clearDeploys <selection>",
+                    "/tames guardian release <selection> (home + sit)",
+                    "/tames release follow|tp|tphome|sit <selection>",
                     "/tames guardian addCurrentToGroup <guardianGroup>",
                     "/tames guardian addToGroup <guardianGroup> <tame selection>",
                     "A guardian anchor is a return point. After combat, the tame paths back there.",
                     "If it still has not returned after about 60 seconds, it is teleported back.",
                     "'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.",
                     "'deploy' activates the current guardian locations for the selected tames.",
-                    "deployGroup activates the saved locations from one guardian group; clearDeploys removes active guardian deployments from selected tames.",
+                    "deployGroup activates saved locations. Release assigned guardians before changing their deployment.",
+                    "Assigned guardians ignore movement, mode, teleport and drum commands until explicitly released. Inventory and abilities remain editable.",
                     "Guardian groups store per-tame guardian positions under a shared name."
             );
         }
@@ -10246,6 +10366,7 @@ public class TameCommands {
             data.mode = TameMode.BODYGUARD.id();
             return;
         }
+        if (isAssignedGuardian(data)) return;
         data.mode = mode.id();
         if (mode == TameMode.BODYGUARD && bodyguardRange != null) {
             data.bodyguardRange = bodyguardRange;
@@ -10267,7 +10388,7 @@ public class TameCommands {
         ModeSpec spec = parseModeSpec(modeName);
         if (spec == null) return error(p, "Invalid mode.");
         TameMode mode = spec.mode();
-        if (d.rosterBodyguard) return error(p, "Roster bodyguards stay in bodyguard mode; use /tames bodyguard setRange or remove.");
+        if (isManualMovementLocked(d)) return error(p, movementLockMessage(d));
         applyModeSpec(d, mode, spec.bodyguardRange());
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Mode set to " + modeLabel(mode, d) + " for " + d.name + "."));
@@ -10282,6 +10403,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
+            if (isManualMovementLocked(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10301,6 +10423,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
+            if (isManualMovementLocked(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10320,6 +10443,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedTamesForAllCommands(p.getUUID())) {
+            if (isManualMovementLocked(d)) continue;
             LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (e == null || !e.isAlive()) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
@@ -10346,6 +10470,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, p.getUUID(), selectedState)) {
             TameData d = TameRegistry.get(tame.getUUID());
             if (d == null) continue;
+            if (isManualMovementLocked(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10361,7 +10486,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         String profile = parseMovementProfile(profileName);
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         applyMovementProfile(data, profile);
@@ -10376,7 +10501,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10391,7 +10516,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10406,7 +10531,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10425,7 +10550,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10438,7 +10563,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10451,7 +10576,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10464,7 +10589,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
         if (tame == null) return error(player, "Pet is not loaded.");
@@ -10479,7 +10604,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchor(player, tame, data);
@@ -10494,7 +10619,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchorWithoutRemember(player, tame, data);
@@ -10509,7 +10634,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
@@ -10526,7 +10651,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchor(player, tame, data);
@@ -10541,7 +10666,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive()) {
                 setGuardianAnchorWithoutRemember(player, tame, data);
@@ -10556,7 +10681,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             Entity entity = player.serverLevel().getEntity(data.uuid);
             if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
@@ -10577,7 +10702,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10593,7 +10718,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10625,7 +10750,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10639,7 +10764,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10689,7 +10814,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (data.horseType) return error(player, "Horse-type tames cannot use guardian mode.");
         String normalizedSet = normalizeGuardianSetName(setName);
         if (normalizedSet == null) return error(player, "Guardian set name cannot be blank.");
@@ -10892,7 +11017,7 @@ public class TameCommands {
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : members) {
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             if (data.dead) {
                 skippedDead++;
                 continue;
@@ -10944,33 +11069,7 @@ public class TameCommands {
     }
 
     private static int guardianClearDeploys(CommandSourceStack source, String selectionRaw) {
-        ServerPlayer player = source.getPlayer();
-        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
-        if (selected.isEmpty()) {
-            return error(player, "No living owned tames matched '" + selectionRaw + "'.");
-        }
-        int cleared = 0;
-        for (TameData data : selected) {
-            if (data == null || !data.hasHome) continue;
-            LivingEntity loaded = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
-            if (loaded != null && loaded.isAlive()) {
-                applyLivingMovementOverride(loaded, data, MovementOrder.FOLLOW);
-                if (loaded instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
-            } else {
-                clearGuardianAnchor(data);
-                data.movementOrder = 0;
-            }
-            if (data.tlId != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.tlId);
-            if (data.uuid != null) PENDING_GUARDIAN_RESPAWN_DEPLOYMENTS.remove(data.uuid);
-            cleared++;
-        }
-        if (cleared <= 0) {
-            return error(player, "None of the selected tames currently have Guardian deploys.");
-        }
-        TameRegistry.markDirty();
-        player.sendSystemMessage(Component.literal("Cleared current Guardian deploys for " + cleared + " tame(s); loaded tames now follow.")
-                .withStyle(ChatFormatting.GREEN));
-        return cleared;
+        return error(source.getPlayer(), "Use /tames guardian release <selection> or /tames release follow|tp|tphome|sit <selection> to release guardians.");
     }
 
     private static int guardianDeployCurrentGroup(CommandSourceStack source, String group) {
@@ -11016,7 +11115,7 @@ public class TameCommands {
         int crossDimension = 0;
 
         for (TameData data : requested) {
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             if (data == null || data.uuid == null) {
                 continue;
             }
@@ -11301,7 +11400,7 @@ public class TameCommands {
         for (TamableAnimal tame : selected) {
             if (tame == null || !tame.isAlive()) continue;
             TameData data = TameRegistry.get(tame.getUUID());
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyMovementOverride(tame, order);
             count++;
         }
@@ -11309,7 +11408,7 @@ public class TameCommands {
     }
 
     public static int drumCyclePlacedMode(ServerPlayer player, String selectorName) {
-        List<TameData> selected = drumSelectedTameData(player, selectorName);
+        List<TameData> selected = drumSelectedTameData(player, selectorName).stream().filter(data -> !isManualMovementLocked(data)).toList();
         if (selected.isEmpty()) {
             return 0;
         }
@@ -11322,6 +11421,7 @@ public class TameCommands {
             default -> TameMode.DEFAULT.id();
         };
         for (TameData data : selected) {
+            if (isManualMovementLocked(data)) continue;
             data.mode = nextModeId;
         }
         TameRegistry.markDirty();
@@ -11440,7 +11540,7 @@ public class TameCommands {
         String dimensionId = player.serverLevel().dimension().location().toString();
         for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
             TameData data = TameRegistry.get(tame.getUUID());
-            if (data == null) continue;
+            if (data == null || isManualMovementLocked(data)) continue;
             rememberCurrentGuardianAnchor(data);
             applyGuardianAnchor(dimensionId, pos.getX(), pos.getY(), pos.getZ(), tame, data);
             count++;
@@ -11455,6 +11555,7 @@ public class TameCommands {
         List<UUID> moved = new ArrayList<>();
         for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
             TameData data = TameRegistry.get(tame.getUUID());
+            if (isManualMovementLocked(data)) continue;
             if (data == null) continue;
             data.mode = TameMode.PASSIVE.id();
             tame.setOrderedToSit(false);
@@ -11475,6 +11576,7 @@ public class TameCommands {
     public static void drumFinalizePassiveSit(TamableAnimal tame) {
         if (tame == null) return;
         TameData data = TameRegistry.get(tame.getUUID());
+        if (isManualMovementLocked(data)) return;
         if (data != null) {
             data.mode = TameMode.PASSIVE.id();
         }
@@ -11506,6 +11608,7 @@ public class TameCommands {
         List<String> failedNames = new ArrayList<>();
 
         for (TameData data : requested) {
+            if (isManualMovementLocked(data)) continue;
             if (data == null || data.uuid == null || data.dead) continue;
             TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
             if (tame == null) {
@@ -11938,7 +12041,7 @@ public class TameCommands {
         }
         int count = 0;
         for (TameData data : selected) {
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             putGuardianSetAnchor(data, target.setName(), dimensionId, pos.getX(), pos.getY(), pos.getZ());
             count++;
         }
@@ -12079,6 +12182,7 @@ public class TameCommands {
         int crossDimension = 0;
         int skippedDuel = 0;
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -12109,6 +12213,7 @@ public class TameCommands {
             }
         }
         for (TameData d : queuedTargets) {
+            if (isManualMovementLocked(d)) continue;
             if (!consumeHungerForCommandTeleport(p, d, null)) {
                 queueFailed++;
                 failedQueueNames.add(tameDisplayName(d) + " (no food)");
@@ -12145,6 +12250,7 @@ public class TameCommands {
         int crossDimension = 0;
         int skippedDuel = 0;
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -12175,6 +12281,7 @@ public class TameCommands {
             }
         }
         for (TameData d : queuedTargets) {
+            if (isManualMovementLocked(d)) continue;
             if (!consumeHungerForCommandTeleport(p, d, null)) {
                 queueFailed++;
                 failedQueueNames.add(tameDisplayName(d) + " (no food)");
@@ -12215,7 +12322,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
-            if (d.rosterBodyguard) continue;
+            if (isManualMovementLocked(d)) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (tame == null || d.horseType) continue;
             if (isDuelLocked(d)) { skippedDuel++; continue; }
@@ -12232,7 +12339,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
-            if (d.rosterBodyguard) continue;
+            if (isManualMovementLocked(d)) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (tame == null || d.horseType) continue;
             if (isDuelLocked(d)) { skippedDuel++; continue; }
@@ -12253,7 +12360,7 @@ public class TameCommands {
         for (LivingEntity tame : selected) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             applyLivingMovementOverride(tame, data, targetOrder);
             changed++;
         }
@@ -12265,7 +12372,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTame(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
-        if (d.rosterBodyguard) return error(p, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(d)) return error(p, movementLockMessage(d));
         LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
         if (tame == null) return error(p, "Pet is not loaded.");
         if (d.horseType) return error(p, "Horse-type tames cannot use follow, wander, or sit commands.");
@@ -12279,7 +12386,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to change movement.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         data.wanderLock = enabled;
         TameRegistry.markDirty();
         String state = enabled ? "enabled" : "disabled";
@@ -12292,7 +12399,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData data : ownedTames(p.getUUID())) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
             if (tame == null || data.horseType || (nearbyOnly && tame.distanceToSqr(p) > 32.0D * 32.0D)) continue;
             if (isDuelLocked(data)) { skippedDuel++; continue; }
@@ -12309,7 +12416,7 @@ public class TameCommands {
         int count = 0;
         int skippedDuel = 0;
         for (TameData data : ownedTames(p.getUUID())) {
-            if (data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), data);
             if (tame == null || data.horseType) continue;
             if (isDuelLocked(data)) { skippedDuel++; continue; }
@@ -12325,6 +12432,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData d = findOwnedTameAny(p.getUUID(), pet);
         if (d == null) return error(p, "Pet not found.");
+        if (isManualMovementLocked(d)) return error(p, movementLockMessage(d));
         if (isDuelLocked(d)) return error(p, tameDisplayName(d) + " is in a duel. Use /tames dueltp.");
         if (d.stored) return error(p, tameDisplayName(d) + " is stored and can only be recovered with admin respawn.");
         if (d.dead || isDeadEntry(d.uuid)) return error(p, tameDisplayName(d) + " is dead and cannot be teleported.");
@@ -12391,6 +12499,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
         if (!data.hasHome) return error(player, data.name + " does not currently have a guardian location.");
@@ -12401,7 +12510,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTameAny(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (data.rosterBodyguard) return error(player, "Bodyguard movement is automatic; remove it from the roster to send it home.");
+        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
         if (isDuelLocked(data)) return error(player, tameDisplayName(data) + " is in a duel. Use /tames dueltp.");
         if (data.stored) return error(player, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (data.dead || isDeadEntry(data.uuid)) return error(player, tameDisplayName(data) + " is dead and cannot be teleported.");
@@ -12412,6 +12521,7 @@ public class TameCommands {
         ServerPlayer p = source.getPlayer();
         TameData data = findRecoverRequiredOwnedTame(p.getUUID(), pet);
         if (data == null) return error(p, "No failed auto-follow tame found with that name.");
+        if (isManualMovementLocked(data)) return error(p, movementLockMessage(data));
         if (data.stored) return error(p, tameDisplayName(data) + " is stored and can only be recovered with admin respawn.");
         if (isEffectivelyLoaded(source, p, data)) {
             return error(p, "Pet is already loaded/carried. Recover is only for lost/unloaded tames.");
@@ -12434,6 +12544,7 @@ public class TameCommands {
         int failed = 0;
         String firstFailure = null;
         for (TameData data : recoverable) {
+            if (isManualMovementLocked(data)) continue;
             if (data == null) {
                 continue;
             }
@@ -14221,6 +14332,7 @@ public class TameCommands {
         int crossDimension = 0;
         int skippedDuel = 0;
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -14251,6 +14363,7 @@ public class TameCommands {
             }
         }
         for (TameData d : queuedTargets) {
+            if (isManualMovementLocked(d)) continue;
             if (!consumeHungerForCommandTeleport(p, d, null)) {
                 queueFailed++;
                 failedQueueNames.add(tameDisplayName(d) + " (no food)");
@@ -14528,6 +14641,7 @@ public class TameCommands {
         int skippedDuel = 0;
 
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -14565,6 +14679,7 @@ public class TameCommands {
             }
         }
         for (TameData d : queuedTargets) {
+            if (isManualMovementLocked(d)) continue;
             if (!consumeHungerForCommandTeleport(p, d, null)) {
                 queueFailed++;
                 failedQueueNames.add(tameDisplayName(d) + " (no food)");
@@ -14580,6 +14695,7 @@ public class TameCommands {
         }
         int deadSkipped = 0;
         for (TameData d : ownedDeadTamesForAllCommands(p.getUUID())) {
+            if (isManualMovementLocked(d)) continue;
             if (matchesDimensionFilter(d, null, dimensionId)) {
                 deadSkipped++;
             }
@@ -14602,6 +14718,7 @@ public class TameCommands {
         List<TameData> teleportedData = new ArrayList<>();
 
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -14640,6 +14757,7 @@ public class TameCommands {
         List<TameData> teleportedData = new ArrayList<>();
 
         for (TameData data : requested) {
+            if (isManualMovementLocked(data)) continue;
             if (data == null || data.dead || isEffectivelyLoaded(source, player, data)) {
                 continue;
             }
@@ -14717,6 +14835,7 @@ public class TameCommands {
         int xpBudget = currentXpPoints(player);
 
         for (TameData data : requested) {
+            if (isManualMovementLocked(data)) continue;
             if (data == null || data.uuid == null || data.dead || !data.hasHome) {
                 continue;
             }
@@ -14767,6 +14886,7 @@ public class TameCommands {
             }
         }
         for (TameData data : unloadedTargets) {
+            if (isManualMovementLocked(data)) continue;
             if (!consumeHungerForCommandTeleport(player, data, null)) {
                 queueFailed++;
                 failedNames.add((data.name == null ? "unknown" : data.name) + " (no food)");
@@ -15518,7 +15638,7 @@ public class TameCommands {
         boolean movementChanged = false;
 
         for (TameData data : requested) {
-            if (data != null && data.rosterBodyguard) continue;
+            if (isManualMovementLocked(data)) continue;
             if (data == null || data.uuid == null) {
                 continue;
             }
@@ -15613,6 +15733,7 @@ public class TameCommands {
         int skippedUnloadedHorses = 0;
         List<String> failedNames = new ArrayList<>();
         for (TameData d : requested) {
+            if (isManualMovementLocked(d)) continue;
             if (d == null || d.dead) {
                 continue;
             }
@@ -15660,6 +15781,7 @@ public class TameCommands {
             }
         }
         for (TameData data : unloadedTargets) {
+            if (isManualMovementLocked(data)) continue;
             if (!consumeHungerForCommandTeleport(p, data, null)) {
                 failed++;
                 failedNames.add(tameDisplayName(data) + " (no food)");
@@ -21857,7 +21979,7 @@ public class TameCommands {
     }
 
     private static void applyMovementProfile(TameData data, String profile) {
-        if (data == null || data.rosterBodyguard) {
+        if (data == null || isManualMovementLocked(data)) {
             return;
         }
         data.skeletonMovement = "skeleton".equals(profile);
@@ -22348,6 +22470,10 @@ public class TameCommands {
         if (data == null) {
             return false;
         }
+        if (isAssignedGuardian(data)) {
+            enforceGuardianCommandLock(tame, data);
+            return false;
+        }
         MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
         if ((liveOrder == MovementOrder.FOLLOW || liveOrder == MovementOrder.WANDER) && isHungerBlockingAbilities(data)) {
             applyHungerForcedSit(tame, data);
@@ -22677,7 +22803,9 @@ public class TameCommands {
     }
 
     private static void applyGuardianAnchor(String dimensionId, int x, int y, int z, LivingEntity tame, TameData data) {
-        if (data.rosterBodyguard && !isDuelLocked(data)) return;
+        if (isManualMovementLocked(data) && !isDuelLocked(data)) return;
+        clearPendingImmediateChunkTeleport(data);
+        data.guardianReleaseMovementPending = -1;
         data.guardianResting = false;
         data.guardianHungerHomeDeadline = 0L;
         data.hasHome = true;
@@ -22700,9 +22828,11 @@ public class TameCommands {
     }
 
     private static boolean restorePreviousGuardianAnchor(LivingEntity tame, TameData data) {
-        if (tame == null || data == null || data.rosterBodyguard || !data.hasPreviousHome) {
+        if (tame == null || data == null || isManualMovementLocked(data) || !data.hasPreviousHome) {
             return false;
         }
+        clearPendingImmediateChunkTeleport(data);
+        data.guardianReleaseMovementPending = -1;
         boolean hadCurrent = data.hasHome;
         String currentDim = data.homeDimension;
         int currentX = data.homeX;
@@ -22831,6 +22961,7 @@ public class TameCommands {
 
     private static boolean deployLoadedTameToGuardianSet(TamableAnimal tame, TameData data, SpawnTarget target) {
         if (tame == null || data == null || target == null || target.level == null || target.pos == null) return false;
+        if (isManualMovementLocked(data)) return false;
         TameTransferService.TransferResult result = TameTransferService.transferToLocation(
                 tame,
                 target.level,

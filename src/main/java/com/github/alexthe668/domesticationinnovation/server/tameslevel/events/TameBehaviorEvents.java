@@ -88,6 +88,7 @@ public class TameBehaviorEvents {
         }
         if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
+        if (activeData.guardianReleaseMovementPending >= 0) TameCommands.applyPendingGuardianRelease(tame, activeData);
         if ((tame.tickCount + tame.getId()) % 10 == 0) LevelSystem.syncLevelArmor(tame, activeData);
         if ((tame.tickCount + tame.getId()) % 10 == 0) AnimightEquipmentEvents.maintain(tame, activeData);
         TameFoodManager.tick(tame, activeData);
@@ -385,6 +386,7 @@ public class TameBehaviorEvents {
         if (tame == null || data == null || !(tame.level() instanceof ServerLevel serverLevel)) {
             return;
         }
+        if (data.hasHome || data.rosterBodyguard) return;
         if (TameMode.byId(data.mode) != TameMode.BOSS) {
             return;
         }
