@@ -826,6 +826,8 @@ GUARDIAN
 /tames guardian addToGroup <guardianGroup> <tame selection>
 A guardian anchor is a return point. After combat, the tame paths back there.
 If it still has not returned after about 60 seconds, it is teleported back.
+At each Overworld dawn, guardians also return once to their saved guardian post. A living combat target or incoming-hit animation defers this return until the next idle maintenance check (normally about 2-2.5 seconds after combat ends).
+Morning returns use the shared limit of two guardian transitions per tick, cost no food, and retain pending work across saves. Unloaded guardians wait until naturally loaded; morning returns never load their source chunks. Hungry/resting guardians and offline guardians without nearby players retain the existing rest rules. Assigned bodyguards and active duel participants are excluded.
 'previous' restores the last guardian anchor. 'home' sets the current anchor without overwriting previous.
 'deploy' activates the current guardian locations for the selected tames.
 deployGroup activates the saved locations from one guardian group; clearDeploys removes active guardian deployments from selected tames.

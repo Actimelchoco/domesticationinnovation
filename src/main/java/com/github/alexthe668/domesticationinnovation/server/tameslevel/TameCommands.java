@@ -22686,6 +22686,7 @@ public class TameCommands {
         data.homeY = y;
         data.homeZ = z;
         data.guardianReturnTicks = 0;
+        data.guardianMorningReturnDay = Math.floorDiv(tame.getServer().overworld().getDayTime(), 24000L);
         data.guardianRelaxing = false;
         data.guardianNextPhaseTick = 0L;
         data.guardianTargetUuid = null;
@@ -22714,6 +22715,7 @@ public class TameCommands {
         data.homeY = data.previousHomeY;
         data.homeZ = data.previousHomeZ;
         data.guardianReturnTicks = 0;
+        data.guardianMorningReturnDay = Math.floorDiv(tame.getServer().overworld().getDayTime(), 24000L);
         data.guardianRelaxing = false;
         data.guardianNextPhaseTick = 0L;
         data.guardianTargetUuid = null;
@@ -23034,6 +23036,47 @@ public class TameCommands {
         }
         return TameTransferService.transferInterfaceToLocation(tame, destination.level, destination.pos.x,
                 destination.pos.y, destination.pos.z, tame.getYRot(), tame.getXRot(), data, true);
+    }
+
+    /** A pending dawn return survives combat and saves, but never overrides rest or duel rules. */
+    public static boolean processGuardianMorningReturn(LivingEntity tame, TameData data) {
+        if (tame == null || data == null || !tame.isAlive() || tame.getServer() == null || data.dead || data.stored
+                || data.rosterBodyguard || !data.hasHome || data.movementOrder != 3 || data.guardianResting
+                || isDuelLocked(data.uuid)) return false;
+        MinecraftServer server = tame.getServer();
+        long day = Math.floorDiv(server.overworld().getDayTime(), 24000L);
+        if (data.guardianMorningReturnDay == Long.MIN_VALUE || day < data.guardianMorningReturnDay) {
+            data.guardianMorningReturnDay = day;
+            TameRegistry.markDirty();
+            return false;
+        }
+        if (day <= data.guardianMorningReturnDay) return false;
+        if (tame.hurtTime > 0 || (tame instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != null
+                && mob.getTarget().isAlive() && mob.getTarget().level() == tame.level())) return false;
+        boolean ownerOnline = data.ownerUUID != null && server.getPlayerList().getPlayer(data.ownerUUID) != null;
+        if (!ownerOnline && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.hasNearbyPlayer(server, data)) return false;
+        if (data.hungerSaturation <= 0 && !hasEdibleStoredFood(tame, data)) return false;
+        SpawnTarget post = spawnTargetFromGuardianHome(server, data);
+        if (post == null || post.level == null || post.pos == null) return false;
+        if (tame.level() == post.level && tame.distanceToSqr(post.pos) <= 1.0D) {
+            data.guardianMorningReturnDay = day;
+            TameRegistry.markDirty();
+            return false;
+        }
+        if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(post.level, post.pos)
+                || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) return false;
+        LivingEntity moved = transferGuardian(tame, data, post);
+        if (moved == null) return false;
+        data.guardianMorningReturnDay = day;
+        data.guardianReturnTicks = 0;
+        data.guardianRelaxing = false;
+        data.guardianNextPhaseTick = 0L;
+        data.guardianTargetUuid = null;
+        data.guardianTargetStuckTicks = 0;
+        if (moved instanceof net.minecraft.world.entity.Mob mob) { mob.setTarget(null); mob.getNavigation().stop(); }
+        applyLivingMovementOverride(moved, data, MovementOrder.GUARDIAN);
+        TameRegistry.markDirty();
+        return true;
     }
 
     /** Suspends guarding without changing the saved post or charging food for emergency travel. */

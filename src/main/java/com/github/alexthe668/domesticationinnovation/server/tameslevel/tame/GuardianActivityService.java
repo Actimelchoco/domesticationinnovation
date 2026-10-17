@@ -133,6 +133,7 @@ public final class GuardianActivityService {
         int now = server.getTickCount();
         if (now < work.nextRestCheck) return data.guardianResting;
         work.nextRestCheck = now + CHECK_INTERVAL + Math.floorMod(data.uuid.hashCode(), 10);
+        if (TameCommands.processGuardianMorningReturn(body, data)) return true;
         return TameCommands.processGuardianRest(body, data);
     }
 
@@ -307,6 +308,7 @@ public final class GuardianActivityService {
         useServer(server);
         expireWakeTickets(server, false);
         int now = server.getTickCount();
+        long day = Math.floorDiv(server.overworld().getDayTime(), 24000L);
         long deadline = System.nanoTime() + MAINTENANCE_BUDGET_NANOS;
         int count = Math.min(WORK.size(), GuardianWorkBudget.MAX_RECORDS_PER_TICK);
         for (int i = 0; i < count && cursor != null && budget.tryInspect(now); i++) {
@@ -316,6 +318,17 @@ public final class GuardianActivityService {
             if (TameRegistry.get(data.uuid) != data || !data.hasHome) { forget(data); continue; }
             if (now < work.nextMaintenance) continue;
             work.nextMaintenance = now + CHECK_INTERVAL;
+            boolean guardian = !data.rosterBodyguard && (data.movementOrder == 3 || data.guardianResting);
+            if (guardian && (data.guardianMorningReturnDay == Long.MIN_VALUE || day < data.guardianMorningReturnDay)) {
+                data.guardianMorningReturnDay = day;
+                TameRegistry.markDirty();
+            }
+            if (guardian && !data.guardianResting && data.guardianMorningReturnDay < day
+                    && !data.dead && !data.stored && !TameDuelManager.isTameInDuel(data.uuid)) {
+                // An unloaded guardian retains its pending day; never load its source chunk for a morning return.
+                LivingEntity body = LoadedTameIndex.find(server, data.uuid, data.tlId);
+                if (body != null) processRestThrottled(body, data);
+            }
             if (data.tlId != null && REST_WALK_TICKETS.containsKey(data.tlId)) {
                 LivingEntity walker = LoadedTameIndex.find(server, data.uuid, data.tlId);
                 if (data.dead || data.stored || !data.guardianResting || walker == null || !walker.isAlive()
