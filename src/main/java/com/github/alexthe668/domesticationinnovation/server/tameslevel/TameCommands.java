@@ -816,8 +816,8 @@ public class TameCommands {
         private final UUID first;
         private final UUID second;
         private final long expiresAtMs;
-        private TeamSelection firstSelection;
-        private TeamSelection secondSelection;
+        private final SimpleDuelTeam firstTeam = new SimpleDuelTeam();
+        private final SimpleDuelTeam secondTeam = new SimpleDuelTeam();
         private boolean fundingFailed;
 
         private SimpleDuelPreparation(UUID first, UUID second, long expiresAtMs) {
@@ -830,18 +830,19 @@ public class TameCommands {
             return first.equals(player) ? second : first;
         }
 
-        private void setSelection(UUID player, TeamSelection selection) {
-            if (first.equals(player)) firstSelection = selection;
-            else if (second.equals(player)) secondSelection = selection;
-        }
-
-        private TeamSelection selection(UUID player) {
-            return first.equals(player) ? firstSelection : secondSelection;
+        private SimpleDuelTeam team(UUID player) {
+            return first.equals(player) ? firstTeam : secondTeam;
         }
 
         private boolean ready() {
-            return firstSelection != null && secondSelection != null;
+            return firstTeam.ready && secondTeam.ready;
         }
+    }
+
+    private static final class SimpleDuelTeam {
+        private final Set<UUID> tameIds = new LinkedHashSet<>();
+        private boolean includeSelf;
+        private boolean ready;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildHungerInventoryAutopickupCommand() {
@@ -920,10 +921,28 @@ public class TameCommands {
     private static LiteralArgumentBuilder<CommandSourceStack> buildOrganizedDuelCommand() {
         return Commands.literal("duel")
                 .then(Commands.literal("selection")
-                        .requires(TameCommands::isIdleDuelSource)
+                        .requires(source -> isIdleDuelSource(source) || isPreparingDuelSource(source))
+                        .executes(ctx -> simpleDuelShowSelection(ctx.getSource()))
                         .then(Commands.argument("spec", StringArgumentType.greedyString())
+                                .requires(TameCommands::isIdleDuelSource)
                                 .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                 .executes(ctx -> duelCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
+                .then(Commands.literal("start")
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .executes(ctx -> simpleDuelReady(ctx.getSource())))
+                .then(Commands.literal("add")
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
+                                .executes(ctx -> simpleDuelAdd(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
+                .then(Commands.literal("addMyself")
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .executes(ctx -> simpleDuelAdd(ctx.getSource(), "myself")))
+                .then(Commands.literal("remove")
+                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> suggestSimpleDuelRemoval(ctx.getSource(), b))
+                                .executes(ctx -> simpleDuelRemove(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                 .then(Commands.literal("invite")
                         .requires(TameCommands::isIdleDuelSource)
                         .then(Commands.argument("player", StringArgumentType.word())
@@ -989,10 +1008,10 @@ public class TameCommands {
                         .requires(TameCommands::hasSimpleDuelInviteSource)
                         .then(Commands.argument("inviteId", StringArgumentType.word())
                                 .executes(ctx -> simpleDuelDecline(ctx.getSource(), StringArgumentType.getString(ctx, "inviteId")))))
-                .then(Commands.argument("selection", StringArgumentType.greedyString())
+                .then(Commands.argument("teamSelection", StringArgumentType.greedyString())
                         .requires(TameCommands::isPreparingDuelSelectionSource)
                         .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                        .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "selection"))));
+                        .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "teamSelection"))));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildChestDrumSettingsCommand() {
@@ -5732,12 +5751,19 @@ public class TameCommands {
             sendInfoPage(p, "Duel Start",
                     "/tames duel selection <left selection> vs <right selection>",
                     "/tames duel invite <player>",
+                    "/tames duel add <selection>",
+                    "/tames duel remove <name|type <type>|group <group>|all|myself>",
+                    "/tames duel addMyself",
+                    "/tames duel selection",
+                    "/tames duel start",
                     "/tames duel <selection>",
                     "/tames duel nearby [radius]",
                     "/tames duel cancel",
                     "Selections support comma-separated tame names, groups, types, and movement states.",
                     "Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.",
-                    "After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20."
+                    "After accepting an invite, build your team with add/addMyself or nearby, and view it with selection. Each player confirms with start.",
+                    "Remove suggests only selected names, types and groups. Editing either team clears both ready confirmations.",
+                    "Nearby adds tames within radius 3 by default, capped at 20. /tames duel <selection> replaces your team. Selections expire after five minutes."
             );
         }
         else if (key.equals("duel accept")) {
@@ -25565,8 +25591,8 @@ public class TameCommands {
         SimpleDuelPreparation preparation = new SimpleDuelPreparation(challenger.getUUID(), opponent.getUUID(), System.currentTimeMillis() + SIMPLE_DUEL_WINDOW_MS);
         SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(challenger.getUUID(), preparation);
         SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(opponent.getUUID(), preparation);
-        challenger.sendSystemMessage(Component.literal(opponent.getName().getString() + " accepted. Select with /tames duel <selection> or /tames duel nearby [radius].").withStyle(ChatFormatting.GREEN));
-        opponent.sendSystemMessage(Component.literal("Accepted. Select with /tames duel <selection> or /tames duel nearby [radius].").withStyle(ChatFormatting.GREEN));
+        challenger.sendSystemMessage(Component.literal(opponent.getName().getString() + " accepted. Use /tames duel add <selection>, addMyself, or nearby [radius]. View with /tames duel selection, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
+        opponent.sendSystemMessage(Component.literal("Accepted. Use /tames duel add <selection>, addMyself, or nearby [radius]. View with /tames duel selection, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
         refreshDuelCommands(challenger, opponent);
         return 1;
     }
@@ -25585,6 +25611,14 @@ public class TameCommands {
     }
 
     private static int simpleDuelSelect(CommandSourceStack source, String rawSelection) {
+        return simpleDuelEdit(source, rawSelection, true);
+    }
+
+    private static int simpleDuelAdd(CommandSourceStack source, String rawSelection) {
+        return simpleDuelEdit(source, rawSelection, false);
+    }
+
+    private static int simpleDuelEdit(CommandSourceStack source, String rawSelection, boolean replace) {
         ServerPlayer player = source.getPlayer();
         SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
         if (preparation == null || preparation.expiresAtMs <= System.currentTimeMillis()) return error(player, "You are not preparing a duel.");
@@ -25595,28 +25629,135 @@ public class TameCommands {
         TeamSelectionResult resolved = resolveLoadedTeamSelection(source, player, parsed.selection);
         if (!resolved.error.isBlank()) return error(player, resolved.error);
         if (resolved.members.isEmpty()) return error(player, "Your duel selection has no loaded, living participants.");
-        preparation.setSelection(player.getUUID(), parsed.selection);
-        player.sendSystemMessage(Component.literal("Duel selection ready: " + teamSelectionLabel(parsed.selection) + ".").withStyle(ChatFormatting.GREEN));
+        return simpleDuelApplySelection(source, preparation, resolved, parsed.selection.includeSelf, replace);
+    }
+
+    private static int simpleDuelApplySelection(CommandSourceStack source, SimpleDuelPreparation preparation,
+                                               TeamSelectionResult resolved, boolean includeSelf, boolean replace) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelTeam team = preparation.team(player.getUUID());
+        Set<UUID> before = new LinkedHashSet<>(team.tameIds);
+        boolean hadSelf = team.includeSelf;
+        if (replace) { team.tameIds.clear(); team.includeSelf = false; }
+        team.includeSelf |= includeSelf;
+        for (LivingEntity tame : resolved.tames) team.tameIds.add(tame.getUUID());
+        if (hadSelf != team.includeSelf || !before.equals(team.tameIds)) simpleDuelSelectionChanged(source, preparation);
+        return simpleDuelShowSelection(source);
+    }
+
+    private static void simpleDuelSelectionChanged(CommandSourceStack source, SimpleDuelPreparation preparation) {
+        preparation.firstTeam.ready = false;
+        preparation.secondTeam.ready = false;
+        preparation.fundingFailed = false;
+        ServerPlayer player = source.getPlayer();
         ServerPlayer opponent = source.getServer().getPlayerList().getPlayer(preparation.opponent(player.getUUID()));
-        if (opponent != null) opponent.sendSystemMessage(Component.literal(player.getName().getString() + " has submitted a duel selection.").withStyle(ChatFormatting.GRAY));
+        if (opponent != null) opponent.sendSystemMessage(Component.literal(player.getName().getString() + " changed their duel selection. Both players must use /tames duel start when ready.").withStyle(ChatFormatting.GRAY));
+    }
+
+    private static int simpleDuelShowSelection(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null || !isPreparingDuelSource(source)) return error(player, "You are not preparing a duel. Invite a player first.");
+        SimpleDuelTeam team = preparation.team(player.getUUID());
+        player.sendSystemMessage(Component.literal("Your duel selection" + (team.ready ? " (ready)" : " (not ready)") + ":").withStyle(ChatFormatting.GOLD));
+        if (team.includeSelf) player.sendSystemMessage(Component.literal("- myself").withStyle(ChatFormatting.AQUA));
+        for (UUID id : team.tameIds) {
+            TameData data = TameRegistry.get(id);
+            String label = data == null ? id.toString() : data.name + " [" + data.type + "]" + (data.group == null || data.group.isBlank() ? "" : " group " + data.group);
+            player.sendSystemMessage(Component.literal("- " + label).withStyle(ChatFormatting.AQUA));
+        }
+        if (!team.includeSelf && team.tameIds.isEmpty()) player.sendSystemMessage(Component.literal("(empty)").withStyle(ChatFormatting.GRAY));
+        player.sendSystemMessage(Component.literal("Use /tames duel add <selection>, remove <selection>, addMyself, then start.").withStyle(ChatFormatting.GRAY));
+        return 1;
+    }
+
+    private static int simpleDuelRemove(CommandSourceStack source, String rawSelection) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null || !isPreparingDuelSelectionSource(source)) return error(player, "You are not preparing a duel.");
+        CompactDuelSideParseResult parsed = parseCompactDuelSide(source, player, rawSelection);
+        if (!parsed.error.isBlank() || !parsed.targetPlayerNames.isEmpty()) return error(player, "Use a selected tame name, type <type>, group <group>, all, or myself.");
+        SimpleDuelTeam team = preparation.team(player.getUUID());
+        Set<UUID> removed = new HashSet<>();
+        for (DuelSelection selector : parsed.selection.tameSelections) {
+            if (selector.kind == DuelSelectionKind.ALL) removed.addAll(team.tameIds);
+            else if (selector.kind == DuelSelectionKind.SINGLE) {
+                for (UUID id : team.tameIds) {
+                    TameData data = TameRegistry.get(id);
+                    if ((data != null && data.name != null && data.name.equalsIgnoreCase(selector.value)) || id.toString().equalsIgnoreCase(selector.value)) removed.add(id);
+                }
+            } else for (TameData data : resolveOwnedTameDataSelection(player.getUUID(), selector)) removed.add(data.uuid);
+        }
+        boolean changed = team.tameIds.removeAll(removed);
+        if (parsed.selection.includeSelf && team.includeSelf) { team.includeSelf = false; changed = true; }
+        if (!changed) return error(player, "That selection does not match anyone in your duel team.");
+        simpleDuelSelectionChanged(source, preparation);
+        return simpleDuelShowSelection(source);
+    }
+
+    private static CompletableFuture<Suggestions> suggestSimpleDuelRemoval(CommandSourceStack source, SuggestionsBuilder b) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = player == null ? null : SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null) return b.buildFuture();
+        SimpleDuelTeam team = preparation.team(player.getUUID());
+        Set<String> names = new LinkedHashSet<>(), types = new LinkedHashSet<>(), groups = new LinkedHashSet<>();
+        for (UUID id : team.tameIds) {
+            TameData data = TameRegistry.get(id);
+            names.add(data == null || data.name == null || data.name.isBlank() ? id.toString() : data.name);
+            if (data != null && data.type != null && !data.type.isBlank()) types.add(data.type);
+            if (data != null && data.group != null && !data.group.isBlank()) groups.add(data.group);
+        }
+        String remaining = b.getRemaining().toLowerCase(Locale.ROOT);
+        if (remaining.startsWith("type ")) return SharedSuggestionProvider.suggest(types, b.createOffset(b.getStart() + 5));
+        if (remaining.startsWith("group ")) return SharedSuggestionProvider.suggest(groups, b.createOffset(b.getStart() + 6));
+        if (remaining.startsWith("name ")) return SharedSuggestionProvider.suggest(names, b.createOffset(b.getStart() + 5));
+        if (!team.tameIds.isEmpty()) { names.add("all"); names.add("name"); }
+        if (!types.isEmpty()) names.add("type");
+        if (!groups.isEmpty()) names.add("group");
+        if (team.includeSelf) names.add("myself");
+        return SharedSuggestionProvider.suggest(names, b);
+    }
+
+    private static TeamSelectionResult resolveSimpleDuelTeam(CommandSourceStack source, ServerPlayer owner, SimpleDuelTeam team) {
+        List<LivingEntity> tames = new ArrayList<>(), members = new ArrayList<>();
+        if (team.includeSelf) {
+            if (!owner.isAlive()) return TeamSelectionResult.fail("You must be alive to duel as yourself.");
+            members.add(owner);
+        }
+        for (UUID id : team.tameIds) {
+            TameData data = TameRegistry.get(id);
+            if (data == null || !owner.getUUID().equals(data.ownerUUID) || isInactiveEntry(id)) return TeamSelectionResult.fail("A selected tame is no longer eligible. Remove it and try again.");
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner.getUUID(), data);
+            if (tame == null || !tame.isAlive()) return TeamSelectionResult.fail("Selected tame '" + data.name + "' is not loaded/alive. Load it or remove it.");
+            tames.add(tame); members.add(tame);
+        }
+        return members.isEmpty() ? TeamSelectionResult.fail("Your duel selection is empty.") : TeamSelectionResult.ok(members, tames);
+    }
+
+    private static int simpleDuelReady(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
+        if (preparation == null || !isPreparingDuelSelectionSource(source)) return error(player, "You are not preparing a duel.");
+        TeamSelectionResult team = resolveSimpleDuelTeam(source, player, preparation.team(player.getUUID()));
+        if (!team.error.isBlank()) return error(player, team.error);
+        preparation.team(player.getUUID()).ready = true;
+        if (!preparation.ready()) player.sendSystemMessage(Component.literal("Ready. Waiting for the other player to use /tames duel start.").withStyle(ChatFormatting.GREEN));
         return tryStartSimpleDuel(source, preparation);
     }
 
     private static int simpleDuelNearby(CommandSourceStack source, int radius) {
         ServerPlayer player = source.getPlayer();
-        List<DuelSelection> selections = new ArrayList<>();
+        List<LivingEntity> nearby = new ArrayList<>();
         for (TamableAnimal tame : player.level().getEntitiesOfClass(TamableAnimal.class, player.getBoundingBox().inflate(Mth.clamp(radius, 1, 20)))) {
             if (!tame.isAlive() || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) continue;
             TameData data = TameRegistry.get(tame.getUUID());
             if (data != null && data.horseType) continue;
-            selections.add(DuelSelection.single(data == null ? tame.getName().getString() : data.name));
+            if (data != null) nearby.add(tame);
         }
-        if (selections.isEmpty()) return error(player, "No eligible loaded tames found within " + radius + " blocks.");
+        if (nearby.isEmpty()) return error(player, "No eligible loaded tames found within " + radius + " blocks.");
         SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
         if (preparation == null) return error(player, "You are not preparing a duel.");
-        preparation.setSelection(player.getUUID(), TeamSelection.of(false, selections));
-        player.sendSystemMessage(Component.literal("Selected " + selections.size() + " nearby tame(s).").withStyle(ChatFormatting.GREEN));
-        return tryStartSimpleDuel(source, preparation);
+        return simpleDuelApplySelection(source, preparation, TeamSelectionResult.ok(nearby, nearby), false, false);
     }
 
     private static int tryStartSimpleDuel(CommandSourceStack source, SimpleDuelPreparation preparation) {
@@ -25624,8 +25765,8 @@ public class TameCommands {
         ServerPlayer first = source.getServer().getPlayerList().getPlayer(preparation.first);
         ServerPlayer second = source.getServer().getPlayerList().getPlayer(preparation.second);
         if (first == null || second == null) return simpleDuelStop(source, "Duel selection stopped because a player disconnected.");
-        TeamSelectionResult firstTeam = resolveLoadedTeamSelection(source, first, preparation.firstSelection);
-        TeamSelectionResult secondTeam = resolveLoadedTeamSelection(source, second, preparation.secondSelection);
+        TeamSelectionResult firstTeam = resolveSimpleDuelTeam(source, first, preparation.firstTeam);
+        TeamSelectionResult secondTeam = resolveSimpleDuelTeam(source, second, preparation.secondTeam);
         if (!firstTeam.error.isBlank()) return error(source.getPlayer(), firstTeam.error);
         if (!secondTeam.error.isBlank()) return error(source.getPlayer(), secondTeam.error);
         Set<UUID> firstIds = collectLivingEntityIds(firstTeam.members);

@@ -158,6 +158,11 @@ paths below in place of the former flat /tames settings <option> commands.
 /tames ranked leaderboard type <tameType> owned <limit>
 /tames ranked leaderboard type <tameType> owned all
 /tames duel selection <spec>
+/tames duel selection
+/tames duel add <selection>
+/tames duel remove <selection>
+/tames duel addMyself
+/tames duel start
 /tames duel invite <player>
 /tames duel leaderboard
 /tames duel leaderboard <limit>
@@ -1045,12 +1050,23 @@ DUEL START
 ----------
 /tames duel selection <left selection> vs <right selection>
 /tames duel invite <player>
+/tames duel add <selection>
+/tames duel remove <selected tame name | name <name> | type <type> | group <group> | all | myself>
+/tames duel addMyself
+/tames duel selection
+/tames duel start
 /tames duel <selection>
 /tames duel nearby [radius]
 /tames duel cancel
 Selections support comma-separated tame names, groups, types, and movement states.
 Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.
-After accepting an invite, both players have five minutes to submit a selection. Nearby defaults to radius 3 and is capped at 20.
+After accepting an invite, both players have five minutes to build their teams and each confirm with /tames duel start.
+Add adds loaded tames to the current team; addMyself includes the player. Repeated additions do not duplicate participants.
+Selection lists the current tame names, types and groups, plus the player if included. Remove suggestions show only selected names, types and groups.
+Removing a group/type affects only members already selected. Groups are expanded when added, so removing one member does not cause it to be added back.
+Either player's roster change clears both ready confirmations. Selection commands never automatically start an invited duel.
+Nearby adds nearby tames, defaults to radius 3 and is capped at 20. The legacy /tames duel <selection> replaces your current team.
+The direct compact /tames duel selection <left> vs <right> workflow remains available while idle.
 
 DUEL ACCEPT
 -----------
