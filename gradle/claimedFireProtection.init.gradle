@@ -28,12 +28,16 @@ allprojects {
                 originalAttributes = new java.util.jar.Manifest(input).mainAttributes.collectEntries { key, value -> [(key.toString()): value.toString()] }
             }
         } finally { archive.close() }
-        def configs = originalAttributes['MixinConfigs'] + ',ftbchunks-claim-fire.mixins.json'
+        def configs = ((originalAttributes['MixinConfigs'] ?: '').split(',').findAll { it } + ['ftbchunks-claim-fire.mixins.json', 'ftbchunks-claim-ice.mixins.json']).unique().join(',')
         tasks.register('claimedFireProtectionJar', Jar) {
             archiveFileName = 'ftb-chunks-forge-2001.3.8-no-claimed-fire.jar'
             destinationDirectory = project.layout.buildDirectory.dir('claimed-fire')
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
             from(sourceSets.claimedFireCompat.output)
             from(project.layout.buildDirectory.file('tmp/compileClaimedFireCompatJava/ftbchunks-claim-fire.refmap.json'))
+            from(project.layout.buildDirectory.file('tmp/compileClaimedFireCompatJava/ftbchunks-claim-fire.refmap.json')) {
+                rename { 'ftbchunks-claim-ice.refmap.json' }
+            }
             from(project.zipTree(chunkJar)) {
                 exclude 'META-INF/MANIFEST.MF', 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
                 includeEmptyDirs = false

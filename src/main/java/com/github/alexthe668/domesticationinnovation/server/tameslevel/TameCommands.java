@@ -146,6 +146,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import com.github.alexthe668.domesticationinnovation.server.misc.DIWorldData;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -2355,11 +2356,7 @@ public class TameCommands {
                                                         .executes(ctx -> hungerInventoryTaste(ctx.getSource(), StringArgumentType.getString(ctx, "type"), StringArgumentType.getString(ctx, "selection")))))))
 
                         .then(buildBodyguardCommand("bodyguard"))
-                        .then(buildBodyguardCommand("Bodyguard"))
-                        .then(Commands.literal("pack")
-                                .then(Commands.argument("name", StringArgumentType.string())
-                                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
-                                        .executes(ctx -> packStatus(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                        .then(buildPackCommand())
                         .then(buildOrganizedLeaderboardCommand())
                         .then(Commands.literal("_leaderboardOld")
                                 .requires(source -> false)
@@ -4816,6 +4813,84 @@ public class TameCommands {
         }
         if (body.level() != owner.level() || body.distanceToSqr(owner) > data.bodyguardRange * data.bodyguardRange)
             teleportLivingTameToPlayer(body,owner);
+    }
+
+    private static final Map<String, String> PACK_BONUS_HELP = createPackBonusHelp();
+
+    private static Map<String, String> createPackBonusHelp() {
+        Map<String, String> help = new LinkedHashMap<>();
+        help.put("lonely", "With no qualifying packmates: +50% damage and +200% base passive healing speed. These two bonus categories add +20% saturation consumption before other bonuses.");
+        help.put("smallPack", "Solo: +200% base passive healing speed; two total members: +100%; three: +50%; four or more: no size bonus. Adds to the same-species healing bonus. Faster healing spends saturation more often.");
+        help.put("sameSpecies", "Each same-species packmate adds +20 percentage points base healing speed; each different-species packmate subtracts 30, floored at zero. Small-pack healing adds afterward. Above 11 total same-species members, each extra member reduces base healing amount by 20 percentage points, down to zero.");
+        help.put("diversity", "Different-species packmates reduce ability cooldowns: 10% for the first, then 7.5%, then 5.625%, etc. Total reduction is 40% * (1 - 0.75^count), approaching 40%. Each different-type packmate counts, including duplicate types.");
+        help.put("levelDamage", "If the highest and lowest levels in the local pack differ by at most 10, gain +10% damage per packmate. The receiving tame counts when checking the level range.");
+        help.put("lowestLevelXp", "If the local pack's level range is at most 10, every tame tied for its lowest level gains +10% incoming XP per packmate. Stacks with daily and bodyguard XP.");
+        help.put("sameModDefense", "Each packmate of a different species from the same mod adds 5 percentage points damage reduction. Each packmate from another mod subtracts 30. Result is clamped to 0-30%; same-species members do not add defense.");
+        help.put("dailyXp", "Each qualifying Minecraft morning alive adds +10 percentage points incoming XP while the owner is online, or +5 offline, up to +100%. Dead/stored tames do not qualify. Death resets this bonus and the survival streak; skipped mornings are not awarded retroactively.");
+        help.put("bodyguard", "One/two/three living assigned bodyguards gain +200%/+100%/+50% base healing speed, including outside combat. A full-health owner gives them +50% incoming XP. These stack with pack bonuses; bodyguard checks refresh every 3 seconds.");
+        help.put("saturation", "Food saturation costs increase by 10% per active bonus category, plus the total incoming XP bonus. Daily XP, bodyguard XP and bodyguard healing each count separately. Example: 3 categories and +40% XP cost 1.70x saturation. Faster passive healing also spends saturation more often.");
+        help.put("deathPenalty", "Death clears daily pack XP and the survival streak. The second and each later non-duel death that Minecraft day also lowers the saved highest-level record by 1, never below the current level after its normal death penalty. Level-reward memory is retained.");
+        return Collections.unmodifiableMap(help);
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildPackCommand() {
+        return Commands.literal("pack")
+                .executes(ctx -> packSystemInfo(ctx.getSource(), null))
+                .then(Commands.literal("system")
+                        .executes(ctx -> packSystemInfo(ctx.getSource(), null))
+                        .then(Commands.literal("info")
+                                .executes(ctx -> packSystemInfo(ctx.getSource(), null))
+                                .then(Commands.argument("bonus", StringArgumentType.word())
+                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(PACK_BONUS_HELP.keySet(), b))
+                                        .executes(ctx -> packSystemInfo(ctx.getSource(), StringArgumentType.getString(ctx, "bonus"))))))
+                .then(Commands.literal("tameInfo")
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                .executes(ctx -> packTameInfo(ctx.getSource(), StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.argument("name", StringArgumentType.string())
+                        .suggests((ctx, b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                        .executes(ctx -> packStatus(ctx.getSource(), StringArgumentType.getString(ctx, "name"))));
+    }
+
+    private static int packSystemInfo(CommandSourceStack source, String bonus) {
+        if (bonus != null) {
+            String id = PACK_BONUS_HELP.keySet().stream().filter(k -> k.equalsIgnoreCase(bonus)).findFirst().orElse(null);
+            if (id == null) { source.sendFailure(Component.literal("Unknown pack bonus. Choose: " + String.join(", ", PACK_BONUS_HELP.keySet()))); return 0; }
+            source.sendSuccess(() -> Component.literal(id + ": " + PACK_BONUS_HELP.get(id)).withStyle(ChatFormatting.AQUA), false);
+            return 1;
+        }
+        source.sendSuccess(() -> Component.literal("Pack system").withStyle(ChatFormatting.GOLD), false);
+        source.sendSuccess(() -> Component.literal("Living, loaded, unstored tames qualify while fighting, with a 5-second grace period. Their owner must be online, in the same dimension and within 67 blocks. Duels do not qualify."), false);
+        source.sendSuccess(() -> Component.literal("Each tame counts its own qualifying packmates within 32 blocks, excluding itself. Bonuses refresh every 3 seconds and depend on pack size, species, mod and levels. Daily survival XP and assigned bodyguard bonuses can also apply outside combat."), false);
+        source.sendSuccess(() -> Component.literal("Small packs and matching species improve healing; different species reduce cooldowns. Similar levels boost damage and the lowest members' XP. Different species from the same mod can add defense."), false);
+        source.sendSuccess(() -> Component.literal("Bonuses increase food saturation costs. Use /tames pack tameInfo <name> for brief current boosts. Select a bonus below for its rules:"), false);
+        for (String id : PACK_BONUS_HELP.keySet()) source.sendSuccess(() -> Component.literal("- " + id).withStyle(style -> style.withColor(ChatFormatting.AQUA)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/tames pack system info " + id))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Explain " + id)))), false);
+        return 1;
+    }
+
+    private static String packTameBonusSummary(TameData data) {
+        var modifiers = TamePackService.modifiers(data);
+        List<String> boosts = new ArrayList<>();
+        double speed = (1 / modifiers.healingIntervalMultiplier() - 1) * 100;
+        if (speed > 0.001) boosts.add(String.format(Locale.ROOT, "Healing speed +%.1f%%", speed));
+        if (Math.abs(modifiers.healingAmount() - 1) > 0.00001) boosts.add(String.format(Locale.ROOT, "Healing amount %.1f%%", modifiers.healingAmount() * 100));
+        if (modifiers.cooldownMultiplier() < .99999) boosts.add(String.format(Locale.ROOT, "Cooldown -%.1f%%", (1 - modifiers.cooldownMultiplier()) * 100));
+        if (modifiers.damageMultiplier() > 1.00001) boosts.add(String.format(Locale.ROOT, "Damage +%.1f%%", (modifiers.damageMultiplier() - 1) * 100));
+        if (modifiers.incomingDamageMultiplier() < .99999) boosts.add(String.format(Locale.ROOT, "Damage reduction %.1f%%", (1 - modifiers.incomingDamageMultiplier()) * 100));
+        if (modifiers.xpBonus() > .00001) boosts.add(String.format(Locale.ROOT, "XP +%.1f%%", modifiers.xpBonus() * 100));
+        if (modifiers.saturationMultiplier() > 1.00001) boosts.add(String.format(Locale.ROOT, "Saturation use %.2fx", modifiers.saturationMultiplier()));
+        return boosts.isEmpty() ? "No active pack bonuses." : String.join("; ", boosts);
+    }
+
+    private static int packTameInfo(CommandSourceStack source, String name) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) return 0;
+        TameData data = findOwnedTame(player.getUUID(), name);
+        if (data == null) return error(player, "No owned tame found with that name.");
+        player.sendSystemMessage(Component.literal(data.name + ": " + packTameBonusSummary(data)).withStyle(ChatFormatting.AQUA));
+        return 1;
     }
 
     private static int packStatus(CommandSourceStack source, String name) {

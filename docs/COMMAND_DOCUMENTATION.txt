@@ -1158,11 +1158,20 @@ Saturation costs add +10% per active bonus category, plus the total incoming XP 
 
 Lonely bonus: a combat-eligible tame with zero qualifying packmates gains +50% damage, +200% base healing speed, and +20% saturation consumption. The normal owner distance, combat eligibility, grace period, and 3-second cached refresh apply. It replaces pack damage bonuses when alone; daily XP bonuses still apply. /tames pack <name> identifies the lonely bonus.
 
+/tames pack system
+/tames pack system info
+Both show how eligibility, range, refresh timing, bonuses and food costs work, with clickable bonus help.
+/tames pack system info <bonus>
+Explains one mechanic. Tab completion: lonely, smallPack, sameSpecies, diversity, levelDamage, lowestLevelXp, sameModDefense, dailyXp, bodyguard, saturation, deathPenalty.
+/tames pack tameInfo <name>
+One-line summary of the owned tame's active healing, cooldown, damage, defense and XP boosts, plus saturation cost. Uses cached effective values, including daily and bodyguard bonuses; no extra pack scans. Quote names containing spaces.
+/tames pack <name> retains the existing detailed roster and status output.
+
 SMALL PACK HEALING
 Solo combat-eligible tames gain +200% base healing speed; duos +100%; trios +50%. These add to the same-species healing bonus after its penalties are clamped. Four or more receive no small-pack size bonus. Faster passive healing performs more paid heals, consuming more saturation over time; full-health tames do not spend saturation on healing.
 
 BODYGUARD ROSTER
-/tames bodyguard (or /tames Bodyguard): system rules and roster.
+/tames bodyguard: system rules and roster.
 /tames bodyguard info: assigned guards, alive/dead status and range.
 /tames bodyguard add/remove <name>: maximum three assignments, including dead guards. The add command disappears at three; removing frees a slot. Guards retain assignment across respawns. Removal sends a living guard home and sits it, without teleport payment.
 /tames bodyguard setRange <1-22>: shared roster range. /tames mode <name> bodyguard <range> also accepts only 1-22, but roster guards use the shared command and cannot change out of bodyguard mode.
