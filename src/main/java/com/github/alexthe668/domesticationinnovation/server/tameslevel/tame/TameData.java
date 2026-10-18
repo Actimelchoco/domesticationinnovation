@@ -80,6 +80,7 @@ public class TameData {
     public int homeX = 0;
     public int homeY = 0;
     public int homeZ = 0;
+    public CompoundTag lastGuardianPost = new CompoundTag();
     public boolean hasPreviousHome = false;
     public String previousHomeDimension = "";
     public int previousHomeX = 0;
@@ -297,6 +298,7 @@ public class TameData {
         tag.putInt("homeX", homeX);
         tag.putInt("homeY", homeY);
         tag.putInt("homeZ", homeZ);
+        tag.put("lastGuardianPost", lastGuardianPost.copy());
         tag.putBoolean("hasPreviousHome", hasPreviousHome);
         tag.putString("previousHomeDimension", previousHomeDimension == null ? "" : previousHomeDimension);
         tag.putInt("previousHomeX", previousHomeX);
@@ -530,6 +532,7 @@ public class TameData {
         data.homeX = tag.getInt("homeX");
         data.homeY = tag.getInt("homeY");
         data.homeZ = tag.getInt("homeZ");
+        data.lastGuardianPost = tag.getCompound("lastGuardianPost").copy();
         data.hasPreviousHome = tag.getBoolean("hasPreviousHome");
         data.previousHomeDimension = tag.contains("previousHomeDimension", Tag.TAG_STRING) ? tag.getString("previousHomeDimension") : "";
         data.previousHomeX = tag.getInt("previousHomeX");

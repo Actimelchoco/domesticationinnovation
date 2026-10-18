@@ -15,6 +15,12 @@ import java.util.*;
 @GameTestHolder("domesticationinnovation")
 @PrefixGameTestTemplate(false)
 public class GuardianCommandRegression {
+    private static Set<String> suggestions(GameTestHelper helper,ServerPlayer owner,String command) {
+        var dispatcher=helper.getLevel().getServer().getCommands().getDispatcher();
+        Set<String> result=new HashSet<>();
+        dispatcher.getCompletionSuggestions(dispatcher.parse("tames "+command,owner.createCommandSourceStack())).join().getList().forEach(s->result.add(s.getText()));
+        return result;
+    }
     private static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
     @SuppressWarnings("unchecked")
     private static Map<UUID,ServerPlayer> players(GameTestHelper helper)throws Exception{
@@ -64,6 +70,9 @@ public class GuardianCommandRegression {
             check(data.hasHome&&data.movementOrder==3&&data.mode==mode&&!guard.isOrderedToSit(),"drums preserve guardian");
             guard.setOrderedToSit(true);TameCommands.enforceGuardianCommandLock(guard,data);
             check(!guard.isOrderedToSit()&&data.hasHome,"native sit is corrected without clearing anchor");
+            var commandable=(com.github.alexthe666.citadel.server.entity.IComandableMob)guard;
+            commandable.setCommand(2);TameCommands.enforceGuardianCommandLock(guard,data);
+            check(commandable.getCommand()==0&&data.hasHome,"native follow is corrected without clearing anchor");
             data.guardianResting=true;guard.setOrderedToSit(true);TameCommands.enforceGuardianCommandLock(guard,data);
             check(guard.isOrderedToSit()&&data.hasHome,"automatic rest remains allowed");data.guardianResting=false;
             check(run(helper,owner,"inventory autopickup true Locked")==1&&data.hungerAutopickup,"inventory remains editable");
@@ -119,5 +128,82 @@ public class GuardianCommandRegression {
             check(wolf.isOrderedToSit()&&data.movementOrder==1&&data.guardianReleaseMovementPending==-1,"natural load applies pending sit once");
             check(run(helper,owner,"follow Cold")==1&&!wolf.isOrderedToSit(),"ordinary commands work after release");
         }finally{clean(helper,owner,wolf);}helper.succeed();
+    }
+
+    @GameTest(template="empty",batch="guardian-command")
+    public static void roleColorsAndBodyguardSuggestionsMatchEligibility(GameTestHelper helper)throws Exception{
+        var owner=owner(helper);
+        Wolf guardian=wolf(helper,owner,"Post",true),bodyguard=wolf(helper,owner,"Escort",true),normal=wolf(helper,owner,"Available",true),stored=wolf(helper,owner,"Stored",true);
+        var g=TameRegistry.get(guardian.getUUID());var b=TameRegistry.get(bodyguard.getUUID());var n=TameRegistry.get(normal.getUUID());var s=TameRegistry.get(stored.getUUID());
+        b.hasHome=false;b.rosterBodyguard=true;b.movementOrder=0;n.hasHome=false;s.hasHome=false;s.stored=true;
+        BodyguardService.roster(owner).bodyguards.add(b.ensureTlId());
+        try{
+            check(suggestions(helper,owner,"bodyguard add ").equals(Set.of("Available")),"add suggests only eligible unassigned tames");
+            check(suggestions(helper,owner,"bodyguard remove ").equals(Set.of("Escort")),"remove suggests only roster members");
+            var color=TameCommands.class.getDeclaredMethod("statusColor",TameData.class,boolean.class);color.setAccessible(true);
+            var suffix=TameCommands.class.getDeclaredMethod("inactiveSuffix",TameData.class);suffix.setAccessible(true);
+            check(color.invoke(null,g,true)==net.minecraft.ChatFormatting.AQUA&&color.invoke(null,g,false)==net.minecraft.ChatFormatting.AQUA,"guardian color independent of load");
+            check(color.invoke(null,b,true)==net.minecraft.ChatFormatting.BLUE,"bodyguard has unique blue color");
+            check(suffix.invoke(null,g).equals(" [GUARDIAN]")&&suffix.invoke(null,b).equals(" [BODYGUARD]"),"role labels distinguish duty");
+            b.dead=true;check(color.invoke(null,b,true)==net.minecraft.ChatFormatting.GRAY&&suffix.invoke(null,b).toString().contains("BODYGUARD"),"dead status retains priority and role label");
+            check(suggestions(helper,owner,"bodyguard remove ").contains("Escort"),"dead roster slot can still be removed");
+            b.dead=false;
+            check(run(helper,owner,"guardian")==1,"bare guardian lists posts");
+            check(run(helper,owner,"bodyguard add Available")==1,"eligible suggested tame can be added");
+            check(!suggestions(helper,owner,"bodyguard add ").contains("Available"),"new member disappears from add");
+            check(suggestions(helper,owner,"bodyguard remove ").contains("Available"),"new member appears in remove");
+        }finally{BodyguardService.roster(owner).bodyguards.clear();clean(helper,owner,guardian,bodyguard,normal,stored);}helper.succeed();
+    }
+
+    @GameTest(template="empty",batch="guardian-command")
+    public static void releaseThenDeployRestoresSavedPostAcrossSave(GameTestHelper helper)throws Exception{
+        var owner=owner(helper);owner.giveExperiencePoints(1000);Wolf wolf=wolf(helper,owner,"Returning",true);var data=TameRegistry.get(wolf.getUUID());
+        int x=data.homeX,y=data.homeY,z=data.homeZ;
+        try{
+            check(run(helper,owner,"release tp Returning")==1&&!data.hasHome,"release clears active assignment");
+            check(data.lastGuardianPost.getInt("x")==x,"release remembers last guarding location");
+            data.lastGuardianPost=TameData.fromTag(data.toTag()).lastGuardianPost;
+            check(run(helper,owner,"guardian deploy Returning")==1,"deploy released guardian using saved post");
+            check(data.hasHome&&data.homeX==x&&data.homeY==y&&data.homeZ==z&&data.movementOrder==3,"deploy restores assignment and guarding");
+            check(wolf.distanceToSqr(x+.5,y,z+.5)<.01,"deploy teleports to last post");
+            check(run(helper,owner,"guardian deploy Returning")==0,"already assigned guardian cannot be moved by repeated deploy");
+        }finally{clean(helper,owner,wolf);}helper.succeed();
+    }
+
+    @GameTest(template="empty",batch="guardian-command")
+    public static void drumCombatOrdersSkipBothGuardRoles(GameTestHelper helper)throws Exception{
+        var owner=owner(helper);Wolf guard=wolf(helper,owner,"Post",true),escort=wolf(helper,owner,"Escort",true),normal=wolf(helper,owner,"Normal",true);
+        var data=TameRegistry.get(escort.getUUID());data.hasHome=false;data.rosterBodyguard=true;data.movementOrder=0;
+        TameRegistry.get(normal.getUUID()).hasHome=false;
+        var enemy=EntityType.ZOMBIE.create(helper.getLevel());
+        try{
+            check(TameCommands.drumSetTargets(owner,net.minecraft.world.item.ItemStack.EMPTY,enemy)==1,"only ordinary tame receives attack order");
+            check(guard.getTarget()==null&&escort.getTarget()==null&&normal.getTarget()==enemy,"combat target respects both roles");
+            guard.setTarget(enemy);escort.setTarget(enemy);
+            check(TameCommands.drumClearTargets(owner,net.minecraft.world.item.ItemStack.EMPTY)==1,"only ordinary tame receives clear-target order");
+            check(guard.getTarget()==enemy&&escort.getTarget()==enemy&&normal.getTarget()==null,"guard fights remain intact");
+        }finally{enemy.discard();clean(helper,owner,guard,escort,normal);}helper.succeed();
+    }
+
+    @SuppressWarnings("unchecked")
+    @GameTest(template="empty",batch="guardian-command")
+    public static void unloadedDeployRetainsDutyAfterOriginalEntityLookup(GameTestHelper helper)throws Exception{
+        var owner=owner(helper);owner.giveExperiencePoints(1000);Wolf wolf=wolf(helper,owner,"ColdPost",false);var data=TameRegistry.get(wolf.getUUID());
+        int x=data.homeX,y=data.homeY,z=data.homeZ;
+        try{
+            check(run(helper,owner,"release follow ColdPost")==1,"release cold guardian");
+            data.lastKnownDimension=helper.getLevel().dimension().location().toString();data.lastKnownX=x;data.lastKnownY=y;data.lastKnownZ=z;
+            check(run(helper,owner,"guardian deploy ColdPost")==1&&data.hasHome,"unloaded deployment queued and duty assigned");
+            var field=TameCommands.class.getDeclaredField("PENDING_IMMEDIATE_CHUNK_TELEPORTS");field.setAccessible(true);
+            Object pending=((Map<UUID,Object>)field.get(null)).get(data.tlId);
+            check(pending!=null,"deployment looks up original entity");
+            for(String name:List.of("nextAttemptTick","chunksReadyTick")){
+                var f=pending.getClass().getDeclaredField(name);f.setAccessible(true);f.setLong(pending,0L);
+            }
+            helper.getLevel().addFreshEntity(wolf);LoadedTameIndex.refresh(wolf);
+            var process=TameCommands.class.getDeclaredMethod("processPendingImmediateChunkTeleports",net.minecraft.server.MinecraftServer.class);process.setAccessible(true);process.invoke(null,helper.getLevel().getServer());
+            check(data.hasHome&&data.movementOrder==3&&wolf.distanceToSqr(x+.5,y,z+.5)<.01,"queued transfer preserves guarding post and order");
+            check(!TameCommands.hasPendingImmediateChunkTeleport(data),"completed deployment releases lookup");
+        }finally{TameCommands.cancelPendingImmediateChunkTeleport(helper.getLevel().getServer(),data);clean(helper,owner,wolf);}helper.succeed();
     }
 }

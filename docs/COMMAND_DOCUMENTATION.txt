@@ -1181,3 +1181,11 @@ If no edible food remains in the guard inventory and its own saturation is insuf
 One/two/three living roster guards receive +200%/+100%/+50% base healing speed respectively, including outside combat. These stack additively with pack healing. Full-health owners give their living roster guards +50% incoming XP. Healing and XP count as active bonus categories, and faster healing consumes saturation more often. Roster bonuses refresh every 60 ticks.
 
 Roster bodyguards ignore manual follow/sit/wander/guardian orders, movement profiles, home teleport and wander-lock commands, including group/type/all selectors and drum movement orders. Individual commands report the movement lock; bulk movement commands skip them. Inventory, attributes, abilities, groups, names and other non-movement settings remain editable. The earlier always-bodyguard combat-mode rule is retained; bodyguard setRange/remove and automatic hunger, close movement, respawn and duel handling still work.
+
+GUARD DUTY LISTING AND DEPLOYMENT
+-------------------------------
+/tames labels assigned guardians [GUARDIAN] in aqua and assigned bodyguards [BODYGUARD] in blue. Dead, stored and duel status colors retain priority; duty labels remain visible.
+/tames guardian lists current guardians with their post dimension and coordinates.
+/tames guardian deploy <selection> restores a released tame to its last guardian post and resumes guardian duty. The last post survives release and server restarts. Existing teleport payments apply. Already assigned guardians and bodyguards are skipped; release first to redeploy.
+/tames bodyguard add suggests only eligible owned tames outside guard duty and duels, excluding stored tames. remove suggests only assigned roster members outside duels, including dead members whose slots can be freed.
+Assigned guardians and bodyguards also ignore drum attack-target and clear-target orders. Inventory, feeding, abilities, attributes, groups and read-only reports remain available. Explicit releases, bodyguard removal, automatic rest/respawn, duel lifecycle and admin recovery keep their existing purpose.

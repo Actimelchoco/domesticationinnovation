@@ -392,6 +392,7 @@ public class TameCommands {
         private final boolean liveEntityOnly;
         private final boolean silent;
         private final boolean autoFollow;
+        private boolean guardianDeployment;
 
         private PendingImmediateChunkTeleport(UUID ticketId, UUID tameUuid, UUID tlId, UUID ownerUuid, ResourceKey<Level> sourceDimension, BlockPos sourcePos, SpawnTarget target, long createdTick, long nextAttemptTick, long chunksReadyTick, String tameName, boolean liveEntityOnly, boolean silent, boolean autoFollow) {
             this.ticketId = ticketId;
@@ -2665,6 +2666,7 @@ public class TameCommands {
                                                         MovementOrder.WANDER
                                                 )))))
                         .then(Commands.literal("guardian")
+                                .executes(ctx -> guardianList(ctx.getSource()))
                                 .then(Commands.literal("release")
                                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestGuardianReleaseSelection(ctx.getSource(), b))
@@ -4085,7 +4087,16 @@ public class TameCommands {
                 TameData liveData = pendingTeleportData(pending);
                 logRebuildTrace("pendingImmediateChunk.liveEntityFound", liveData,
                         "ticket=" + entry.getKey() + " sourceDim=" + pending.sourceDimension.location() + " liveDim=" + tame.level().dimension().location() + " targetDim=" + pending.target.level.dimension().location() + " targetPos=" + pending.target.pos);
-                teleportLivingTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
+                if (pending.guardianDeployment && liveData != null && isAssignedGuardian(liveData)) {
+                    LivingEntity deployed = transferGuardian(tame, liveData, pending.target);
+                    if (deployed == null) {
+                        releaseImmediateChunkTeleport(sourceLevel, pending);
+                        markRecoverRequired(liveData);
+                        finished.add(entry.getKey());
+                        continue;
+                    }
+                    applyLivingMovementOverride(deployed, liveData, MovementOrder.GUARDIAN);
+                } else teleportLivingTameToLocation(tame, pending.target, isAssignedBedTarget(liveData, pending.target));
                 resendTeleportedEntityToRelevantPlayers(server, pending.tameUuid, pending.tlId);
                 LivingEntity moved = TameEntityAdapter.findLoaded(server, pending.tameUuid, pending.tlId);
                 if (moved != null && liveData != null && liveData.movementOrder == 1) {
@@ -4718,6 +4729,32 @@ public class TameCommands {
         return data != null && data.hasHome && !data.rosterBodyguard;
     }
 
+    private static String dutySuffix(TameData data) {
+        if (data == null) return "";
+        return data.rosterBodyguard ? " [BODYGUARD]" : isAssignedGuardian(data) ? " [GUARDIAN]" : "";
+    }
+
+    private static CompletableFuture<Suggestions> suggestBodyguardCandidates(CommandSourceStack source, SuggestionsBuilder b, boolean add) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) return b.buildFuture();
+        var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
+        if (add && roster.bodyguards.size() >= 3) return b.buildFuture();
+        for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
+            if (isDuelLocked(data)) continue;
+            boolean member = data.tlId != null && roster.bodyguards.contains(data.tlId);
+            if (add ? !member && !isManualMovementLocked(data) && !data.stored : member) suggestCommandString(b, data.name);
+        }
+        return b.buildFuture();
+    }
+
+    private static void rememberLastGuardianPost(TameData data) {
+        if (data == null || !data.hasHome || data.homeDimension == null || data.homeDimension.isBlank()) return;
+        CompoundTag post = new CompoundTag();
+        post.putString("dimension", data.homeDimension);
+        post.putInt("x", data.homeX); post.putInt("y", data.homeY); post.putInt("z", data.homeZ);
+        data.lastGuardianPost = post;
+    }
+
     private static boolean isManualMovementLocked(TameData data) {
         return data != null && (data.rosterBodyguard || isAssignedGuardian(data));
     }
@@ -4756,22 +4793,27 @@ public class TameCommands {
         return SharedSuggestionProvider.suggest(options, b);
     }
 
-    private static int releaseGuardians(CommandSourceStack source, String action, String raw) {
-        ServerPlayer owner = source.getPlayer();
-        if (owner == null) return 0;
+    private static List<TameData> resolveGuardCommandSelection(UUID ownerId, String raw) {
         Map<UUID, TameData> selected = new LinkedHashMap<>();
         for (String term : raw.split(",")) {
             String value = term.trim();
             if (value.startsWith("\"") && value.endsWith("\"") && value.length() > 1) value = value.substring(1, value.length() - 1);
             DuelSelection selector = parseCompactDuelSelector(value);
             if (selector == null) continue;
-            for (TameData data : resolveOwnedTameDataSelection(owner.getUUID(), selector)) {
-                if (data == null || data.dead || data.stored || (selector.kind == DuelSelectionKind.ALL && isRemovedFromAll(owner.getUUID(), data))) continue;
+            for (TameData data : resolveOwnedTameDataSelection(ownerId, selector)) {
+                if (data == null || data.dead || data.stored || (selector.kind == DuelSelectionKind.ALL && isRemovedFromAll(ownerId, data))) continue;
                 selected.put(data.uuid, data);
             }
         }
+        return new ArrayList<>(selected.values());
+    }
+
+    private static int releaseGuardians(CommandSourceStack source, String action, String raw) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) return 0;
+        List<TameData> selected = resolveGuardCommandSelection(owner.getUUID(), raw);
         int released = 0, skipped = 0;
-        for (TameData data : selected.values()) {
+        for (TameData data : selected) {
             if (!isAssignedGuardian(data) || isDuelLocked(data)) { skipped++; continue; }
             LivingEntity body = findLoadedOwnedLivingTameByIdentity(source, owner.getUUID(), data);
             MovementOrder order = action.equals("sit") || action.equals("tphome") ? MovementOrder.SIT : MovementOrder.FOLLOW;
@@ -4823,7 +4865,12 @@ public class TameCommands {
         if (!isAssignedGuardian(data) || data.guardianResting || data.hungerForcedSit || isDuelLocked(data)) return;
         boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit()
                 : tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
-        if (sitting || data.movementOrder != 3) applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
+        boolean nativeChanged = false;
+        if (tame instanceof IComandableMob commandable) {
+            ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+            nativeChanged = !matchesSnapshotCommand(commandable.getCommand(), MovementOrder.GUARDIAN, key == null ? data.type : key.toString());
+        }
+        if (sitting || nativeChanged || data.movementOrder != 3) applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildBodyguardCommand(String literal) {
@@ -4833,10 +4880,10 @@ public class TameCommands {
                 .then(Commands.literal("add")
                         .requires(source -> source.getPlayer() != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(source.getPlayer()).bodyguards.size() < 3)
                         .then(Commands.argument("name", StringArgumentType.string())
-                                .suggests((ctx,b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                                .suggests((ctx,b) -> suggestBodyguardCandidates(ctx.getSource(), b, true))
                                 .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), true))))
                 .then(Commands.literal("remove").then(Commands.argument("name", StringArgumentType.string())
-                        .suggests((ctx,b) -> suggestOwnedPetNames(ctx.getSource(), b))
+                        .suggests((ctx,b) -> suggestBodyguardCandidates(ctx.getSource(), b, false))
                         .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), false))))
                 .then(Commands.literal("setRange").then(Commands.argument("range", IntegerArgumentType.integer(1,22))
                         .executes(ctx -> bodyguardRange(ctx.getSource(), IntegerArgumentType.getInteger(ctx,"range")))));
@@ -4871,9 +4918,11 @@ public class TameCommands {
         UUID id = data.ensureTlId();
         if (add) {
             if (isAssignedGuardian(data)) return error(owner, movementLockMessage(data));
-            if (roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
+            if (data.rosterBodyguard || roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
             if (roster.bodyguards.size() >= 3) return error(owner, "Maximum 3 bodyguards.");
             if (data.stored) return error(owner, "Unstore the tame before adding it.");
+            clearPendingImmediateChunkTeleport(data);
+            data.guardianReleaseMovementPending = -1;
             com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
             data.bodyguardPreviousClose = data.closeMovement;
             roster.bodyguards.add(id); data.rosterBodyguard = true;
@@ -10792,7 +10841,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         List<TameData> guardians = new ArrayList<>();
         for (TameData data : ownedTames(player.getUUID())) {
-            if (data != null && data.hasHome) {
+            if (isAssignedGuardian(data)) {
                 guardians.add(data);
             }
         }
@@ -10804,8 +10853,8 @@ public class TameCommands {
         for (TameData data : guardians) {
             String dimension = data.homeDimension == null || data.homeDimension.isBlank() ? "unknown" : data.homeDimension;
             player.sendSystemMessage(Component.literal(
-                    "[" + data.level + "] " + data.name + " @ " + dimension + " " + data.homeX + " " + data.homeY + " " + data.homeZ
-            ).withStyle(ChatFormatting.GRAY));
+                    "[" + data.level + "] " + data.name + " @ " + dimension + " " + data.homeX + " " + data.homeY + " " + data.homeZ + inactiveSuffix(data)
+            ).withStyle(statusColor(data, isLoadedAnywhere(source.getServer(), data.uuid))));
         }
         return 1;
     }
@@ -11061,7 +11110,7 @@ public class TameCommands {
 
     private static int guardianDeployCurrentSelection(CommandSourceStack source, String selectionRaw) {
         ServerPlayer player = source.getPlayer();
-        List<TameData> selected = resolveHungerSelection(source.getServer(), player.getUUID(), selectionRaw);
+        List<TameData> selected = resolveGuardCommandSelection(player.getUUID(), selectionRaw);
         if (selected.isEmpty()) {
             return error(player, "No living owned tames matched '" + selectionRaw + "'.");
         }
@@ -11099,87 +11148,53 @@ public class TameCommands {
     }
 
     private static int guardianDeployCurrent(CommandSourceStack source, ServerPlayer player, List<TameData> requested, String label) {
-        if (requested == null || requested.isEmpty()) {
-            return error(player, "No tames found for " + label + ".");
-        }
-
-        List<TamableAnimal> loadedTargets = new ArrayList<>();
-        List<SpawnTarget> loadedDestinations = new ArrayList<>();
-        List<TameData> unloadedTargets = new ArrayList<>();
-        List<SpawnTarget> unloadedDestinations = new ArrayList<>();
-        List<String> failedNames = new ArrayList<>();
-        int deadSkipped = 0;
-        int queueFailed = 0;
-        int queued = 0;
-        int cost = 0;
-        int crossDimension = 0;
-
+        if (requested == null || requested.isEmpty()) return error(player, "No tames found for " + label + ".");
+        int deployed = 0, queued = 0, skipped = 0;
+        String firstFailure = null;
         for (TameData data : requested) {
-            if (isManualMovementLocked(data)) continue;
-            if (data == null || data.uuid == null) {
-                continue;
+            if (data == null || data.uuid == null || data.dead || data.stored || data.horseType || isManualMovementLocked(data) || isDuelLocked(data)) { skipped++; continue; }
+            SpawnTarget target = spawnTargetFromGuardianSet(source, data.lastGuardianPost);
+            // Older saves kept a previous post but had no dedicated last-post field.
+            if (target == null && data.hasPreviousHome) {
+                CompoundTag previous = new CompoundTag();
+                previous.putString("dimension", data.previousHomeDimension);
+                previous.putInt("x", data.previousHomeX); previous.putInt("y", data.previousHomeY); previous.putInt("z", data.previousHomeZ);
+                target = spawnTargetFromGuardianSet(source, previous);
             }
-            if (data.dead) {
-                deadSkipped++;
-                continue;
-            }
-            SpawnTarget target = spawnTargetFromCurrentGuardian(source, data);
-            if (target == null || target.level == null || target.pos == null) {
-                queueFailed++;
-                failedNames.add((data.name == null ? "unknown" : data.name) + " (missing current guardian location)");
-                continue;
-            }
-            TamableAnimal tame = findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid);
-            if (tame == null) {
-                String queueError = validateUnloadedHomeTeleport(source, player, data, target);
-                if (queueError != null && (data.entitySnapshot == null || data.entitySnapshot.isEmpty())) {
-                    queueFailed++;
-                    failedNames.add((data.name == null ? "unknown" : data.name) + " (" + queueError + ")");
-                    continue;
-                }
-                unloadedTargets.add(data);
-                unloadedDestinations.add(target);
-                boolean cross = data.lastKnownDimension != null
-                        && !data.lastKnownDimension.isBlank()
-                        && !target.level.dimension().location().toString().equals(data.lastKnownDimension);
-                cost += teleportCostFor(data, cross);
-                if (cross) {
-                    crossDimension++;
-                }
-                continue;
-            }
-            boolean cross = !tame.level().dimension().equals(target.level.dimension());
-            loadedTargets.add(tame);
-            loadedDestinations.add(target);
-            cost += teleportCostFor(data, cross);
-            if (cross) {
-                crossDimension++;
-            }
-        }
-
-        if (loadedTargets.isEmpty() && unloadedTargets.isEmpty()) {
-            return error(player, "No current guardian locations available for " + label + ".");
-        }
-        TeleportPaymentResult payment = payTeleportXp(player, cost, loadedTargets.size() + unloadedTargets.size());
-        if (!payment.success) return error(player, payment.error);
-        for (int i = 0; i < loadedTargets.size(); i++) {
-            deployLoadedTameToGuardianCurrent(loadedTargets.get(i), loadedDestinations.get(i));
-        }
-        for (int i = 0; i < unloadedTargets.size(); i++) {
-            UnloadedTpResult unloaded = tpUnloadedHomeViaLanternOrRecover(source, player, unloadedTargets.get(i), unloadedDestinations.get(i));
-            if (unloaded.success) {
-                queued++;
+            if (target == null) { skipped++; continue; }
+            LivingEntity body = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (body != null) {
+                TeleportPaymentResult payment = payTeleportXp(player, teleportCostFor(data, !body.level().dimension().equals(target.level.dimension())), 1);
+                if (!payment.success) { firstFailure = payment.error; skipped++; continue; }
+                LivingEntity moved = transferGuardian(body, data, target);
+                if (moved == null) { skipped++; continue; }
+                applyGuardianAnchor(target.level.dimension().location().toString(), Mth.floor(target.pos.x), Mth.floor(target.pos.y), Mth.floor(target.pos.z), moved, data);
+                deployed++;
             } else {
-                queueFailed++;
-                failedNames.add((unloadedTargets.get(i).name == null ? "unknown" : unloadedTargets.get(i).name) + " (" + unloaded.error + ")");
+                ResourceLocation originId = data.lastKnownDimension == null ? null : ResourceLocation.tryParse(data.lastKnownDimension);
+                ServerLevel origin = originId == null ? null : source.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, originId));
+                if (origin == null) { skipped++; continue; }
+                TeleportPaymentResult payment = payTeleportXp(player, teleportCostFor(data, !origin.dimension().equals(target.level.dimension())), 1);
+                if (!payment.success) { firstFailure = payment.error; skipped++; continue; }
+                cancelPendingImmediateChunkTeleport(source.getServer(), data);
+                UnloadedTpResult result = queueImmediateChunkTeleport(origin, new BlockPos(data.lastKnownX, data.lastKnownY, data.lastKnownZ), data, target, true, false);
+                if (!result.success) { skipped++; continue; }
+                PendingImmediateChunkTeleport pending = PENDING_IMMEDIATE_CHUNK_TELEPORTS.get(data.tlId != null ? data.tlId : data.uuid);
+                pending.guardianDeployment = true;
+                data.hasHome = true; data.homeDimension = target.level.dimension().location().toString();
+                data.homeX = Mth.floor(target.pos.x); data.homeY = Mth.floor(target.pos.y); data.homeZ = Mth.floor(target.pos.z);
+                data.movementOrder = 3; data.guardianResting = false; data.hungerForcedSit = false;
+                data.guardianReleaseMovementPending = -1;
+                data.guardianMorningReturnDay = Math.floorDiv(source.getServer().overworld().getDayTime(), 24000L);
+                rememberLastGuardianPost(data);
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
+                queued++;
             }
         }
-
-        sendTeleportNames(player, loadedTargets, unloadedTargets);
-        if (!failedNames.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Guardian deploy failures: " + String.join("; ", failedNames)).withStyle(ChatFormatting.RED));
-        }
-        return 1;
+        if (deployed + queued == 0) return error(player, firstFailure != null ? firstFailure : "No eligible released tames have a saved guardian post. Assigned guardians/bodyguards, stored, dead and dueling tames are skipped.");
+        TameRegistry.markDirty();
+        player.sendSystemMessage(Component.literal("Guardian deploy: " + deployed + " deployed, " + queued + " queued" + (skipped > 0 ? ", " + skipped + " skipped" : "") + ".").withStyle(ChatFormatting.AQUA));
+        return deployed + queued;
     }
 
     private static int guardianSetInfo(CommandSourceStack source, String setName) {
@@ -11482,6 +11497,7 @@ public class TameCommands {
     public static int drumClearTargets(ServerPlayer player, ItemStack drum) {
         int count = 0;
         for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            if (isManualMovementLocked(TameRegistry.get(tame.getUUID()))) continue;
             tame.setTarget(null);
             count++;
         }
@@ -11494,6 +11510,7 @@ public class TameCommands {
     public static int drumSetTargets(ServerPlayer player, ItemStack drum, LivingEntity target) {
         int count = 0;
         for (TamableAnimal tame : drumSelectedLoadedTames(player, drum)) {
+            if (isManualMovementLocked(TameRegistry.get(tame.getUUID()))) continue;
             if (tame == target) continue;
             tame.setTarget(target);
             count++;
@@ -15401,7 +15418,7 @@ public class TameCommands {
     }
 
     private static void clearPendingImmediateChunkTeleport(TameData data) {
-        cancelPendingImmediateChunkTeleport(null, data);
+        cancelPendingImmediateChunkTeleport(net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer(), data);
     }
 
     public static void cancelPendingImmediateChunkTeleport(MinecraftServer server, TameData data) {
@@ -22436,6 +22453,11 @@ public class TameCommands {
         tame.setTarget(null);
         tame.getNavigation().stop();
         if (tame instanceof IComandableMob commandableMob) {
+            // A stale native sit flag otherwise masks every command candidate as SIT.
+            if (order != MovementOrder.SIT) {
+                tame.setOrderedToSit(false);
+                tame.setInSittingPose(false);
+            }
             syncCommandableMovementState(tame, commandableMob, order);
             MovementOrder liveOrder = currentLiveMovementOrder(tame, data);
             boolean sit = liveOrder == MovementOrder.SIT;
@@ -22820,6 +22842,7 @@ public class TameCommands {
         data.guardianTargetUuid = null;
         data.guardianTargetStuckTicks = 0;
         data.guardianTargetBestDistanceSq = 0.0D;
+        rememberLastGuardianPost(data);
         applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
         cacheGuardianRestHome(tame, data);
@@ -22865,6 +22888,7 @@ public class TameCommands {
             data.previousHomeY = 0;
             data.previousHomeZ = 0;
         }
+        rememberLastGuardianPost(data);
         applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
         if (tame instanceof TamableAnimal tamable) refreshRegistrySnapshotFor(tamable);
@@ -22887,6 +22911,7 @@ public class TameCommands {
         if (data == null || !data.hasHome) {
             return;
         }
+        rememberLastGuardianPost(data);
         data.hasHome = false;
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.forget(data);
         data.guardianResting = false;
@@ -29436,15 +29461,15 @@ public class TameCommands {
             return "";
         }
         if (isDuelLocked(data)) {
-            return " [DUEL]";
+            return dutySuffix(data) + " [DUEL]";
         }
         if (data.stored) {
-            return " [STORED]";
+            return dutySuffix(data) + " [STORED]";
         }
         if (data.dead) {
-            return " [DEAD]";
+            return dutySuffix(data) + " [DEAD]";
         }
-        return "";
+        return dutySuffix(data);
     }
 
     private static String statusLabel(TameData data, MinecraftServer server) {
@@ -29478,6 +29503,8 @@ public class TameCommands {
         if (data.dead) {
             return ChatFormatting.GRAY;
         }
+        if (data.rosterBodyguard) return ChatFormatting.BLUE;
+        if (isAssignedGuardian(data)) return ChatFormatting.AQUA;
         return loaded ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
     }
 
