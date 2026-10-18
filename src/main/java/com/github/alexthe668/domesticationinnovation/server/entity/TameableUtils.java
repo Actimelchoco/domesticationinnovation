@@ -259,19 +259,9 @@ public class TameableUtils {
     private static void onUpdateEnchants(@Nullable Map<ResourceLocation, Integer> prevEnchants, LivingEntity enchanted) {
         int healthExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.HEALTH_BOOST);
         int speedExtra = getEnchantLevel(enchanted, DIEnchantmentRegistry.SPEEDSTER);
-        int protectionLevel = hasCollar(enchanted) ? getEnchantLevel(enchanted, net.minecraft.world.item.enchantment.Enchantments.ALL_DAMAGE_PROTECTION) : 0;
-        float collarArmor = 0.0F;
-        float collarArmorToughness = 0.0F;
-        if (hasCollar(enchanted)) {
-            float[] mapped = mapProtectionToArmorStats(protectionLevel);
-            collarArmor = mapped[0];
-            collarArmorToughness = mapped[1];
-        }
         boolean amphib = hasEnchant(enchanted, DIEnchantmentRegistry.AMPHIBIOUS) && !enchanted.isInWaterOrBubble() && isWaterCreature(enchanted);
         AttributeInstance health = enchanted.getAttribute(Attributes.MAX_HEALTH);
         AttributeInstance speed = enchanted.getAttribute(Attributes.MOVEMENT_SPEED);
-        AttributeInstance armor = enchanted.getAttribute(Attributes.ARMOR);
-        AttributeInstance armorToughness = enchanted.getAttribute(Attributes.ARMOR_TOUGHNESS);
         if (hasEnchant(enchanted, DIEnchantmentRegistry.IMMATURITY_CURSE) || prevEnchants != null && prevEnchants.keySet().contains(ForgeRegistries.ENCHANTMENTS.getKey(DIEnchantmentRegistry.IMMATURITY_CURSE))) {
             //change pose to update client
             enchanted.setPose(Pose.FALL_FLYING);
@@ -314,32 +304,24 @@ public class TameableUtils {
                 speed.removePermanentModifier(SPEED_BOOST_AQUATIC_LAND_UUID);
             }
         }
-        if (armor != null) {
-            if (collarArmor > 0.0F) {
-                AttributeModifier armorModifier = new AttributeModifier(COLLAR_ARMOR_UUID, "collar tag armor bonus", collarArmor, AttributeModifier.Operation.ADDITION);
-                if (armor.hasModifier(armorModifier)) {
-                    armor.removeModifier(armorModifier);
-                    armor.addPermanentModifier(armorModifier);
-                } else {
-                    armor.addPermanentModifier(armorModifier);
-                }
-            } else {
-                armor.removePermanentModifier(COLLAR_ARMOR_UUID);
-            }
-        }
-        if (armorToughness != null) {
-            if (collarArmorToughness > 0.0F) {
-                AttributeModifier toughnessModifier = new AttributeModifier(COLLAR_ARMOR_TOUGHNESS_UUID, "collar tag armor toughness bonus", collarArmorToughness, AttributeModifier.Operation.ADDITION);
-                if (armorToughness.hasModifier(toughnessModifier)) {
-                    armorToughness.removeModifier(toughnessModifier);
-                    armorToughness.addPermanentModifier(toughnessModifier);
-                } else {
-                    armorToughness.addPermanentModifier(toughnessModifier);
-                }
-            } else {
-                armorToughness.removePermanentModifier(COLLAR_ARMOR_TOUGHNESS_UUID);
-            }
-        }
+        refreshCollarDefense(enchanted);
+    }
+
+    /** Scale only base + permanent stat bonuses; worn equipment is not multiplied. */
+    public static void refreshCollarDefense(LivingEntity tame) {
+        if (tame == null || tame.level().isClientSide) return;
+        int tier = hasCollar(tame) ? Math.max(1, getEnchantLevel(tame, net.minecraft.world.item.enchantment.Enchantments.ALL_DAMAGE_PROTECTION)) : 1;
+        updateCollarDefense(tame.getAttribute(Attributes.ARMOR), COLLAR_ARMOR_UUID, tier, "collar armor multiplier");
+        updateCollarDefense(tame.getAttribute(Attributes.ARMOR_TOUGHNESS), COLLAR_ARMOR_TOUGHNESS_UUID, tier, "collar toughness multiplier");
+    }
+
+    private static void updateCollarDefense(AttributeInstance attribute, UUID id, int tier, String name) {
+        if (attribute == null) return;
+        double amount = Math.max(0.0D, attribute.getBaseValue()) * (tier - 1);
+        AttributeModifier existing = attribute.getModifier(id);
+        if (existing != null && existing.getOperation() == AttributeModifier.Operation.ADDITION && existing.getAmount() == amount) return;
+        if (existing != null) attribute.removeModifier(id);
+        if (amount > 0) attribute.addPermanentModifier(new AttributeModifier(id, name, amount, AttributeModifier.Operation.ADDITION));
     }
 
     /** Recomputes collar-owned attributes after migrating away from collar armor points. */
@@ -347,16 +329,6 @@ public class TameableUtils {
         if (tame != null && !tame.level().isClientSide) {
             onUpdateEnchants(null, tame);
         }
-    }
-
-    public static float collarProtectionReduction(int level) {
-        return Mth.clamp(level, 0, 12) * (0.67F / 12.0F);
-    }
-
-    private static float[] mapProtectionToArmorStats(int protectionLevel) {
-        // Every collar supplies its flat base armor. Protection remains a separate
-        // post-armor damage reduction and does not add armor toughness.
-        return new float[]{5.0F, 0.0F};
     }
 
     private static boolean isWaterCreature(LivingEntity enchanted) {
@@ -521,7 +493,7 @@ public class TameableUtils {
 
     public static void addEnchant(LivingEntity entity, EnchantmentInstance enchantment) {
         ListTag listtag = getEnchantmentList(entity);
-        addEnchant(entity, enchantment, listtag);
+        addEnchant(entity, enchantment, listtag == null ? new ListTag() : listtag);
     }
 
     public static void addEnchant(LivingEntity entity, EnchantmentInstance enchantment, ListTag listtag) {

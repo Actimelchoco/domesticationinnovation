@@ -41,7 +41,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 /** Reserve storage for native Animights equipment, independent of the retired collar armor. */
 public final class AnimightEquipmentEvents {
-    public static final int INVENTORY_SIZE = 27;
+    public static final int INVENTORY_SIZE = 54;
     private static final EquipmentSlot[] ARMOR_SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
     private AnimightEquipmentEvents() { }
@@ -220,6 +220,7 @@ public final class AnimightEquipmentEvents {
 
     public static void maintain(LivingEntity tame, TameData data) {
         maintain(tame, data, 0);
+        discardWornReserveArmor(tame, data);
     }
 
     private static void maintain(LivingEntity tame, TameData data, int incomingDamage) {
@@ -254,6 +255,43 @@ public final class AnimightEquipmentEvents {
             }
         }
         if (usesWeapons(tame)) maintainWeapon(tame, data);
+    }
+
+    /** Opt-in disposal: only one weak piece per five seconds, after normal equipment swaps. */
+    public static boolean discardWornReserveArmor(LivingEntity tame, TameData data) {
+        if (!active(tame, data)
+                || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.discardWornArmor(data.ownerUUID)) return false;
+        long now = tame.level().getGameTime();
+        if (now < data.nextAnimightWornArmorDiscardTick) return false;
+        data.nextAnimightWornArmorDiscardTick = now + 100L;
+        int weakest = -1;
+        for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
+            ItemStack stack = data.animightEquipmentInventory.get(i);
+            if (stack.isEmpty() || !(stack.getItem() instanceof ArmorItem)) continue;
+            // Non-damageable armor must never count as nearly broken.
+            if (!stack.isDamageableItem() || !tooWorn(stack, 0)) return false;
+            if (weakest < 0 || compareDiscardArmor(stack, data.animightEquipmentInventory.get(weakest)) < 0) weakest = i;
+        }
+        if (weakest < 0) return false;
+        ItemStack stack = data.animightEquipmentInventory.get(weakest);
+        ItemStack dropped = stack.copyWithCount(1);
+        var entity = tame.spawnAtLocation(dropped);
+        if (entity == null) return false;
+        entity.setPickUpDelay(40);
+        stack.shrink(1);
+        if (stack.isEmpty()) data.animightEquipmentInventory.set(weakest, ItemStack.EMPTY);
+        TameRegistry.markDirty();
+        return true;
+    }
+
+    private static int compareDiscardArmor(ItemStack a, ItemStack b) {
+        EquipmentSlot aSlot = ((ArmorItem)a.getItem()).getEquipmentSlot(), bSlot = ((ArmorItem)b.getItem()).getEquipmentSlot();
+        int result = Double.compare(attribute(a, aSlot, Attributes.ARMOR), attribute(b, bSlot, Attributes.ARMOR));
+        if (result == 0) result = Double.compare(attribute(a, aSlot, Attributes.ARMOR_TOUGHNESS), attribute(b, bSlot, Attributes.ARMOR_TOUGHNESS));
+        if (result == 0) result = Integer.compare(EnchantmentHelper.getItemEnchantmentLevel(Enchantments.ALL_DAMAGE_PROTECTION, a),
+                EnchantmentHelper.getItemEnchantmentLevel(Enchantments.ALL_DAMAGE_PROTECTION, b));
+        if (result == 0) result = Integer.compare(a.getMaxDamage() - a.getDamageValue(), b.getMaxDamage() - b.getDamageValue());
+        return result;
     }
 
     private static void maintainWeapon(LivingEntity tame, TameData data) {
@@ -341,8 +379,8 @@ public final class AnimightEquipmentEvents {
 
     public static boolean openInventory(ServerPlayer player, LivingEntity tame, TameData data) {
         if (!active(tame, data) || !player.getUUID().equals(data.ownerUUID)) return false;
-        player.openMenu(new SimpleMenuProvider((id, inventory, viewer) -> new ChestMenu(MenuType.GENERIC_9x3,
-                id, inventory, new ReserveContainer(tame, data), 3), Component.literal(data.name + " Equipment")));
+        player.openMenu(new SimpleMenuProvider((id, inventory, viewer) -> new ChestMenu(MenuType.GENERIC_9x6,
+                id, inventory, new ReserveContainer(tame, data), 6), Component.literal(data.name + " Equipment")));
         return true;
     }
 

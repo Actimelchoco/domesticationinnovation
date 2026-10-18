@@ -1038,6 +1038,7 @@ public class TameCommands {
             new SettingsCategory("abilities", "Ability preferences and ore scenting", List.of(
                     "healthSiphon", "enableVoidCloud", "orescenting", "herding")),
             new SettingsCategory("display", "Tame nameplates", List.of("hideLevelInName")),
+            new SettingsCategory("equipment", "Animight reserve equipment", List.of("discardWornArmor")),
             new SettingsCategory("beds", "Automatic bed assignment", List.of("noAutoSetBed")),
             new SettingsCategory("selection", "Exclusions from all-tame commands", List.of("excludeFromAll"))
     );
@@ -1055,6 +1056,7 @@ public class TameCommands {
             Map.entry("orescenting", "<name> <oreId>"),
             Map.entry("herding", "<true|false> (admin)"),
             Map.entry("hideLevelInName", "<true|false>"),
+            Map.entry("discardWornArmor", "<true|false> (default false; armor at 10% durability or less)"),
             Map.entry("noAutoSetBed", "<true|false>"),
             Map.entry("excludeFromAll", "[info|add|remove] <tame|group|type> <name>")
     );
@@ -1135,6 +1137,10 @@ public class TameCommands {
                 .then(Commands.literal("hideLevelInName")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setHideLevelInName(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
+                .then(Commands.literal("discardWornArmor")
+                        .executes(ctx -> discardWornArmorSetting(ctx.getSource(), null))
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ctx -> discardWornArmorSetting(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
                 .then(Commands.literal("noAutoSetBed")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setNoAutoSetBed(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -4868,7 +4874,9 @@ public class TameCommands {
         boolean nativeChanged = false;
         if (tame instanceof IComandableMob commandable) {
             ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-            nativeChanged = !matchesSnapshotCommand(commandable.getCommand(), MovementOrder.GUARDIAN, key == null ? data.type : key.toString());
+            nativeChanged = tame instanceof ModifedToBeTameable && !(tame instanceof TamableAnimal)
+                    ? commandable.getCommand() != 0
+                    : !matchesSnapshotCommand(commandable.getCommand(), MovementOrder.GUARDIAN, key == null ? data.type : key.toString());
         }
         if (sitting || nativeChanged || data.movementOrder != 3) applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
     }
@@ -5643,9 +5651,9 @@ public class TameCommands {
         }
         else if (key.equals("armor") || key.equals("armour") || key.equals("amor")) {
             sendInfoPage(p, "Collar Protection",
-                    "Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.",
-                    "Every collar tag also grants 5 armor points, regardless of Protection level.",
-                    "Protection scales evenly by about 5.5833% per tier, up to 67% at Protection XII. Tames also gain 1 armor point per current level (subject to the normal armor cap).",
+                    "Collar Protection tier scales existing armor and toughness; tier I leaves them unchanged.",
+                    "Collar tier multiplies base armor + armor bonus stats and base toughness + toughness bonus stats; equipped gear is not multiplied.",
+                    "No flat per-level armor, flat collar armor, or separate Protection damage reduction. Example: 2 base armor + 1 bonus, tier III = 9 armor.",
                     "Craft a collar in the center with eight matching materials around it:",
                     "Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.",
                     "I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.",
@@ -5891,8 +5899,8 @@ public class TameCommands {
                     "Lists your tames with collar tags (or without via notag), including their Protection tier.",
                     "Protection I-XII is crafted by surrounding a collar tag with the tier material.",
                     "Protection II-XII must be upgraded sequentially from the previous tier.",
-                    "Every collar tag grants 5 base armor points, in addition to its Protection effect.",
-                    "Protection tiers scale evenly to 67% post-armor damage reduction at XII. Each tame level also adds 1 armor point (subject to the normal armor cap)."
+                    "Collars multiply existing armor and toughness by their tier; they grant no flat armor or additional damage reduction.",
+                    "Tier I preserves base defense; tier III multiplies it by 3. Existing equipment and Minecraft attribute caps still apply."
             );
         }
         else if (key.equals("sinistercarrot") || key.equals("sinestercarrot") || key.equals("sinister carrot") || key.equals("sinester carrot")) {
@@ -10653,10 +10661,10 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive()) {
-                setGuardianAnchor(player, tame, data);
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType) {
+                setGuardianAnchor(player, entity, data);
                 count++;
             }
         }
@@ -10668,10 +10676,10 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive()) {
-                setGuardianAnchorWithoutRemember(player, tame, data);
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType) {
+                setGuardianAnchorWithoutRemember(player, entity, data);
                 count++;
             }
         }
@@ -10683,9 +10691,9 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType && restorePreviousGuardianAnchor(entity, data)) {
                 count++;
             }
         }
@@ -10700,10 +10708,10 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive()) {
-                setGuardianAnchor(player, tame, data);
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType) {
+                setGuardianAnchor(player, entity, data);
                 count++;
             }
         }
@@ -10715,10 +10723,10 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive()) {
-                setGuardianAnchorWithoutRemember(player, tame, data);
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType) {
+                setGuardianAnchorWithoutRemember(player, entity, data);
                 count++;
             }
         }
@@ -10730,9 +10738,9 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (isManualMovementLocked(data)) continue;
-            Entity entity = player.serverLevel().getEntity(data.uuid);
-            if (entity instanceof TamableAnimal tame && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity entity = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
+            if (entity != null && entity.isAlive() && !data.horseType && restorePreviousGuardianAnchor(entity, data)) {
                 count++;
             }
         }
@@ -10748,10 +10756,10 @@ public class TameCommands {
         MovementOrder order = parseMovementOrder(stateName);
         if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
+        for (LivingEntity tame : loadedOwnedStateLivingTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (isManualMovementLocked(data)) continue;
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10764,10 +10772,10 @@ public class TameCommands {
         MovementOrder order = parseMovementOrder(stateName);
         if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
+        for (LivingEntity tame : loadedOwnedStateLivingTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (isManualMovementLocked(data)) continue;
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10780,9 +10788,9 @@ public class TameCommands {
         MovementOrder order = parseMovementOrder(stateName);
         if (order == null) return error(player, "Invalid state. Use follow, wander, or sit.");
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
+        for (LivingEntity tame : loadedOwnedStateLivingTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
-            if (data != null && restorePreviousGuardianAnchor(tame, data)) {
+            if (data != null && !data.dead && !data.stored && !isDuelLocked(data) && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
             }
         }
@@ -10796,10 +10804,10 @@ public class TameCommands {
     private static int setGuardianAllLoaded(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
+        for (LivingEntity tame : loadedOwnedAllLivingTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
-            if (isManualMovementLocked(data)) continue;
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
             setGuardianAnchor(player, tame, data);
             count++;
         }
@@ -10810,10 +10818,10 @@ public class TameCommands {
     private static int setGuardianAllLoadedHome(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
+        for (LivingEntity tame : loadedOwnedAllLivingTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null || !tame.isAlive()) continue;
-            if (isManualMovementLocked(data)) continue;
+            if (isManualMovementLocked(data) || data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
             setGuardianAnchorWithoutRemember(player, tame, data);
             count++;
         }
@@ -10824,9 +10832,9 @@ public class TameCommands {
     private static int setGuardianAllLoadedPrevious(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         int count = 0;
-        for (TamableAnimal tame : loadedOwnedAllTames(source, player.getUUID())) {
+        for (LivingEntity tame : loadedOwnedAllLivingTames(source, player.getUUID())) {
             TameData data = TameRegistry.get(tame.getUUID());
-            if (data != null && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
+            if (data != null && !data.dead && !data.stored && !isDuelLocked(data) && tame.isAlive() && restorePreviousGuardianAnchor(tame, data)) {
                 count++;
             }
         }
@@ -22260,6 +22268,16 @@ public class TameCommands {
         return key == null ? tame.getType().toString() : key.toString();
     }
 
+    private static List<LivingEntity> loadedOwnedAllLivingTames(CommandSourceStack source, UUID owner) {
+        List<LivingEntity> result = new ArrayList<>();
+        for (TameData data : ownedTamesForAllCommands(owner)) {
+            if (data.dead || data.stored || data.horseType || isDuelLocked(data)) continue;
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
+            if (tame != null && tame.isAlive()) result.add(tame);
+        }
+        return result;
+    }
+
     private static List<LivingEntity> loadedOwnedStateLivingTames(CommandSourceStack source, UUID owner, MovementOrder order) {
         List<LivingEntity> list = new ArrayList<>();
         for (TameData data : ownedTames(owner)) {
@@ -22403,20 +22421,17 @@ public class TameCommands {
             mob.getNavigation().stop();
         }
         if (tame instanceof IComandableMob commandable) {
-            ResourceLocation key = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
-            String typeId = key == null ? tame.getType().toString() : key.toString();
-            boolean inverted = usesInvertedGenericCallOrder(typeId);
-            int fallback = switch (order) {
-                case WANDER, GUARDIAN -> inverted ? 2 : 0;
-                case FOLLOW -> inverted ? 0 : 2;
-                case SIT -> 1;
-            };
-            int movementIndex = switch (order) {
-                case FOLLOW -> 0;
-                case SIT -> 1;
-                case WANDER, GUARDIAN -> 2;
-            };
-            commandable.setCommand(TameRegistry.getCallOrderCommand(typeId, movementIndex, fallback));
+            // DI interface tames share a fixed contract, including modded adapters.
+            // External call-order overrides must never turn guardian roam into follow.
+            int command = switch (order) { case FOLLOW -> 2; case SIT -> 1; case WANDER, GUARDIAN -> 0; };
+            boolean changed = commandable.getCommand() != command;
+            commandable.setCommand(command);
+            if (changed && (tame instanceof net.minecraft.world.entity.animal.frog.Frog
+                    || tame instanceof net.minecraft.world.entity.animal.axolotl.Axolotl)) {
+                tame.getBrain().eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET);
+                tame.getBrain().eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.PATH);
+                tame.getBrain().setActiveActivityToFirstValid(List.of(Activity.IDLE));
+            }
         }
         if (order != MovementOrder.SIT) {
             tryInvokeBooleanSetter(tame, "setOrderedToSit", false);
@@ -23802,6 +23817,15 @@ public class TameCommands {
         }
         TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
         return openHungerInventory(player, data, tame) ? 1 : 0;
+    }
+
+    private static int discardWornArmorSetting(CommandSourceStack source, Boolean enabled) {
+        ServerPlayer owner = source.getPlayer();
+        if (owner == null) return 0;
+        if (enabled != null) PlayerDebugSettings.setDiscardWornArmor(owner.getUUID(), enabled);
+        owner.sendSystemMessage(Component.literal("Animight discardWornArmor: " + PlayerDebugSettings.discardWornArmor(owner.getUUID())
+                + ". If all stored armor is at 10% durability or less, drop the weakest piece (at most once per 5 seconds)."));
+        return 1;
     }
 
     private static int animightEquipmentInventoryOpen(CommandSourceStack source, String name) {

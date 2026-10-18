@@ -974,15 +974,6 @@ public class CommonProxy {
     @SubscribeEvent
     public void onLivingDamage(LivingDamageEvent event) {
         debugShadowHandsDamageEvent(event);
-        if (TameableUtils.isTamed(event.getEntity())
-                && !event.getSource().is(DamageTypeTags.BYPASSES_ENCHANTMENTS)) {
-            int protection = Mth.clamp(TameableUtils.getEnchantLevel(
-                    event.getEntity(), Enchantments.ALL_DAMAGE_PROTECTION), 0, 12);
-            if (protection > 0) {
-                // LivingDamageEvent runs after armor/toughness absorption; XII caps at 67%.
-                event.setAmount(event.getAmount() * (1.0F - TameableUtils.collarProtectionReduction(protection)));
-            }
-        }
         if (event.getSource().getEntity() instanceof LivingEntity && TameableUtils.isTamed(event.getSource().getEntity())) {
             LivingEntity pet = (LivingEntity) event.getSource().getEntity();
             if (TameableUtils.hasEnchant(pet, DIEnchantmentRegistry.IMMATURITY_CURSE)) {

@@ -1881,15 +1881,12 @@ public class LevelSystem {
         instance.addPermanentModifier(new AttributeModifier(id, name, amount, AttributeModifier.Operation.ADDITION));
     }
 
-    /** Derived from the current level, so restores and level reductions never accumulate bonuses. */
+    /** Migrates the retired flat-per-level armor and keeps collar scaling in sync. */
     public static void syncLevelArmor(LivingEntity tame, TameData data) {
         if (tame == null || data == null || tame.level().isClientSide || TameRegistry.isSummonType(tame)) return;
         AttributeInstance armor = tame.getAttribute(Attributes.ARMOR);
-        if (armor == null) return;
-        double amount = Math.max(0, data.level);
-        AttributeModifier existing = armor.getModifier(LEVEL_ARMOR_UUID);
-        if (existing != null && existing.getAmount() == amount) return;
-        applyManagedAdditionModifier(tame, Attributes.ARMOR, LEVEL_ARMOR_UUID, amount, "tl_level_armor");
+        if (armor != null && armor.getModifier(LEVEL_ARMOR_UUID) != null) armor.removeModifier(LEVEL_ARMOR_UUID);
+        TameableUtils.refreshCollarDefense(tame);
     }
 
     private static void trackBonus(TameData data, BaseStatReward reward) {

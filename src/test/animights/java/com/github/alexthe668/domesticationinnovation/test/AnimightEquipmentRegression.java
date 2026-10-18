@@ -148,7 +148,7 @@ public final class AnimightEquipmentRegression {
             ItemStack recovery = data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).findFirst().orElseThrow();
             check(ScrapItem.getOriginal(recovery).is(Items.IRON_CHESTPLATE), "captured scrap must retain original armor NBT");
             data.animightEquipmentInventory.clear();
-            for (int i = 0; i < 27; i++) data.animightEquipmentInventory.add(new ItemStack(Items.DIAMOND_HELMET));
+            for (int i = 0; i < AnimightEquipmentEvents.INVENTORY_SIZE; i++) data.animightEquipmentInventory.add(new ItemStack(Items.DIAMOND_HELMET));
             ItemStack overflow = new ItemStack(Items.IRON_BOOTS);
             check(AnimightEquipmentEvents.store(data, overflow) == 0 && overflow.getCount() == 1, "full inventory must leave overflow untouched");
             ItemStack nearBreak = worn(new ItemStack(Items.IRON_HELMET));
@@ -207,7 +207,7 @@ public final class AnimightEquipmentRegression {
                     && reserves(data, scrapItem) == 1, "malformed seal and DNL scrap must remain intact");
             check(AnimightEquipmentEvents.restoreSealedItems(data) == 0, "repeated restoration must not duplicate originals");
             data.animightEquipmentInventory.clear();
-            for (int i = 0; i < 27; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_HELMET));
+            for (int i = 0; i < AnimightEquipmentEvents.INVENTORY_SIZE; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_HELMET));
             data.animightEquipmentInventory.set(26, sealed(new ItemStack(Items.NETHERITE_CHESTPLATE)));
             tame.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.DIAMOND_CHESTPLATE));
             AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim, helper.getLevel().damageSources().mobAttack(tame)));
@@ -324,7 +324,7 @@ public final class AnimightEquipmentRegression {
                     && tame.getMainHandItem().getTag().getString("RegressionMarker").equals("saved-weapon"),
                     "kill must store/unseal held weapon and equip its restored original with NBT intact");
             data.animightEquipmentInventory.clear();
-            for (int i = 0; i < 27; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_SWORD));
+            for (int i = 0; i < AnimightEquipmentEvents.INVENTORY_SIZE; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_SWORD));
             data.animightEquipmentInventory.set(26, new ItemStack(Items.NETHERITE_AXE));
             tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WOODEN_SWORD));
             AnimightEquipmentEvents.maintain(tame, data);
@@ -337,6 +337,47 @@ public final class AnimightEquipmentRegression {
             check(breaking.isEmpty() && data.animightEquipmentInventory.stream().anyMatch(AnimightEquipmentEvents::isRecoveryItem),
                     "DNL weapon scrap must be captured just like armor scrap");
         } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty")
+    public static void largerReserveAndOptInWornArmorDisposal(GameTestHelper helper) {
+        var tame=companion(helper);helper.getLevel().addFreshEntity(tame);var data=TameRegistry.get(tame.getUUID());
+        try {
+            var inventory=new AnimightEquipmentEvents.ReserveContainer(tame,data);
+            check(inventory.getContainerSize()==54,"equipment reserve doubles to 54 slots");
+            inventory.setItem(53,new ItemStack(Items.IRON_SWORD));
+            check(TameData.fromTag(data.toTag()).animightEquipmentInventory.get(53).is(Items.IRON_SWORD),"last new slot survives saves");
+            data.animightEquipmentInventory.clear();
+            ItemStack weak=worn(new ItemStack(Items.LEATHER_BOOTS)),strong=worn(new ItemStack(Items.DIAMOND_CHESTPLATE));
+            data.animightEquipmentInventory.add(weak);data.animightEquipmentInventory.add(strong);
+            check(!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.discardWornArmor(data.ownerUUID),"disposal defaults false");
+            AnimightEquipmentEvents.maintain(tame,data);check(reserves(data,Items.LEATHER_BOOTS)==1,"default setting retains worn gear");
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.setDiscardWornArmor(data.ownerUUID,true);
+            check(com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.saveAll().get(data.ownerUUID).getBoolean("discardWornArmor"),"setting persists per owner");
+            AnimightEquipmentEvents.maintain(tame,data);
+            check(reserves(data,Items.LEATHER_BOOTS)==0&&reserves(data,Items.DIAMOND_CHESTPLATE)==1,"only weakest worn piece discarded");
+            var drops=helper.getLevel().getEntitiesOfClass(ItemEntity.class,tame.getBoundingBox().inflate(2),e->e.getItem().is(Items.LEATHER_BOOTS));
+            check(drops.stream().anyMatch(e->e.getItem().getTag()!=null&&e.getItem().getTag().getString("RegressionMarker").equals("keep-this-data")),"discarded armor drops intact with NBT");
+            AnimightEquipmentEvents.maintain(tame,data);check(reserves(data,Items.DIAMOND_CHESTPLATE)==1,"repeated checks respect discard throttle");
+        } finally {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.setDiscardWornArmor(data.ownerUUID,false);
+            TameRegistry.remove(tame.getUUID());tame.discard();
+        }
+        helper.succeed();
+    }
+    @GameTest(template="empty")
+    public static void healthyReserveArmorPreventsDisposal(GameTestHelper helper) {
+        var tame=companion(helper);var data=TameRegistry.get(tame.getUUID());
+        try {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.setDiscardWornArmor(data.ownerUUID,true);
+            data.animightEquipmentInventory.add(worn(new ItemStack(Items.LEATHER_BOOTS)));
+            data.animightEquipmentInventory.add(new ItemStack(Items.IRON_CHESTPLATE));
+            check(!AnimightEquipmentEvents.discardWornReserveArmor(tame,data)&&reserves(data,Items.LEATHER_BOOTS)==1,"a healthy stored armor piece prevents disposal");
+        } finally {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.setDiscardWornArmor(data.ownerUUID,false);
+            TameRegistry.remove(tame.getUUID());tame.discard();
+        }
         helper.succeed();
     }
 }

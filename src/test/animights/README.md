@@ -26,3 +26,5 @@ Remove opt-in outputs before producing a release, using separate invocations:
 .\gradlew.bat clean --offline
 .\gradlew.bat build --offline
 ```
+
+Current balance checks also verify collar tier scaling of base-plus-bonus armor/toughness, removal of the saved per-level modifier, no extra post-armor damage reduction, attribute caps, non-compounding refresh/save-load, 54-slot reserves, last-slot persistence, and default-off owner-controlled worn-armor disposal with intact ground drops and a five-second throttle.

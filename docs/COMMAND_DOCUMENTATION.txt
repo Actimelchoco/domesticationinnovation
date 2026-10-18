@@ -724,10 +724,10 @@ Preferred food gives 200% saturation. Gluttonous tames can eat other edible food
 
 COLLAR PROTECTION
 -----------------
-Protection on a collar reduces damage remaining after the tame's existing armor and armor toughness.
-Every collar tag also grants 5 armor points, regardless of Protection level.
-Protection tiers scale evenly by about 5.5833% per tier. Protection XII reduces that remaining damage by 67%.
-Every tame gains 1 armor point per current level, in addition to its native armor, equipment, rewards, and the collar's 5 points. Existing tames receive this automatically; level reductions also reduce this bonus. Minecraft's normal effective armor cap still applies.
+Collar Protection tier multiplies existing base armor + bonus armor stats and base toughness + toughness bonus stats. Equipped gear is not multiplied.
+Tier I leaves those stats unchanged; tier III multiplies them by 3. Zero base defense stays zero.
+There is no separate post-armor collar damage reduction.
+The flat armor-per-level and flat collar armor bonuses are removed automatically, including existing saved modifiers. Normal Minecraft attribute caps still apply.
 Craft a collar in the center with eight matching materials around it:
 Protection I starts from an unenchanted collar. Every later tier requires the immediately previous Protection tier.
 I Create copper sheets, II Create iron sheets, III Create golden sheets, IV emerald, V diamond, VI netherite scrap.
@@ -745,7 +745,7 @@ Without Gluttonous, fallback bread gives only 10% of base saturation; other non-
 Artifacts Eternal Steak counts as meat and can feed any tame without being consumed. Preferred Steak gives 200% saturation; non-preferred Steak gives 50%, even without Gluttonous.
 
 Animights equipment reserve:
-/tl inventory equipment <name> opens an owned, loaded Animight's 27-slot equipment reserve outside duels.
+/tl inventory equipment <name> opens an owned, loaded Animight's 54-slot equipment reserve outside duels.
 Equipment name suggestions list only owned living Animights, and non-Animights are explicitly rejected.
 Ordinary guardians rest at their TPHome destination while their owner is offline and no living non-spectator player is within 20 blocks of the saved post. Their post is retained; they resume when a player approaches the post or their owner reconnects, provided food or saturation is available. No persistent guard-post chunk tickets are used.
 Guardians with no food and no saturation walk toward their TPHome destination for up to 1200 game ticks (one minute), then teleport there if still away and sit. They return to the saved guard post after food or saturation becomes available, subject to the owner-online rule. Emergency home travel is free and does not require food. These temporary rest states survive saving and loading; manual movement commands cancel them.
@@ -956,8 +956,8 @@ COLLAR
 Lists your tames with collar tags (or without via notag), including their Protection tier.
 Protection I-XII is crafted by surrounding a collar tag with the tier material.
 Protection II-XII must be upgraded sequentially from the previous tier.
-Every collar tag grants 5 base armor points, in addition to its Protection effect.
-Protection tiers scale evenly to 67% post-armor damage reduction at XII. Every tame level also grants 1 armor point, subject to Minecraft's normal effective armor cap.
+Collars scale base armor/toughness plus bonus stats by their tier; equipment stays separate.
+No flat armor per level, no flat collar armor, and no additional collar damage reduction. Minecraft attribute caps still apply.
 
 SINISTER CARROT
 ---------------
@@ -1189,3 +1189,14 @@ GUARD DUTY LISTING AND DEPLOYMENT
 /tames guardian deploy <selection> restores a released tame to its last guardian post and resumes guardian duty. The last post survives release and server restarts. Existing teleport payments apply. Already assigned guardians and bodyguards are skipped; release first to redeploy.
 /tames bodyguard add suggests only eligible owned tames outside guard duty and duels, excluding stored tames. remove suggests only assigned roster members outside duels, including dead members whose slots can be freed.
 Assigned guardians and bodyguards also ignore drum attack-target and clear-target orders. Inventory, feeding, abilities, attributes, groups and read-only reports remain available. Explicit releases, bodyguard removal, automatic rest/respawn, duel lifecycle and admin recovery keep their existing purpose.
+
+INTERFACE GUARDIANS
+-------------------
+DI interface tames use their fixed native commands: roam/guardian=0, sit=1, follow=2. External-mod call-order overrides no longer redirect interface guardian orders into follow.
+Guardian set/home/previous selections for all, groups, types and states include loaded interface tames; dead/stored tames, horses, dueling tames and assigned guards retain their restrictions.
+For brain-driven tames, post-return and relaxed post wandering update WALK_TARGET as well as navigation at the existing guardian intervals. Switching amphibian commands clears stale movement memories/activities. No new world scans or faster maintenance loops are introduced.
+
+ANIMIGHT WORN ARMOR DISPOSAL
+----------------------------
+/tames settings equipment discardWornArmor [true|false]
+Default false, saved per owner. After ordinary armor swaps, if every armor piece left in reserve is damageable and at 10% durability or less, drop one weakest piece intact. Rank by armor, toughness, Protection, then remaining durability. Check/drop at most once per 5 seconds per tame. Healthy or unbreakable stored armor prevents disposal; weapons, scraps, seals and equipped pieces are never discarded by this setting. Equipment reserve now has 54 slots; old saved contents retain their positions.

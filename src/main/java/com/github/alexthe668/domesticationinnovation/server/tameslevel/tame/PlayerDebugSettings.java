@@ -45,6 +45,7 @@ public final class PlayerDebugSettings {
     private static final Map<UUID, Boolean> RANKED_DUEL_SUMMARY_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> NEW_TAME_MESSAGES = new HashMap<>();
     private static final Map<UUID, Boolean> AUTO_RESPAWN_MESSAGES = new HashMap<>();
+    private static final Map<UUID, Boolean> DISCARD_WORN_ARMOR = new HashMap<>();
     private static final Map<UUID, Boolean> NO_AUTO_SET_BED = new HashMap<>();
     private static final Map<UUID, Boolean> DUEL_GLOW = new HashMap<>();
     private static final Map<UUID, Boolean> FRIENDLY_FIRE = new HashMap<>();
@@ -83,6 +84,7 @@ public final class PlayerDebugSettings {
             new BooleanSetting("newTameMessages", NEW_TAME_MESSAGES, true),
             new BooleanSetting("autoRespawnMessages", AUTO_RESPAWN_MESSAGES, true),
             new BooleanSetting("noAutoSetBed", NO_AUTO_SET_BED, false),
+            new BooleanSetting("discardWornArmor", DISCARD_WORN_ARMOR, false),
             new BooleanSetting("friendlyFire", FRIENDLY_FIRE, false),
             new BooleanSetting("tamesFriendly", TAMES_FRIENDLY, true),
             new BooleanSetting("hideLevelInName", HIDE_LEVEL_IN_NAME, false)
@@ -224,6 +226,13 @@ public final class PlayerDebugSettings {
 
     public static boolean autoRespawnMessages(UUID player) {
         return getBoolean(AUTO_RESPAWN_MESSAGES, player, true);
+    }
+
+    public static boolean discardWornArmor(UUID player) {
+        return getBoolean(DISCARD_WORN_ARMOR, player, false);
+    }
+    public static void setDiscardWornArmor(UUID player, boolean enabled) {
+        setBoolean(DISCARD_WORN_ARMOR, player, enabled, false);
     }
 
     public static boolean noAutoSetBed(UUID player) {

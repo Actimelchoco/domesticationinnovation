@@ -316,7 +316,19 @@ public class TameBehaviorEvents {
             data.guardianReturnTicks = 0;
             return;
         }
-        tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
+        navigateGuardian(tame, home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0F);
+    }
+
+    private static void navigateGuardian(PathfinderMob tame, double x, double y, double z, float speed) {
+        // Brain-driven interface tames overwrite direct navigation from WALK_TARGET.
+        // Set that memory at the existing return interval so their AI agrees with the post.
+        if (!(tame instanceof TamableAnimal)
+                && tame.getBrain().checkMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET,
+                        net.minecraft.world.entity.ai.memory.MemoryStatus.REGISTERED)) {
+            tame.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET,
+                    new net.minecraft.world.entity.ai.memory.WalkTarget(new net.minecraft.world.phys.Vec3(x, y, z), speed, 1));
+        }
+        tame.getNavigation().moveTo(x, y, z, speed);
     }
 
     private static void handleGuardianRelaxedWander(PathfinderMob tame, TameData data) {
@@ -335,7 +347,7 @@ public class TameBehaviorEvents {
         BlockPos home = new BlockPos(data.homeX, data.homeY, data.homeZ);
         double distanceSqr = tame.distanceToSqr(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D);
         if (distanceSqr > 12.0D * 12.0D) {
-            tame.getNavigation().moveTo(home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0D);
+            navigateGuardian(tame, home.getX() + 0.5D, home.getY(), home.getZ() + 0.5D, 1.0F);
             return;
         }
         if (!tame.getNavigation().isDone()) {
@@ -349,7 +361,7 @@ public class TameBehaviorEvents {
         int offsetZ = tame.getRandom().nextInt(radius * 2 + 1) - radius;
         double targetX = home.getX() + 0.5D + offsetX;
         double targetZ = home.getZ() + 0.5D + offsetZ;
-        tame.getNavigation().moveTo(targetX, home.getY(), targetZ, 0.95D);
+        navigateGuardian(tame, targetX, home.getY(), targetZ, 0.95F);
     }
 
     private static void handleCloseOwner(PathfinderMob tame, TameData data) {

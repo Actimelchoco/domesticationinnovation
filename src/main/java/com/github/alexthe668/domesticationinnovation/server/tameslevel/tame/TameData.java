@@ -151,6 +151,7 @@ public class TameData {
     public int hungerSaturation = 1000;
     public final List<ItemStack> hungerInventory = new ArrayList<>();
     public final List<ItemStack> armorInventory = new ArrayList<>();
+    public transient long nextAnimightWornArmorDiscardTick = Long.MIN_VALUE;
     public final List<ItemStack> animightEquipmentInventory = new ArrayList<>();
     public boolean hungerForcedSit = false;
     public boolean guardianResting = false;
@@ -663,7 +664,7 @@ public class TameData {
         }
         data.armorInventory.clear();
         ListTag equipmentReserveTag = tag.getList("animightEquipmentInventory", Tag.TAG_COMPOUND);
-        for (int i = 0; i < Math.min(27, equipmentReserveTag.size()); i++) {
+        for (int i = 0; i < Math.min(com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.INVENTORY_SIZE, equipmentReserveTag.size()); i++) {
             data.animightEquipmentInventory.add(ItemStack.of(equipmentReserveTag.getCompound(i)));
         }
         ListTag armorInventoryTag = tag.contains("armorInventory", Tag.TAG_LIST)
