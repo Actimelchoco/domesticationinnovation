@@ -138,8 +138,8 @@ public class GuardianCommandRegression {
         b.hasHome=false;b.rosterBodyguard=true;b.movementOrder=0;n.hasHome=false;s.hasHome=false;s.stored=true;
         BodyguardService.roster(owner).bodyguards.add(b.ensureTlId());
         try{
-            check(suggestions(helper,owner,"bodyguard add ").equals(Set.of("Available")),"add suggests only eligible unassigned tames");
-            check(suggestions(helper,owner,"bodyguard remove ").equals(Set.of("Escort")),"remove suggests only roster members");
+            check(suggestions(helper,owner,"bodyguard add ").equals(Set.of("Available","all","name","type","group")),"add suggests only eligible unassigned tames and selection helpers");
+            check(suggestions(helper,owner,"bodyguard remove ").equals(Set.of("Escort","all","name","type","group")),"remove suggests only roster members and selection helpers");
             var color=TameCommands.class.getDeclaredMethod("statusColor",TameData.class,boolean.class);color.setAccessible(true);
             var suffix=TameCommands.class.getDeclaredMethod("inactiveSuffix",TameData.class);suffix.setAccessible(true);
             check(color.invoke(null,g,true)==net.minecraft.ChatFormatting.AQUA&&color.invoke(null,g,false)==net.minecraft.ChatFormatting.AQUA,"guardian color independent of load");

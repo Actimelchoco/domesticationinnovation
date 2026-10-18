@@ -8,6 +8,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.nbt.CompoundTag;
@@ -113,6 +114,10 @@ public class TameSpawnEvents {
     public static void onModifiedTameTick(LivingEvent.LivingTickEvent event) {
         LivingEntity living = event.getEntity();
         if (ignoreOrTerminateConfiguredSummon(living)) return;
+        if (!living.level().isClientSide && living.tickCount % 20 == 0
+                && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter.isTame(living))
+            TameData.imprintEntity(living,
+                    com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter.ownerUuid(living));
         if (!living.level().isClientSide && living instanceof TamableAnimal tame) {
             // Bred offspring can receive their owner after EntityJoinLevelEvent and do not
             // necessarily fire AnimalTameEvent. Pick them up once ownership is established.
@@ -266,6 +271,8 @@ public class TameSpawnEvents {
     @SubscribeEvent
     public static void onTamed(AnimalTameEvent event) {
         if (isTameReconstructionSuppressed()) return;
+        if (!event.getAnimal().level().isClientSide && event.getTamer() != null)
+            TameData.imprintEntity(event.getAnimal(), event.getTamer().getUUID());
         if (!(event.getAnimal() instanceof TamableAnimal tame)) return;
         if (!tame.hasCustomName()) {
             // Forge can fire AnimalTameEvent before isTame() reflects the new state.
@@ -313,7 +320,7 @@ public class TameSpawnEvents {
     }
 
     public static TameData registerOrRestoreTame(TamableAnimal tame, boolean notifyClassIfNew, boolean allowDeadIdentitySync) {
-        if (tame == null || !tame.isTame()) return null;
+        if (tame == null || TameLimitService.applyPending(tame) || !tame.isTame()) return null;
         // This is the common registration boundary. Spawn events are not the only
         // callers: behavior ticks, world-load scans and persistence backfills can
         // all arrive here directly. Never give a configured summon an identity.
@@ -976,7 +983,7 @@ public class TameSpawnEvents {
     }
 
     private static void registerLiveOnlyModifiedTame(LivingEntity living, ModifedToBeTameable modified) {
-        if (living == null || modified == null || living.level().isClientSide || modified.getTameOwnerUUID() == null) return;
+        if (living == null || modified == null || living.level().isClientSide || TameLimitService.applyPending(living) || modified.getTameOwnerUUID() == null) return;
         if (TameRegistry.isSummonType(living)) return;
         TameData data = TameRegistry.get(living.getUUID());
         if (data == null) {

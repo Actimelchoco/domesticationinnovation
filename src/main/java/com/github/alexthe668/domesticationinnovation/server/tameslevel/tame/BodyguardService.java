@@ -18,12 +18,32 @@ public final class BodyguardService {
         return TameRegistry.getOrCreatePlayerDuelStats(owner.getUUID(), owner.getGameProfile().getName());
     }
     public static List<TameData> members(PlayerDuelStats roster) {
-        List<TameData> result = new ArrayList<>(3);
+        List<TameData> result = new ArrayList<>(roster.bodyguards.size());
         for (UUID id : roster.bodyguards) {
             TameData data = TameRegistry.getByTlId(id);
             if (data != null && Objects.equals(data.ownerUUID, roster.playerUuid)) result.add(data);
         }
         return result;
+    }
+    public static Composition composition(PlayerDuelStats roster) {
+        Composition result = new Composition();
+        for (TameData data : members(roster)) result.add(data.type);
+        return result;
+    }
+    /** Command-local counts: checking each candidate stays constant time even for large rosters. */
+    public static final class Composition {
+        private final Map<String, Integer> counts = new HashMap<>();
+        private int duplicateTypes;
+        public boolean canAdd(String type) {
+            if (type == null || type.isBlank()) return false;
+            if (counts.isEmpty() || counts.size() == 1 && counts.containsKey(type)) return true;
+            return duplicateTypes == 0 && !counts.containsKey(type);
+        }
+        public void add(String type) {
+            int previous = counts.getOrDefault(type, 0);
+            if (previous == 1) duplicateTypes++;
+            counts.put(type, previous + 1);
+        }
     }
     public static double healingBonus(int alive) {
         return alive == 1 ? 2 : alive == 2 ? 1 : alive == 3 ? .5 : 0;

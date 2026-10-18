@@ -170,6 +170,7 @@ public class TameRegistry {
                 continue;
             }
             UUID before = data.tlId;
+            if (data.rememberImprintedOwner(null, data.ownerUUID)) changed = true;
             data.ensureTlId();
             if (!Objects.equals(before, data.tlId)) {
                 changed = true;
@@ -275,6 +276,10 @@ public class TameRegistry {
             return;
         }
         data.ensureTlId();
+        data.rememberImprintedOwner(null, data.ownerUUID);
+        if (data.limitRegisteredAt == 0 && !TAMES.containsKey(data.uuid)) {
+            data.limitRegisteredAt = TameLimitService.nextRegistrationOrder();
+        }
         TameData previous = TAMES.put(data.uuid, data);
         if (previous != null) {
             removeFromIndexes(previous);
@@ -313,6 +318,7 @@ public class TameRegistry {
             return false;
         }
         UUID oldOwner = data.ownerUUID;
+        data.rememberImprintedOwner(null, oldOwner);
         if (Objects.equals(oldOwner, newOwner)) {
             return false;
         }
@@ -327,6 +333,9 @@ public class TameRegistry {
         }
         GuardianActivityService.removeAssignment(data);
         data.ownerUUID = newOwner;
+        data.limitRegisteredAt = TameLimitService.nextRegistrationOrder();
+        data.limitOnlineTicks = 0;
+        data.limitWarned = false;
         OWNER_TO_TAMES.computeIfAbsent(newOwner, k -> new HashSet<>()).add(tameUuid);
         migrateDeathOwnership(tameUuid, oldOwner, newOwner);
         markDirty();
@@ -408,6 +417,11 @@ public class TameRegistry {
                 retainedPerTame.put(identity, retained + 1);
             }
         }
+    }
+
+    /** Existing records are shared with SavedData; field-only updates need no index/map copies. */
+    public static void markEntryDataDirty() {
+        if (savedData != null) savedData.setDirty();
     }
 
     public static void markDirty() {
@@ -1188,6 +1202,7 @@ public class TameRegistry {
             return;
         }
         data.ensureTlId();
+        if (data.rememberImprintedOwner(tame, data.ownerUUID)) markEntryDataDirty();
         TameData.syncTlIdToEntity(tame, data.tlId);
     }
 

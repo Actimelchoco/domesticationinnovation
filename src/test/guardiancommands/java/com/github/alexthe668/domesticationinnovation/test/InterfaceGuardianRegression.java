@@ -77,4 +77,28 @@ public class InterfaceGuardianRegression {
             }
         }finally{clean(h,owner,frog,fox);}h.succeed();
     }
+    @GameTest(template="empty",batch="interface-guardian")
+    public static void savedGroupDeploymentIncludesMixedInterfaceAndVanillaTames(GameTestHelper h)throws Exception{
+        var owner=owner(h);var frog=pet(h,owner,EntityType.FROG,"DeployFrog");var fox=pet(h,owner,EntityType.FOX,"DeployFox");
+        var wolf=EntityType.WOLF.create(h.getLevel());wolf.setTame(true);wolf.setOwnerUUID(owner.getUUID());
+        wolf.setPos(owner.getX()+8,owner.getY(),owner.getZ());h.getLevel().addFreshEntity(wolf);
+        var wolfData=TameRegistry.get(wolf.getUUID());wolfData.name="DeployWolf";wolfData.group="interface";
+        var post=owner.blockPosition();
+        try{
+            check(run(h,owner,"guardian addToGroup base all")==3,"save all three deployment anchors");
+            for(String selector:List.of("all","group interface","type frog","DeployFrog","state follow")){
+                run(h,owner,"release follow all");
+                for(var pet:List.of(frog,fox,wolf))pet.setPos(owner.getX()+8,owner.getY(),owner.getZ());
+                check(run(h,owner,"guardian deployGroup base "+selector)==1,"deploy command succeeds: "+selector);
+                var selected=selector.equals("type frog")||selector.equals("DeployFrog")?List.of(frog):List.of(frog,fox,wolf);
+                for(var pet:selected){
+                    var data=TameRegistry.get(pet.getUUID());
+                    check(data.hasHome&&data.movementOrder==3,"selected pet actually deployed: "+selector+" / "+data.name);
+                    check(new BlockPos(data.homeX,data.homeY,data.homeZ).equals(post),"saved anchor restored");
+                    check(pet.distanceToSqr(post.getX()+.5,post.getY(),post.getZ()+.5)<16,"pet teleported to saved post");
+                }
+                check(((IComandableMob)frog).getCommand()==0,"deployed interface pet roams instead of following owner");
+            }
+        }finally{clean(h,owner,frog,fox,wolf);}h.succeed();
+    }
 }

@@ -215,6 +215,7 @@ public final class TameDuelManager {
         // maintenance interval when the owners have disabled duelGlow.
         clearTeamOneGlow(server, battle);
         syncPlayerEnemyGlow(server, battle);
+        refreshOwnerCommands(server, battle);
     }
 
     public static synchronized boolean areDuelOpponents(UUID attackerId, UUID targetId) {
@@ -261,6 +262,47 @@ public final class TameDuelManager {
 
     public static synchronized boolean isTameInDuel(UUID tameId) {
         return isEntityInDuel(tameId);
+    }
+
+    public record DuelMemberStatus(UUID id, String name, boolean alive) {}
+    public record DuelTeamStatus(UUID owner, List<DuelMemberStatus> members) {}
+
+    /** On-demand view retains eliminated entrants even if their living body has already been restored. */
+    public static synchronized List<DuelTeamStatus> duelTeamStatus(MinecraftServer server, UUID owner) {
+        if (server == null || owner == null) return List.of();
+        for (DuelBattle battle : BATTLE_BY_ID.values()) {
+            if (!owner.equals(battle.ownerA) && !owner.equals(battle.ownerB)) continue;
+            return List.of(teamStatus(server, battle, battle.ownerA, battle.originalTeamA),
+                    teamStatus(server, battle, battle.ownerB, battle.originalTeamB));
+        }
+        return List.of();
+    }
+
+    private static DuelTeamStatus teamStatus(MinecraftServer server, DuelBattle battle, UUID owner, Set<UUID> roster) {
+        List<DuelMemberStatus> members = new ArrayList<>();
+        for (UUID id : roster) {
+            LivingEntity entity = findLoadedLivingParticipant(server, id);
+            TameData data = TameRegistry.get(id);
+            if (data == null) data = TameRegistry.getByTlId(id);
+            CompoundTag snapshot = battle.tameSnapshots.get(id);
+            if (data == null && snapshot != null && snapshot.hasUUID(TameData.TL_ID_TAG))
+                data = TameRegistry.getByTlId(snapshot.getUUID(TameData.TL_ID_TAG));
+            if (entity == null && data != null) entity = findLoadedLivingParticipant(server, data.uuid);
+            String savedName = snapshot == null ? "" : snapshot.getString("name");
+            String name = id.equals(owner) ? "player" : data != null && data.name != null && !data.name.isBlank()
+                    ? data.name : !savedName.isBlank() ? savedName : entity != null ? entity.getName().getString() : id.toString();
+            members.add(new DuelMemberStatus(id, name, battle.participants.contains(id) && entity != null && entity.isAlive()));
+        }
+        members.sort(Comparator.comparing(DuelMemberStatus::name).thenComparing(member -> member.id().toString()));
+        return new DuelTeamStatus(owner, List.copyOf(members));
+    }
+
+    private static void refreshOwnerCommands(MinecraftServer server, DuelBattle battle) {
+        if (server == null || battle == null) return;
+        for (UUID id : new HashSet<>(List.of(battle.ownerA, battle.ownerB))) {
+            ServerPlayer player = server.getPlayerList().getPlayer(id);
+            if (player != null) server.getCommands().sendCommands(player);
+        }
     }
 
     /** Snapshot so eliminations during processing cannot invalidate iteration. */
@@ -938,6 +980,7 @@ public final class TameDuelManager {
         // while the tame is outside a duel.
         clearDuelVisualState(server, allParticipants);
         notifyBattleAudience(server, battle, resultSummary, leaderboardSummary);
+        refreshOwnerCommands(server, battle);
     }
 
     private static boolean tryRestoreDuelPlayerSnapshot(MinecraftServer server, UUID participantId, CompoundTag playerSnapshot) {

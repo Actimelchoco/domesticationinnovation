@@ -22,10 +22,35 @@ import java.util.UUID;
 
 public class TameData {
     public static final String TL_ID_TAG = "tl_id";
+    public static final String IMPRINTED_OWNER_TAG = "TLImprintedOwner";
 
     public UUID uuid;
     public UUID tlId;
     public UUID ownerUUID;
+    private UUID imprintedOwnerUUID;
+
+    public UUID imprintedOwnerUUID() { return imprintedOwnerUUID; }
+
+    /** Capture once; an ownership transfer must never replace the original imprint. */
+    public static void imprintEntity(LivingEntity entity, UUID firstOwner) {
+        if (entity != null && firstOwner != null && !entity.getPersistentData().hasUUID(IMPRINTED_OWNER_TAG))
+            entity.getPersistentData().putUUID(IMPRINTED_OWNER_TAG, firstOwner);
+    }
+
+    public boolean rememberImprintedOwner(LivingEntity entity, UUID knownOwner) {
+        boolean changed = false;
+        if (imprintedOwnerUUID == null) {
+            imprintedOwnerUUID = entity != null && entity.getPersistentData().hasUUID(IMPRINTED_OWNER_TAG)
+                    ? entity.getPersistentData().getUUID(IMPRINTED_OWNER_TAG) : knownOwner;
+            changed = imprintedOwnerUUID != null;
+        }
+        if (entity != null && imprintedOwnerUUID != null)
+            entity.getPersistentData().putUUID(IMPRINTED_OWNER_TAG, imprintedOwnerUUID);
+        return changed;
+    }
+    public long limitRegisteredAt;
+    public int limitOnlineTicks;
+    public boolean limitWarned;
 
     public String name;
     public String type;
@@ -198,6 +223,7 @@ public class TameData {
         this.uuid = tame.getUUID();
         this.tlId = readOrCreateTlId(tame);
         this.ownerUUID = ownerUUID;
+        rememberImprintedOwner(tame, ownerUUID);
         this.liveOnly = liveOnly;
         this.horseType = tame instanceof net.minecraft.world.entity.animal.horse.AbstractHorse;
 
@@ -228,6 +254,10 @@ public class TameData {
 
     public CompoundTag toTag() {
         CompoundTag tag = new CompoundTag();
+        if (imprintedOwnerUUID != null) tag.putUUID(IMPRINTED_OWNER_TAG, imprintedOwnerUUID);
+        tag.putLong("limitRegisteredAt", limitRegisteredAt);
+        tag.putInt("limitOnlineTicks", limitOnlineTicks);
+        tag.putBoolean("limitWarned", limitWarned);
         tag.putUUID("uuid", uuid);
         tag.putBoolean("liveOnly", liveOnly);
         tag.putBoolean("horseType", horseType);
@@ -454,6 +484,14 @@ public class TameData {
 
     public static TameData fromTag(CompoundTag tag) {
         TameData data = new TameData();
+        if (tag.hasUUID(IMPRINTED_OWNER_TAG)) data.imprintedOwnerUUID = tag.getUUID(IMPRINTED_OWNER_TAG);
+        else {
+            CompoundTag forgeData = tag.getCompound("entitySnapshot").getCompound("ForgeData");
+            if (forgeData.hasUUID(IMPRINTED_OWNER_TAG)) data.imprintedOwnerUUID = forgeData.getUUID(IMPRINTED_OWNER_TAG);
+        }
+        data.limitRegisteredAt = tag.getLong("limitRegisteredAt");
+        data.limitOnlineTicks = Math.max(0, tag.getInt("limitOnlineTicks"));
+        data.limitWarned = tag.getBoolean("limitWarned");
         data.liveOnly = tag.getBoolean("liveOnly");
         data.horseType = tag.getBoolean("horseType");
         data.riddenDistanceProgress = Math.max(0.0D, tag.getDouble("riddenDistanceProgress"));

@@ -69,6 +69,10 @@ public final class TameEntityAdapter {
     }
 
     public static void setOwner(Entity entity, UUID ownerUuid) {
+        if (entity instanceof LivingEntity living) {
+            UUID previousOwner = ownerUuid(entity);
+            TameData.imprintEntity(living, previousOwner != null ? previousOwner : ownerUuid);
+        }
         if (entity instanceof TamableAnimal tamable) {
             tamable.setTame(true);
             tamable.setOwnerUUID(ownerUuid);

@@ -108,8 +108,8 @@ public class BodyguardRegression {
                 check(data.mode==TameMode.BODYGUARD.id()&&data.movementOrder==0,"bodyguard follows");
             }
             var suggestions=dispatcher.getCompletionSuggestions(dispatcher.parse("tames bodyguard ",source)).join();
-            check(!dispatcher.getRoot().getChild("tames").getChild("bodyguard").getChild("add").canUse(source),"add filtered out of player command tree at three");
-            check(dispatcher.execute("tames Bodyguard setRange 22",source)==1,"capitalized alias and range");
+            check(dispatcher.getRoot().getChild("tames").getChild("bodyguard").getChild("add").canUse(source),"add stays available for unlimited compatible guards");
+            check(dispatcher.execute("tames bodyguard setRange 22",source)==1,"bodyguard range");
             try {dispatcher.execute("tames bodyguard setRange 23",source);throw new AssertionError("range 23 accepted");}
             catch(com.mojang.brigadier.exceptions.CommandSyntaxException expected) { }
             TameData first=TameRegistry.get(bodies.get(0).getUUID());
@@ -130,7 +130,7 @@ public class BodyguardRegression {
             check(dispatcher.execute("tames bodyguard remove Guard1",source)==1,"remove guard");
             check(!first.rosterBodyguard&&first.movementOrder==1&&bodies.get(0).isOrderedToSit(),"removed guard goes home and sits");
             suggestions=dispatcher.getCompletionSuggestions(dispatcher.parse("tames bodyguard ",source)).join();
-            check(dispatcher.getRoot().getChild("tames").getChild("bodyguard").getChild("add").canUse(source),"add returns to player command tree below three");
+            check(dispatcher.getRoot().getChild("tames").getChild("bodyguard").getChild("add").canUse(source),"add remains available after removal");
         } finally {
             players(helper).remove(id);BodyguardService.roster(owner).bodyguards.clear();
             for(Wolf body:bodies){body.discard();TameRegistry.TAMES.remove(body.getUUID());}

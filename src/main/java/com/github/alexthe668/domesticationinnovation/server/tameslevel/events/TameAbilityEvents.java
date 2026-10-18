@@ -12,6 +12,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.ChatFormatting;
@@ -137,11 +138,9 @@ public class TameAbilityEvents {
             Map<SupportCacheKey, List<LivingEntity>> supportCache = new HashMap<>();
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof LivingEntity tame)) continue;
-                boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame);
+                boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame) || TameLimitService.isReleased(tame);
                 if ((!TameEntityAdapter.isTame(tame) && !cursed) || !tame.isAlive()) continue;
-                TameData data = cursed
-                        ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
-                        : TameRegistry.get(tame.getUUID());
+                TameData data = TameLimitService.abilityData(tame);
                 if (data == null || (data.abilityLevels.isEmpty() && data.abilities.isEmpty() && data.attributeLevels.isEmpty())) continue;
                 if (reviveDeadEntry(data)) {
                     revivedDeadEntry = true;
@@ -170,7 +169,8 @@ public class TameAbilityEvents {
                 boolean ownerProtectionPass = shouldRunPeriodicPass(tame, now, OWNER_PROTECTION_TICK_RATE);
                 boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, currentTarget);
-                boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0 || TameCommands.isHungerBlockingAbilities(data);
+                boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0
+                        || (!TameLimitService.isReleased(tame) && TameCommands.isHungerBlockingAbilities(data));
                 TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, currentTarget, now));
 
                 if (namedEffectsPass) {
@@ -248,11 +248,9 @@ public class TameAbilityEvents {
             }
 
             LivingEntity attackerTame = resolveTameAttacker(event);
-            boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame);
+            boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame) || TameLimitService.isReleased(attackerTame);
             if (attackerTame != null && (TameEntityAdapter.isTame(attackerTame) || cursedAttacker)) {
-                TameData attackerData = cursedAttacker
-                        ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(attackerTame)
-                        : TameRegistry.get(attackerTame.getUUID());
+                TameData attackerData = TameLimitService.abilityData(attackerTame);
                 if (attackerData != null
                         && (cursedAttacker || TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
@@ -274,11 +272,9 @@ public class TameAbilityEvents {
             }
 
             LivingEntity targetTame = event.getEntity();
-            boolean cursedTarget = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(targetTame);
+            boolean cursedTarget = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(targetTame) || TameLimitService.isReleased(targetTame);
             if (!TameEntityAdapter.isTame(targetTame) && !cursedTarget) return;
-            TameData targetData = cursedTarget
-                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(targetTame)
-                    : TameRegistry.get(targetTame.getUUID());
+            TameData targetData = TameLimitService.abilityData(targetTame);
             if (targetData == null) return;
 
             if (!TameEntityAdapter.isStayingStill(targetTame) && !INTERNAL_SUPPORT_REDIRECT.get() && tameHasNearbyReactiveSupport(targetData)) {
@@ -2534,9 +2530,7 @@ public class TameAbilityEvents {
             if (direct instanceof EvokerFangs) noteDamageContributor("evoker_fangs");
             LivingEntity tame = resolveProjectileOwner(direct);
             TameData data = tame == null ? null
-                    : com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)
-                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
-                    : TameRegistry.get(tame.getUUID());
+                    : TameLimitService.abilityData(tame);
             int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data,
                     direct instanceof NoGriefLargeFireball ? "ghast_fireball"
                             : direct instanceof WitherSkull ? "wither_skull"
@@ -2555,9 +2549,7 @@ public class TameAbilityEvents {
             noteDamageContributor("shulker_bullet");
             LivingEntity tame = resolveProjectileOwner(direct);
             TameData data = tame == null ? null
-                    : com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)
-                    ? com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(tame)
-                    : TameRegistry.get(tame.getUUID());
+                    : TameLimitService.abilityData(tame);
             int level = data == null ? 1 : Math.max(1, LevelSystem.getAbilityLevel(data, "shulker_bullet"));
             if (data != null) {
                 event.setAmount(offensiveAbilityCastDamage(data, "shulker_bullet", level));
@@ -2576,7 +2568,8 @@ public class TameAbilityEvents {
             owner = TameEntityAdapter.owner(projectile);
         }
         return owner instanceof LivingEntity tame && (TameEntityAdapter.isTame(tame)
-                || com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) ? tame : null;
+                || com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)
+                || TameLimitService.isReleased(tame)) ? tame : null;
     }
 
     private static void setProjectileDamage(Entity projectile, String abilityId, float damage) {

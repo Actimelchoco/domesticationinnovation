@@ -950,7 +950,7 @@ public class TameCommands {
                         .then(Commands.argument("player", StringArgumentType.word())
                                 .suggests((ctx, b) -> suggestOnlinePlayers(ctx.getSource(), b))
                                 .executes(ctx -> simpleDuelInvite(ctx.getSource(), StringArgumentType.getString(ctx, "player")))))
-                .then(buildOrganizedDuelLeaderboardCommand())
+                .then(buildOrganizedDuelLeaderboardCommand().requires(TameCommands::isIdleDuelSource))
                 .then(buildArenaCommand().requires(TameCommands::isIdleDuelSource))
                 .then(Commands.literal("session")
                         .requires(source -> false)
@@ -988,10 +988,10 @@ public class TameCommands {
                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                 .executes(ctx -> duelSessionFfaCompact(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
-                .then(Commands.literal("nearby")
+                .then(Commands.literal("addNearby")
                         .requires(TameCommands::isPreparingDuelSelectionSource)
-                        .executes(ctx -> simpleDuelNearby(ctx.getSource(), 3))
-                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 20))
+                        .executes(ctx -> simpleDuelNearby(ctx.getSource(), 10))
+                        .then(Commands.argument("radius", IntegerArgumentType.integer(1, 64))
                                 .executes(ctx -> simpleDuelNearby(ctx.getSource(), IntegerArgumentType.getInteger(ctx, "radius")))))
                 .then(Commands.literal("cancel")
                         .requires(TameCommands::isPreparingDuelSource)
@@ -999,9 +999,9 @@ public class TameCommands {
                 .then(Commands.literal("ff")
                         .requires(TameCommands::isActiveDuelSource)
                         .executes(ctx -> duelForfeit(ctx.getSource())))
-                .then(Commands.literal("tp")
-                        .requires(TameCommands::isActiveDuelSource)
-                        .executes(ctx -> duelTeleportAll(ctx.getSource())))
+                .then(Commands.literal("info")
+                        .requires(source -> isPreparingDuelSource(source) || isActiveDuelSource(source))
+                        .executes(ctx -> simpleDuelInfo(ctx.getSource())))
                 .then(Commands.literal("accept")
                         .requires(TameCommands::hasSimpleDuelInviteSource)
                         .then(Commands.argument("inviteId", StringArgumentType.word())
@@ -4744,13 +4744,27 @@ public class TameCommands {
         ServerPlayer owner = source.getPlayer();
         if (owner == null) return b.buildFuture();
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
-        if (add && roster.bodyguards.size() >= 3) return b.buildFuture();
+        var composition = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.composition(roster);
+        Set<UUID> assigned = new HashSet<>(roster.bodyguards);
+        Set<String> names = new LinkedHashSet<>(), types = new LinkedHashSet<>(), groups = new LinkedHashSet<>();
         for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
             if (isDuelLocked(data)) continue;
-            boolean member = data.tlId != null && roster.bodyguards.contains(data.tlId);
-            if (add ? !member && !isManualMovementLocked(data) && !data.stored : member) suggestCommandString(b, data.name);
+            boolean member = data.tlId != null && assigned.contains(data.tlId);
+            boolean eligible = add ? !member && !isManualMovementLocked(data) && !data.stored && !data.dead && composition.canAdd(data.type) : member;
+            if (!eligible) continue;
+            if (data.name != null && !data.name.isBlank()) names.add(data.name);
+            if (data.type != null && !data.type.isBlank()) types.add(data.type);
+            groups.addAll(groupMemberships(data));
         }
-        return b.buildFuture();
+        String remaining = b.getRemaining().toLowerCase(Locale.ROOT);
+        if (remaining.startsWith("type ")) return SharedSuggestionProvider.suggest(types, b.createOffset(b.getStart() + 5));
+        if (remaining.startsWith("group ")) return SharedSuggestionProvider.suggest(groups, b.createOffset(b.getStart() + 6));
+        if (remaining.startsWith("name ")) return SharedSuggestionProvider.suggest(names, b.createOffset(b.getStart() + 5));
+        if (!names.isEmpty()) { names.add("all"); names.add("name"); }
+        if (!types.isEmpty()) names.add("type");
+        if (!groups.isEmpty()) names.add("group");
+        if (!add && !roster.bodyguards.isEmpty()) names.add("all");
+        return SharedSuggestionProvider.suggest(names, b);
     }
 
     private static void rememberLastGuardianPost(TameData data) {
@@ -4886,13 +4900,15 @@ public class TameCommands {
                 .executes(ctx -> bodyguardInfo(ctx.getSource(), true))
                 .then(Commands.literal("info").executes(ctx -> bodyguardInfo(ctx.getSource(), false)))
                 .then(Commands.literal("add")
-                        .requires(source -> source.getPlayer() != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(source.getPlayer()).bodyguards.size() < 3)
-                        .then(Commands.argument("name", StringArgumentType.string())
+                        .requires(source -> source.getPlayer() != null)
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
                                 .suggests((ctx,b) -> suggestBodyguardCandidates(ctx.getSource(), b, true))
-                                .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), true))))
-                .then(Commands.literal("remove").then(Commands.argument("name", StringArgumentType.string())
-                        .suggests((ctx,b) -> suggestBodyguardCandidates(ctx.getSource(), b, false))
-                        .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"name"), false))))
+                                .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"selection"), true))))
+                .then(Commands.literal("remove")
+                        .then(Commands.literal("all").executes(ctx -> bodyguardChange(ctx.getSource(), "all", false)))
+                        .then(Commands.argument("selection", StringArgumentType.greedyString())
+                                .suggests((ctx,b) -> suggestBodyguardCandidates(ctx.getSource(), b, false))
+                                .executes(ctx -> bodyguardChange(ctx.getSource(), StringArgumentType.getString(ctx,"selection"), false))))
                 .then(Commands.literal("setRange").then(Commands.argument("range", IntegerArgumentType.integer(1,22))
                         .executes(ctx -> bodyguardRange(ctx.getSource(), IntegerArgumentType.getInteger(ctx,"range")))));
     }
@@ -4900,11 +4916,11 @@ public class TameCommands {
         ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
         if (rules) {
-            owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <name>, info, setRange <1-22>. Maximum 3 assigned tames; dead guards keep their slots and return after respawning."));
+            owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <selection>, remove all, info, setRange <1-22>. No roster size cap: all guards must share one entity type, or every guard must have a different type. Dead/stored guards still count for composition."));
             owner.sendSystemMessage(Component.literal("Always bodyguard mode and automatic follow movement; manual movement commands skip roster guards. Inventory, abilities, attributes and other non-movement settings remain editable. Owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
             owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
         }
-        owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "/3; range " + roster.bodyguardRange));
+        owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "; range " + roster.bodyguardRange));
         for (TameData data : com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.members(roster))
             owner.sendSystemMessage(Component.literal(data.name + " | " + (data.dead ? "dead" : data.stored ? "stored" : "alive")));
         return 1;
@@ -4917,47 +4933,80 @@ public class TameCommands {
         TameRegistry.markDirty();
         owner.sendSystemMessage(Component.literal("Bodyguard range set to " + range)); return 1;
     }
-    private static int bodyguardChange(CommandSourceStack source, String name, boolean add) {
+    private static int bodyguardChange(CommandSourceStack source, String raw, boolean add) {
         ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
-        TameData data = findOwnedTameAny(owner.getUUID(), name);
-        if (data == null) return error(owner, "Owned tame not found.");
-        if (isDuelLocked(data)) return error(owner, "That tame is in a duel.");
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
-        UUID id = data.ensureTlId();
-        if (add) {
-            if (isAssignedGuardian(data)) return error(owner, movementLockMessage(data));
-            if (data.rosterBodyguard || roster.bodyguards.contains(id)) return error(owner, "Already a bodyguard.");
-            if (roster.bodyguards.size() >= 3) return error(owner, "Maximum 3 bodyguards.");
-            if (data.stored) return error(owner, "Unstore the tame before adding it.");
-            clearPendingImmediateChunkTeleport(data);
-            data.guardianReleaseMovementPending = -1;
-            com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
-            data.bodyguardPreviousClose = data.closeMovement;
-            roster.bodyguards.add(id); data.rosterBodyguard = true;
-            data.mode = TameMode.BODYGUARD.id(); data.bodyguardRange = roster.bodyguardRange;
-            clearGuardianAnchor(data);
-        } else {
-            if (!roster.bodyguards.remove(id)) return error(owner, "Not an assigned bodyguard.");
-            clearPendingImmediateChunkTeleport(data);
-            data.rosterBodyguard = false; data.mode = TameMode.DEFAULT.id();
-            data.closeMovement = data.bodyguardPreviousClose;
-            data.bodyguardHealingBonus = 0; data.bodyguardXpBonus = 0;
-            TamePackService.updateModifiers(data);
-            if (!data.dead && !data.stored) {
-                SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
-                LivingEntity body = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
-                data.movementOrder = 1;
-                if (body != null) {
-                    LivingEntity moved = transferGuardian(body, data, home);
-                    if (moved != null) applyLivingMovementOverride(moved, data, MovementOrder.SIT);
-                } else queueRosterBodyguardTransfer(source.getServer(), data, home);
+        var composition = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.composition(roster);
+        Map<UUID, TameData> selected = new LinkedHashMap<>();
+        for (String term : raw.split(",")) {
+            String value = term.trim();
+            if (value.startsWith("\"") && value.endsWith("\"") && value.length() > 1) value = value.substring(1, value.length() - 1);
+            DuelSelection selector = parseCompactDuelSelector(value);
+            if (selector == null) continue;
+            List<TameData> matches = !add && selector.kind == DuelSelectionKind.ALL
+                    ? new ArrayList<>(com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.members(roster))
+                    : new ArrayList<>(resolveOwnedTameDataSelection(owner.getUUID(), selector));
+            matches.sort(Comparator.comparing((TameData data) -> safeName(data)).thenComparing(data -> data.uuid.toString()));
+            for (TameData data : matches) {
+                if (add && selector.kind == DuelSelectionKind.ALL && isRemovedFromAll(owner.getUUID(), data)) continue;
+                selected.put(data.uuid, data);
             }
         }
+        int changed = 0, skipped = 0;
+        String firstFailure = null;
+        for (TameData data : selected.values()) {
+            UUID id = data.ensureTlId();
+            boolean member = roster.bodyguards.contains(id);
+            if (!add && !member) continue;
+            String failure = isDuelLocked(data) ? "That tame is in a duel." : null;
+            if (add && failure == null) {
+                if (isAssignedGuardian(data)) failure = movementLockMessage(data);
+                else if (data.rosterBodyguard || member) failure = "Already a bodyguard.";
+                else if (data.dead || data.stored) failure = "Only living, unstored tames can be added.";
+                else if (!composition.canAdd(data.type)) failure = "Bodyguards must all share one type, or each have a unique type.";
+            }
+            if (failure != null) { skipped++; if (firstFailure == null) firstFailure = failure; continue; }
+            if (add) {
+                clearPendingImmediateChunkTeleport(data);
+                data.guardianReleaseMovementPending = -1;
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
+                data.bodyguardPreviousClose = data.closeMovement;
+                roster.bodyguards.add(id); composition.add(data.type); data.rosterBodyguard = true;
+                data.mode = TameMode.BODYGUARD.id(); data.bodyguardRange = roster.bodyguardRange;
+                clearGuardianAnchor(data);
+            } else {
+                roster.bodyguards.remove(id);
+                clearPendingImmediateChunkTeleport(data);
+                data.rosterBodyguard = false; data.mode = TameMode.DEFAULT.id();
+                data.closeMovement = data.bodyguardPreviousClose;
+                data.bodyguardHealingBonus = 0; data.bodyguardXpBonus = 0;
+                TamePackService.updateModifiers(data);
+                if (!data.dead && !data.stored) {
+                    SpawnTarget home = resolveRespawnTarget(source, owner, data, false);
+                    LivingEntity body = findLoadedLivingTameByIdentity(source.getServer(), data.uuid, data.tlId);
+                    data.movementOrder = 1;
+                    if (body != null) {
+                        LivingEntity moved = transferGuardian(body, data, home);
+                        if (moved != null) applyLivingMovementOverride(moved, data, MovementOrder.SIT);
+                    } else queueRosterBodyguardTransfer(source.getServer(), data, home);
+                }
+            }
+            changed++;
+        }
+        if (!add && raw.trim().equalsIgnoreCase("all")) {
+            int before = roster.bodyguards.size();
+            roster.bodyguards.removeIf(id -> {
+                TameData data = TameRegistry.getByTlId(id);
+                return data == null || !owner.getUUID().equals(data.ownerUUID);
+            });
+            changed += before - roster.bodyguards.size();
+        }
+        if (changed == 0) return error(owner, firstFailure != null ? firstFailure : "No eligible bodyguards matched that selection.");
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.refresh(source.getServer());
         TameRegistry.markDirty();
-        // Refresh Brigadier's permission-filtered tree so add disappears/reappears at the limit.
-        if (owner.connection != null) source.getServer().getCommands().sendCommands(owner);
-        owner.sendSystemMessage(Component.literal((add ? "Added " : "Removed ") + data.name + " as bodyguard.")); return 1;
+        owner.sendSystemMessage(Component.literal((add ? "Added " : "Removed ") + changed + " bodyguard(s)."
+                + (skipped > 0 ? " Skipped " + skipped + ". " + firstFailure : "")));
+        return changed;
     }
     private static void queueRosterBodyguardTransfer(MinecraftServer server, TameData data, SpawnTarget target) {
         if (data.lastKnownDimension == null || data.lastKnownDimension.isBlank()) return;
@@ -6009,13 +6058,13 @@ public class TameCommands {
                     "/tames duel selection",
                     "/tames duel start",
                     "/tames duel <selection>",
-                    "/tames duel nearby [radius]",
+                    "/tames duel addNearby [radius]",
                     "/tames duel cancel",
                     "Selections support comma-separated tame names, groups, types, and movement states.",
                     "Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.",
-                    "After accepting an invite, build your team with add/addMyself or nearby, and view it with selection. Each player confirms with start.",
-                    "Remove suggests only selected names, types and groups. Editing either team clears both ready confirmations.",
-                    "Nearby adds tames within radius 3 by default, capped at 20. /tames duel <selection> replaces your team. Selections expire after five minutes."
+                    "After accepting an invite, use add/addMyself/addNearby and view both rosters with info. Each player confirms with start; an empty team fights as the player.",
+                    "Remove suggests only selected names, types and groups. Editing clears only your confirmation; your opponent stays ready.",
+                    "addNearby defaults to a 10-block radius; supply 1-64 to change it. During battle only ff and info are available. Selections expire after five minutes."
             );
         }
         else if (key.equals("duel accept")) {
@@ -6036,8 +6085,8 @@ public class TameCommands {
         else if (key.equals("duel ff") || key.equals("duel forfeit")) {
             sendInfoPage(p, "Duel Forfeit",
                     "/tames duel ff",
-                    "/tames duel tp",
-                    "These commands are available only during an active duel."
+                    "/tames duel info",
+                    "During battle only ff and info are available. Info shows both original rosters with alive/dead status."
             );
         }
         else if (key.equals("duel duelleaderboard") || key.equals("duel leaderboard")) {
@@ -11079,7 +11128,7 @@ public class TameCommands {
                 skippedDead++;
                 continue;
             }
-            TamableAnimal tame = findLoadedTameByIdentity(source.getServer(), data.uuid, data.tlId);
+            LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, player.getUUID(), data);
             if (tame == null || !tame.isAlive()) {
                 skippedUnloaded++;
                 continue;
@@ -22999,23 +23048,18 @@ public class TameCommands {
         return spawnTargetFromGuardianSet(source, anchor);
     }
 
-    private static boolean deployLoadedTameToGuardianSet(TamableAnimal tame, TameData data, SpawnTarget target) {
+    private static boolean deployLoadedTameToGuardianSet(LivingEntity tame, TameData data, SpawnTarget target) {
         if (tame == null || data == null || target == null || target.level == null || target.pos == null) return false;
         if (isManualMovementLocked(data)) return false;
-        TameTransferService.TransferResult result = TameTransferService.transferToLocation(
-                tame,
-                target.level,
-                target.pos.x,
-                target.pos.y,
-                target.pos.z,
-                target.yRot,
-                target.xRot,
-                data
-        );
-        if (!result.success()) {
-            return false;
+        LivingEntity moved;
+        if (tame instanceof TamableAnimal animal) {
+            var result = TameTransferService.transferToLocation(animal, target.level,
+                    target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot, data);
+            moved = result.success() ? result.entity() : null;
+        } else {
+            moved = TameTransferService.transferInterfaceToLocation(tame, target.level,
+                    target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot, data, false);
         }
-        TamableAnimal moved = result.entity();
         if (moved == null) {
             return false;
         }
@@ -25889,8 +25933,8 @@ public class TameCommands {
         SimpleDuelPreparation preparation = new SimpleDuelPreparation(challenger.getUUID(), opponent.getUUID(), System.currentTimeMillis() + SIMPLE_DUEL_WINDOW_MS);
         SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(challenger.getUUID(), preparation);
         SIMPLE_DUEL_PREPARATION_BY_PLAYER.put(opponent.getUUID(), preparation);
-        challenger.sendSystemMessage(Component.literal(opponent.getName().getString() + " accepted. Use /tames duel add <selection>, addMyself, or nearby [radius]. View with /tames duel selection, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
-        opponent.sendSystemMessage(Component.literal("Accepted. Use /tames duel add <selection>, addMyself, or nearby [radius]. View with /tames duel selection, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
+        challenger.sendSystemMessage(Component.literal(opponent.getName().getString() + " accepted. Use /tames duel add <selection>, addMyself, or addNearby [radius]. View with /tames duel info, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
+        opponent.sendSystemMessage(Component.literal("Accepted. Use /tames duel add <selection>, addMyself, or addNearby [radius]. View with /tames duel info, then both use /tames duel start.").withStyle(ChatFormatting.GREEN));
         refreshDuelCommands(challenger, opponent);
         return 1;
     }
@@ -25939,33 +25983,57 @@ public class TameCommands {
         if (replace) { team.tameIds.clear(); team.includeSelf = false; }
         team.includeSelf |= includeSelf;
         for (LivingEntity tame : resolved.tames) team.tameIds.add(tame.getUUID());
-        if (hadSelf != team.includeSelf || !before.equals(team.tameIds)) simpleDuelSelectionChanged(source, preparation);
+        if (hadSelf != team.includeSelf || !before.equals(team.tameIds)) {
+            simpleDuelSelectionChanged(source, preparation);
+            return 1;
+        }
         return simpleDuelShowSelection(source);
     }
 
     private static void simpleDuelSelectionChanged(CommandSourceStack source, SimpleDuelPreparation preparation) {
-        preparation.firstTeam.ready = false;
-        preparation.secondTeam.ready = false;
-        preparation.fundingFailed = false;
         ServerPlayer player = source.getPlayer();
-        ServerPlayer opponent = source.getServer().getPlayerList().getPlayer(preparation.opponent(player.getUUID()));
-        if (opponent != null) opponent.sendSystemMessage(Component.literal(player.getName().getString() + " changed their duel selection. Both players must use /tames duel start when ready.").withStyle(ChatFormatting.GRAY));
+        preparation.team(player.getUUID()).ready = false;
+        preparation.fundingFailed = false;
+        for (UUID id : List.of(preparation.first, preparation.second)) {
+            ServerPlayer recipient = source.getServer().getPlayerList().getPlayer(id);
+            if (recipient != null) sendSimpleDuelSelections(recipient, preparation);
+        }
+    }
+
+    private static void sendSimpleDuelSelections(ServerPlayer recipient, SimpleDuelPreparation preparation) {
+        for (UUID id : List.of(preparation.first, preparation.second)) {
+            SimpleDuelTeam team = preparation.team(id);
+            ServerPlayer owner = recipient.getServer().getPlayerList().getPlayer(id);
+            String ownerName = owner == null ? id.toString() : owner.getGameProfile().getName();
+            List<String> members = new ArrayList<>();
+            if (team.includeSelf || team.tameIds.isEmpty()) members.add("player");
+            for (UUID tameId : team.tameIds) {
+                TameData data = TameRegistry.get(tameId);
+                members.add(data == null || data.name == null || data.name.isBlank() ? tameId.toString() : data.name);
+            }
+            recipient.sendSystemMessage(Component.literal(ownerName + ": " + String.join(", ", members)).withStyle(ChatFormatting.AQUA));
+        }
     }
 
     private static int simpleDuelShowSelection(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         SimpleDuelPreparation preparation = SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
         if (preparation == null || !isPreparingDuelSource(source)) return error(player, "You are not preparing a duel. Invite a player first.");
-        SimpleDuelTeam team = preparation.team(player.getUUID());
-        player.sendSystemMessage(Component.literal("Your duel selection" + (team.ready ? " (ready)" : " (not ready)") + ":").withStyle(ChatFormatting.GOLD));
-        if (team.includeSelf) player.sendSystemMessage(Component.literal("- myself").withStyle(ChatFormatting.AQUA));
-        for (UUID id : team.tameIds) {
-            TameData data = TameRegistry.get(id);
-            String label = data == null ? id.toString() : data.name + " [" + data.type + "]" + (data.group == null || data.group.isBlank() ? "" : " group " + data.group);
-            player.sendSystemMessage(Component.literal("- " + label).withStyle(ChatFormatting.AQUA));
+        sendSimpleDuelSelections(player, preparation);
+        return 1;
+    }
+
+    private static int simpleDuelInfo(CommandSourceStack source) {
+        if (isPreparingDuelSource(source)) return simpleDuelShowSelection(source);
+        ServerPlayer player = source.getPlayer();
+        var teams = TameDuelManager.duelTeamStatus(source.getServer(), player.getUUID());
+        if (teams.isEmpty()) return error(player, "You are not in a duel.");
+        for (var team : teams) {
+            String ownerName = resolveKnownOwnerName(source.getServer(), team.owner(), team.owner().toString());
+            List<String> members = new ArrayList<>();
+            for (var member : team.members()) members.add(member.name() + (member.alive() ? " (alive)" : " (dead)"));
+            player.sendSystemMessage(Component.literal(ownerName + ": " + String.join(", ", members)).withStyle(ChatFormatting.AQUA));
         }
-        if (!team.includeSelf && team.tameIds.isEmpty()) player.sendSystemMessage(Component.literal("(empty)").withStyle(ChatFormatting.GRAY));
-        player.sendSystemMessage(Component.literal("Use /tames duel add <selection>, remove <selection>, addMyself, then start.").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
@@ -25990,7 +26058,7 @@ public class TameCommands {
         if (parsed.selection.includeSelf && team.includeSelf) { team.includeSelf = false; changed = true; }
         if (!changed) return error(player, "That selection does not match anyone in your duel team.");
         simpleDuelSelectionChanged(source, preparation);
-        return simpleDuelShowSelection(source);
+        return 1;
     }
 
     private static CompletableFuture<Suggestions> suggestSimpleDuelRemoval(CommandSourceStack source, SuggestionsBuilder b) {
@@ -26018,7 +26086,7 @@ public class TameCommands {
 
     private static TeamSelectionResult resolveSimpleDuelTeam(CommandSourceStack source, ServerPlayer owner, SimpleDuelTeam team) {
         List<LivingEntity> tames = new ArrayList<>(), members = new ArrayList<>();
-        if (team.includeSelf) {
+        if (team.includeSelf || team.tameIds.isEmpty()) {
             if (!owner.isAlive()) return TeamSelectionResult.fail("You must be alive to duel as yourself.");
             members.add(owner);
         }
@@ -26038,7 +26106,9 @@ public class TameCommands {
         if (preparation == null || !isPreparingDuelSelectionSource(source)) return error(player, "You are not preparing a duel.");
         TeamSelectionResult team = resolveSimpleDuelTeam(source, player, preparation.team(player.getUUID()));
         if (!team.error.isBlank()) return error(player, team.error);
-        preparation.team(player.getUUID()).ready = true;
+        SimpleDuelTeam draft = preparation.team(player.getUUID());
+        if (draft.tameIds.isEmpty()) draft.includeSelf = true;
+        draft.ready = true;
         if (!preparation.ready()) player.sendSystemMessage(Component.literal("Ready. Waiting for the other player to use /tames duel start.").withStyle(ChatFormatting.GREEN));
         return tryStartSimpleDuel(source, preparation);
     }
@@ -26046,8 +26116,10 @@ public class TameCommands {
     private static int simpleDuelNearby(CommandSourceStack source, int radius) {
         ServerPlayer player = source.getPlayer();
         List<LivingEntity> nearby = new ArrayList<>();
-        for (TamableAnimal tame : player.level().getEntitiesOfClass(TamableAnimal.class, player.getBoundingBox().inflate(Mth.clamp(radius, 1, 20)))) {
-            if (!tame.isAlive() || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) continue;
+        radius = Mth.clamp(radius, 1, 64);
+        for (LivingEntity tame : player.level().getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(radius))) {
+            if (!tame.isAlive() || !TameEntityAdapter.isTame(tame) || !player.getUUID().equals(TameEntityAdapter.ownerUuid(tame))
+                    || player.distanceToSqr(tame) > (double) radius * radius) continue;
             TameData data = TameRegistry.get(tame.getUUID());
             if (data != null && data.horseType) continue;
             if (data != null) nearby.add(tame);
@@ -26080,7 +26152,6 @@ public class TameCommands {
         TameDuelManager.startTeamDuel(source.getServer(), first.getUUID(), firstIds, second.getUUID(), secondIds, Set.of(), false);
         first.sendSystemMessage(Component.literal("Duel started.").withStyle(ChatFormatting.GOLD));
         second.sendSystemMessage(Component.literal("Duel started.").withStyle(ChatFormatting.GOLD));
-        refreshDuelCommands(first, second);
         return 1;
     }
 

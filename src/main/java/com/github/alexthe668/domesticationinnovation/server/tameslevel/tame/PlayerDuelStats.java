@@ -87,7 +87,7 @@ public class PlayerDuelStats {
             data.ariseUsesToday = Math.max(0, tag.getInt("ariseUsesToday"));
             data.bodyguardRange = tag.contains("bodyguardRange") ? Math.max(1, Math.min(22, tag.getInt("bodyguardRange"))) : 12;
             for (var entry : tag.getList("bodyguards", Tag.TAG_STRING)) {
-                try { UUID id = UUID.fromString(entry.getAsString()); if (data.bodyguards.size() < 3 && !data.bodyguards.contains(id)) data.bodyguards.add(id); }
+                try { UUID id = UUID.fromString(entry.getAsString()); if (!data.bodyguards.contains(id)) data.bodyguards.add(id); }
                 catch (IllegalArgumentException ignored) { }
             }
             if (tag.contains("animightConversions", Tag.TAG_COMPOUND)) {

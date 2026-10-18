@@ -186,11 +186,11 @@ paths below in place of the former flat /tames settings <option> commands.
 /tames duel arena <arenaName> setWaitingB
 /tames duel arena <arenaName> hidetames <enabled>
 /tames duel arena <arenaName> duel <spec>
-/tames duel nearby
-/tames duel nearby <radius>
+/tames duel addNearby
+/tames duel addNearby <radius>
 /tames duel cancel
 /tames duel ff
-/tames duel tp
+/tames duel info
 /tames duel accept <inviteId>
 /tames duel decline <inviteId>
 /tames duel <selection>
@@ -1057,16 +1057,16 @@ DUEL START
 /tames duel selection
 /tames duel start
 /tames duel <selection>
-/tames duel nearby [radius]
+/tames duel addNearby [radius]
 /tames duel cancel
 Selections support comma-separated tame names, groups, types, and movement states.
 Duels have no entry payment; participating tames consume food at one hundredth of their normal rate.
 After accepting an invite, both players have five minutes to build their teams and each confirm with /tames duel start.
 Add adds loaded tames to the current team; addMyself includes the player. Repeated additions do not duplicate participants.
-Selection lists the current tame names, types and groups, plus the player if included. Remove suggestions show only selected names, types and groups.
+Selection lists both current rosters by name, showing player when a team has no tames or explicitly includes its player. Remove suggestions show only selected names, types and groups.
 Removing a group/type affects only members already selected. Groups are expanded when added, so removing one member does not cause it to be added back.
-Either player's roster change clears both ready confirmations. Selection commands never automatically start an invited duel.
-Nearby adds nearby tames, defaults to radius 3 and is capped at 20. The legacy /tames duel <selection> replaces your current team.
+A roster change clears only that player's ready confirmation; the opponent stays ready. Selection commands never automatically start an invited duel. Empty rosters display the player, and /tames duel start with no tames selected acts as addMyself. Every roster edit prints only the two current player selections to both participants.
+addNearby adds owned loaded tames (including interface tames) within a spherical 10-block radius by default. Its optional radius accepts integers 1-64. The legacy /tames duel <selection> replaces your current team.
 The direct compact /tames duel selection <left> vs <right> workflow remains available while idle.
 
 DUEL ACCEPT
@@ -1085,8 +1085,8 @@ Declines a pending duel invite from that player.
 DUEL FORFEIT
 ------------
 /tames duel ff
-/tames duel tp
-These commands are available only during an active duel.
+/tames duel info
+During battle only ff and info are shown. Info lists both original rosters, including eliminated participants marked dead and active participants marked alive. During selection, info shows both current rosters. The selection-phase commands are add, remove, addMyself, addNearby, selection, info, start and cancel. The client command list refreshes automatically on phase changes.
 
 DUEL DUELLEADERBOARD
 --------------------
@@ -1174,7 +1174,8 @@ Solo combat-eligible tames gain +200% base healing speed; duos +100%; trios +50%
 BODYGUARD ROSTER
 /tames bodyguard: system rules and roster.
 /tames bodyguard info: assigned guards, alive/dead status and range.
-/tames bodyguard add/remove <name>: maximum three assignments, including dead guards. The add command disappears at three; removing frees a slot. Guards retain assignment across respawns. Removal sends a living guard home and sits it, without teleport payment.
+/tames bodyguard add <selection>: no roster size cap. The roster must contain either only one entity type or one tame per entity type. Supports names, comma-separated names, group, type and all; incompatible additions are skipped in selection order. Dead/stored members still count for composition. Suggestions include only eligible types and tames. Existing mixed rosters are preserved but must be repaired by removal before adding more.
+/tames bodyguard remove <selection> and /tames bodyguard remove all: remove assigned members, including dead members. remove all also clears stale assignments. Living removed guards go home and sit without teleport payment. Duel-locked members remain protected. Guards retain assignment across respawns.
 /tames bodyguard setRange <1-22>: shared roster range. /tames mode <name> bodyguard <range> also accepts only 1-22, but roster guards use the shared command and cannot change out of bodyguard mode.
 Roster guards follow their owner; below 5 health they use close movement, reverting when the owner recovers. Unloaded living guards are recovered through their saved chunk and teleported to the owner; missing originals are never reconstructed by this recovery path. Stored guards are not recovered.
 If no edible food remains in the guard inventory and its own saturation is insufficient for an action, it consumes owner saturation at exactly 1 owner saturation = 1 tame food point (100 tame saturation units). Borrowing requires an online owner and sufficient saturation; it does not drain the owner's food level.
@@ -1209,3 +1210,15 @@ Only the target claim matters; unclaimed targets, ordinary player damage/removal
 OPTIONAL FTB JAR: CLAIMED FRAMES AND ARMOR STANDS
 ------------------------------------------------
 The standalone FTB Chunks claimed-display fork makes claimed frames/glow frames and armor stands immune to all ordinary damage except direct player melee with an empty main hand or sword. This is broader than the tame-only protection. Existing FTB player permissions still apply. Frame contents cannot be popped by blocked sources, and frames survive lost support/pushing. Unclaimed targets retain normal behavior. Replace the server FTB Chunks JAR with the display-protection build; no config or client edits required.
+
+PER-TYPE TAME LIMIT (V42)
+------------------------
+Each owner may keep 10 qualifying registry entries per entity type, including qualifying stored/dead entries. Only tames at level 10+ with at least one ability or positive ability/attribute upgrade level count. Other tames remain registered and owned, do not consume limit slots, and have any grace timer cleared. Extras get 10 minutes of owner online time before losing ownership and becoming permanent wild monster hunters with their abilities preserved. Timers persist across restarts, pause offline, and clear when a place opens. Existing over-limit registries receive the same grace period; older records use stable UUID order to choose the retained ten. Warnings are automatic; no config changes are required. Full rules and performance limits: docs/TAME_LIMIT.txt.
+
+GUARDIAN GROUP INTERFACE TAMES (V43)
+----------------------------------
+/tames guardian deployGroup <guardianGroup> <selection> deploys loaded interface-based tames as well as vanilla-style tames, including mixed selections. Saved posts, guardian command locks and ownership checks still apply. This command-only fix adds no ticking scans and needs no configuration edits.
+
+IMPRINTED OWNER (V44)
+--------------------
+The first known player to tame a creature becomes its permanent imprinted owner. The player's UUID is stored separately from current ownership, in both the tame registry and the entity's persistent TLImprintedOwner tag. Transfers, save/load, reconstruction and release to the wild preserve this identity. Existing tames without an imprint use their current known owner; earlier ownership cannot be reconstructed reliably. This is saved memory only and grants no extra reclaim or command permissions. No configuration edits are required.
