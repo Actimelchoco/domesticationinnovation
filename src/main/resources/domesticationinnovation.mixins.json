@@ -25,6 +25,7 @@
     "AlexsMobsWarpedToadMixin",
     "BaseSpawnerMixin",
     "CatMixin",
+    "ClaimedDecorationDamageMixin",
     "EnderDragonMixin",
     "EntityMixin",
     "FishingHookMixin",

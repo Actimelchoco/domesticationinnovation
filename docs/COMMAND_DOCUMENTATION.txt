@@ -1200,3 +1200,8 @@ ANIMIGHT WORN ARMOR DISPOSAL
 ----------------------------
 /tames settings equipment discardWornArmor [true|false]
 Default false, saved per owner. After ordinary armor swaps, if every armor piece left in reserve is damageable and at 10% durability or less, drop one weakest piece intact. Rank by armor, toughness, Protection, then remaining durability. Check/drop at most once per 5 seconds per tame. Healthy or unbreakable stored armor prevents disposal; weapons, scraps, seals and equipped pieces are never discarded by this setting. Equipment reserve now has 54 slots; old saved contents retain their positions.
+
+FTB CLAIM DISPLAY AND VEHICLE PROTECTION
+---------------------------------------
+Tames cannot damage armor stands, item frames (including glow frames and their contents), paintings/other hanging entities, boats, minecarts or end crystals inside any FTB claim. Applies to tame melee, owned projectiles and tame-attributed explosions, even if the attacker is outside the claim or the tame belongs to the claim owner. Armor-stand targets are also rejected before combat begins.
+Only the target claim matters; unclaimed targets, ordinary player damage/removal, wild mobs and ownerless damage retain existing behavior and FTB permissions. Hanging decorations use their anchor block. Modded entities inheriting these vanilla damage methods are covered. FTB Chunks remains optional; when absent this rule is inactive. Uses direct claim lookups only on relevant damage/target/explosion events; no ticking scans or chunk loading. Install the updated DomesticationInnovation JAR; no FTB JAR or config edits are required.
