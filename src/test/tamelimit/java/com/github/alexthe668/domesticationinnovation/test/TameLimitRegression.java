@@ -175,6 +175,8 @@ public final class TameLimitRegression {
     @GameTest(template="empty", timeoutTicks=100)
     public static void releasedHunterStillCastsItsAbilities(GameTestHelper h) {
         Wolf wolf=wolf(h,UUID.randomUUID()); wolf.setNoAi(true);
+        var viewer=FakePlayerFactory.get(h.getLevel(),new GameProfile(UUID.randomUUID(),"HunterViewer"));
+        viewer.setPos(wolf.getX(),wolf.getY(),wolf.getZ());h.getLevel().players().add(viewer);
         var zombie=EntityType.ZOMBIE.create(h.getLevel()); zombie.setNoAi(true);
         zombie.moveTo(h.absolutePos(new BlockPos(4,1,1)),0,0);
         h.getLevel().addFreshEntity(zombie);
@@ -192,7 +194,7 @@ public final class TameLimitRegression {
                     TameLimitService.target(event);
                     check(event.getNewTarget()==null,"hunter rejects passive animals");
                 }finally{cow.discard();}
-            }finally{wolf.discard();zombie.discard();}
+            }finally{h.getLevel().players().remove(viewer);wolf.discard();zombie.discard();}
             h.succeed();
         });
     }

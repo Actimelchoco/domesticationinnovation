@@ -36,6 +36,13 @@ public abstract class MobMixin extends LivingEntity {
     @Unique private boolean tl$primitiveGoalsInstalled;
     @Unique private final java.util.List<net.minecraft.world.entity.ai.goal.WrappedGoal> tl$primitiveWildGoals = new java.util.ArrayList<>();
 
+    @Inject(method = "serverAiStep", at = @At("HEAD"), cancellable = true)
+    private void tl$pauseUnobservedLostHunter(CallbackInfo ci) {
+        Mob mob = (Mob)(Object)this;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService.isReleased(mob)
+                && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LostHunterActivity.active(mob)) ci.cancel();
+    }
+
     @Inject(method = "serverAiStep", at = @At("HEAD"))
     private void tl$primitivePetGoals(CallbackInfo ci) {
         Mob mob = (Mob) (Object) this;

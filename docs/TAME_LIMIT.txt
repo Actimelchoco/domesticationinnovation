@@ -34,8 +34,10 @@ Counting runs once per second for online owners, using the owner registry index.
 Timer updates only dirty the existing SavedData record, without copying the
 registry. Release cleanup is capped at four creatures per owner per second.
 Stored release retries check at most 32 entries and spawn at most four per second.
-Wild target searches are staggered every 40 ticks, only near a player (64 blocks),
-and retain a valid current target. Search radius is 10 blocks.
+As of v53, wild target searches are staggered every 100 ticks, only near a living,
+non-spectator player (64 blocks), and retain a valid current target. Search radius
+is 10 blocks. Native AI sleeps away from players; pathfinding and ability work
+have additional budgets. See LOST_HUNTER_THROTTLE.txt.
 
 This limits registered ownership, not total loaded entities or total per-player
 tames across all types. Released hunters still tick, pathfind and cast abilities.

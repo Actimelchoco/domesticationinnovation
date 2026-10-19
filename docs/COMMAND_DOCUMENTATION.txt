@@ -1219,6 +1219,10 @@ GUARDIAN GROUP INTERFACE TAMES (V43)
 ----------------------------------
 /tames guardian deployGroup <guardianGroup> <selection> deploys loaded interface-based tames as well as vanilla-style tames, including mixed selections. Saved posts, guardian command locks and ownership checks still apply. This command-only fix adds no ticking scans and needs no configuration edits.
 
+LOST HUNTER THROTTLE (V53)
+--------------------------
+Lost hunters sleep their native AI and skip abilities when no living, non-spectator player is within 64 blocks. Proximity checks are cached/staggered every 20 ticks. Near players, idle target searches run every 100 ticks, new path computations are limited to every 100 ticks idle or 20 ticks in combat, and ability passes run every 100 ticks idle or 20 ticks in combat. Support scans respect cooldowns and reactive splash scans have a 20-tick minimum cooldown per effect. Owned tames and reclaim/recovery rules are unchanged. See LOST_HUNTER_THROTTLE.txt.
+
 DUEL TEAMMATES (V52)
 --------------------
 During selection, /tames duel invite <player> invites a teammate to your side. They accept the invitation, manage their own player/tame selection, and use start themselves. All players must ready up; edits reset only the editor's readiness. Idle invite still challenges an opponent. Supports 2v1 and larger casual teams; ranked is unchanged. Any member can cancel selection or forfeit the match. Team invitations expire with their selection. See DUEL_TEAMMATES.txt.

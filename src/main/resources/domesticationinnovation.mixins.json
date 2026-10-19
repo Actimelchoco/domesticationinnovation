@@ -41,6 +41,7 @@
     "LegendaryMonstersHauntedGuardMixin",
     "LegendaryMonstersMossyGolemMixin",
     "LivingEntityMixin",
+    "LostHunterNavigationMixin",
     "MobMixin",
     "MutantMonstersCreeperMinionMixin",
     "PanicGoalMixin",

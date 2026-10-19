@@ -286,6 +286,7 @@ public final class TameLimitService {
     @SubscribeEvent
     public static void leave(EntityLeaveLevelEvent event) {
         if (event.getLevel().isClientSide) return;
+        if (event.getEntity() instanceof LivingEntity living) LostHunterActivity.forget(living);
         TameData data = CACHE.remove(event.getEntity());
         if (data != null) event.getEntity().getPersistentData().put(RECORD, data.toTag());
     }
@@ -460,12 +461,11 @@ public final class TameLimitService {
         @Override public boolean canContinueToUse() { return canUse(); }
         @Override public boolean requiresUpdateEveryTick() { return true; }
         @Override public void tick() {
-            if ((mob.tickCount + mob.getId()) % 40 != 0) return;
+            if (!LostHunterActivity.active(mob)) return;
             LivingEntity current = mob.getTarget();
             if (current != null && hunterTarget(current) && !current.isRemoved()) return;
-            mob.setTarget(null);
-            // No idle area scans away from players; native entity ticks remain vanilla's responsibility.
-            if (mob.level().getNearestPlayer(mob, 64) == null) return;
+            if (current != null) mob.setTarget(null);
+            if (Math.floorMod(mob.level().getGameTime() + mob.getUUID().hashCode(), LostHunterActivity.IDLE_SEARCH_TICKS) != 0) return;
             LivingEntity closest = null;
             double distance = Double.MAX_VALUE;
             for (LivingEntity candidate : mob.level().getEntitiesOfClass(LivingEntity.class,

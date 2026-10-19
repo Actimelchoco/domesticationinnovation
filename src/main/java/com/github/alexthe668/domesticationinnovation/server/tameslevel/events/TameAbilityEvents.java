@@ -13,6 +13,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameMode;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LostHunterActivity;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.ChatFormatting;
@@ -138,6 +139,7 @@ public class TameAbilityEvents {
             Map<SupportCacheKey, List<LivingEntity>> supportCache = new HashMap<>();
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof LivingEntity tame)) continue;
+                if (TameLimitService.isReleased(tame) && !LostHunterActivity.abilityPass(tame, level.getGameTime())) continue;
                 boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame) || TameLimitService.isReleased(tame);
                 if ((!TameEntityAdapter.isTame(tame) && !cursed) || !tame.isAlive()) continue;
                 TameData data = TameLimitService.abilityData(tame);
@@ -186,7 +188,10 @@ public class TameAbilityEvents {
                 if (TameEntityAdapter.isStayingStill(tame)) {
                     continue;
                 }
-                if (!abilitiesBlocked && needsNearbyAllySupportScan(data)) {
+                if (!abilitiesBlocked && needsNearbyAllySupportScan(data)
+                        && (!TameLimitService.isReleased(tame) || (shouldRunPeriodicPass(tame, now, 100)
+                            && ((LevelSystem.hasAbility(data, "triage_pulse") && isReady(data, "triage_pulse_tick", now))
+                                || (LevelSystem.hasAbility(data, "cleanse_touch") && isReady(data, "cleanse_touch_tick", now)))))) {
                     List<LivingEntity> nearbySupportTames = collectOwnedNearbySupportTames(level, tame, TameEntityAdapter.ownerUuid(tame), 10.0D, supportCache);
                     TamePerformanceProfiler.run("ability.triage_pulse", () -> handleTriagePulse(level, tame, data, now, nearbySupportTames));
                     TamePerformanceProfiler.run("ability.cleanse_touch", () -> handleCleanseTouch(level, tame, data, now, nearbySupportTames));
@@ -249,7 +254,8 @@ public class TameAbilityEvents {
 
             LivingEntity attackerTame = resolveTameAttacker(event);
             boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame) || TameLimitService.isReleased(attackerTame);
-            if (attackerTame != null && (TameEntityAdapter.isTame(attackerTame) || cursedAttacker)) {
+            if (attackerTame != null && (TameEntityAdapter.isTame(attackerTame) || cursedAttacker)
+                    && (!TameLimitService.isReleased(attackerTame) || LostHunterActivity.active(attackerTame))) {
                 TameData attackerData = TameLimitService.abilityData(attackerTame);
                 if (attackerData != null
                         && (cursedAttacker || TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
@@ -272,6 +278,7 @@ public class TameAbilityEvents {
             }
 
             LivingEntity targetTame = event.getEntity();
+            if (TameLimitService.isReleased(targetTame) && !LostHunterActivity.active(targetTame)) return;
             boolean cursedTarget = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(targetTame) || TameLimitService.isReleased(targetTame);
             if (!TameEntityAdapter.isTame(targetTame) && !cursedTarget) return;
             TameData targetData = TameLimitService.abilityData(targetTame);
@@ -860,6 +867,7 @@ public class TameAbilityEvents {
     private static void handleBattleStrength(LivingEntity tame, TameData data, LivingHurtEvent event) {
         if (!LevelSystem.hasAbility(data, "battle_strength")) return;
         if (tame.getRandom().nextDouble() > 0.10D) return;
+        if (!claimLostAreaScan(tame, data, "battle_strength")) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "battle_strength"));
         int amplifier = Math.max(0, levelValue - 1);
@@ -876,6 +884,7 @@ public class TameAbilityEvents {
     private static void handleDefensiveAura(LivingEntity targetTame, TameData data, LivingHurtEvent event) {
         if (!LevelSystem.hasAbility(data, "defensive_aura")) return;
         if (targetTame.getRandom().nextDouble() > 0.10D) return;
+        if (!claimLostAreaScan(targetTame, data, "defensive_aura")) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "defensive_aura"));
         int amplifier = defensiveAuraAmplifier(levelValue);
@@ -1552,6 +1561,7 @@ public class TameAbilityEvents {
         if (firstTarget == null || !firstTarget.isAlive()) {
             return;
         }
+        if (!claimLostAreaScan(tame, data, "chain_lightning")) return;
         int maxChains = 1 + levelValue;
         double chainRadius = 4.0D + Math.max(0, levelValue - 1) * 0.25D;
         float chainDamage = aoeDamage(Math.max(1.0F, hitDamage * 0.33F));
@@ -1617,6 +1627,7 @@ public class TameAbilityEvents {
     }
 
     private static void applySweepingEdge(LivingEntity tame, TameData data, LivingEntity primaryTarget, float hitDamage, int level) {
+        if (!claimLostAreaScan(tame, data, "sweeping_edge")) return;
         int hits = 0;
         double radius = 1.4D + Math.max(0, level - 1) * 0.20D;
         float scaling = (float) Math.min(0.50D, 0.20D + Math.max(0, level - 1) * 0.075D);
@@ -2394,6 +2405,17 @@ public class TameAbilityEvents {
 
     private static boolean needsNearbyAllySupportScan(TameData data) {
         return data != null && (LevelSystem.hasAbility(data, "triage_pulse") || LevelSystem.hasAbility(data, "cleanse_touch"));
+    }
+
+    /** Reactive splash effects otherwise have no cooldown and can rescan for every incoming hit. */
+    private static boolean claimLostAreaScan(LivingEntity tame, TameData data, String ability) {
+        if (!TameLimitService.isReleased(tame)) return true;
+        if (!LostHunterActivity.active(tame)) return false;
+        long now = tame.level().getGameTime();
+        String key = "lost_scan_" + ability;
+        if (!isReady(data, key, now)) return false;
+        setCooldown(data, key, now + 20);
+        return true;
     }
 
     private static boolean tameHasNearbyReactiveSupport(TameData data) {
