@@ -1,0 +1,34 @@
+Duel teammates (v52)
+
+Idle: /tames duel invite <player> still challenges an opponent.
+During selection: the same command invites that player onto YOUR side.
+The invited player must click Accept or use /tames duel accept <inviteId>.
+This permits 2v1, 2v2 and larger casual teams. Ranked matchmaking is unchanged.
+
+Example:
+  Alice: /tames duel invite Bob
+  Bob: accept the challenge
+  Alice (during selection): /tames duel invite Charlie
+  Charlie: accept the team invitation
+  Alice, Bob and Charlie: choose tames or themselves, then /tames duel start
+Alice and Charlie now fight Bob. Empty selections default to the player.
+
+Each teammate manages only their own tames and confirms their own selection.
+Everyone must be ready. Editing your selection clears only your readiness.
+Selection/info displays both combined teams to every member. Team invite
+suggestions exclude yourself and players already selecting or fighting.
+Invitations cannot force someone into a match, join the other side, join twice,
+or survive cancellation, expiry or the start of the original selection.
+
+During battle every teammate has /tames duel info and /tames duel ff.
+Forfeiting forfeits the entire team's match. During selection any member can
+cancel the entire selection. Normal pet ownership and restoration are retained.
+Team membership, results and boss bars recognize all participating owners,
+including teammates who select only their pets. No extra ticking loops are added.
+
+Install the v52 replacement Domestication Innovation JAR on the server.
+Clients can keep v51 for its client-only duel outlines, or update to v52.
+No configuration changes are needed. This change adds no new glow effects.
+
+Regression command:
+  .\gradlew.bat -I gradle/duelTeammatesRegression.init.gradle runGameTestServer --offline

@@ -58,6 +58,7 @@ public final class TameDuelManager {
         private final UUID battleId;
         private final UUID ownerA;
         private final UUID ownerB;
+        private final Map<UUID, Boolean> ownerSides = new HashMap<>();
         private final Set<UUID> teamA;
         private final Set<UUID> teamB;
         private final Set<UUID> originalTeamA;
@@ -79,6 +80,7 @@ public final class TameDuelManager {
             this.battleId = battleId;
             this.ownerA = ownerA;
             this.ownerB = ownerB;
+            ownerSides.put(ownerA, true);ownerSides.putIfAbsent(ownerB, false);
             this.teamA = teamA;
             this.teamB = teamB;
             this.originalTeamA = new HashSet<>(teamA);
@@ -162,6 +164,17 @@ public final class TameDuelManager {
     }
 
     public static synchronized void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB, Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked, boolean teamColoredKillMessages) {
+        startTeamDuel(server, ownerA, teamA, ownerB, teamB, spectatorIds, broadcastToServer, ranked, teamColoredKillMessages, null, null);
+    }
+
+    public static synchronized void startTeamDuelWithOwners(MinecraftServer server, UUID ownerA, Set<UUID> teamA,
+            UUID ownerB, Set<UUID> teamB, Set<UUID> ownersA, Set<UUID> ownersB) {
+        startTeamDuel(server, ownerA, teamA, ownerB, teamB, Set.of(), false, false, false, ownersA, ownersB);
+    }
+
+    private static void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB,
+            Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked, boolean teamColoredKillMessages,
+            Set<UUID> ownersA, Set<UUID> ownersB) {
         if (server == null || ownerA == null || ownerB == null) return;
         if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
@@ -169,6 +182,8 @@ public final class TameDuelManager {
         if (!ownerA.equals(ownerB)) {
             endDuelsForOwner(server, ownerB);
         }
+        if (ownersA != null) for (UUID owner : ownersA) endDuelsForOwner(server, owner);
+        if (ownersB != null) for (UUID owner : ownersB) endDuelsForOwner(server, owner);
 
         Set<UUID> cleanA = new HashSet<>();
         Set<UUID> cleanB = new HashSet<>();
@@ -193,6 +208,9 @@ public final class TameDuelManager {
 
         UUID battleId = UUID.randomUUID();
         DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer, ranked, teamColoredKillMessages);
+        if (ownersA != null) for (UUID owner : ownersA) battle.ownerSides.put(owner, true);
+        if (ownersB != null) for (UUID owner : ownersB) battle.ownerSides.putIfAbsent(owner, false);
+        battle.spectatorIds.removeAll(battle.ownerSides.keySet());
         BATTLE_BY_ID.put(battleId, battle);
         for (UUID participantId : cleanA) {
             BATTLE_ID_BY_ENTITY.put(participantId, battleId);
@@ -240,8 +258,8 @@ public final class TameDuelManager {
             if (battle == null) {
                 continue;
             }
-            if ((attackerId.equals(battle.ownerA) && targetId.equals(battle.ownerB))
-                    || (attackerId.equals(battle.ownerB) && targetId.equals(battle.ownerA))) {
+            if (battle.ownerSides.containsKey(attackerId) && battle.ownerSides.containsKey(targetId)
+                    && !battle.ownerSides.get(attackerId).equals(battle.ownerSides.get(targetId))) {
                 return true;
             }
         }
@@ -255,7 +273,7 @@ public final class TameDuelManager {
     public static synchronized boolean isOwnerInDuel(UUID ownerId) {
         if (ownerId == null) return false;
         for (DuelBattle battle : BATTLE_BY_ID.values()) {
-            if (battle != null && (ownerId.equals(battle.ownerA) || ownerId.equals(battle.ownerB))) return true;
+            if (battle != null && battle.ownerSides.containsKey(ownerId)) return true;
         }
         return false;
     }
@@ -265,13 +283,13 @@ public final class TameDuelManager {
     }
 
     public record DuelMemberStatus(UUID id, String name, boolean alive) {}
-    public record DuelTeamStatus(UUID owner, List<DuelMemberStatus> members) {}
+    public record DuelTeamStatus(UUID owner, List<DuelMemberStatus> members, String label) {}
 
     /** On-demand view retains eliminated entrants even if their living body has already been restored. */
     public static synchronized List<DuelTeamStatus> duelTeamStatus(MinecraftServer server, UUID owner) {
         if (server == null || owner == null) return List.of();
         for (DuelBattle battle : BATTLE_BY_ID.values()) {
-            if (!owner.equals(battle.ownerA) && !owner.equals(battle.ownerB)) continue;
+            if (!battle.ownerSides.containsKey(owner)) continue;
             return List.of(teamStatus(server, battle, battle.ownerA, battle.originalTeamA),
                     teamStatus(server, battle, battle.ownerB, battle.originalTeamB));
         }
@@ -294,12 +312,12 @@ public final class TameDuelManager {
             members.add(new DuelMemberStatus(id, name, battle.participants.contains(id) && entity != null && entity.isAlive()));
         }
         members.sort(Comparator.comparing(DuelMemberStatus::name).thenComparing(member -> member.id().toString()));
-        return new DuelTeamStatus(owner, List.copyOf(members));
+        return new DuelTeamStatus(owner, List.copyOf(members), teamDisplayName(server, battle, owner, null, ""));
     }
 
     private static void refreshOwnerCommands(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
-        for (UUID id : new HashSet<>(List.of(battle.ownerA, battle.ownerB))) {
+        for (UUID id : battle.ownerSides.keySet()) {
             ServerPlayer player = server.getPlayerList().getPlayer(id);
             if (player != null) server.getCommands().sendCommands(player);
         }
@@ -535,7 +553,7 @@ public final class TameDuelManager {
         if (server == null || ownerId == null) return 0;
         Set<UUID> battleIdsToEnd = new HashSet<>();
         for (DuelBattle battle : BATTLE_BY_ID.values()) {
-            if (ownerId.equals(battle.ownerA) || ownerId.equals(battle.ownerB)) {
+            if (battle.ownerSides.containsKey(ownerId)) {
                 battleIdsToEnd.add(battle.battleId);
             }
         }
@@ -543,7 +561,7 @@ public final class TameDuelManager {
         for (UUID battleId : battleIdsToEnd) {
             DuelBattle battle = BATTLE_BY_ID.get(battleId);
             if (battle == null) continue;
-            finishBattle(server, battle, "Forfeit.", ownerId);
+            finishBattle(server, battle, "Forfeit.", Boolean.TRUE.equals(battle.ownerSides.get(ownerId)) ? battle.ownerA : battle.ownerB);
             ended++;
         }
         return ended;
@@ -589,6 +607,7 @@ public final class TameDuelManager {
     private static void clearBattleViewerGlow(MinecraftServer server, DuelBattle battle) {
         if (server == null || battle == null) return;
         Set<UUID> viewers = new HashSet<>(battle.roster);
+        viewers.addAll(battle.ownerSides.keySet());
         if (battle.ownerA != null) viewers.add(battle.ownerA);
         if (battle.ownerB != null) viewers.add(battle.ownerB);
         viewers.addAll(battle.spectatorIds);
@@ -1414,6 +1433,7 @@ public final class TameDuelManager {
             return;
         }
         Set<UUID> recipients = new HashSet<>();
+        recipients.addAll(battle.ownerSides.keySet());
         if (battle.ownerA != null) {
             recipients.add(battle.ownerA);
         }
@@ -1435,10 +1455,7 @@ public final class TameDuelManager {
         if (server == null || battle == null) {
             return;
         }
-        createOwnerBossBars(server, battle, battle.ownerA);
-        if (!battle.ownerA.equals(battle.ownerB)) {
-            createOwnerBossBars(server, battle, battle.ownerB);
-        }
+        for (UUID owner : battle.ownerSides.keySet()) createOwnerBossBars(server, battle, owner);
         updateBossBars(server, battle);
     }
 
@@ -1464,10 +1481,7 @@ public final class TameDuelManager {
         if (server == null || battle == null) {
             return;
         }
-        updateOwnerBossBars(server, battle, battle.ownerA);
-        if (!battle.ownerA.equals(battle.ownerB)) {
-            updateOwnerBossBars(server, battle, battle.ownerB);
-        }
+        for (UUID owner : battle.ownerSides.keySet()) updateOwnerBossBars(server, battle, owner);
     }
 
     private static void updateOwnerBossBars(MinecraftServer server, DuelBattle battle, UUID ownerId) {
@@ -1487,7 +1501,7 @@ public final class TameDuelManager {
             return;
         }
 
-        boolean ownerIsTeamA = ownerId.equals(battle.ownerA);
+        boolean ownerIsTeamA = Boolean.TRUE.equals(battle.ownerSides.get(ownerId));
         Set<UUID> ownTeam = ownerIsTeamA ? battle.originalTeamA : battle.originalTeamB;
         Set<UUID> enemyTeam = ownerIsTeamA ? battle.originalTeamB : battle.originalTeamA;
 
@@ -1617,6 +1631,7 @@ public final class TameDuelManager {
             return;
         }
         Set<UUID> recipients = new HashSet<>();
+        recipients.addAll(battle.ownerSides.keySet());
         if (battle.ownerA != null) {
             recipients.add(battle.ownerA);
         }
@@ -1691,6 +1706,7 @@ public final class TameDuelManager {
         if (battle == null || participantId == null) {
             return null;
         }
+        if (battle.ownerSides.containsKey(participantId)) return participantId;
         if (participantId.equals(battle.ownerA)) {
             return battle.ownerA;
         }
@@ -1851,6 +1867,15 @@ public final class TameDuelManager {
     }
 
     private static String teamDisplayName(MinecraftServer server, DuelBattle battle, UUID ownerId, UUID highestId, String fallbackName) {
+        if (battle != null && battle.ownerSides.containsKey(ownerId)) {
+            Boolean side = battle.ownerSides.get(ownerId);
+            List<UUID> owners = battle.ownerSides.entrySet().stream().filter(entry -> entry.getValue().equals(side))
+                    .map(Map.Entry::getKey).toList();
+            if (owners.size() > 1) return owners.stream().map(id -> {
+                ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(id);
+                return player == null ? id.toString() : player.getGameProfile().getName();
+            }).sorted().collect(java.util.stream.Collectors.joining(" + "));
+        }
         if (battle != null && battle.ownerA != null && battle.ownerB != null && !battle.ownerA.equals(battle.ownerB)) {
             ServerPlayer owner = server == null ? null : server.getPlayerList().getPlayer(ownerId);
             if (owner != null) {

@@ -143,9 +143,9 @@ public class ClientProxy extends CommonProxy {
             event.setColor(OreColorRegistry.getBlockColor(((HighlightedBlockEntity) event.getEntityIn()).getBlockState()));
             event.setResult(Event.Result.ALLOW);
         } else if (event.getEntityIn() instanceof LivingEntity living) {
-            int duelTeam = TameableUtils.getTamesLevelDuelGlowTeam(living);
-            if (ClientDuelGlowSettings.duelGlow() && (duelTeam == 1 || duelTeam == 2)) {
-                event.setColor(duelTeam == 1 ? 0x3F76E4 : 0xE53935);
+            int duelTeam = ClientDuelOutlines.team(living);
+            if (duelTeam != 0) {
+                event.setColor(ClientDuelOutlinePolicy.color(duelTeam));
                 event.setResult(Event.Result.ALLOW);
             }
         }
@@ -225,6 +225,7 @@ public class ClientProxy extends CommonProxy {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
+        ClientDuelOutlines.tick();
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
         if (player == null || minecraft.level == null) {

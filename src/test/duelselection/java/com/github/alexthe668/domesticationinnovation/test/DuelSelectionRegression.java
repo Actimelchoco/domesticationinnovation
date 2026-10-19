@@ -63,7 +63,7 @@ public class DuelSelectionRegression {
         try{
             check(visibleCommands(dispatcher,source).equals(Set.of("invite","selection","arena","leaderboard")),"idle command set");
             preparations().put(first.getUUID(),prep);preparations().put(second.getUUID(),prep);
-            check(visibleCommands(dispatcher,source).equals(Set.of("selection","info","start","cancel","add","addMyself","addNearby","remove")),"selection phase exposes only selection and start/cancel commands");
+            check(visibleCommands(dispatcher,source).equals(Set.of("selection","info","start","cancel","add","addMyself","addNearby","remove","invite")),"selection phase exposes selection, team invite and start/cancel commands");
             var near=wolf(h,first,"Near","Ranges");near.setPos(first.getX()+9,first.getY(),first.getZ());
             var diagonal=wolf(h,first,"Diagonal","Ranges");diagonal.setPos(first.getX()+9,first.getY(),first.getZ()+9);
             var edge=wolf(h,first,"Edge","Ranges");edge.setPos(first.getX()+64,first.getY(),first.getZ());

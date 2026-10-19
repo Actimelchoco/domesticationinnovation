@@ -1,0 +1,25 @@
+Client duel/ranked outlines (v51)
+
+Replace the Domestication Innovation JAR on participating clients with the v51
+client-duel-outlines build. The v50 server JAR can stay installed: this feature
+only changes client rendering and reuses existing duel team membership.
+
+During your own duel or ranked battle, Team A has a blue outline and Team B a
+red outline. This includes player combatants and vanilla/interface-based tames.
+Owners selecting only tames also see their match's outlines. Uninvolved players
+and spectators do not receive this extra visual glow; other matches are ignored.
+
+No new server effects, glowing flags, scoreboard changes or packets are added.
+Normal outlines from Minecraft or other mods retain their usual behavior.
+Client membership discovery runs at most once per second over already tracked
+entities; rendering performs only the team match check. It loads no chunks.
+Teams leaving a battle stop qualifying immediately; the local membership cache
+refreshes within one second and resets on world/player changes.
+
+The existing client option remains available and defaults to enabled:
+  /tames settings duelGlow true
+  /tames settings duelGlow false
+No server configuration changes are required.
+
+Validation: standalone membership/color policy checks and production build.
+Actual outline appearance with third-party shaders has not been visually tested.

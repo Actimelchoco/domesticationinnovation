@@ -1219,6 +1219,10 @@ GUARDIAN GROUP INTERFACE TAMES (V43)
 ----------------------------------
 /tames guardian deployGroup <guardianGroup> <selection> deploys loaded interface-based tames as well as vanilla-style tames, including mixed selections. Saved posts, guardian command locks and ownership checks still apply. This command-only fix adds no ticking scans and needs no configuration edits.
 
+DUEL TEAMMATES (V52)
+--------------------
+During selection, /tames duel invite <player> invites a teammate to your side. They accept the invitation, manage their own player/tame selection, and use start themselves. All players must ready up; edits reset only the editor's readiness. Idle invite still challenges an opponent. Supports 2v1 and larger casual teams; ranked is unchanged. Any member can cancel selection or forfeit the match. Team invitations expire with their selection. See DUEL_TEAMMATES.txt.
+
 LOST TAME RETAMING (V50)
 -----------------------
 /tames lost [page] lists your unrecovered lost tames (owner at loss or permanent imprinted owner), with dimension and coordinates at loss. Anyone can retame a living lost creature with food it accepts after 72,000 elapsed server ticks; its imprinted owner can do so immediately. Progress, equipment and imprint remain. Successful retaming consumes one food, starts it sitting, resets grace, and closes the recovery entry. The tame limit still applies. See LOST_TAME_RETAMING.txt for timing and migration details.

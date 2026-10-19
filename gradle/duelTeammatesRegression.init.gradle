@@ -1,0 +1,5 @@
+apply from: new File(initscript.sourceFile.parentFile, 'duelSelectionRegression.init.gradle')
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/duelteammates/java')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/duel-teammates-gametest')
+} }
