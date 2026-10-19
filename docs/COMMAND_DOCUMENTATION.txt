@@ -82,9 +82,10 @@ paths below in place of the former flat /tames settings <option> commands.
 /tames settings combat doNotAttack <mobtype>
 /tames settings combat doNotAttackAnimals
 /tames settings combat doNotAttackAnimals <enabled>
-/tames settings combat doNotAttackOwner
-/tames settings combat doNotAttackOwner add <player>
-/tames settings combat doNotAttackOwner remove <player>
+/tames settings combat friendlyOwners
+/tames settings combat friendlyOwners add <player>
+/tames settings combat friendlyOwners remove <player>
+/tames friendlyOwners [add|remove <player>]
 /tames settings movement enterPortalsByThemselves <enabled>
 /tames settings abilities healthSiphon <enabled>
 /tames settings abilities enableVoidCloud <enabled>

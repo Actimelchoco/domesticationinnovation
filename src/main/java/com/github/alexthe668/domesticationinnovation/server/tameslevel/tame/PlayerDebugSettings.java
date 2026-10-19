@@ -458,7 +458,7 @@ public final class PlayerDebugSettings {
                 value.putUUID("owner", ownerId);
                 list.add(value);
             }
-            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("doNotAttackOwners", list);
+            out.computeIfAbsent(entry.getKey(), ignored -> new CompoundTag()).put("friendlyOwners", list);
         }
         return out;
     }
@@ -490,15 +490,15 @@ public final class PlayerDebugSettings {
             if (tag.contains("inventorySummaryMinutes", Tag.TAG_INT)) {
                 INVENTORY_SUMMARY_MINUTES.put(player, Math.max(1, tag.getInt("inventorySummaryMinutes")));
             }
-            if (tag.contains("doNotAttackOwners", Tag.TAG_LIST)) {
-                ListTag list = tag.getList("doNotAttackOwners", Tag.TAG_COMPOUND);
-                Set<UUID> values = new LinkedHashSet<>();
+            Set<UUID> friendlyOwners = new LinkedHashSet<>();
+            for (String key : java.util.List.of("doNotAttackOwners", "friendlyOwners")) {
+                ListTag list = tag.getList(key, Tag.TAG_COMPOUND);
                 for (int i = 0; i < list.size(); i++) {
                     CompoundTag saved = list.getCompound(i);
-                    if (saved.hasUUID("owner")) values.add(saved.getUUID("owner"));
+                    if (saved.hasUUID("owner")) friendlyOwners.add(saved.getUUID("owner"));
                 }
-                if (!values.isEmpty()) DO_NOT_ATTACK_OWNERS.put(player, values);
             }
+            if (!friendlyOwners.isEmpty()) DO_NOT_ATTACK_OWNERS.put(player, friendlyOwners);
         }
     }
 

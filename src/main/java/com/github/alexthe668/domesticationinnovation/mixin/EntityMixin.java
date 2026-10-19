@@ -25,6 +25,12 @@ import java.util.function.Predicate;
 @Mixin(Entity.class)
 public class EntityMixin {
 
+    @Inject(method = "thunderHit", at = @At("HEAD"), cancellable = true)
+    private void tl$blockFriendlyLightning(net.minecraft.server.level.ServerLevel level,
+            net.minecraft.world.entity.LightningBolt bolt, CallbackInfo ci) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks((Entity)(Object)this, bolt)) ci.cancel();
+    }
+
     @Inject(method = "spawnAtLocation(Lnet/minecraft/world/item/ItemStack;F)Lnet/minecraft/world/entity/item/ItemEntity;",
             at = @At("HEAD"), cancellable = true)
     private void tl$storeAnimightBreakProtection(net.minecraft.world.item.ItemStack stack, float offset,

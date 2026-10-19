@@ -23,9 +23,15 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Mob.class)
 public abstract class MobMixin extends LivingEntity {
+
+    @Inject(method = "doHurtTarget", at = @At("HEAD"), cancellable = true)
+    private void tl$blockFriendlyOwnerMelee(Entity target, CallbackInfoReturnable<Boolean> cir) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(target, this)) cir.setReturnValue(false);
+    }
 
     @Shadow protected MoveControl moveControl;
     @Shadow protected PathNavigation navigation;

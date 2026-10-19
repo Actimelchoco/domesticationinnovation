@@ -1044,7 +1044,7 @@ public class TameCommands {
 
     private static final List<SettingsCategory> SETTINGS_CATEGORIES = List.of(
             new SettingsCategory("combat", "Target rules and friendly fire", List.of(
-                    "doNotAttack", "doNotAttackAnimals", "doNotAttackOwner", "friendlyFire", "tamesFriendly")),
+                    "doNotAttack", "doNotAttackAnimals", "friendlyOwners", "friendlyFire", "tamesFriendly")),
             new SettingsCategory("movement", "Portals and chairs", List.of("enterPortalsByThemselves", "sitOnChairs")),
             new SettingsCategory("abilities", "Ability preferences and ore scenting", List.of(
                     "healthSiphon", "enableVoidCloud", "orescenting", "herding")),
@@ -1057,7 +1057,7 @@ public class TameCommands {
     private static final Map<String, String> SETTINGS_USAGE = Map.ofEntries(
             Map.entry("doNotAttack", "[remove] <mobtype>"),
             Map.entry("doNotAttackAnimals", "[true|false]"),
-            Map.entry("doNotAttackOwner", "[add|remove <player>]"),
+            Map.entry("friendlyOwners", "[add|remove <player>]"),
             Map.entry("friendlyFire", "[true|false]"),
             Map.entry("tamesFriendly", "[true|false]"),
             Map.entry("enterPortalsByThemselves", "<true|false>"),
@@ -1126,16 +1126,7 @@ public class TameCommands {
                         .executes(ctx -> listDoNotAttack(ctx.getSource()))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setDoNotAttackAnimals(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
-                .then(Commands.literal("doNotAttackOwner")
-                        .executes(ctx -> listDoNotAttackOwners(ctx.getSource()))
-                        .then(Commands.literal("add")
-                                .then(Commands.argument("player", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
-                                        .executes(ctx -> setDoNotAttackOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), true))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("player", StringArgumentType.word())
-                                        .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
-                                        .executes(ctx -> setDoNotAttackOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), false)))))
+                .then(friendlyOwnersCommand())
                 .then(Commands.literal("enterPortalsByThemselves")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(ctx -> setEnterPortalsByThemselves(ctx.getSource(), BoolArgumentType.getBool(ctx, "enabled")))))
@@ -3164,6 +3155,7 @@ public class TameCommands {
 
                         .then(debugCommand())
                         .then(LostTameCommands.playerBuild())
+                        .then(friendlyOwnersCommand())
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
@@ -14623,12 +14615,12 @@ public class TameCommands {
         return playerTamesFriendlyStatus(source);
     }
 
-    private static int listDoNotAttackOwners(CommandSourceStack source) {
+    private static int listFriendlyOwners(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
         Set<UUID> protectedOwners = PlayerDebugSettings.doNotAttackOwners(player.getUUID());
         if (protectedOwners.isEmpty()) {
-            player.sendSystemMessage(Component.literal("Protected owners: none. Any owner with tamesFriendly=false can enter a conflict with you.")
+            player.sendSystemMessage(Component.literal("Friendly owners: none.")
                     .withStyle(ChatFormatting.YELLOW));
             return 1;
         }
@@ -14636,23 +14628,37 @@ public class TameCommands {
                 .map(id -> resolveKnownOwnerName(source.getServer(), id, id.toString()))
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
-        player.sendSystemMessage(Component.literal("Protected owners (cannot conflict with you): " + String.join(", ", names) + ".")
+        player.sendSystemMessage(Component.literal("Friendly owners (you and your tames cannot damage them or their tames): " + String.join(", ", names) + ".")
                 .withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
-    private static int setDoNotAttackOwner(CommandSourceStack source, String playerName, boolean protectedOwner) {
+    private static LiteralArgumentBuilder<CommandSourceStack> friendlyOwnersCommand() {
+        return Commands.literal("friendlyOwners").requires(source -> source.getPlayer() != null)
+                .executes(ctx -> listFriendlyOwners(ctx.getSource()))
+                .then(Commands.literal("add").then(Commands.argument("player", StringArgumentType.word())
+                        .suggests((ctx, b) -> suggestKnownPlayerOwners(ctx.getSource(), b))
+                        .executes(ctx -> setFriendlyOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), true))))
+                .then(Commands.literal("remove").then(Commands.argument("player", StringArgumentType.word())
+                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(PlayerDebugSettings.doNotAttackOwners(ctx.getSource().getPlayer().getUUID())
+                                .stream().map(id -> resolveKnownOwnerName(ctx.getSource().getServer(), id, id.toString())), b))
+                        .executes(ctx -> setFriendlyOwner(ctx.getSource(), StringArgumentType.getString(ctx, "player"), false))));
+    }
+
+    private static int setFriendlyOwner(CommandSourceStack source, String playerName, boolean protectedOwner) {
         ServerPlayer player = source.getPlayer();
         if (player == null) return 0;
-        UUID otherOwner = resolveKnownOwnerUuid(source.getServer(), playerName);
+        UUID otherOwner;
+        try { otherOwner = UUID.fromString(playerName); }
+        catch (IllegalArgumentException ignored) { otherOwner = resolveKnownOwnerUuid(source.getServer(), playerName); }
         if (otherOwner == null) return error(player, "Unknown player: " + playerName + ".");
-        if (player.getUUID().equals(otherOwner)) return error(player, "You cannot add yourself to doNotAttackOwner.");
+        if (player.getUUID().equals(otherOwner)) return error(player, "You cannot add yourself to friendlyOwners.");
         PlayerDebugSettings.setDoNotAttackOwner(player.getUUID(), otherOwner, protectedOwner);
         if (protectedOwner) TameIllBloodManager.clearBetween(player.getUUID(), otherOwner);
         String resolvedName = resolveKnownOwnerName(source.getServer(), otherOwner, playerName);
         player.sendSystemMessage(Component.literal(resolvedName + (protectedOwner
-                ? " is now protected from conflicts with you."
-                : " may enter conflicts with you again."))
+                ? " and their tames are now protected from you and your tames."
+                : " was removed from your friendly owners list."))
                 .withStyle(protectedOwner ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
         return 1;
     }
@@ -19145,7 +19151,7 @@ public class TameCommands {
         if (online != null) {
             return online.getUUID();
         }
-        Optional<GameProfile> cached = server.getProfileCache().get(playerName);
+        Optional<GameProfile> cached = server.getProfileCache() == null ? Optional.empty() : server.getProfileCache().get(playerName);
         if (cached.isPresent() && cached.get().getId() != null) {
             return cached.get().getId();
         }
@@ -19160,7 +19166,7 @@ public class TameCommands {
         if (online != null) {
             return online.getName().getString();
         }
-        Optional<GameProfile> cached = server.getProfileCache().get(ownerId);
+        Optional<GameProfile> cached = server.getProfileCache() == null ? Optional.empty() : server.getProfileCache().get(ownerId);
         if (cached.isPresent() && cached.get().getName() != null && !cached.get().getName().isBlank()) {
             return cached.get().getName();
         }

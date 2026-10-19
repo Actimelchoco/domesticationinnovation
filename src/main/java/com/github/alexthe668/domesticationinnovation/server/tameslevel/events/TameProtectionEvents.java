@@ -198,6 +198,7 @@ public class TameProtectionEvents {
         }
         UUID attackerId = attacker.getUUID();
         UUID victimId = victim.getUUID();
+        if (FriendlyOwnerProtection.friendly(attackerId, victimId)) return false;
         return TameDuelManager.areDuelOpponents(attackerId, victimId)
                 || TameDuelManager.areDuelOwnersOpponents(attackerId, victimId);
     }
@@ -229,6 +230,7 @@ public class TameProtectionEvents {
         if (target == null) {
             return;
         }
+        if (FriendlyOwnerProtection.blocks(target, tame)) { clearForbiddenPlayerAggression(tame);return; }
         if (TameDuelManager.isTameInDuel(tame.getUUID())) {
             if (TameDuelManager.areDuelOpponents(tame.getUUID(), target.getUUID())) {
                 return;
@@ -299,7 +301,7 @@ public class TameProtectionEvents {
             return tame;
         }
         if (direct instanceof Projectile projectile) {
-            return TameEntityAdapter.owner(projectile);
+            return projectile.getOwner() instanceof LivingEntity owner ? owner : null;
         }
         return null;
     }
@@ -308,7 +310,7 @@ public class TameProtectionEvents {
         if (attacker instanceof Player player) {
             return player.getUUID();
         }
-        if (direct instanceof Projectile projectile && TameEntityAdapter.owner(projectile) instanceof Player player) {
+        if (direct instanceof Projectile projectile && projectile.getOwner() instanceof Player player) {
             return player.getUUID();
         }
         LivingEntity tame = resolveTameAttacker(attacker, direct);
@@ -322,7 +324,7 @@ public class TameProtectionEvents {
         if (source.getEntity() instanceof Player player) {
             return player;
         }
-        if (source.getDirectEntity() instanceof Projectile projectile && TameEntityAdapter.owner(projectile) instanceof Player owner) {
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof Player owner) {
             return owner;
         }
         return null;

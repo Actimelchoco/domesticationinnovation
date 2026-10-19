@@ -1,0 +1,47 @@
+Friendly owners (v54)
+
+  /tames friendlyOwners
+  /tames friendlyOwners add <player>
+  /tames friendlyOwners remove <player>
+
+Also available under /tames settings combat friendlyOwners.
+The former doNotAttackOwner command
+name is replaced. Previously saved doNotAttackOwners entries migrate
+automatically; no configuration edits or re-adding players are required.
+Remove suggestions list only your currently selected friendly owners.
+
+Players on the list and their owned tames are protected from you and your
+tames, including interface-based pets. The existing mutual relationship is
+preserved: a list entry on either side protects both players and their pets.
+This explicit protection also applies during duels; remove the friendship
+first if you want to fight each other. Adding a friend clears existing conflict.
+
+Protection covers attributed melee, bows/crossbows/tridents and other owned
+projectiles, attributed magic and damage types that bypass armor, owned TNT,
+fangs, lightning with a known cause, and owned area-effect clouds. It checks
+the actual Projectile owner rather than treating the projectile as a tame.
+Unloaded tame shooters can resolve through their saved registry entry.
+
+Projectile impacts are rejected before on-hit ignition/effects. Standard
+explosion affected-entity lists exclude friends before damage/knockback.
+Harmful effects with a known friendly source are rejected; beneficial effects
+remain allowed. Damage is checked before LivingEntity.hurt and at Forge damage
+stages; existing duel PvP overrides cannot uncancel friendly-owner protection.
+Tame target selection also respects the list.
+
+Ownership must exist in the damage/effect source. Environmental lava/fire,
+unowned traps, already-running unattributed effects, and third-party mods that
+discard attribution or directly change health cannot reliably identify who
+caused the harm. These are not turned into blanket environmental immunity.
+
+All checks are event-driven, use bounded ownership resolution and UUID lookups,
+and add no ticking world scans or chunk loads. Normal PvP rules remain in force
+when neither owner lists the other; removing one list entry does not override
+an entry on the other side or other server protection rules.
+
+Replace the server's previous Domestication Innovation JAR with v54. Existing
+clients can stay on their current compatible extension build. Previous features,
+including lost hunter throttling and client-only duel outlines, are preserved.
+
+Regression command:
+  .\gradlew.bat -I gradle/friendlyOwnersRegression.init.gradle runGameTestServer --offline

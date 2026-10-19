@@ -1146,6 +1146,8 @@ public class TameRegistry {
         if (target == null) {
             return false;
         }
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.friendly(ownerUuid,
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.owner(target))) return true;
         if (matchesProtectedTargetRules(ownerUuid, target)) {
             return true;
         }
