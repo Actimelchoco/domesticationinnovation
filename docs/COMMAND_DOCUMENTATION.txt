@@ -1219,6 +1219,14 @@ GUARDIAN GROUP INTERFACE TAMES (V43)
 ----------------------------------
 /tames guardian deployGroup <guardianGroup> <selection> deploys loaded interface-based tames as well as vanilla-style tames, including mixed selections. Saved posts, guardian command locks and ownership checks still apply. This command-only fix adds no ticking scans and needs no configuration edits.
 
+LOST TAME RETAMING (V50)
+-----------------------
+/tames lost [page] lists your unrecovered lost tames (owner at loss or permanent imprinted owner), with dimension and coordinates at loss. Anyone can retame a living lost creature with food it accepts after 72,000 elapsed server ticks; its imprinted owner can do so immediately. Progress, equipment and imprint remain. Successful retaming consumes one food, starts it sitting, resets grace, and closes the recovery entry. The tame limit still applies. See LOST_TAME_RETAMING.txt for timing and migration details.
+
+LOST TAME RECOVERY (V49)
+------------------------
+Per-type limit releases are archived before ownership is removed. Admins (permission 2) use /tames admin lost list [page], /tames admin lost info <id>, and /tames admin lost recover <id>. Recovery restores the original owner's tame at the admin's position, sitting, with its imprint, progress and saved equipment. Old wild copies are retired; failed spawning preserves the archive. Archives persist after wild death/restarts in world/data/tameslevel_lost_registry.dat, without automatic trimming. Recovery resets grace but does not bypass the tame limit. This covers releases from this build onward. See LOST_TAME_RECOVERY.txt.
+
 IMPRINTED OWNER (V44)
 --------------------
 The first known player to tame a creature becomes its permanent imprinted owner. The player's UUID is stored separately from current ownership, in both the tame registry and the entity's persistent TLImprintedOwner tag. Transfers, save/load, reconstruction and release to the wild preserve this identity. Existing tames without an imprint use their current known owner; earlier ownership cannot be reconstructed reliably. This is saved memory only and grants no extra reclaim or command permissions. No configuration edits are required.

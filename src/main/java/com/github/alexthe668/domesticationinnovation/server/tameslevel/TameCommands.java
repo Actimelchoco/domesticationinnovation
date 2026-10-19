@@ -3152,9 +3152,11 @@ public class TameCommands {
                                                                 StringArgumentType.getString(ctx, "mode")))))))
 
                         .then(debugCommand())
+                        .then(LostTameCommands.playerBuild())
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
+                                .then(LostTameCommands.build())
 
                                 .then(Commands.literal("reset")
                                         .then(Commands.literal("primitiveMobs")

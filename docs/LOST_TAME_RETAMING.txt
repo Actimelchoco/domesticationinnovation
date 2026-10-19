@@ -1,0 +1,33 @@
+Lost tame retaming (v50)
+
+Lost tames remain wild monster hunters until reclaimed. Right-click a living
+lost tame with any food accepted by its native diet or the tame food settings.
+The first/imprinted owner can reclaim it immediately. Any other player can
+retame it after 72,000 server ticks (three Minecraft days, about 60 minutes at
+20 TPS). This is elapsed simulation time: sleeping and /time changes do not
+skip the cooldown, and server downtime does not advance it. Unloaded chunks
+do not pause the timer. Each new limit release starts a new cooldown.
+
+One food is consumed on success (creative mode and eternal steak are exempt).
+Either hand is supported. No food is consumed on rejected attempts. The same
+living creature is retamed, preserving progress, equipment and first imprint.
+It starts sitting in default mode, with a fresh limit grace timer. Normal tame
+limits still apply. Reclaiming closes its lost archive entry, preventing another
+admin recovery. Unrelated vanilla/mod taming interactions cannot skip the timer.
+
+  /tames lost [page]
+Lists unrecovered lost entries where you were the owner at loss or are the
+imprinted owner, with names, entity types, dimensions and coordinates at loss.
+Locations are historical; wild tames can move or die. It does not load chunks
+or track their current locations. Other players' private lost lists are hidden.
+Admin list/info/recover commands from v49 remain available, including recovery
+when the wild body has died. Archives have no automatic expiry.
+
+Compatibility: v49 entries lack a simulation timestamp. For these, public
+retaming starts its three-day wait at the first reclaim attempt after updating;
+the imprinted owner can still reclaim immediately. Existing linked v49 archive
+entries are closed when the creature is reclaimed.
+
+Install the v50-lost-tame-retaming JAR instead of the previous Domestication
+Innovation JAR. No configuration changes are needed. Interaction and list
+checks are event-driven and add no background scanning.

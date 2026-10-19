@@ -1,0 +1,27 @@
+Lost tame recovery (v49)
+
+Before the per-type tame limit removes ownership, a separate lost registry saves
+the owner, first imprint, progress and entity snapshot, including saved equipment.
+Loaded creatures get a fresh snapshot; unloaded/stored creatures use their latest
+saved snapshot. Archives survive wild-body death and server restarts and are not
+automatically trimmed. Recovered entries remain as history.
+
+Admin commands (permission level 2):
+  /tames admin lost list [page]
+  /tames admin lost info <id>
+  /tames admin lost recover <id>
+IDs have command suggestions. Recovery restores the original owner's tame at the
+admin's location, sitting, even when the owner is offline. Its limit grace timer
+resets; the normal limit still applies, so make room before recovering extras.
+
+Recovery replaces the old wild body and retires old copies when they next load.
+Failed spawning leaves the archive recoverable and the original wild body intact.
+The archive is saved with the world at world/data/tameslevel_lost_registry.dat.
+Include that file when backing up the world. This protects future limit releases;
+it cannot reconstruct missing owner data from losses before this version.
+
+Install domesticationinnovation-tameslevel-extension-v49-lost-tame-recovery-1.7.1-1.20.1.jar
+as the replacement for the previous Domestication Innovation JAR. No config edit.
+
+Regression command:
+  .\gradlew.bat -I gradle/lostTameRegression.init.gradle runGameTestServer --offline

@@ -1,0 +1,53 @@
+Per-type tame limit (v42)
+
+Each player may keep 10 qualifying registry entries per entity type (for example minecraft:wolf).
+Only tames currently at level 10 or higher with at least one ability or one positive
+ability/attribute upgrade level count. Lower-level tames and tames without upgrades
+remain registered and owned, but do not consume a limit slot or face release.
+An exempt tame has its grace timer cleared; qualifying again starts a fresh timer.
+Qualifying stored and dead entries count, so storage does not bypass the allowance.
+Different types and different owners have independent allowances.
+
+The oldest 10 entries are retained. New extras receive 12,000 server ticks
+(10 minutes at 20 TPS) of owner online time. Offline time does not count.
+The remaining timer is saved in the registry across restarts. When a place
+opens, the next extra becomes eligible to stay and its timer is cleared.
+Transfers start a fresh timer under the recipient's own allowance.
+
+Existing over-limit registries also receive the full grace period. Older entries
+without an acquisition timestamp use a stable UUID order to choose the first 10.
+Warnings identify up to three extras, with a total count, without flooding chat.
+
+At expiry the extra is removed from the registry and guardian bookkeeping.
+Its tame/owner/sit state is cleared. Its level, ability levels and attributes
+are preserved on the entity, with monster hunter behavior until reclaimed.
+Retaming follows the v50 cooldown rules below. They target hostile
+monsters rather than players, other tames or passive animals. Owner-dependent
+support abilities naturally have no owner to protect after release.
+
+Unloaded creatures receive their release when they next load. Stored creatures
+are spawned from their saved snapshot when their original chunk is already
+loaded. Neither path force-loads chunks. Queued bed respawns for released
+entities are removed; existing death history remains historical.
+
+Counting runs once per second for online owners, using the owner registry index.
+Timer updates only dirty the existing SavedData record, without copying the
+registry. Release cleanup is capped at four creatures per owner per second.
+Stored release retries check at most 32 entries and spawn at most four per second.
+Wild target searches are staggered every 40 ticks, only near a player (64 blocks),
+and retain a valid current target. Search radius is 10 blocks.
+
+This limits registered ownership, not total loaded entities or total per-player
+tames across all types. Released hunters still tick, pathfind and cast abilities.
+It therefore cannot guarantee a TPS improvement or negligible performance cost.
+A separate total/active cap would give stronger protection against entity spam.
+
+As of v50, lost hunters can be retamed with accepted food: immediately by their
+imprinted owner, or by anyone after 72,000 elapsed server ticks. See
+LOST_TAME_RETAMING.txt. /tames lost lists your lost entries and locations at loss.
+
+Install the latest Domestication Innovation replacement JAR. This change does not
+belong in FTB Chunks. No configuration edits are required.
+
+Regression command:
+  .\gradlew.bat -I gradle/tameLimitRegression.init.gradle runGameTestServer --offline
