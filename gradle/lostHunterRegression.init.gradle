@@ -1,0 +1,6 @@
+apply from: new File(initscript.sourceFile.parentFile, 'imprintedOwnerRegression.init.gradle')
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/losthunter/java')
+    sourceSets.main.java.srcDir('src/test/losttames/java')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/lost-hunter-gametest')
+} }

@@ -1,0 +1,43 @@
+Lost hunter throttling (v53)
+
+Applies only to tames released by the trained per-type limit. Ordinary wild mobs,
+owned tames, guardians, bodyguards and duel participants retain their behavior.
+
+No living, non-spectator player within 64 blocks:
+  - Native Mob AI is paused, including goals, navigation and custom AI steps.
+  - Current combat targets and active routes are cleared.
+  - Periodic abilities and hurt-triggered ability work are skipped.
+  - Normal entity/world ticks, physics and damage continue. No persistent NoAI
+    flag is changed, so reclaiming restores normal behavior automatically.
+
+Near players:
+  - Idle target searches every 100 ticks (five seconds), staggered by tame UUID.
+  - A valid hostile target is retained without repeating the area search.
+  - New paths at most once per 100 ticks while idle, or 20 ticks in combat.
+  - Entering combat or waking permits a new path immediately; current paths
+    can be reused cheaply. Failed/unreachable paths consume the retry budget.
+  - Native combat ticks remain responsive while a player is nearby.
+  - Ability evaluations every 100 ticks idle and 20 ticks in combat, aligned
+    with existing staggered heavy ability passes. Existing cooldowns still apply.
+  - Nearby support searches at most every 100 ticks and only when a relevant
+    support ability is off cooldown.
+  - Reactive battle-strength, defensive-aura, chain-lightning and sweeping-edge
+    area effects get independent 20-tick minimum cooldowns on lost tames only.
+
+Player proximity is cached and rechecked at most once per 20 ticks per hunter,
+with staggered refreshes. Wake/sleep transitions may take up to one second.
+Budgets are transient weakly held records, cleared on unload. No chunk loading,
+new background world scans or changes to lost recovery/retaming are introduced.
+Native navigation subclasses that use the base PathNavigation search are covered;
+mods doing their own work outside those AI/navigation methods may still tick.
+
+This reduces work but does not make loaded entities free: physics, collision,
+world ticking and already-spawned projectiles still have a cost. Actual TPS gains
+depend on the modpack, entity types and combat load.
+
+Replace the server's previous Domestication Innovation JAR with v53. Clients can
+keep v51/v52 or update to v53. Client-only duel outlines are preserved. No config
+changes are required.
+
+Regression command:
+  .\gradlew.bat -I gradle/lostHunterRegression.init.gradle runGameTestServer --offline
