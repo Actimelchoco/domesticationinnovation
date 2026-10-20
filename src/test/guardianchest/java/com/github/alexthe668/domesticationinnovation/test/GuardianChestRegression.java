@@ -31,7 +31,7 @@ public class GuardianChestRegression {
     static class Fixture implements AutoCloseable {
         final GameTestHelper h;final FakePlayer owner;final BlockPos chest,post,home,power;
         final Wolf wolf;final TameData data;final ChestBlockEntity container;final LoadedChestDrums.Chest setup;
-        final ItemStack paper;final Set<UUID> oldPool;
+        ItemStack paper;final Set<UUID> oldPool;
         Fixture(GameTestHelper h){
             this.h=h;GuardianChestAutomation.stop(null);oldPool=TameRegistry.getRankedParticipants();
             var profile=new GameProfile(UUID.randomUUID(),"Guard"+UUID.randomUUID().toString().substring(0,8));
@@ -58,7 +58,7 @@ public class GuardianChestRegression {
             TameCommands.setGuardianPaperPost(data,"night",h.getLevel(),post);
             paper=new ItemStack(DIItemRegistry.DEED_OF_OWNERSHIP.get());paper.getOrCreateTag().putBoolean("HasBoundEntity",true);paper.getTag().putUUID("BoundEntity",wolf.getUUID());paper.getTag().putString("BoundEntityName",data.name);container.setItem(1,paper);
         }
-        void scan(){GuardianChestAutomation.scan(setup);}
+        void scan(){GuardianChestAutomation.scan(setup);if(!container.getItem(1).isEmpty())paper=container.getItem(1);}
         void tick(){GuardianChestAutomation.tick(new TickEvent.ServerTickEvent(TickEvent.Phase.END,()->true,h.getLevel().getServer()));}
         void power(boolean on){h.getLevel().setBlock(power,on?Blocks.REDSTONE_BLOCK.defaultBlockState():Blocks.AIR.defaultBlockState(),3);scan();}
         @Override public void close(){

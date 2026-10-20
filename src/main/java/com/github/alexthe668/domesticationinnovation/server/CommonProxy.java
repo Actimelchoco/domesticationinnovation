@@ -1125,6 +1125,7 @@ public class CommonProxy {
             return false;
         }
         ItemStack held = player.getMainHandItem();
+        if(held.is(DIItemRegistry.COLLAR_TAG.get()))return false;
         return held.isEmpty() || !held.getItem().isEdible();
     }
 
@@ -1255,8 +1256,22 @@ public class CommonProxy {
                 ((IComandableMob) rabbit).playerSetCommand(event.getEntity(), rabbit);
             }
         }
-        if (event.getTarget() instanceof LivingEntity living && TameableUtils.isPetOf(event.getEntity(), entity) && !living.getType().is(DITagRegistry.REFUSES_COLLAR_TAGS)) {
+    }
+
+    @SubscribeEvent(priority=EventPriority.HIGH)
+    public void onCollarInteract(PlayerInteractEvent.EntityInteract event) { applyCollar(event,event.getTarget()); }
+
+    @SubscribeEvent(priority=EventPriority.HIGH)
+    public void onCollarInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) { applyCollar(event,event.getTarget()); }
+
+    private void applyCollar(PlayerInteractEvent event,Entity target) {
+        Player player=event.getEntity();ItemStack stack=event.getItemStack();
+        if (target instanceof LivingEntity living && TameEntityAdapter.isTame(living) && player.getUUID().equals(TameEntityAdapter.ownerUuid(living)) && !living.getType().is(DITagRegistry.REFUSES_COLLAR_TAGS)) {
             if (event.getItemStack().is(DIItemRegistry.COLLAR_TAG.get()) && DomesticationMod.CONFIG.collarTag.get()) {
+                if (isDuelRestrictedPlayer(player) || isOwnerInteractingWithDuelTame(player,target)) return;
+                if (player.getCooldowns().isOnCooldown(DIItemRegistry.COLLAR_TAG.get())) {
+                    event.setCanceled(true);event.setCancellationResult(InteractionResult.FAIL);return;
+                }
                 if (!event.getEntity().level().isClientSide && living.isAlive()) {
                     Map<Enchantment, Integer> itemEnchantments = readAnvilEnchantments(stack);
                     Map<ResourceLocation, Integer> entityEnchantments = TameableUtils.getEnchants(living);
@@ -1302,6 +1317,7 @@ public class CommonProxy {
                         living.spawnAtLocation(collarFrom);
                     }
                     living.playSound(DISoundRegistry.COLLAR_TAG.get(), 1, 1);
+                    player.getCooldowns().addCooldown(DIItemRegistry.COLLAR_TAG.get(),5);
                     if (itemEnchantments.isEmpty()) {
                         TameableUtils.clearEnchants(living);
                     } else {
@@ -1309,6 +1325,14 @@ public class CommonProxy {
                         for (Map.Entry<Enchantment, Integer> entry : itemEnchantments.entrySet()) {
                             TameableUtils.addEnchant(living, new EnchantmentInstance(entry.getKey(), entry.getValue()), listTag);
                         }
+                    }
+                    TameableUtils.setHasCollar(living,true);
+                    TameData collarData=TameRegistry.get(living.getUUID());
+                    if(collarData==null)collarData=TameRegistry.getByTlId(TameData.getTlId(living));
+                    if(collarData!=null){
+                        collarData.hasCollarTag=true;
+                        collarData.collarTagTier=Math.max(0,TameableUtils.getEnchantLevel(living,net.minecraft.world.item.enchantment.Enchantments.ALL_DAMAGE_PROTECTION));
+                        CompoundTag snapshot=new CompoundTag();living.save(snapshot);collarData.entitySnapshot=snapshot;TameRegistry.markDirty();
                     }
                 }
                 event.setCanceled(true);

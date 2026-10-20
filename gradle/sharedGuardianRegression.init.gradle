@@ -1,0 +1,14 @@
+apply from: new File(initscript.sourceFile.parentFile, 'duelSelectionRegression.init.gradle')
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/duelteammates/java')
+    sourceSets.main.java.srcDir('src/test/friendlyowners/java')
+    sourceSets.main.java.srcDir('src/test/rankedreferee/java')
+    sourceSets.main.java.srcDir('src/test/guardianchest/java')
+    sourceSets.main.java.srcDir('src/test/sharedguardian/java')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/shared-guardian-gametest')
+    repositories { flatDir { dirs 'C:/Users/bruns/Downloads/serverpack-slim-6.6.5b3hf/mods' } }
+    dependencies {
+        runtimeOnly fg.deobf('testlocal:sophisticatedcore:1.20.1-1.5.2.2346')
+        runtimeOnly fg.deobf('testlocal:sophisticatedstorage:1.20.1-1.5.0.2137')
+    }
+} }

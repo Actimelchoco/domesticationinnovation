@@ -5,250 +5,333 @@ import com.github.alexthe668.domesticationinnovation.server.block.DIBlockRegistr
 import com.github.alexthe668.domesticationinnovation.server.block.DrumBlockEntity;
 import com.github.alexthe668.domesticationinnovation.server.item.DIItemRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.*;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.entity.player.*;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.items.IItemHandlerModifiable;
+import net.minecraftforge.registries.ForgeRegistries;
 import java.util.*;
 
-/** Only indexed, loaded drums are inspected. One setup scan and one tame operation per tick. */
+/** Shared controllers use the loaded drum index. One setup and one tame operation per tick. */
 @Mod.EventBusSubscriber(modid=DomesticationMod.MODID)
 public final class GuardianChestAutomation {
     public static final String PAPER="TLGuardianPaper";
     private record Key(ServerLevel level, BlockPos pos) {}
     private record Config(UUID owner, String group) {}
+    private record Inspection(Set<Config> configs, String problem, int labels, int unresolved) {}
+    private record Member(Config config, UUID token) {}
     private static final class Setup {
-        final Key key; LoadedChestDrums.Chest chest; Config config; boolean powered;
-        final Map<UUID,UUID> members=new LinkedHashMap<>();
+        final Key key;
+        LoadedChestDrums.Chest chest;
+        Set<Config> configs=Set.of();
+        boolean powered;
+        final Map<UUID,Member> members=new LinkedHashMap<>();
         Setup(Key key){this.key=key;}
     }
-    private record Action(Setup setup, UUID identity, UUID token, boolean deploy, int expires) {}
+    private record Action(Setup setup, Config config, UUID identity, UUID token, boolean deploy, int expires) {}
+    private record Manual(UUID caller,UUID owner,UUID identity,String group,boolean deploy,int expires) {}
+    private record Notice(String message,int tick) {}
     private static final Map<Key,Setup> SETUPS=new LinkedHashMap<>();
     private static final Map<UUID,Action> AUTHORIZED=new HashMap<>();
-    private static final Map<Key,LoadedChestDrums.Chest> SCANS=new LinkedHashMap<>();
-    private static final Map<Key,LoadedChestDrums.Chest> DIRTY=new LinkedHashMap<>();
+    private static final Map<Key,LoadedChestDrums.Chest> SCANS=new LinkedHashMap<>(), DIRTY=new LinkedHashMap<>();
+    private static final Map<Key,BlockPos> BLOCKERS=new HashMap<>();
+    private static final Map<Key,Notice> NOTICES=new HashMap<>();
     private static final Map<UUID,Action> ACTIONS=new LinkedHashMap<>();
     private static final Map<UUID,UUID> LATEST=new HashMap<>();
-    private record Manual(UUID owner,UUID identity,String group,int expires) {}
     private static final Map<UUID,Manual> MANUAL=new LinkedHashMap<>();
-
     private GuardianChestAutomation() {}
-    /** Suppress the ordinary drum's broad movement command for an automation controller. */
-    public static boolean handlesRedstone(net.minecraft.world.level.Level world,BlockPos drumPos){
-        if(!(world instanceof ServerLevel level))return false;
-        Key key=new Key(level,drumPos.above());Setup setup=SETUPS.get(key);
-        if(setup!=null){DIRTY.put(key,setup.chest);return true;}
-        var chunk=level.getChunkSource().getChunkNow(drumPos.getX()>>4,drumPos.getZ()>>4);
-        if(chunk==null||!(chunk.getBlockEntity(key.pos) instanceof ChestBlockEntity chest))return false;
-        var inventory=chest.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER).orElse(null);
-        return inventory!=null&&configuration(level,new LoadedChestDrums.Chest(chest,inventory,null,0))!=null;
-    }
-    @SubscribeEvent public static void neighbors(net.minecraftforge.event.level.BlockEvent.NeighborNotifyEvent event){
-        if(SETUPS.isEmpty()||!(event.getLevel() instanceof ServerLevel level))return;
-        for(var direction:event.getNotifiedSides()){
-            BlockPos pos=event.getPos().relative(direction);
-            Setup setup=SETUPS.get(new Key(level,pos));if(setup==null)setup=SETUPS.get(new Key(level,pos.above()));
-            if(setup!=null)DIRTY.put(setup.key,setup.chest);
-        }
-    }
+
+    private static Key key(LoadedChestDrums.Chest chest){return new Key((ServerLevel)chest.blockEntity().getLevel(),chest.pos());}
     public static boolean isPaper(ItemStack stack){return stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get())&&stack.hasTag()&&stack.getTag().contains(PAPER,10);}
     public static TameData paperTame(ItemStack stack){
-        if(!stack.hasTag())return null;
+        if(!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get())||!stack.hasTag())return null;
         CompoundTag tag=isPaper(stack)?stack.getTag().getCompound(PAPER):stack.getTag();
         UUID id=tag.hasUUID("Tame")?tag.getUUID("Tame"):tag.hasUUID("BoundEntity")?tag.getUUID("BoundEntity"):null;
         if(id==null)return null;
         TameData data=TameRegistry.getByTlId(id);return data==null?TameRegistry.get(id):data;
     }
-    /** Conversion is permanent; the original deed binding cannot transfer ownership afterwards. */
     public static boolean bindPaper(ItemStack stack,UUID owner,String group){
-        if(!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get())||!stack.hasTag()||group==null||group.isBlank())return false;
+        if(owner==null||group==null||group.isBlank()||!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get())||!stack.hasTag())return false;
         if(!isPaper(stack)&&!stack.getTag().getBoolean("HasBoundEntity"))return false;
         TameData data=paperTame(stack);
         if(data==null||!owner.equals(data.ownerUUID))return false;
         if(isPaper(stack)){
-            CompoundTag binding=stack.getTag().getCompound(PAPER);
-            if(!binding.hasUUID("Owner")||!owner.equals(binding.getUUID("Owner"))||!group.equals(binding.getString("Group")))return false;
+            CompoundTag old=stack.getTag().getCompound(PAPER);
+            if(!old.hasUUID("Owner")||!owner.equals(old.getUUID("Owner"))||!group.equals(old.getString("Group")))return false;
         }
         CompoundTag binding=new CompoundTag();binding.putUUID("Owner",owner);binding.putUUID("Tame",data.ensureTlId());binding.putString("Group",group);
         stack.getOrCreateTag().put(PAPER,binding);
         stack.getTag().remove("HasBoundEntity");stack.getTag().remove("BoundEntity");stack.getTag().remove("BoundEntityName");
-        stack.setHoverName(Component.literal(group+": "+data.name));
-        return true;
+        stack.setHoverName(Component.literal(group+": "+data.name));return true;
     }
     private static boolean matches(ItemStack stack,Config config,UUID identity){
         if(!isPaper(stack))return false;
-        CompoundTag tag=stack.getTag().getCompound(PAPER);
-        TameData data=paperTame(stack);
+        CompoundTag tag=stack.getTag().getCompound(PAPER);TameData data=paperTame(stack);
         return tag.hasUUID("Owner")&&tag.hasUUID("Tame")&&config.owner.equals(tag.getUUID("Owner"))
                 &&config.group.equals(tag.getString("Group"))&&identity.equals(tag.getUUID("Tame"))
                 &&data!=null&&config.owner.equals(data.ownerUUID);
     }
-    private static boolean foundation(ServerLevel level,BlockPos chest){
-        BlockPos base=chest.below(2);
-        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
-            BlockPos pos=base.offset(x,0,z);
-            var chunk=level.getChunkSource().getChunkNow(pos.getX()>>4,pos.getZ()>>4);
-            if(chunk==null||!(chunk.getBlockEntity(pos) instanceof ChestBlockEntity))return false;
-        }
-        return true;
+    public static BlockPos foundationCenter(LoadedChestDrums.Chest chest){
+        return chest.drumPos().getY()<chest.pos().getY()?chest.drumPos().below():chest.pos().below();
     }
-    private static Config configuration(ServerLevel level,LoadedChestDrums.Chest chest){
-        if(!(chest.blockEntity() instanceof ChestBlockEntity)||!foundation(level,chest.pos())||chest.blockEntity().isRemoved())return null;
-        var drumChunk=level.getChunkSource().getChunkNow(chest.pos().getX()>>4,chest.pos().getZ()>>4);
-        if(drumChunk==null||!(drumChunk.getBlockEntity(chest.pos().below()) instanceof DrumBlockEntity drum)||drum.getPlacerUUID()==null)return null;
-        // Resolve only the placer, never a network/name lookup on the server tick.
-        var server=level.getServer();var player=server.getPlayerList().getPlayer(drum.getPlacerUUID());
-        var profile=player==null?(server.getProfileCache()==null?null:server.getProfileCache().get(drum.getPlacerUUID()).orElse(null)):player.getGameProfile();
-        if(profile==null)return null;
-        Config found=null;
+    public static int foundationCount(LoadedChestDrums.Chest chest){
+        ServerLevel level=(ServerLevel)chest.blockEntity().getLevel();int count=0;BlockPos base=foundationCenter(chest);
+        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
+            BlockPos pos=base.offset(x,0,z);var chunk=level.getChunkSource().getChunkNow(pos.getX()>>4,pos.getZ()>>4);
+            if(chunk==null)continue;
+            var block=chunk.getBlockState(pos);var entity=chunk.getBlockEntity(pos);
+            var id=ForgeRegistries.BLOCKS.getKey(block.getBlock());
+            boolean namedChest=id!=null&&(id.getPath().equals("chest")||id.getPath().endsWith("_chest"));
+            if(entity!=null&&!entity.isRemoved()&&(entity instanceof ChestBlockEntity||namedChest||block.is(net.minecraftforge.common.Tags.Blocks.CHESTS))
+                    &&entity.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent())count++;
+        }
+        return count;
+    }
+    private static boolean hasIntent(LoadedChestDrums.Chest chest){
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
             ItemStack stack=chest.inventory().getStackInSlot(slot);
-            if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
-            String name=stack.getHoverName().getString();int split=name.indexOf(':');
-            if(split<1||!profile.getName().equalsIgnoreCase(name.substring(0,split).trim()))continue;
-            String group=name.substring(split+1).trim().toLowerCase(Locale.ROOT);if(group.isBlank()||group.length()>128)continue;
-            Config next=new Config(profile.getId(),group);
-            if(found!=null&&!found.equals(next))return null; // Ambiguous labels never issue commands.
-            found=next;
-        }
-        return found;
+            if(isPaper(stack)||stack.is(DIBlockRegistry.DRUM.get().asItem())&&stack.hasCustomHoverName()&&stack.getHoverName().getString().contains(":"))return true;
+        }return false;
     }
-    private static boolean powered(Setup setup){return setup.key.level.hasNeighborSignal(setup.key.pos)||setup.key.level.hasNeighborSignal(setup.key.pos.below());}
-    private static boolean hasPaper(Setup setup,UUID identity){
-        for(int slot=0;slot<setup.chest.inventory().getSlots();slot++)if(matches(setup.chest.inventory().getStackInSlot(slot),setup.config,identity))return true;
+    private static Inspection inspect(LoadedChestDrums.Chest chest){
+        if(!(chest.blockEntity().getLevel() instanceof ServerLevel level)||chest.blockEntity().isRemoved())return new Inspection(Set.of(),"Control inventory is unloaded or removed.",0,0);
+        var chunk=level.getChunkSource().getChunkNow(chest.drumPos().getX()>>4,chest.drumPos().getZ()>>4);
+        if(chunk==null||!(chunk.getBlockEntity(chest.drumPos()) instanceof DrumBlockEntity))return new Inspection(Set.of(),"Place a drum immediately above or below the control inventory.",0,0);
+        int base=foundationCount(chest);
+        if(base!=9)return new Inspection(Set.of(),"Base has "+base+"/9 chest blocks. Put a flat 3x3 chest layer centered at "+foundationCenter(chest).toShortString()+".",0,0);
+        var server=level.getServer();Map<String,UUID> owners=new HashMap<>();Set<UUID> checked=new HashSet<>();List<String[]> labels=new ArrayList<>();
+        for(var player:server.getPlayerList().getPlayers())owners.put(player.getGameProfile().getName().toLowerCase(Locale.ROOT),player.getUUID());
+        for(int slot=0;slot<chest.inventory().getSlots();slot++){
+            ItemStack stack=chest.inventory().getStackInSlot(slot);TameData data=paperTame(stack);
+            if(data!=null&&data.ownerUUID!=null&&checked.add(data.ownerUUID)){
+                var online=server.getPlayerList().getPlayer(data.ownerUUID);
+                var profile=online!=null?online.getGameProfile():server.getProfileCache()==null?null:server.getProfileCache().get(data.ownerUUID).orElse(null);
+                if(profile!=null)owners.put(profile.getName().toLowerCase(Locale.ROOT),profile.getId());
+            }
+            if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
+            String name=stack.getHoverName().getString();int split=name.indexOf(':');if(split<1)continue;
+            String owner=name.substring(0,split).trim().toLowerCase(Locale.ROOT),group=name.substring(split+1).trim().toLowerCase(Locale.ROOT);
+            if(!owner.isBlank()&&!group.isBlank()&&group.length()<=128)labels.add(new String[]{owner,group});
+        }
+        Set<Config> configs=new LinkedHashSet<>();int unresolved=0;
+        for(String[] label:labels){UUID owner=owners.get(label[0]);if(owner==null)unresolved++;else configs.add(new Config(owner,label[1]));}
+        if(labels.isEmpty())return new Inspection(Set.of(),"Add a drum named '<owner>:<deployment group>' and bound adoption papers to this inventory.",0,0);
+        if(configs.isEmpty())return new Inspection(Set.of(),"Named drum owners are not resolved. Add their bound tame papers; the owners may need to join once to cache their profiles.",labels.size(),unresolved);
+        return new Inspection(Set.copyOf(configs),"",labels.size(),unresolved);
+    }
+    private static Config configForPaper(ItemStack stack,Set<Config> configs){
+        TameData data=paperTame(stack);if(data==null||data.ownerUUID==null)return null;
+        if(isPaper(stack)){
+            CompoundTag binding=stack.getTag().getCompound(PAPER);
+            for(Config config:configs)if(config.owner.equals(data.ownerUUID)&&binding.hasUUID("Owner")&&config.owner.equals(binding.getUUID("Owner"))&&config.group.equals(binding.getString("Group")))return config;
+            return null;
+        }
+        if(!stack.getTag().getBoolean("HasBoundEntity"))return null;
+        List<Config> matching=configs.stream().filter(config->config.owner.equals(data.ownerUUID)).toList();
+        if(matching.size()==1)return matching.get(0);
+        List<Config> anchored=matching.stream().filter(config->data.guardianSetAnchors.containsKey(config.group)).toList();
+        return anchored.size()==1?anchored.get(0):null;
+    }
+    private static boolean storePaper(LoadedChestDrums.Chest chest,int slot,Config config){
+        ItemStack old=chest.inventory().getStackInSlot(slot),replacement=old.copy();
+        if(!bindPaper(replacement,config.owner,config.group))return false;
+        if(ItemStack.isSameItemSameTags(old,replacement))return true;
+        if(!(chest.inventory() instanceof IItemHandlerModifiable inventory))return false;
+        try{inventory.setStackInSlot(slot,replacement);chest.blockEntity().setChanged();}
+        catch(RuntimeException ignored){return false;}
+        return matches(chest.inventory().getStackInSlot(slot),config,paperTame(replacement).ensureTlId());
+    }
+    private static boolean powered(LoadedChestDrums.Chest chest){ServerLevel level=(ServerLevel)chest.blockEntity().getLevel();return level.hasNeighborSignal(chest.pos())||level.hasNeighborSignal(chest.drumPos());}
+    private static boolean hasPaper(Setup setup,Config config,UUID identity){
+        for(int slot=0;slot<setup.chest.inventory().getSlots();slot++)if(matches(setup.chest.inventory().getStackInSlot(slot),config,identity))return true;
         return false;
     }
     public static boolean authorized(UUID token){
         Action action=AUTHORIZED.get(token);if(action==null||!token.equals(LATEST.get(action.identity)))return false;
-        Setup setup=action.setup;
-        if(SETUPS.get(setup.key)!=setup||setup.chest.blockEntity().isRemoved()||setup.config==null)return false;
+        Setup setup=action.setup;if(SETUPS.get(setup.key)!=setup||setup.chest.blockEntity().isRemoved()||BLOCKERS.containsKey(setup.key))return false;
         var chunk=setup.key.level.getChunkSource().getChunkNow(setup.key.pos.getX()>>4,setup.key.pos.getZ()>>4);
-        return chunk!=null&&chunk.getBlockEntity(setup.key.pos)==setup.chest.blockEntity()
-                &&setup.config.equals(configuration(setup.key.level,setup.chest))&&powered(setup)==action.deploy&&hasPaper(setup,action.identity);
+        return chunk!=null&&chunk.getBlockEntity(setup.key.pos)==setup.chest.blockEntity()&&inspect(setup.chest).configs.contains(action.config)
+                &&powered(setup.chest)==action.deploy&&hasPaper(setup,action.config,action.identity);
     }
-    private static void retire(UUID token){
-        Action action=AUTHORIZED.remove(token);if(action!=null){LATEST.remove(action.identity,token);ACTIONS.remove(action.identity,action);}
+    private static void retire(UUID token){Action action=AUTHORIZED.remove(token);if(action!=null){LATEST.remove(action.identity,token);ACTIONS.remove(action.identity,action);}}
+    private static void invalidate(Setup setup){for(Member member:setup.members.values())retire(member.token);setup.members.clear();}
+    private static void notify(LoadedChestDrums.Chest chest,String message){
+        Key key=key(chest);int now=key.level.getServer().getTickCount();Notice old=NOTICES.get(key);
+        if(old!=null&&(old.message.equals(message)||now-old.tick<40))return;
+        NOTICES.put(key,new Notice(message,now));
+        Set<UUID> recipients=new HashSet<>();
+        for(int slot=0;slot<chest.inventory().getSlots();slot++){TameData data=paperTame(chest.inventory().getStackInSlot(slot));if(data!=null&&data.ownerUUID!=null)recipients.add(data.ownerUUID);}
+        if(chest.owner()!=null)recipients.add(chest.owner());
+        for(var player:key.level.players())if(player.blockPosition().distSqr(chest.pos())<=16D*16D)recipients.add(player.getUUID());
+        Component text=Component.literal("[Guardian chest "+chest.pos().toShortString()+"] "+message).withStyle(ChatFormatting.AQUA);
+        for(UUID owner:recipients){var player=key.level.getServer().getPlayerList().getPlayer(owner);if(player!=null)player.sendSystemMessage(text);}
     }
-    private static void invalidate(Setup setup){for(UUID token:setup.members.values())retire(token);setup.members.clear();}
-    public static void removeDrum(ServerLevel level,BlockPos drum){
-        Key key=new Key(level,drum.above());Setup setup=SETUPS.remove(key);if(setup!=null)invalidate(setup);
-        SCANS.remove(key);DIRTY.remove(key);
+    public static String status(LoadedChestDrums.Status status){
+        if(!status.active())return "Inactive: overlaps chest x drum at "+status.blocker().toShortString()+".";
+        var chest=status.chest();Inspection inspection=inspect(chest);if(!inspection.problem.isBlank())return "Inactive: "+inspection.problem;
+        Set<UUID> linked=new HashSet<>();int unbound=0,rejected=0,missing=0,bodyguards=0,inactive=0;
+        for(int slot=0;slot<chest.inventory().getSlots();slot++){
+            ItemStack stack=chest.inventory().getStackInSlot(slot);if(!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get()))continue;
+            Config config=configForPaper(stack,inspection.configs);TameData data=paperTame(stack);
+            if(config==null||data==null){if(!isPaper(stack)&&(!stack.hasTag()||!stack.getTag().getBoolean("HasBoundEntity")))unbound++;else rejected++;continue;}
+            UUID id=data.tlId!=null?data.tlId:data.uuid;if(!linked.add(id))continue;
+            if(!data.guardianSetAnchors.containsKey(config.group))missing++;
+            if(data.rosterBodyguard)bodyguards++;if(data.dead||data.stored)inactive++;
+        }
+        return "Ready; power "+(powered(chest)?"ON":"OFF")+"; "+inspection.configs.size()+" owner/group label(s), "+linked.size()+" linked tame(s)"
+                +"; missing posts "+missing+", bodyguards "+bodyguards+", dead/stored "+inactive+", unbound papers "+unbound+", unmatched/ambiguous papers "+rejected
+                +(inspection.unresolved>0?", unresolved owner labels "+inspection.unresolved:"")+".";
     }
     public static void scan(LoadedChestDrums.Chest chest){
         if(!(chest.blockEntity().getLevel() instanceof ServerLevel level))return;
-        Key key=new Key(level,chest.pos());Setup setup=SETUPS.get(key);Config config=configuration(level,chest);
-        if(config==null){if(setup!=null){invalidate(setup);SETUPS.remove(key);}return;}
+        Key key=key(chest);Setup setup=SETUPS.get(key);Inspection inspection=inspect(chest);
+        if(BLOCKERS.containsKey(key)||!inspection.problem.isBlank()){
+            if(hasIntent(chest)||setup!=null)notify(chest,status(new LoadedChestDrums.Status(chest,BLOCKERS.get(key))));
+            if(setup!=null){invalidate(setup);SETUPS.remove(key);}return;
+        }
         boolean fresh=setup==null;
         if(fresh){setup=new Setup(key);SETUPS.put(key,setup);}
-        if(!config.equals(setup.config)||setup.chest!=null&&setup.chest.blockEntity()!=chest.blockEntity()){invalidate(setup);fresh=true;}
-        setup.chest=chest;setup.config=config;boolean on=powered(setup);boolean edge=!fresh&&on!=setup.powered;setup.powered=on;
-        Set<UUID> present=new LinkedHashSet<>();boolean changed=false;
+        if(setup.chest!=null&&setup.chest.blockEntity()!=chest.blockEntity()){invalidate(setup);fresh=true;}
+        setup.chest=chest;setup.configs=inspection.configs;boolean on=powered(chest),edge=!fresh&&on!=setup.powered;setup.powered=on;
+        Map<UUID,Config> present=new LinkedHashMap<>();Set<UUID> conflicts=new HashSet<>();int converted=0,failed=0,queued=0;
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
-            ItemStack stack=chest.inventory().getStackInSlot(slot);
-            if(!stack.is(DIItemRegistry.DEED_OF_OWNERSHIP.get()))continue;
-            boolean wasPaper=isPaper(stack);
-            if(!bindPaper(stack,config.owner,config.group))continue;
-            changed|=!wasPaper;
-            UUID id=stack.getTag().getCompound(PAPER).getUUID("Tame");present.add(id);
+            ItemStack stack=chest.inventory().getStackInSlot(slot);Config config=configForPaper(stack,setup.configs);if(config==null)continue;
+            boolean wasPaper=isPaper(stack);if(!storePaper(chest,slot,config)){failed++;continue;}
+            TameData data=paperTame(chest.inventory().getStackInSlot(slot));UUID id=data.ensureTlId();if(!wasPaper)converted++;
+            Config old=present.putIfAbsent(id,config);if(old!=null&&!old.equals(config))conflicts.add(id);
         }
-        for(UUID old:new ArrayList<>(setup.members.keySet()))if(!present.contains(old))retire(setup.members.remove(old));
-        for(UUID id:present){
-            boolean added=!setup.members.containsKey(id);
+        for(UUID conflict:conflicts)present.remove(conflict);
+        for(UUID old:new ArrayList<>(setup.members.keySet()))if(!present.containsKey(old)||!setup.members.get(old).config.equals(present.get(old)))retire(setup.members.remove(old).token);
+        for(var entry:present.entrySet()){
+            UUID id=entry.getKey();Config config=entry.getValue();boolean added=!setup.members.containsKey(id);
             if(edge||added){
-                UUID old=setup.members.remove(id);if(old!=null)retire(old);
-                UUID token=UUID.randomUUID();setup.members.put(id,token);
-                if(edge||on){Action action=new Action(setup,id,token,on,level.getServer().getTickCount()+1200);AUTHORIZED.put(token,action);LATEST.put(id,token);ACTIONS.put(id,action);}
+                Member old=setup.members.remove(id);if(old!=null)retire(old.token);UUID token=UUID.randomUUID();setup.members.put(id,new Member(config,token));
+                TameData data=TameRegistry.getByTlId(id);
+                if((edge||on)&&data!=null&&!data.rosterBodyguard&&!data.dead&&!data.stored&&(!on||data.guardianSetAnchors.containsKey(config.group))){
+                    Action action=new Action(setup,config,id,token,on,level.getServer().getTickCount()+1200);AUTHORIZED.put(token,action);LATEST.put(id,token);ACTIONS.put(id,action);queued++;
+                }
             }
         }
-        if(changed)chest.blockEntity().setChanged();
+        String message=status(new LoadedChestDrums.Status(chest,null));
+        if(converted>0)message+=" Converted "+converted+" paper stack(s).";
+        if(edge||fresh&&on)message+=" Queued "+queued+(on?" guardian deployment(s).":" home recall(s).");
+        if(failed>0)message+=" Could not update "+failed+" paper slot(s); inventory must allow slot updates.";
+        if(!conflicts.isEmpty())message+=" Conflicting group papers for "+conflicts.size()+" tame(s); remove duplicates.";
+        notify(chest,message);
     }
-    /** Refresh from the existing loaded-drum index, without discovering blocks or entities. */
     public static void refresh(ServerLevel level,List<LoadedChestDrums.Status> statuses){
-        Set<BlockPos> current=new HashSet<>();
-        for(var status:statuses)if(status.active()){current.add(status.chest().pos());SCANS.put(new Key(level,status.chest().pos()),status.chest());}
-        for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();
-            if(entry.getKey().level==level&&!current.contains(entry.getKey().pos)){invalidate(entry.getValue());iterator.remove();}}
+        Set<BlockPos> loaded=new HashSet<>();
+        for(var status:statuses){Key key=new Key(level,status.chest().pos());loaded.add(key.pos);SCANS.put(key,status.chest());
+            if(status.active())BLOCKERS.remove(key);else{BLOCKERS.put(key,status.blocker());Setup old=SETUPS.remove(key);if(old!=null)invalidate(old);}}
+        for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level&&!loaded.contains(entry.getKey().pos)){invalidate(entry.getValue());iterator.remove();}}
+        NOTICES.keySet().removeIf(key->key.level==level&&!loaded.contains(key.pos));BLOCKERS.keySet().removeIf(key->key.level==level&&!loaded.contains(key.pos));
     }
-    /** Includes unloaded guardians: food is stored in their registry inventory without loading chunks. */
     public static List<TameData> feedingMembers(LoadedChestDrums.Chest chest){
-        if(!(chest.blockEntity().getLevel() instanceof ServerLevel level))return List.of();
-        Setup setup=SETUPS.get(new Key(level,chest.pos()));
-        if(setup==null||setup.chest.blockEntity()!=chest.blockEntity()||!setup.config.equals(configuration(level,chest)))return List.of();
-        List<TameData> result=new ArrayList<>();
-        for(UUID id:setup.members.keySet()){
-            TameData data=TameRegistry.getByTlId(id);
-            if(data!=null&&setup.config.owner.equals(data.ownerUUID)&&data.hasHome&&!data.rosterBodyguard&&!data.dead&&!data.stored&&hasPaper(setup,id))result.add(data);
+        if(!(chest.blockEntity().getLevel() instanceof ServerLevel))return List.of();
+        Setup setup=SETUPS.get(key(chest));if(setup==null||setup.chest.blockEntity()!=chest.blockEntity())return List.of();
+        Set<Config> configs=inspect(chest).configs;List<TameData> result=new ArrayList<>();
+        for(var entry:setup.members.entrySet()){
+            TameData data=TameRegistry.getByTlId(entry.getKey());Config config=entry.getValue().config;
+            if(configs.contains(config)&&data!=null&&config.owner.equals(data.ownerUUID)&&data.hasHome&&!data.rosterBodyguard&&!data.dead&&!data.stored&&hasPaper(setup,config,entry.getKey()))result.add(data);
+        }return result;
+    }
+    public static boolean handlesRedstone(net.minecraft.world.level.Level world,BlockPos drumPos){
+        if(!(world instanceof ServerLevel level))return false;
+        var chest=LoadedChestDrums.chestAtDrum(level,drumPos);if(chest==null)return false;Key key=key(chest);
+        Setup setup=SETUPS.get(key);if(setup!=null){DIRTY.put(key,chest);return true;}
+        // Invalid controllers must not accidentally issue an ordinary broad drum movement command.
+        return hasIntent(chest);
+    }
+    @SubscribeEvent public static void neighbors(BlockEvent.NeighborNotifyEvent event){
+        if(SETUPS.isEmpty()||!(event.getLevel() instanceof ServerLevel level))return;
+        for(var direction:event.getNotifiedSides()){
+            BlockPos pos=event.getPos().relative(direction);
+            for(BlockPos candidate:List.of(pos,pos.above(),pos.below())){Setup setup=SETUPS.get(new Key(level,candidate));if(setup!=null)DIRTY.put(setup.key,setup.chest);}
         }
-        return result;
+    }
+    public static void removeDrum(ServerLevel level,BlockPos drum){
+        for(BlockPos pos:List.of(drum.above(),drum.below())){
+            Key key=new Key(level,pos);Setup setup=SETUPS.get(key);
+            if(setup!=null&&setup.chest.drumPos().equals(drum)){invalidate(setup);SETUPS.remove(key);}
+            SCANS.remove(key);DIRTY.remove(key);BLOCKERS.remove(key);NOTICES.remove(key);
+        }
     }
     @SubscribeEvent public static void tick(TickEvent.ServerTickEvent event){
         if(event.phase!=TickEvent.Phase.END)return;
-        Map<Key,LoadedChestDrums.Chest> scans=DIRTY.isEmpty()?SCANS:DIRTY;
+        var scans=DIRTY.isEmpty()?SCANS:DIRTY;
         if(!scans.isEmpty()){var iterator=scans.entrySet().iterator();var entry=iterator.next();var chest=entry.getValue();Key key=entry.getKey();iterator.remove();SCANS.remove(key);scan(chest);}
-        if(ACTIONS.isEmpty()){
-            if(!MANUAL.isEmpty()){var iterator=MANUAL.values().iterator();Manual manual=iterator.next();iterator.remove();
-                TameData data=TameRegistry.getByTlId(manual.identity);
-                if(data!=null&&manual.owner.equals(data.ownerUUID)&&!data.rosterBodyguard&&!data.dead
-                        &&!TameCommands.guardianAutomationMove(event.getServer(),data,manual.group,true,null)
-                        &&event.getServer().getTickCount()<manual.expires)MANUAL.put(manual.identity,manual);
-            }
-            return;
+        if(!ACTIONS.isEmpty()){
+            var iterator=ACTIONS.values().iterator();Action action=iterator.next();iterator.remove();if(!authorized(action.token))return;
+            TameData data=TameRegistry.getByTlId(action.identity);
+            if(data==null||data.dead||data.rosterBodyguard||!action.config.owner.equals(data.ownerUUID))return;
+            if(!TameCommands.guardianAutomationMove(event.getServer(),data,action.config.group,action.deploy,action.token)
+                    &&event.getServer().getTickCount()<action.expires)ACTIONS.put(action.identity,action);
+        }else if(!MANUAL.isEmpty()){
+            var iterator=MANUAL.values().iterator();Manual manual=iterator.next();iterator.remove();TameData data=TameRegistry.getByTlId(manual.identity);
+            if(data==null||!manual.owner.equals(data.ownerUUID)||data.rosterBodyguard||data.dead)return;
+            boolean done=TameCommands.guardianAutomationMove(event.getServer(),data,manual.group,manual.deploy,null);
+            if(!done&&event.getServer().getTickCount()<manual.expires)MANUAL.put(manual.identity,manual);
+            else{var caller=event.getServer().getPlayerList().getPlayer(manual.caller);if(caller!=null)caller.sendSystemMessage(Component.literal((done?"Guardian request processed for ":"Guardian request timed out for ")+data.name+"."));}
         }
-        var iterator=ACTIONS.values().iterator();Action action=iterator.next();iterator.remove();
-        if(!authorized(action.token))return;
-        TameData data=TameRegistry.getByTlId(action.identity);
-        if(data==null||data.dead||data.rosterBodyguard||!action.setup.config.owner.equals(data.ownerUUID))return;
-        if(!TameCommands.guardianAutomationMove(event.getServer(),data,action.setup.config.group,action.deploy,action.token)
-                &&event.getServer().getTickCount()<action.expires)ACTIONS.put(action.identity,action);
     }
-    @SubscribeEvent(priority=EventPriority.HIGHEST) public static void usePaper(PlayerInteractEvent.RightClickBlock event){
-        if(!isPaper(event.getItemStack()))return;
-        event.setCanceled(true);event.setCancellationResult(InteractionResult.SUCCESS);
-        if(!(event.getEntity() instanceof ServerPlayer player))return;
-        var binding=event.getItemStack().getTag().getCompound(PAPER);TameData data=paperTame(event.getItemStack());
-        if(data==null||!binding.hasUUID("Owner")||!player.getUUID().equals(binding.getUUID("Owner"))||!player.getUUID().equals(data.ownerUUID)){
-            player.sendSystemMessage(Component.literal("Only this tame's owner can use its guardian paper."));return;
-        }
+    private static void requestManual(ServerPlayer player,ItemStack stack,boolean deploy){
+        TameData data=paperTame(stack);var binding=stack.getTag().getCompound(PAPER);
+        if(data==null||!binding.hasUUID("Owner")||!binding.getUUID("Owner").equals(data.ownerUUID)){player.sendSystemMessage(Component.literal("This guardian paper no longer matches the tame's owner."));return;}
+        if(data.rosterBodyguard){player.sendSystemMessage(Component.literal("Bodyguards cannot be overridden by guardian papers."));return;}
+        if(data.dead||data.stored){player.sendSystemMessage(Component.literal("This tame is dead or stored and cannot be moved by a guardian paper."));return;}
         String group=binding.getString("Group");
-        if(player.isShiftKeyDown()){
-            requestManual(player,data,group);
-        }else{
-            TameCommands.setGuardianPaperPost(data,group,player.serverLevel(),event.getPos().relative(event.getFace()));
-            player.sendSystemMessage(Component.literal("Guardian post for "+data.name+" in '"+group+"' set."));
-        }
-    }
-    private static void requestManual(ServerPlayer player,TameData data,String group){
-        if(data.rosterBodyguard){player.sendSystemMessage(Component.literal("Release this bodyguard before deploying it as a guardian."));return;}
-        if(!data.guardianSetAnchors.containsKey(group)){player.sendSystemMessage(Component.literal("Right click a block with this paper to set its guardian post first."));return;}
+        if(deploy&&!data.guardianSetAnchors.containsKey(group)){player.sendSystemMessage(Component.literal("Right click the ground with this paper to set its guardian post first."));return;}
+        if(!deploy&&!data.hasHome){player.sendSystemMessage(Component.literal(data.name+" is not assigned as a guardian."));return;}
         if(player.getCooldowns().isOnCooldown(DIItemRegistry.DEED_OF_OWNERSHIP.get()))return;
         player.getCooldowns().addCooldown(DIItemRegistry.DEED_OF_OWNERSHIP.get(),10);
-        MANUAL.put(data.ensureTlId(),new Manual(player.getUUID(),data.tlId,group,player.server.getTickCount()+1200));
-        player.sendSystemMessage(Component.literal("Guardian deployment queued for "+data.name+"."));
+        UUID id=data.ensureTlId();UUID previous=LATEST.remove(id);if(previous!=null)retire(previous);ACTIONS.remove(id);
+        MANUAL.put(id,new Manual(player.getUUID(),data.ownerUUID,id,group,deploy,player.server.getTickCount()+1200));
+        player.sendSystemMessage(Component.literal((deploy?"Guardian deployment queued for ":"Guardian release/tphome queued for ")+data.name+"."));
+    }
+    @SubscribeEvent(priority=EventPriority.HIGHEST) public static void usePaper(PlayerInteractEvent.RightClickBlock event){
+        if(!isPaper(event.getItemStack()))return;event.setCanceled(true);event.setCancellationResult(InteractionResult.SUCCESS);
+        if(!(event.getEntity() instanceof ServerPlayer player))return;
+        if(player.isShiftKeyDown()){requestManual(player,event.getItemStack(),true);return;}
+        TameData data=paperTame(event.getItemStack());var binding=event.getItemStack().getTag().getCompound(PAPER);
+        if(data==null||!binding.hasUUID("Owner")||!binding.getUUID("Owner").equals(data.ownerUUID)){player.sendSystemMessage(Component.literal("This guardian paper no longer matches its tame."));return;}
+        TameCommands.setGuardianPaperPost(data,binding.getString("Group"),player.serverLevel(),event.getPos().relative(event.getFace()));
+        player.sendSystemMessage(Component.literal("Guardian post for "+data.name+" in '"+binding.getString("Group")+"' set."));
     }
     @SubscribeEvent(priority=EventPriority.HIGHEST) public static void useInAir(PlayerInteractEvent.RightClickItem event){
         if(!isPaper(event.getItemStack())||!event.getEntity().isShiftKeyDown())return;
         event.setCanceled(true);event.setCancellationResult(InteractionResult.SUCCESS);
-        if(!(event.getEntity() instanceof ServerPlayer player))return;
-        var binding=event.getItemStack().getTag().getCompound(PAPER);TameData data=paperTame(event.getItemStack());
-        if(data!=null&&binding.hasUUID("Owner")&&player.getUUID().equals(binding.getUUID("Owner"))&&player.getUUID().equals(data.ownerUUID))requestManual(player,data,binding.getString("Group"));
+        if(event.getEntity() instanceof ServerPlayer player)requestManual(player,event.getItemStack(),true);
     }
+    @SubscribeEvent(priority=EventPriority.HIGHEST,receiveCanceled=true) public static void punchBlock(PlayerInteractEvent.LeftClickBlock event){
+        if(!isPaper(event.getItemStack()))return;event.setCanceled(true);
+        if(event.getEntity() instanceof ServerPlayer player&&event.getHand()==InteractionHand.MAIN_HAND)requestManual(player,event.getItemStack(),false);
+    }
+    @SubscribeEvent(priority=EventPriority.HIGHEST,receiveCanceled=true) public static void punchEntity(AttackEntityEvent event){
+        if(!isPaper(event.getEntity().getMainHandItem()))return;event.setCanceled(true);
+        if(event.getEntity() instanceof ServerPlayer player)requestManual(player,player.getMainHandItem(),false);
+    }
+    @SubscribeEvent(priority=EventPriority.HIGHEST) public static void protectBlock(BlockEvent.BreakEvent event){if(isPaper(event.getPlayer().getMainHandItem()))event.setCanceled(true);}
     @SubscribeEvent(priority=EventPriority.HIGHEST) public static void blockAdoption(PlayerInteractEvent.EntityInteract event){if(isPaper(event.getItemStack())){event.setCanceled(true);event.setCancellationResult(InteractionResult.FAIL);}}
     @SubscribeEvent(priority=EventPriority.HIGHEST) public static void blockAdoptionSpecific(PlayerInteractEvent.EntityInteractSpecific event){if(isPaper(event.getItemStack())){event.setCanceled(true);event.setCancellationResult(InteractionResult.FAIL);}}
     @SubscribeEvent public static void unload(net.minecraftforge.event.level.LevelEvent.Unload event){
         if(!(event.getLevel() instanceof ServerLevel level))return;
         for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level){invalidate(entry.getValue());iterator.remove();}}
-        SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);
+        SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);BLOCKERS.keySet().removeIf(key->key.level==level);NOTICES.keySet().removeIf(key->key.level==level);
     }
-    @SubscribeEvent public static void stop(ServerStoppedEvent event){SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
+    @SubscribeEvent public static void stop(ServerStoppedEvent event){SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();NOTICES.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
 }

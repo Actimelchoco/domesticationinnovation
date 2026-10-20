@@ -40,7 +40,10 @@ public final class LoadedChestDrums {
         public boolean active() { return blocker == null; }
     }
 
-    public record Chest(BlockEntity blockEntity, IItemHandler inventory, UUID owner, int extraDrums) {
+    public record Chest(BlockEntity blockEntity, IItemHandler inventory, UUID owner, int extraDrums, BlockPos drumPos) {
+        public Chest(BlockEntity blockEntity, IItemHandler inventory, UUID owner, int extraDrums) {
+            this(blockEntity,inventory,owner,extraDrums,blockEntity.getBlockPos().below());
+        }
         public BlockPos pos() { return blockEntity.getBlockPos(); }
         public int range() { return RANGE + extraDrums * RANGE_PER_DRUM; }
         public int height() { return HEIGHT + extraDrums * HEIGHT_PER_DRUM; }
@@ -75,18 +78,30 @@ public final class LoadedChestDrums {
         Map<BlockPos, DrumBlockEntity> drums = LOADED.get(level);
         if (drums == null) return result;
         for (DrumBlockEntity drum : drums.values()) {
-            BlockPos pos = drum.getBlockPos().above();
-            if (center != null && center.distSqr(pos) > (double) radius * radius) continue;
-            if (drum.isRemoved()) continue;
-            var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
-            if (chunk == null || chunk.getBlockEntity(drum.getBlockPos()) != drum) continue;
-            BlockEntity container = chunk.getBlockEntity(pos);
-            if (container == null || container.isRemoved()) continue;
-            IItemHandler inventory = container.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
-            if (inventory != null) result.add(new Chest(container, inventory, drum.getPlacerUUID(), adjacentDrums(level, drums, drum.getBlockPos())));
+            Chest chest=chestAtDrum(level,drum.getBlockPos());
+            if(chest!=null&&(center==null||center.distSqr(chest.pos())<=(double)radius*radius))result.add(chest);
         }
         result.sort(java.util.Comparator.comparingLong(chest -> chest.pos().asLong()));
         return result;
+    }
+
+    /** Prefer the inventory above a drum, so the center foundation chest is never a second controller. */
+    public static Chest chestAtDrum(ServerLevel level,BlockPos drumPos) {
+        Map<BlockPos,DrumBlockEntity> drums=LOADED.get(level);
+        var chunk=level.getChunkSource().getChunkNow(drumPos.getX()>>4,drumPos.getZ()>>4);
+        if(drums==null||chunk==null)return null;
+        DrumBlockEntity drum=drums.get(drumPos);
+        if(drum==null||drum.isRemoved()||chunk.getBlockEntity(drumPos)!=drum)return null;
+        for(Direction side:List.of(Direction.UP,Direction.DOWN)) {
+            BlockPos pos=drumPos.relative(side);
+            BlockEntity container=chunk.getBlockEntity(pos);
+            if(container==null||container.isRemoved())continue;
+            if(side==Direction.DOWN&&chunk.getBlockEntity(pos.below()) instanceof DrumBlockEntity lower
+                    &&!lower.isRemoved()&&drums.get(lower.getBlockPos())==lower)continue;
+            IItemHandler inventory=container.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+            if(inventory!=null)return new Chest(container,inventory,drum.getPlacerUUID(),adjacentDrums(level,drums,drumPos),drumPos);
+        }
+        return null;
     }
 
     private static int adjacentDrums(ServerLevel level, Map<BlockPos, DrumBlockEntity> drums, BlockPos center) {

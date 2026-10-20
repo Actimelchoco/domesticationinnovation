@@ -1034,6 +1034,7 @@ public class TameCommands {
                 .executes(ctx -> listChestDrumRanges(ctx.getSource(), false))
                 .then(Commands.literal("deactivated")
                         .executes(ctx -> listChestDrumRanges(ctx.getSource(), true)))
+                .then(Commands.literal("status").executes(ctx -> listChestDrumRanges(ctx.getSource(), false)))
                 .then(Commands.literal("system")
                         .executes(ctx -> infoDetail(ctx.getSource(), "chestxdrum system")));
     }
@@ -5763,10 +5764,10 @@ public class TameCommands {
                     "Each drum touching a horizontal side of the supporting drum adds 10 blocks in X/Z and 2 up/down. Four extra drums give a range of 65/13. Diagonals and chains do not count.",
                     "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
                     "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory.",
-                    "Guardian automation: put a 3x3 layer of nine chests directly below the drum, and put a drum named '<yourName>:<deploymentGroup>' in the chest above it. The supporting drum must have been placed by you.",
-                    "Bound adoption papers in the top chest become permanent '<group>: <tame>' guardian papers. They can no longer transfer ownership. Only papers for that owner and group control tames.",
+                    "Shared guardian automation: put a drum immediately above OR below the control inventory, with a 3x3 layer of nine chest blocks beneath the lower block. Modded chests are supported.",
+                    "Each owner can add a drum named <owner>:<group> and their bound papers to the same shared inventory. Papers become permanent guardian controls and can no longer transfer ownership. Anyone holding one can manage its tame.",
                     "Redstone ON at the drum or top chest deploys linked tames; OFF releases them and sends them home sitting. Bodyguards are skipped. Other guardian posts can be overridden. A recall withdraws the tame from ranked; an active ranked round is forfeited before deployment.",
-                    "Remove a paper to stop its redstone control and remote feeding. Right click a block with the paper to set that tame's group post; sneak right click a block or the air to deploy it.",
+                    "Right click ground with a guardian paper to set its post; sneak right click to deploy; punch a block/entity to release it and tphome. Remove the paper to stop chest control. /tames chestxdrum status explains missing base chests, labels, papers or posts.",
                     "The top chest still feeds nearby tames normally, and linked assigned guardians can receive its food at any distance or dimension, including while unloaded. The setup itself must be loaded and not overlap another active chest x drum.",
                     "Automation scans at most one setup and processes at most one tame per tick. Rapid signal changes coalesce to the latest state; removed papers cancel queued moves."
             );
@@ -14549,6 +14550,7 @@ public class TameCommands {
                     + " (" + status.chest().extraDrums() + " extra drums); "
                     + (status.active() ? "active" : "deactivated; in range of " + status.blocker().toShortString()))
                     .withStyle(status.active() ? ChatFormatting.GREEN : ChatFormatting.YELLOW));
+            player.sendSystemMessage(Component.literal("  Guardian automation: "+GuardianChestAutomation.status(status)).withStyle(ChatFormatting.AQUA));
         }
         return 1;
     }
