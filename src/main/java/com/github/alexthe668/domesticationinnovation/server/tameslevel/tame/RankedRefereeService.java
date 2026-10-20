@@ -105,7 +105,7 @@ public final class RankedRefereeService {
         Map<UUID,TameData> unique=new HashMap<>();
         for(UUID id:TameRegistry.getRankedParticipants()) {
             TameData data=TameRegistry.get(id);if(data==null)data=TameRegistry.getByTlId(id);
-            if(data==null||data.dead||TameDuelManager.isEntityInDuel(data.uuid)||TameDuelManager.isEntityInDuel(data.tlId)
+            if(data==null||data.dead||TameDuelManager.ignoresDuelCalls(data.uuid)||TameDuelManager.isEntityInDuel(data.uuid)||TameDuelManager.isEntityInDuel(data.tlId)
                     ||TameRegistry.getRankedForbiddenTameTypes().contains(data.type))continue;
             unique.put(data.ensureTlId(),data);
         }
