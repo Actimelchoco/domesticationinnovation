@@ -45,6 +45,7 @@ public abstract class MobMixin extends LivingEntity {
     @Inject(method = "serverAiStep", at = @At("HEAD"), cancellable = true)
     private void tl$pauseUnobservedLostHunter(CallbackInfo ci) {
         Mob mob = (Mob)(Object)this;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService.isReferee(mob)) { ci.cancel();return; }
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService.isReleased(mob)
                 && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LostHunterActivity.active(mob)) ci.cancel();
     }

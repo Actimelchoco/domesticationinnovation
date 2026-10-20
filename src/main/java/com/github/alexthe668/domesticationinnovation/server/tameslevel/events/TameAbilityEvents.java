@@ -14,6 +14,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameLimitService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LostHunterActivity;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TLAdminRuntimeSettings;
 import net.minecraft.ChatFormatting;
@@ -140,7 +141,9 @@ public class TameAbilityEvents {
             for (Entity entity : level.getAllEntities()) {
                 if (!(entity instanceof LivingEntity tame)) continue;
                 if (TameLimitService.isReleased(tame) && !LostHunterActivity.abilityPass(tame, level.getGameTime())) continue;
-                boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame) || TameLimitService.isReleased(tame);
+                if (RankedRefereeService.isReferee(tame)
+                        && (TameEntityAdapter.target(tame) == null || !shouldRunPeriodicPass(tame, level.getGameTime(), 20))) continue;
+                boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame) || TameLimitService.isReleased(tame) || RankedRefereeService.isReferee(tame);
                 if ((!TameEntityAdapter.isTame(tame) && !cursed) || !tame.isAlive()) continue;
                 TameData data = TameLimitService.abilityData(tame);
                 if (data == null || (data.abilityLevels.isEmpty() && data.abilities.isEmpty() && data.attributeLevels.isEmpty())) continue;
@@ -172,7 +175,7 @@ public class TameAbilityEvents {
                 boolean guardianRepulsePass = shouldRunPeriodicPass(tame, now, GUARDIAN_REPULSE_CHECK_RATE);
                 boolean allowOffensive = shouldUseOffensiveAbilities(tame, data, currentTarget);
                 boolean abilitiesBlocked = TameableUtils.getImmuneTime(tame) > 0
-                        || (!TameLimitService.isReleased(tame) && TameCommands.isHungerBlockingAbilities(data));
+                        || (!TameLimitService.isReleased(tame) && !RankedRefereeService.isReferee(tame) && TameCommands.isHungerBlockingAbilities(data));
                 TamePerformanceProfiler.run("feature.guardian_lock_on_beam", () -> renderGuardianLockOnBeam(level, tame, data, currentTarget, now));
 
                 if (namedEffectsPass) {
@@ -253,7 +256,7 @@ public class TameAbilityEvents {
             }
 
             LivingEntity attackerTame = resolveTameAttacker(event);
-            boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame) || TameLimitService.isReleased(attackerTame);
+            boolean cursedAttacker = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(attackerTame) || TameLimitService.isReleased(attackerTame) || RankedRefereeService.isReferee(attackerTame);
             if (attackerTame != null && (TameEntityAdapter.isTame(attackerTame) || cursedAttacker)
                     && (!TameLimitService.isReleased(attackerTame) || LostHunterActivity.active(attackerTame))) {
                 TameData attackerData = TameLimitService.abilityData(attackerTame);

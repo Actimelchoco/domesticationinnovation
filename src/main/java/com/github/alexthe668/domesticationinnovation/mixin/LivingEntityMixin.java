@@ -16,13 +16,15 @@ public abstract class LivingEntityMixin extends Entity {
 
     @Inject(method = "hurt", at = @At("HEAD"), cancellable = true)
     private void tl$protectFriendlyOwnerDamage(net.minecraft.world.damagesource.DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(this, source)) cir.setReturnValue(false);
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(this, source)
+                || com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService.blocks(this, source)) cir.setReturnValue(false);
     }
 
     @Inject(method = "addEffect(Lnet/minecraft/world/effect/MobEffectInstance;Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"), cancellable = true)
     private void tl$protectFriendlyOwnerEffects(net.minecraft.world.effect.MobEffectInstance effect, Entity source, CallbackInfoReturnable<Boolean> cir) {
         if (!effect.getEffect().isBeneficial()
-                && com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(this, source)) cir.setReturnValue(false);
+                && (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(this, source)
+                    || com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService.blocks(this, source))) cir.setReturnValue(false);
     }
 
     public LivingEntityMixin(EntityType<?> entityType, Level lvl) {

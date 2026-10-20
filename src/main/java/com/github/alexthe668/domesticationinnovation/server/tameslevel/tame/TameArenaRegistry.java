@@ -91,6 +91,9 @@ public final class TameArenaRegistry {
     public static TameArena setHideTames(String name, boolean hideTames) {
         return update(name, arena -> arena.withHideTames(hideTames));
     }
+    public static TameArena setRefereeSpot(String name, ArenaPoint point) {
+        return update(name, arena -> arena.withRefereeSpot(point));
+    }
 
     private static TameArena update(String name, java.util.function.UnaryOperator<TameArena> updater) {
         String normalized = normalizeName(name);
@@ -140,30 +143,34 @@ public final class TameArenaRegistry {
         }
     }
 
-    public record TameArena(String name, ArenaPoint spawnA, ArenaPoint spawnB, ArenaPoint waitingA, ArenaPoint waitingB, boolean hideTames) {
+    public record TameArena(String name, ArenaPoint spawnA, ArenaPoint spawnB, ArenaPoint waitingA, ArenaPoint waitingB, boolean hideTames, ArenaPoint refereeSpot) {
+        public TameArena(String name, ArenaPoint spawnA, ArenaPoint spawnB, ArenaPoint waitingA, ArenaPoint waitingB, boolean hideTames) {
+            this(name, spawnA, spawnB, waitingA, waitingB, hideTames, null);
+        }
         public TameArena copy() {
-            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames);
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames, refereeSpot);
         }
 
         public TameArena withSpawnA(ArenaPoint point) {
-            return new TameArena(name, point, spawnB, waitingA, waitingB, hideTames);
+            return new TameArena(name, point, spawnB, waitingA, waitingB, hideTames, refereeSpot);
         }
 
         public TameArena withSpawnB(ArenaPoint point) {
-            return new TameArena(name, spawnA, point, waitingA, waitingB, hideTames);
+            return new TameArena(name, spawnA, point, waitingA, waitingB, hideTames, refereeSpot);
         }
 
         public TameArena withWaitingA(ArenaPoint point) {
-            return new TameArena(name, spawnA, spawnB, point, waitingB, hideTames);
+            return new TameArena(name, spawnA, spawnB, point, waitingB, hideTames, refereeSpot);
         }
 
         public TameArena withWaitingB(ArenaPoint point) {
-            return new TameArena(name, spawnA, spawnB, waitingA, point, hideTames);
+            return new TameArena(name, spawnA, spawnB, waitingA, point, hideTames, refereeSpot);
         }
 
         public TameArena withHideTames(boolean hideTames) {
-            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames);
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames, refereeSpot);
         }
+        public TameArena withRefereeSpot(ArenaPoint point) { return new TameArena(name, spawnA, spawnB, waitingA, waitingB, hideTames, point); }
 
         public boolean isConfiguredForDuel() {
             return spawnA != null && spawnA.isValid()
@@ -188,6 +195,7 @@ public final class TameArenaRegistry {
                 tag.put("waitingB", waitingB.toTag());
             }
             tag.putBoolean("hideTames", hideTames);
+            if (refereeSpot != null && refereeSpot.isValid()) tag.put("refereeSpot", refereeSpot.toTag());
             return tag;
         }
 
@@ -203,7 +211,8 @@ public final class TameArenaRegistry {
             ArenaPoint spawnB = tag.contains("spawnB", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("spawnB")) : null;
             ArenaPoint waitingA = tag.contains("waitingA", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("waitingA")) : null;
             ArenaPoint waitingB = tag.contains("waitingB", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("waitingB")) : null;
-            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, tag.getBoolean("hideTames"));
+            ArenaPoint refereeSpot = tag.contains("refereeSpot", net.minecraft.nbt.Tag.TAG_COMPOUND) ? ArenaPoint.fromTag(tag.getCompound("refereeSpot")) : null;
+            return new TameArena(name, spawnA, spawnB, waitingA, waitingB, tag.getBoolean("hideTames"), refereeSpot);
         }
     }
 }

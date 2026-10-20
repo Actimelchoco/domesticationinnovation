@@ -57,6 +57,8 @@ public final class TameLimitService {
 
     public static TameData abilityData(Entity entity) {
         if (entity == null) return null;
+        TameData referee = RankedRefereeService.data(entity);
+        if (referee != null) return referee;
         if (isReleased(entity)) return wildData(entity);
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(entity))
             return com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.dataFor(entity);

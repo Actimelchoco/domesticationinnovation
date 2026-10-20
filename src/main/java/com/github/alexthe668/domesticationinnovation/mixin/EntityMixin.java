@@ -25,6 +25,11 @@ import java.util.function.Predicate;
 @Mixin(Entity.class)
 public class EntityMixin {
 
+    @Inject(method = "shouldBeSaved", at = @At("HEAD"), cancellable = true)
+    private void tl$neverSaveRankedReferee(CallbackInfoReturnable<Boolean> cir) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService.temporary((Entity)(Object)this)) cir.setReturnValue(false);
+    }
+
     @Inject(method = "thunderHit", at = @At("HEAD"), cancellable = true)
     private void tl$blockFriendlyLightning(net.minecraft.server.level.ServerLevel level,
             net.minecraft.world.entity.LightningBolt bolt, CallbackInfo ci) {

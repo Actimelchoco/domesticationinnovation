@@ -281,6 +281,16 @@ public final class TameDuelManager {
     public static synchronized boolean isTameInDuel(UUID tameId) {
         return isEntityInDuel(tameId);
     }
+    public static synchronized UUID rankedBattleId(UUID participant) {
+        UUID active = resolveActiveParticipantId(participant);
+        UUID id = active == null ? null : BATTLE_ID_BY_ENTITY.get(active);
+        DuelBattle battle = id == null ? null : BATTLE_BY_ID.get(id);
+        return battle != null && battle.ranked ? id : null;
+    }
+    public static synchronized boolean isRankedBattleActive(UUID id) {
+        DuelBattle battle = BATTLE_BY_ID.get(id);
+        return battle != null && battle.ranked;
+    }
 
     public record DuelMemberStatus(UUID id, String name, boolean alive) {}
     public record DuelTeamStatus(UUID owner, List<DuelMemberStatus> members, String label) {}
@@ -961,6 +971,7 @@ public final class TameDuelManager {
 
     private static void finishBattle(MinecraftServer server, DuelBattle battle, String reason, UUID forfeitingOwner) {
         if (battle == null) return;
+        RankedRefereeService.end(battle.battleId);
         BATTLE_BY_ID.remove(battle.battleId);
         persistBattleStatsAndMmr(server, battle, forfeitingOwner);
         refreshStoredDuelSnapshotsFromRegistry(battle);

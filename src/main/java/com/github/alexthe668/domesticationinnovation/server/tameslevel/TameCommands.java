@@ -3697,6 +3697,8 @@ public class TameCommands {
                                                 .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "A")))
                                         .then(Commands.literal("setB")
                                                 .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "B")))
+                                        .then(Commands.literal("setRefereeSpot")
+                                                .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "referee")))
                                         .then(Commands.literal("setWaitingA")
                                                 .executes(ctx -> adminRankedSetSpawn(ctx.getSource(), "waitingA")))
                                         .then(Commands.literal("setWaitingB")
@@ -18974,13 +18976,16 @@ public class TameCommands {
             case "B" -> TameArenaRegistry.setSpawnB(arenaName, point);
             case "waitingA" -> TameArenaRegistry.setWaitingA(arenaName, point);
             case "waitingB" -> TameArenaRegistry.setWaitingB(arenaName, point);
+            case "referee" -> TameArenaRegistry.setRefereeSpot(arenaName, point);
             default -> null;
         };
         if (updated == null) {
             return error(player, "Failed to update ranked arena " + arenaName + ".");
         }
-        stopRankedSession(source.getServer());
-        ensureRankedSessionRunning(source.getServer());
+        if (!"referee".equals(slot)) {
+            stopRankedSession(source.getServer());
+            ensureRankedSessionRunning(source.getServer());
+        }
         source.sendSuccess(() -> Component.literal("Set ranked " + slot + " to " + arenaPointLabel(point) + ".").withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
