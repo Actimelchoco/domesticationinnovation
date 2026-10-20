@@ -478,7 +478,9 @@ public class TameCommands {
         }
 
         private static DuelSelectionResult ok(List<LivingEntity> tames) {
-            return new DuelSelectionResult(tames, "");
+            List<LivingEntity> eligible=new ArrayList<>(tames.stream().filter(tame->!TameDuelManager.ignoresDuelCalls(tame.getUUID())).toList());
+            return eligible.isEmpty()?fail("Bodyguards and assigned guardians ignore duel and ranked calls. Release their guard assignment first.")
+                    :new DuelSelectionResult(eligible, "");
         }
 
         private static DuelSelectionResult fail(String error) {
@@ -4041,6 +4043,7 @@ public class TameCommands {
             return;
         }
         stopFoodDistributions();
+        TameFoodManager.flushLearnedFoods();
         restoreRankedSessionBeforeShutdown(server);
     }
 
@@ -5759,7 +5762,13 @@ public class TameCommands {
                     "The base area extends 25 blocks in X/Z and 5 blocks up/down from the container.",
                     "Each drum touching a horizontal side of the supporting drum adds 10 blocks in X/Z and 2 up/down. Four extra drums give a range of 65/13. Diagonals and chains do not count.",
                     "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
-                    "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory."
+                    "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory.",
+                    "Guardian automation: put a 3x3 layer of nine chests directly below the drum, and put a drum named '<yourName>:<deploymentGroup>' in the chest above it. The supporting drum must have been placed by you.",
+                    "Bound adoption papers in the top chest become permanent '<group>: <tame>' guardian papers. They can no longer transfer ownership. Only papers for that owner and group control tames.",
+                    "Redstone ON at the drum or top chest deploys linked tames; OFF releases them and sends them home sitting. Bodyguards are skipped. Other guardian posts can be overridden. A recall withdraws the tame from ranked; an active ranked round is forfeited before deployment.",
+                    "Remove a paper to stop its redstone control and remote feeding. Right click a block with the paper to set that tame's group post; sneak right click a block or the air to deploy it.",
+                    "The top chest still feeds nearby tames normally, and linked assigned guardians can receive its food at any distance or dimension, including while unloaded. The setup itself must be loaded and not overlap another active chest x drum.",
+                    "Automation scans at most one setup and processes at most one tame per tick. Rapid signal changes coalesce to the latest state; removed papers cancel queued moves."
             );
         }
         else if (key.equals("mode")) {
@@ -9461,6 +9470,7 @@ public class TameCommands {
             }
             if (add) {
                 TameData participantData = rankedTameDataForParticipant(participantId);
+                if (TameDuelManager.ignoresDuelCalls(participantId)) { skipped++; continue; }
                 if (participantData != null && participantData.level < 10) {
                     belowLevel.add(tameDisplayName(participantData));
                     continue;
@@ -9549,6 +9559,7 @@ public class TameCommands {
     }
 
     private static void unloadRankedParticipantTame(MinecraftServer server, UUID participantId) {
+        if (TameDuelManager.ignoresDuelCalls(participantId)) return;
         if (server == null || participantId == null) {
             return;
         }
@@ -9592,6 +9603,7 @@ public class TameCommands {
     }
 
     private static void sendPulledRankedParticipantHome(MinecraftServer server, UUID participantId) {
+        if (TameDuelManager.ignoresDuelCalls(participantId)) return;
         if (server == null || participantId == null) {
             return;
         }
@@ -23072,6 +23084,77 @@ public class TameCommands {
         return spawnTargetFromGuardianSet(source, anchor);
     }
 
+    public static void setGuardianPaperPost(TameData data, String group, ServerLevel level, BlockPos pos) {
+        String name=normalizeGuardianSetName(group);
+        if(data==null||name==null||level==null||pos==null)return;
+        putGuardianSetAnchor(data,name,level.dimension().location().toString(),pos.getX(),pos.getY(),pos.getZ());
+        TameRegistry.markDirty();
+    }
+
+    /** Returns false only when a destination is still loading; callers retry with a bounded queue. */
+    public static boolean guardianAutomationMove(MinecraftServer server,TameData data,String group,boolean deploy,UUID token) {
+        if(server==null||data==null||data.ownerUUID==null||data.dead||data.stored||data.rosterBodyguard
+                ||com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data))return true;
+        if(token!=null&&!GuardianChestAutomation.authorized(token))return true;
+        var source=server.createCommandSourceStack();
+        SpawnTarget target=deploy?spawnTargetFromGuardianSet(source,getGuardianSetAnchor(data,normalizeGuardianSetName(group)))
+                :guardianRestDestination(server,data);
+        if(target==null||target.level==null||target.pos==null)return true;
+        if(!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(target.level,target.pos))return false;
+        UUID identity=data.ensureTlId();
+        ensureRankedPoolLoadedFromRegistry();
+        boolean ranked=RANKED_POOL.contains(data.uuid)||RANKED_POOL.contains(identity)
+                ||TameDuelManager.rankedBattleId(data.uuid)!=null;
+        if(isDuelLocked(data)&&!ranked)return true; // Ordinary duels retain their command lock.
+        LivingEntity body=TameEntityAdapter.findLoaded(server,data.uuid,identity);
+        boolean rankedHidden=ranked&&body==null;
+        if(ranked){
+            Set<UUID> recalledIds=new LinkedHashSet<>(duelParticipantIdentityIds(data.uuid));
+            recalledIds.add(identity);
+            TameDuelManager.recallRankedGuardian(server,data.uuid);
+            TameData restored=TameRegistry.getByTlId(identity);if(restored!=null)data=restored;
+            recalledIds.add(data.uuid);
+            ActiveDuelSession session=RANKED_DUEL_SESSION;
+            for(UUID id:recalledIds){
+                RANKED_POOL.remove(id);
+                if(session!=null){session.poolA.remove(id);session.poolB.remove(id);session.queuedPullAfterRound.remove(id);
+                    session.currentRoundA=removeFromSet(session.currentRoundA,id);session.currentRoundB=removeFromSet(session.currentRoundB,id);
+                    session.idleSitHoldUntilTick.remove(id);}
+            }
+            persistRankedPoolToRegistry();
+            body=TameEntityAdapter.findLoaded(server,data.uuid,identity);
+        }
+        cancelPendingImmediateChunkTeleport(server,data);
+        if(body==null&&rankedHidden){
+            RecoverResult recovered=recoverPetEntityAtLocation(null,target,data);
+            body=recovered.entity;
+            if(body==null)return true; // Never rebuild an ordinary unloaded world entity from an old snapshot.
+        }
+        if(body!=null){
+            if(completeGuardianAutomationMove(body,data,target,deploy)==null)return false;
+        }else{
+            ResourceLocation originId=ResourceLocation.tryParse(data.lastKnownDimension);
+            ServerLevel origin=originId==null?null:server.getLevel(ResourceKey.create(Registries.DIMENSION,originId));
+            if(origin==null)return true;
+            if(!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(
+                    origin,new Vec3(data.lastKnownX+0.5D,data.lastKnownY,data.lastKnownZ+0.5D)))return false;
+            // The shared wake service loads only the source chunk, asynchronously and with a global budget.
+            // Retry the live-entity lookup next turn instead of invoking the legacy nine-chunk teleport path.
+            return false;
+        }
+        TameRegistry.markDirty();return true;
+    }
+
+    private static LivingEntity completeGuardianAutomationMove(LivingEntity body,TameData data,SpawnTarget target,boolean deploy) {
+        if(deploy)cacheGuardianRestHome(body,data);
+        LivingEntity moved=transferGuardian(body,data,target);if(moved==null)return null;
+        clearGuardianAnchor(data);
+        data.hungerForcedSit=false;data.guardianReleaseMovementPending=-1;
+        if(deploy)applyGuardianAnchor(target.level.dimension().location().toString(),Mth.floor(target.pos.x),Mth.floor(target.pos.y),Mth.floor(target.pos.z),moved,data);
+        else applyLivingMovementOverride(moved,data,MovementOrder.SIT);
+        queueClientReloadForTame(moved);TameRegistry.markDirty();return moved;
+    }
+
     private static boolean deployLoadedTameToGuardianSet(LivingEntity tame, TameData data, SpawnTarget target) {
         if (tame == null || data == null || target == null || target.level == null || target.pos == null) return false;
         if (isManualMovementLocked(data)) return false;
@@ -23808,12 +23891,24 @@ public class TameCommands {
                     TameData data = TameRegistry.get(tame.getUUID());
                     if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
                     if (data == null || data.dead || data.stored) continue;
-                    DrumFeedTarget target = targets.get(tame.getUUID());
+                    DrumFeedTarget target = targets.get(data.ensureTlId());
                     if (target == null) {
                         target = new DrumFeedTarget(tame, data);
-                        targets.put(tame.getUUID(), target);
+                        targets.put(data.ensureTlId(), target);
                     }
                     if (!target.full()) nearby.add(target);
+                }
+                // Papers grant remote feeding only to linked, assigned guardians. No chunk loads.
+                Set<UUID> included=new HashSet<>();
+                for(DrumFeedTarget local:nearby)included.add(local.data.ensureTlId());
+                for(TameData data:GuardianChestAutomation.feedingMembers(chest)){
+                    if(!included.add(data.ensureTlId()))continue;
+                    DrumFeedTarget target=targets.get(data.ensureTlId());
+                    if(target==null){
+                        LivingEntity body=TameEntityAdapter.findLoaded(server,data.uuid,data.tlId);
+                        target=new DrumFeedTarget(body,data);targets.put(data.ensureTlId(),target);
+                    }
+                    if(!target.full())nearby.add(target);
                 }
                 if (!nearby.isEmpty()) {
                     nearby.sort(Comparator.comparingLong(target -> target.storedSaturation));
@@ -23827,7 +23922,7 @@ public class TameCommands {
             for (DrumFeedJob job : jobs) {
                 boolean chestChanged = false;
                 for (DrumFeedTarget target : job.targets()) {
-                    if (!target.full()) chestChanged |= feedFromDrumChest(job.chest().inventory(), job.occupiedSlots(), target, preferred);
+                    if (!target.full()) chestChanged |= feedFromDrumChest(job.chest().inventory(), job.occupiedSlots(), target, preferred, job.chest().blockEntity());
                 }
                 if (chestChanged) job.chest().blockEntity().setChanged();
                 changed |= chestChanged;
@@ -23841,7 +23936,7 @@ public class TameCommands {
         return changed;
     }
 
-    private static boolean feedFromDrumChest(IItemHandler handler, List<Integer> occupiedSlots, DrumFeedTarget target, boolean preferred) {
+    private static boolean feedFromDrumChest(IItemHandler handler, List<Integer> occupiedSlots, DrumFeedTarget target, boolean preferred, BlockEntity overflowContainer) {
         boolean changed = false;
         for (int slot : occupiedSlots) {
             if (target.full()) break;
@@ -23871,7 +23966,13 @@ public class TameCommands {
             // Preserve any unexpected remainder from a nonstandard inventory implementation.
             if (!extracted.isEmpty()) {
                 ItemStack remainder = net.minecraftforge.items.ItemHandlerHelper.insertItemStacked(handler, extracted, false);
-                if (!remainder.isEmpty()) target.tame.spawnAtLocation(remainder);
+                if (!remainder.isEmpty()) {
+                    if(target.tame!=null)target.tame.spawnAtLocation(remainder);
+                    else if(overflowContainer.getLevel()!=null){
+                        BlockPos drop=overflowContainer.getBlockPos();
+                        overflowContainer.getLevel().addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(overflowContainer.getLevel(),drop.getX()+0.5,drop.getY()+1,drop.getZ()+0.5,remainder));
+                    }
+                }
             }
         }
         return changed;
@@ -25580,7 +25681,7 @@ public class TameCommands {
     private static List<LivingEntity> loadedOwnedDuelTames(CommandSourceStack source, UUID owner) {
         List<LivingEntity> list = new ArrayList<>();
         for (TameData data : ownedTamesForAllCommands(owner)) {
-            if (data == null || data.horseType || isInactiveEntry(data.uuid)) continue;
+            if (data == null || data.horseType || isInactiveEntry(data.uuid) || TameDuelManager.ignoresDuelCalls(data.uuid)) continue;
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner, data);
             if (tame != null && tame.isAlive()) list.add(tame);
         }
@@ -26153,6 +26254,7 @@ public class TameCommands {
             members.add(owner);
         }
         for (UUID id : team.tameIds) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             TameData data = TameRegistry.get(id);
             if (data == null || !owner.getUUID().equals(data.ownerUUID) || isInactiveEntry(id)) return TeamSelectionResult.fail("A selected tame is no longer eligible. Remove it and try again.");
             LivingEntity tame = findLoadedOwnedLivingTameByIdentity(source, owner.getUUID(), data);
@@ -26180,6 +26282,7 @@ public class TameCommands {
         List<LivingEntity> nearby = new ArrayList<>();
         radius = Mth.clamp(radius, 1, 64);
         for (LivingEntity tame : player.level().getEntitiesOfClass(LivingEntity.class, player.getBoundingBox().inflate(radius))) {
+            if (TameDuelManager.ignoresDuelCalls(tame.getUUID())) continue;
             if (!tame.isAlive() || !TameEntityAdapter.isTame(tame) || !player.getUUID().equals(TameEntityAdapter.ownerUuid(tame))
                     || player.distanceToSqr(tame) > (double) radius * radius) continue;
             TameData data = TameRegistry.get(tame.getUUID());
@@ -28501,6 +28604,7 @@ public class TameCommands {
         List<UUID> available = new ArrayList<>();
         if (session != null && session.ranked) {
             for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
                 if (id == null) {
                     continue;
                 }
@@ -28519,6 +28623,7 @@ public class TameCommands {
             return available;
         }
         for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive()) {
                 available.add(id);
@@ -28530,6 +28635,7 @@ public class TameCommands {
     private static List<LivingEntity> resolveLoadedRoundTames(MinecraftServer server, Set<UUID> ids) {
         List<LivingEntity> tames = new ArrayList<>();
         for (UUID id : ids) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive() && !(living instanceof ServerPlayer)) {
                 tames.add(living);
@@ -28541,6 +28647,7 @@ public class TameCommands {
     private static List<LivingEntity> resolveLoadedRoundMembers(MinecraftServer server, Set<UUID> ids) {
         List<LivingEntity> members = new ArrayList<>();
         for (UUID id : ids) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             LivingEntity living = findLoadedLivingParticipant(server, id);
             if (living != null && living.isAlive()) {
                 members.add(living);
@@ -28616,6 +28723,7 @@ public class TameCommands {
             return;
         }
         for (UUID participantId : participants) {
+            if (TameDuelManager.ignoresDuelCalls(participantId)) continue;
             LivingEntity living = findLoadedLivingParticipant(server, participantId);
             if (living instanceof ServerPlayer player) {
                 player.teleportTo(target.level, target.pos.x, target.pos.y, target.pos.z, target.yRot, target.xRot);
@@ -28719,6 +28827,7 @@ public class TameCommands {
         }
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                 continue;
             }
@@ -28748,6 +28857,7 @@ public class TameCommands {
         }
         if (session.hideWaitingTames) {
             for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
                 if (activeRound.contains(id) || TameDuelManager.isEntityInDuel(id)) {
                     continue;
                 }
@@ -28759,6 +28869,7 @@ public class TameCommands {
         long now = server.overworld() == null ? 0L : server.overworld().getGameTime();
         Set<UUID> suppressedOwners = new LinkedHashSet<>();
         for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             TameData data = rankedTameDataForParticipant(id);
             UUID suppressOwnerId = data != null && data.ownerUUID != null ? data.ownerUUID : ownerId;
             if (suppressOwnerId != null) {
@@ -28770,6 +28881,7 @@ public class TameCommands {
         }
         try {
             for (UUID id : pool) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
                 if (activeRound.contains(id)) {
                     continue;
                 }
@@ -28816,6 +28928,7 @@ public class TameCommands {
         }
         ServerPlayer owner = ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
         for (UUID participantId : activeRound) {
+            if (TameDuelManager.ignoresDuelCalls(participantId)) continue;
             if (participantId == null || !TameDuelManager.isEntityInDuel(participantId)) {
                 continue;
             }
@@ -28941,6 +29054,7 @@ public class TameCommands {
             return;
         }
         for (UUID id : side) {
+            if (TameDuelManager.ignoresDuelCalls(id)) continue;
             if (id == null || !TameDuelManager.isEntityInDuel(id)) {
                 continue;
             }
@@ -29155,7 +29269,7 @@ public class TameCommands {
         }
         TameData data = rankedTameDataForParticipant(participantId);
         if (data != null) {
-            return data.level >= 10 && data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
+            return !TameDuelManager.ignoresDuelCalls(participantId) && data.level >= 10 && data.ownerUUID != null && !data.dead && !isDeadEntry(data.uuid);
         }
         if (TameRegistry.getPlayerDuelStats().containsKey(participantId)) {
             return true;
@@ -29350,6 +29464,7 @@ public class TameCommands {
     private static void prepareTeamForDuel(List<? extends LivingEntity> tames) {
         if (tames == null) return;
         for (LivingEntity tame : tames) {
+            if (TameDuelManager.ignoresDuelCalls(tame.getUUID())) continue;
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
             if (data != null && !data.horseType) applyLivingMovementOverride(tame, data, MovementOrder.WANDER);
@@ -29359,6 +29474,7 @@ public class TameCommands {
     private static void assignInitialDuelTargets(List<? extends LivingEntity> actingTames, List<? extends LivingEntity> opponents) {
         if (actingTames == null || opponents == null) return;
         for (LivingEntity tame : actingTames) {
+            if (TameDuelManager.ignoresDuelCalls(tame.getUUID())) continue;
             LivingEntity enemy = nearestLoadedLivingOpponent(tame, opponents);
             if (enemy != null) {
                 TameDuelManager.assignDuelTarget(tame, enemy);

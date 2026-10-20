@@ -85,9 +85,10 @@ public class DrumBlock extends BaseEntityBlock {
     }
 
     public void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, BlockPos pos2, boolean b) {
+        boolean guardianController=com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.handlesRedstone(level,pos);
         boolean flag = level.hasNeighborSignal(pos);
         if (flag != state.getValue(POWERED)) {
-            if (flag) {
+            if (flag && !guardianController) {
                 UUID uuid = null;
                 if(level.getBlockEntity(pos) instanceof DrumBlockEntity drum){
                     uuid = drum.getPlacerUUID();

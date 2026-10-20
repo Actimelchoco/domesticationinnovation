@@ -57,6 +57,7 @@ public final class LoadedChestDrums {
 
     public static void remove(DrumBlockEntity drum) {
         if (drum.getLevel() instanceof ServerLevel level) {
+            GuardianChestAutomation.removeDrum(level, drum.getBlockPos());
             Map<BlockPos, DrumBlockEntity> drums = LOADED.get(level);
             if (drums != null) {
                 drums.remove(drum.getBlockPos(), drum);
@@ -135,7 +136,9 @@ public final class LoadedChestDrums {
         for (ServerLevel level : event.getServer().getAllLevels()) {
             Map<BlockPos, BlockPos> previous = LAST_BLOCKERS.getOrDefault(level, Map.of());
             Map<BlockPos, BlockPos> current = new HashMap<>();
-            for (Status status : statuses(level)) {
+            List<Status> statuses = statuses(level);
+            GuardianChestAutomation.refresh(level, statuses);
+            for (Status status : statuses) {
                 if (status.active()) continue;
                 BlockPos pos = status.chest().pos();
                 current.put(pos, status.blocker());

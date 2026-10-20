@@ -172,23 +172,24 @@ public final class TameDuelManager {
         startTeamDuel(server, ownerA, teamA, ownerB, teamB, Set.of(), false, false, false, ownersA, ownersB);
     }
 
+    public static boolean ignoresDuelCalls(UUID id) {
+        if(id==null)return false;
+        TameData data=TameRegistry.get(id);
+        if(data==null)data=TameRegistry.getByTlId(id);
+        return data!=null&&(data.rosterBodyguard||data.hasHome);
+    }
+
     private static void startTeamDuel(MinecraftServer server, UUID ownerA, Set<UUID> teamA, UUID ownerB, Set<UUID> teamB,
             Set<UUID> spectatorIds, boolean broadcastToServer, boolean ranked, boolean teamColoredKillMessages,
             Set<UUID> ownersA, Set<UUID> ownersB) {
         if (server == null || ownerA == null || ownerB == null) return;
         if (teamA == null || teamB == null || teamA.isEmpty() || teamB.isEmpty()) return;
 
-        endDuelsForOwner(server, ownerA);
-        if (!ownerA.equals(ownerB)) {
-            endDuelsForOwner(server, ownerB);
-        }
-        if (ownersA != null) for (UUID owner : ownersA) endDuelsForOwner(server, owner);
-        if (ownersB != null) for (UUID owner : ownersB) endDuelsForOwner(server, owner);
-
         Set<UUID> cleanA = new HashSet<>();
         Set<UUID> cleanB = new HashSet<>();
         for (UUID participantId : teamA) {
             if (participantId == null) continue;
+            if (ignoresDuelCalls(participantId)) continue;
             TameData participantData = TameRegistry.get(participantId);
             if (participantData == null) participantData = TameRegistry.getByTlId(participantId);
             if (participantData != null && participantData.horseType) continue;
@@ -197,6 +198,7 @@ public final class TameDuelManager {
         }
         for (UUID participantId : teamB) {
             if (participantId == null) continue;
+            if (ignoresDuelCalls(participantId)) continue;
             TameData participantData = TameRegistry.get(participantId);
             if (participantData == null) participantData = TameRegistry.getByTlId(participantId);
             if (participantData != null && participantData.horseType) continue;
@@ -205,6 +207,11 @@ public final class TameDuelManager {
             cleanB.add(participantId);
         }
         if (cleanA.isEmpty() || cleanB.isEmpty()) return;
+
+        endDuelsForOwner(server, ownerA);
+        if (!ownerA.equals(ownerB)) endDuelsForOwner(server, ownerB);
+        if (ownersA != null) for (UUID owner : ownersA) endDuelsForOwner(server, owner);
+        if (ownersB != null) for (UUID owner : ownersB) endDuelsForOwner(server, owner);
 
         UUID battleId = UUID.randomUUID();
         DuelBattle battle = new DuelBattle(battleId, ownerA, ownerB, cleanA, cleanB, spectatorIds, broadcastToServer, ranked, teamColoredKillMessages);
@@ -436,6 +443,17 @@ public final class TameDuelManager {
 
     public static synchronized boolean endDuelForTame(MinecraftServer server, UUID tameId) {
         return endDuelForEntity(server, tameId);
+    }
+
+    /** Recall ends the ranked round before guardian placement, so delayed duel restoration cannot undo it. */
+    public static synchronized boolean recallRankedGuardian(MinecraftServer server, UUID entityId) {
+        UUID resolved=resolveActiveParticipantId(entityId);
+        UUID battleId=resolved==null?null:BATTLE_ID_BY_ENTITY.get(resolved);
+        DuelBattle battle=battleId==null?null:BATTLE_BY_ID.get(battleId);
+        if(battle==null||!battle.ranked)return false;
+        UUID losingOwner=battle.teamA.contains(resolved)?battle.ownerA:battle.ownerB;
+        finishBattle(server,battle,"Ranked participant recalled for guardian duty.",losingOwner);
+        return true;
     }
 
     public static synchronized boolean endDuelForEntity(MinecraftServer server, UUID entityId) {

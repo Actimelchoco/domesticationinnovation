@@ -1156,6 +1156,7 @@ public class CommonProxy {
         }
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.isPaper(stack)) return;
         if (handleHungerInventoryShortcut(player, event.getHand(), entity, event)) {
             return;
         }

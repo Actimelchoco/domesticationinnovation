@@ -40,6 +40,7 @@ public final class TameFoodManager {
     private static List<Item> candidates = List.of();
     private static Path configPath;
     private static long lastProbeTick = Long.MIN_VALUE;
+    private static boolean learnedDirty;
 
     private TameFoodManager() { }
 
@@ -81,7 +82,11 @@ public final class TameFoodManager {
                 && itemId(stack).equals("primitive_mobs:dodo")) return true;
         if (tame instanceof Animal animal) {
             try {
-                if (animal.isFood(stack)) return true;
+                if (animal.isFood(stack)) {
+                    // Remember successful live feeding so a just-unloaded guardian has the same diet.
+                    learnedDirty |= LEARNED.computeIfAbsent(type, ignored -> new LinkedHashSet<>()).add(itemId(stack));
+                    return true;
+                }
             } catch (Throwable ignored) { }
         }
         String item = itemId(stack);
@@ -356,6 +361,8 @@ public final class TameFoodManager {
         source.forEach((type, values) -> target.put(normalizeType(type), new LinkedHashSet<>(values == null ? Set.of() : values)));
     }
 
+    public static void flushLearnedFoods() { if (learnedDirty) save(); }
+
     private static synchronized void save() {
         if (configPath == null) return;
         try {
@@ -367,6 +374,7 @@ public final class TameFoodManager {
             config.superfoods.putAll(SUPERFOODS);
             CURSORS.forEach((type, cursor) -> { if (cursor >= candidates.size()) config.completedTypes.add(type); });
             try (Writer writer = Files.newBufferedWriter(configPath)) { GSON.toJson(config, CONFIG_TYPE, writer); }
+            learnedDirty = false;
         } catch (Exception ignored) { }
     }
 
