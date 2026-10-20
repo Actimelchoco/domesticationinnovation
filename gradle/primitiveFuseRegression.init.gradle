@@ -1,0 +1,13 @@
+// Build separate reobfuscated tests for Primitive's SRG-targeting mixins.
+gradle.projectsEvaluated {
+    def p = rootProject
+    p.sourceSets.test.java.srcDir('src/test/primitivefuse/java')
+    p.sourceSets.test.resources.srcDir('tools/primitive_tests/resources')
+    p.sourceSets.test.resources.srcDir('src/test/performance/resources')
+    p.tasks.register('primitiveFuseTestJar', Jar) {
+        dependsOn p.tasks.named('testClasses')
+        archiveFileName = 'primitive-fuse-tests.jar'
+        from p.sourceSets.test.output
+    }
+    p.reobf.create('primitiveFuseTestJar')
+}

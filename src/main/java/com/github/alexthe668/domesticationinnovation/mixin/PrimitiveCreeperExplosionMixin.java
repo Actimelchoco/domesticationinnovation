@@ -43,6 +43,22 @@ public abstract class PrimitiveCreeperExplosionMixin extends Monster {
             oldSwell = 0;
             ((Creeper) (Object) this).setSwellDir(-1);
             entityData.set(DATA_IS_IGNITED, false);
+            return;
+        }
+        // FestiveCreeper.tick disables swelling before calling super and has no
+        // SwellGoal. Restore a close-range fuse only for owned festive creepers;
+        // leave its native ranged TNT goal and every wild creeper unchanged.
+        if (!level().isClientSide && PrimitiveMobsCompat.isPrimitivePet(this)
+                && ((ModifedToBeTameable) this).isTame()
+                && "festive_creeper".equals(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES
+                        .getKey(getType()).getPath())) {
+            ModifedToBeTameable pet = (ModifedToBeTameable) this;
+            var target = getTarget();
+            double rangeSquared = swell > 0 ? 49.0D : 9.0D;
+            boolean attack = !pet.isStayingStill() && target != null && target.isAlive()
+                    && distanceToSqr(target) < rangeSquared && pet.isValidAttackTarget(target)
+                    && canAttack(target) && getSensing().hasLineOfSight(target);
+            ((Creeper) (Object) this).setSwellDir(attack ? 1 : -1);
         }
     }
 }
