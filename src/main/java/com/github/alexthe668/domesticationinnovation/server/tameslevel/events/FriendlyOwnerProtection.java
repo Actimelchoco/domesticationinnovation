@@ -56,8 +56,26 @@ public final class FriendlyOwnerProtection {
     }
     public static boolean blocks(Entity target, Entity source) {
         if (target == null || target.level().isClientSide || source == null) return false;
+        // Resolve the actual fighter, never just its owner: spectators and
+        // nonparticipating pets must retain friendship protection.
+        if (TameDuelManager.areDuelOpponents(combatant(source), target.getUUID())) return false;
         UUID victimOwner = owner(target);
         return victimOwner != null && friendly(owner(source), victimOwner);
+    }
+    private static UUID combatant(Entity source) {
+        for(int depth=0;source!=null&&depth<8;depth++) {
+            if(source instanceof LivingEntity)return source.getUUID();
+            Entity next=source instanceof Projectile projectile?projectile.getOwner()
+                    :source instanceof PrimedTnt tnt?tnt.getOwner()
+                    :source instanceof EvokerFangs fangs?fangs.getOwner()
+                    :source instanceof AreaEffectCloud cloud?cloud.getOwner()
+                    :source instanceof LightningBolt bolt?bolt.getCause()
+                    :source instanceof ChainLightningEntity lightning?lightning.getCreatorEntity():null;
+            if(next==null&&source instanceof ProjectileOwnerAccessor projectile)return projectile.tl$getOwnerUUID();
+            if(next==null||next==source)return source.getUUID();
+            source=next;
+        }
+        return null;
     }
     public static boolean blocks(Entity target, DamageSource source) {
         return source != null && (blocks(target, source.getEntity()) || blocks(target, source.getDirectEntity()));

@@ -1138,8 +1138,15 @@ public class TameRegistry {
         if (tame == null || target == null) {
             return false;
         }
-        TameData data = get(tame.getUUID());
-        return data != null && isProtectedAttackTarget(data.ownerUUID, target);
+        return isProtectedAttackTarget((net.minecraft.world.entity.LivingEntity)tame, target);
+    }
+
+    public static boolean isProtectedAttackTarget(net.minecraft.world.entity.LivingEntity source, Entity target) {
+        if (source == null || target == null) return false;
+        if (TameDuelManager.areDuelOpponents(source.getUUID(), target.getUUID())) return false;
+        TameData data = get(source.getUUID());
+        UUID owner = data == null ? com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.owner(source) : data.ownerUUID;
+        return isProtectedAttackTarget(owner, target);
     }
 
     public static boolean isProtectedAttackTarget(UUID ownerUuid, Entity target) {

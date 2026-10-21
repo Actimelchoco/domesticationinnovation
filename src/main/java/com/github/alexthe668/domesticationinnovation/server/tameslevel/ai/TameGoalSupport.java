@@ -288,7 +288,7 @@ public final class TameGoalSupport {
 
     public static boolean setAssasinTarget(ServerPlayer owner, LivingEntity target) {
         if (owner == null || target == null || !target.isAlive() || !(target instanceof net.minecraft.world.entity.Mob)) return false;
-        if (TameRegistry.isProtectedAttackTarget(owner.getUUID(), target)) return false;
+        if (TameRegistry.isProtectedAttackTarget(owner, target)) return false;
         if (TameEntityAdapter.isTame(target) && owner.getUUID().equals(TameEntityAdapter.ownerUuid(target))) return false;
         ASSASIN_TARGETS.put(owner.getUUID(), new AssasinTarget(target.getUUID(), target.level().dimension().location().toString()));
         return true;

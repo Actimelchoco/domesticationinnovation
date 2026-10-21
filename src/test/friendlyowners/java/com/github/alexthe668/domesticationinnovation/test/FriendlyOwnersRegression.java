@@ -112,18 +112,56 @@ public class FriendlyOwnersRegression {
         }h.succeed();
     }
     @GameTest(template="empty")
-    public static void duelsAndConflictsCannotBypassExplicitFriendlyOwners(GameTestHelper h){
+    public static void duelAndRankedOpponentsIgnoreFriendshipAndRestoreItAfterward(GameTestHelper h){
+        for(boolean ranked:List.of(false,true))try(var f=new Fixture(h)){
+            var server=h.getLevel().getServer();
+            TameDuelManager.startTeamDuel(server,f.a.getUUID(),Set.of(f.mine.getUUID()),f.b.getUUID(),Set.of(f.theirs.getUUID()),Set.of(),false,ranked);
+            check(FriendlyOwnerProtection.blocks(f.b,f.a),"owners watching their pets do not become unprotected fighters");
+            TameDuelManager.startTeamDuel(server,f.a.getUUID(),Set.of(f.mine.getUUID(),f.a.getUUID()),f.b.getUUID(),Set.of(f.theirs.getUUID(),f.b.getUUID()),Set.of(),false,ranked);
+            check(TameDuelManager.areDuelOpponents(f.mine.getUUID(),f.theirs.getUUID()),"opposing fighters exist in casual/ranked match");
+            check(!FriendlyOwnerProtection.blocks(f.theirs,f.mine)&&!FriendlyOwnerProtection.blocks(f.mine,f.theirs),"mutual friendship is bypassed for actual opposing fighters");
+            check(!TameRegistry.isProtectedAttackTarget(f.mine,f.theirs),"registry target selection allows an opposing friend");
+            check(!com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils.shouldBlockOffensiveDiTarget(f.mine,f.theirs),"ability target selection allows an opposing friend");
+            check(f.theirs.hurt(h.getLevel().damageSources().mobAttack(f.mine),3),"actual tame melee lands during casual/ranked battle");
+            var arrow=new Arrow(h.getLevel(),f.a);var petArrow=new Arrow(h.getLevel(),f.mine);
+            var cloud=new AreaEffectCloud(h.getLevel(),f.a.getX(),f.a.getY(),f.a.getZ());cloud.setOwner(f.a);
+            var tnt=new PrimedTnt(h.getLevel(),f.a.getX(),f.a.getY(),f.a.getZ(),f.a);
+            try{
+                f.theirs.invulnerableTime=0;
+                check(f.theirs.hurt(h.getLevel().damageSources().arrow(arrow,f.a),3),"actual player arrow lands on opposing tame");
+                check(!FriendlyOwnerProtection.blocks(f.theirs,new DamageSource(h.getLevel().damageSources().arrow(petArrow,f.mine).typeHolder(),petArrow,null)),"direct-only pet arrow resolves the fighter");
+                var impact=new ProjectileImpactEvent(arrow,new EntityHitResult(f.b));FriendlyOwnerProtection.impact(impact);check(!impact.isCanceled(),"opponent impact is not swallowed");
+                check(!FriendlyOwnerProtection.blocks(f.theirs,cloud)&&FriendlyOwnerProtection.blocks(f.fox,cloud),"lingering effects bypass only participating opponents");
+                check(f.theirs.addEffect(new MobEffectInstance(MobEffects.POISON,100),f.a),"opposing player can apply a harmful effect");
+                var explosion=new Explosion(h.getLevel(),tnt,f.a.getX(),f.a.getY(),f.a.getZ(),4,false,Explosion.BlockInteraction.KEEP);
+                var targets=new ArrayList<Entity>(List.of(f.b,f.theirs,f.fox));FriendlyOwnerProtection.explosion(new ExplosionEvent.Detonate(h.getLevel(),explosion,targets));
+                check(targets.contains(f.b)&&targets.contains(f.theirs)&&!targets.contains(f.fox),"explosions retain opponents and exclude an unselected friendly pet");
+                var attack=new LivingAttackEvent(f.b,h.getLevel().damageSources().playerAttack(f.a),4);attack.setCanceled(true);TameProtectionEvents.onAttackAllowDuelPlayerPvp(attack);check(!attack.isCanceled(),"duel PvP override allows opposing friendly players");
+                var hurt=new LivingHurtEvent(f.b,h.getLevel().damageSources().playerAttack(f.a),4);hurt.setCanceled(true);TameProtectionEvents.onHurtAllowDuelPlayerPvp(hurt);check(!hurt.isCanceled(),"duel hurt override allows opposing friendly players");
+                var damage=new LivingDamageEvent(f.theirs,h.getLevel().damageSources().mobAttack(f.mine),4);FriendlyOwnerProtection.damage(damage);check(!damage.isCanceled(),"final damage stage permits opponents");
+                check(FriendlyOwnerProtection.blocks(f.fox,f.mine),"an unselected pet stays protected even when its owner is a fighter");
+                TameDuelManager.endDuelsForOwner(server,f.a.getUUID());
+                check(FriendlyOwnerProtection.blocks(f.theirs,petArrow)&&FriendlyOwnerProtection.blocks(f.b,arrow),"even previously fired projectiles are protected again after the match");
+                check(TameRegistry.isProtectedAttackTarget(f.mine,f.theirs),"registry friendship protection returns after the match");
+                check(PlayerDebugSettings.isDoNotAttackOwner(f.a.getUUID(),f.b.getUUID()),"saved friendship is never removed or edited");
+            }finally{arrow.discard();petArrow.discard();cloud.discard();tnt.discard();}
+        }h.succeed();
+    }
+    @GameTest(template="empty")
+    public static void friendlyTeammatesAndDifferentBattlesStayProtected(GameTestHelper h){
         try(var f=new Fixture(h)){
-            TameDuelManager.startTeamDuel(h.getLevel().getServer(),f.a.getUUID(),Set.of(f.mine.getUUID()),f.b.getUUID(),Set.of(f.theirs.getUUID()));
-            check(TameDuelManager.areDuelOpponents(f.mine.getUUID(),f.theirs.getUUID()),"fixture has opposing duel participants");
-            var source=h.getLevel().damageSources().mobAttack(f.mine);
-            check(!f.theirs.hurt(source,5),"duel does not override explicit friend protection");
-            var event=new LivingAttackEvent(f.b,h.getLevel().damageSources().playerAttack(f.a),4);event.setCanceled(true);
-            TameProtectionEvents.onAttackAllowDuelPlayerPvp(event);check(event.isCanceled(),"duel PvP override cannot uncancel friend damage");
-            var hurt=new LivingHurtEvent(f.b,h.getLevel().damageSources().playerAttack(f.a),4);hurt.setCanceled(true);
-            TameProtectionEvents.onHurtAllowDuelPlayerPvp(hurt);check(hurt.isCanceled(),"duel hurt override cannot uncancel friend damage");
-            var damage=new LivingDamageEvent(f.theirs,source,4);FriendlyOwnerProtection.damage(damage);check(damage.isCanceled(),"final damage stage also protected");
-            check(TameRegistry.isProtectedAttackTarget(f.a.getUUID(),f.theirs),"target selection recognizes friendly owner");
+            UUID enemyOwner=UUID.randomUUID();var enemy=f.pet(enemyOwner);var otherA=f.pet(UUID.randomUUID());var otherB=f.pet(UUID.randomUUID());
+            try{
+                var server=h.getLevel().getServer();
+                TameDuelManager.startTeamDuelWithOwners(server,f.a.getUUID(),Set.of(f.mine.getUUID(),f.theirs.getUUID()),enemyOwner,Set.of(enemy.getUUID()),Set.of(f.a.getUUID(),f.b.getUUID()),Set.of(enemyOwner));
+                check(FriendlyOwnerProtection.blocks(f.theirs,f.mine),"friendly owners on the same team stay protected");
+                check(!f.theirs.hurt(h.getLevel().damageSources().mobAttack(f.mine),3),"actual friendly teammate damage remains blocked");
+                TameDuelManager.endDuelsForOwner(server,f.a.getUUID());
+                TameDuelManager.startTeamDuel(server,f.a.getUUID(),Set.of(f.mine.getUUID()),enemyOwner,Set.of(enemy.getUUID()));
+                TameDuelManager.startTeamDuel(server,f.b.getUUID(),Set.of(f.theirs.getUUID()),UUID.randomUUID(),Set.of(otherB.getUUID()));
+                check(FriendlyOwnerProtection.blocks(f.theirs,f.mine),"fighters in different battles do not bypass friendship");
+                TameDuelManager.endDuelsForOwner(server,f.b.getUUID());
+            }finally{for(var pet:List.of(enemy,otherA,otherB)){TameDuelManager.endDuelForEntity(h.getLevel().getServer(),pet.getUUID());TameRegistry.remove(pet.getUUID());pet.discard();}}
         }h.succeed();
     }
 }

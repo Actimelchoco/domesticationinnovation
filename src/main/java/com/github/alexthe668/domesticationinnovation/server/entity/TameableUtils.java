@@ -171,7 +171,7 @@ public class TameableUtils {
             return true;
         }
         if (TameEntityAdapter.isTame(source)) {
-            return TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(source), target);
+            return TameRegistry.isProtectedAttackTarget(source, target);
         }
         return false;
     }

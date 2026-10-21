@@ -491,7 +491,7 @@ public class TameBehaviorEvents {
         if (sourceLevel != null && target.level() != sourceLevel) return false;
         if (target instanceof Player) return false;
         if (TameEntityAdapter.isTame(target)) return false;
-        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) return false;
+        if (TameRegistry.isProtectedAttackTarget(tame, target)) return false;
         return true;
     }
 

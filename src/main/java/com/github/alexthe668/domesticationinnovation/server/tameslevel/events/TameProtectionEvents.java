@@ -75,7 +75,7 @@ public class TameProtectionEvents {
             return;
         }
 
-        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tameAttacker), victim)) {
+        if (TameRegistry.isProtectedAttackTarget(tameAttacker, victim)) {
             event.setCanceled(true);
             return;
         }
@@ -198,9 +198,9 @@ public class TameProtectionEvents {
         }
         UUID attackerId = attacker.getUUID();
         UUID victimId = victim.getUUID();
+        if (TameDuelManager.areDuelOpponents(attackerId, victimId)) return true;
         if (FriendlyOwnerProtection.friendly(attackerId, victimId)) return false;
-        return TameDuelManager.areDuelOpponents(attackerId, victimId)
-                || TameDuelManager.areDuelOwnersOpponents(attackerId, victimId);
+        return TameDuelManager.areDuelOwnersOpponents(attackerId, victimId);
     }
 
     @SubscribeEvent
@@ -252,7 +252,7 @@ public class TameProtectionEvents {
             if (!ownersMayFight(ownerId, TameEntityAdapter.ownerUuid(target))) TameEntityAdapter.setTarget(tame, null);
             return;
         }
-        if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), target)) {
+        if (TameRegistry.isProtectedAttackTarget(tame, target)) {
             TameEntityAdapter.setTarget(tame, null);
         }
     }

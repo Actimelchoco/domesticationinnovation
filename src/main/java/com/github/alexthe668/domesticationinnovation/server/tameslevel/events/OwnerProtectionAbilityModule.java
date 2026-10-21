@@ -224,7 +224,7 @@ public final class OwnerProtectionAbilityModule {
             if (!nearby.isAlive()) continue;
             if (nearby == tame || nearby == owner) continue;
             if (!(nearby instanceof Monster)) continue;
-            if (TameRegistry.isProtectedAttackTarget(TameEntityAdapter.ownerUuid(tame), nearby)) continue;
+            if (TameRegistry.isProtectedAttackTarget(tame, nearby)) continue;
             LevelSystem.trackDamage(nearby, tame);
             nearby.hurt(tame.damageSources().mobAttack(tame), damage);
         }
