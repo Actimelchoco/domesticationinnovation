@@ -88,6 +88,7 @@ public class TameData {
     public boolean dead = false;
     public boolean stored = false;
     public long deadGameTime = 0L;
+    public long commandRespawnAfterDayTime = -1L;
     public long deadUnixMillis = 0L;
     public String deathDimension = "";
     public int deathX = 0;
@@ -300,6 +301,7 @@ public class TameData {
         tag.putBoolean("dead", dead);
         tag.putBoolean("stored", stored);
         tag.putLong("deadGameTime", deadGameTime);
+        tag.putLong("commandRespawnAfterDayTime", commandRespawnAfterDayTime);
         tag.putLong("deadUnixMillis", deadUnixMillis);
         tag.putString("deathDimension", deathDimension == null ? "" : deathDimension);
         tag.putInt("deathX", deathX);
@@ -534,6 +536,8 @@ public class TameData {
         data.duelCount = Math.max(0, tag.getInt("duelCount"));
         data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
         data.dead = tag.getBoolean("dead");
+        data.commandRespawnAfterDayTime = tag.contains("commandRespawnAfterDayTime", Tag.TAG_ANY_NUMERIC)
+                ? tag.getLong("commandRespawnAfterDayTime") : -1L;
         data.stored = tag.getBoolean("stored");
         data.deadGameTime = tag.contains("deadGameTime", Tag.TAG_LONG) ? tag.getLong("deadGameTime") : 0L;
         data.deadUnixMillis = tag.contains("deadUnixMillis", Tag.TAG_LONG) ? tag.getLong("deadUnixMillis") : 0L;

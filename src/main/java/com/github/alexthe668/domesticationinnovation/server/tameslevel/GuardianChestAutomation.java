@@ -42,12 +42,10 @@ public final class GuardianChestAutomation {
     }
     private record Action(Setup setup, Config config, UUID identity, UUID token, boolean deploy, int expires) {}
     private record Manual(UUID caller,UUID owner,UUID identity,String group,boolean deploy,int expires) {}
-    private record Notice(String message,int tick) {}
     private static final Map<Key,Setup> SETUPS=new LinkedHashMap<>();
     private static final Map<UUID,Action> AUTHORIZED=new HashMap<>();
     private static final Map<Key,LoadedChestDrums.Chest> SCANS=new LinkedHashMap<>(), DIRTY=new LinkedHashMap<>();
     private static final Map<Key,BlockPos> BLOCKERS=new HashMap<>();
-    private static final Map<Key,Notice> NOTICES=new HashMap<>();
     private static final Map<UUID,Action> ACTIONS=new LinkedHashMap<>();
     private static final Map<UUID,UUID> LATEST=new HashMap<>();
     private static final Map<UUID,Manual> MANUAL=new LinkedHashMap<>();
@@ -186,17 +184,6 @@ public final class GuardianChestAutomation {
     }
     private static void retire(UUID token){Action action=AUTHORIZED.remove(token);if(action!=null){LATEST.remove(action.identity,token);ACTIONS.remove(action.identity,action);}}
     private static void invalidate(Setup setup){for(Member member:setup.members.values())retire(member.token);setup.members.clear();}
-    private static void notify(LoadedChestDrums.Chest chest,String message){
-        Key key=key(chest);int now=key.level.getServer().getTickCount();Notice old=NOTICES.get(key);
-        if(old!=null&&(old.message.equals(message)||now-old.tick<40))return;
-        NOTICES.put(key,new Notice(message,now));
-        Set<UUID> recipients=new HashSet<>();
-        for(int slot=0;slot<chest.inventory().getSlots();slot++){TameData data=paperTame(chest.inventory().getStackInSlot(slot));if(data!=null&&data.ownerUUID!=null)recipients.add(data.ownerUUID);}
-        if(chest.owner()!=null)recipients.add(chest.owner());
-        for(var player:key.level.players())if(player.blockPosition().distSqr(chest.pos())<=16D*16D)recipients.add(player.getUUID());
-        Component text=Component.literal("[Guardian chest "+chest.pos().toShortString()+"] "+message).withStyle(ChatFormatting.AQUA);
-        for(UUID owner:recipients){var player=key.level.getServer().getPlayerList().getPlayer(owner);if(player!=null)player.sendSystemMessage(text);}
-    }
     public static String status(LoadedChestDrums.Status status){
         if(!status.active())return "Inactive: overlaps chest x drum at "+status.blocker().toShortString()+".";
         var chest=status.chest();Inspection inspection=inspect(chest);if(!inspection.problem.isBlank())return "Inactive: "+inspection.problem;
@@ -217,18 +204,17 @@ public final class GuardianChestAutomation {
         if(!(chest.blockEntity().getLevel() instanceof ServerLevel level))return;
         Key key=key(chest);Setup setup=SETUPS.get(key);Inspection inspection=inspect(chest);
         if(BLOCKERS.containsKey(key)||!inspection.problem.isBlank()){
-            if(hasIntent(chest)||setup!=null)notify(chest,status(new LoadedChestDrums.Status(chest,BLOCKERS.get(key))));
             if(setup!=null){invalidate(setup);SETUPS.remove(key);}return;
         }
         boolean fresh=setup==null;
         if(fresh){setup=new Setup(key);SETUPS.put(key,setup);}
         if(setup.chest!=null&&setup.chest.blockEntity()!=chest.blockEntity()){invalidate(setup);fresh=true;}
         setup.chest=chest;setup.configs=inspection.configs;boolean on=powered(chest),edge=!fresh&&on!=setup.powered;setup.powered=on;
-        Map<UUID,Config> present=new LinkedHashMap<>();Set<UUID> conflicts=new HashSet<>();int converted=0,failed=0,queued=0;
+        Map<UUID,Config> present=new LinkedHashMap<>();Set<UUID> conflicts=new HashSet<>();
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
             ItemStack stack=chest.inventory().getStackInSlot(slot);Config config=configForPaper(stack,setup.configs);if(config==null)continue;
-            boolean wasPaper=isPaper(stack);if(!storePaper(chest,slot,config)){failed++;continue;}
-            TameData data=paperTame(chest.inventory().getStackInSlot(slot));UUID id=data.ensureTlId();if(!wasPaper)converted++;
+            if(!storePaper(chest,slot,config))continue;
+            TameData data=paperTame(chest.inventory().getStackInSlot(slot));UUID id=data.ensureTlId();
             Config old=present.putIfAbsent(id,config);if(old!=null&&!old.equals(config))conflicts.add(id);
         }
         for(UUID conflict:conflicts)present.remove(conflict);
@@ -239,23 +225,18 @@ public final class GuardianChestAutomation {
                 Member old=setup.members.remove(id);if(old!=null)retire(old.token);UUID token=UUID.randomUUID();setup.members.put(id,new Member(config,token));
                 TameData data=TameRegistry.getByTlId(id);
                 if((edge||on)&&data!=null&&!data.rosterBodyguard&&!data.dead&&!data.stored&&(!on||data.guardianSetAnchors.containsKey(config.group))){
-                    Action action=new Action(setup,config,id,token,on,level.getServer().getTickCount()+1200);AUTHORIZED.put(token,action);LATEST.put(id,token);ACTIONS.put(id,action);queued++;
+                    Action action=new Action(setup,config,id,token,on,level.getServer().getTickCount()+1200);AUTHORIZED.put(token,action);LATEST.put(id,token);ACTIONS.put(id,action);
                 }
             }
         }
-        String message=status(new LoadedChestDrums.Status(chest,null));
-        if(converted>0)message+=" Converted "+converted+" paper stack(s).";
-        if(edge||fresh&&on)message+=" Queued "+queued+(on?" guardian deployment(s).":" home recall(s).");
-        if(failed>0)message+=" Could not update "+failed+" paper slot(s); inventory must allow slot updates.";
-        if(!conflicts.isEmpty())message+=" Conflicting group papers for "+conflicts.size()+" tame(s); remove duplicates.";
-        notify(chest,message);
+
     }
     public static void refresh(ServerLevel level,List<LoadedChestDrums.Status> statuses){
         Set<BlockPos> loaded=new HashSet<>();
         for(var status:statuses){Key key=new Key(level,status.chest().pos());loaded.add(key.pos);SCANS.put(key,status.chest());
             if(status.active())BLOCKERS.remove(key);else{BLOCKERS.put(key,status.blocker());Setup old=SETUPS.remove(key);if(old!=null)invalidate(old);}}
         for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level&&!loaded.contains(entry.getKey().pos)){invalidate(entry.getValue());iterator.remove();}}
-        NOTICES.keySet().removeIf(key->key.level==level&&!loaded.contains(key.pos));BLOCKERS.keySet().removeIf(key->key.level==level&&!loaded.contains(key.pos));
+        BLOCKERS.keySet().removeIf(key->key.level==level&&!loaded.contains(key.pos));
     }
     public static List<TameData> feedingMembers(LoadedChestDrums.Chest chest){
         if(!(chest.blockEntity().getLevel() instanceof ServerLevel))return List.of();
@@ -284,7 +265,7 @@ public final class GuardianChestAutomation {
         for(BlockPos pos:List.of(drum.above(),drum.below())){
             Key key=new Key(level,pos);Setup setup=SETUPS.get(key);
             if(setup!=null&&setup.chest.drumPos().equals(drum)){invalidate(setup);SETUPS.remove(key);}
-            SCANS.remove(key);DIRTY.remove(key);BLOCKERS.remove(key);NOTICES.remove(key);
+            SCANS.remove(key);DIRTY.remove(key);BLOCKERS.remove(key);
         }
     }
     @SubscribeEvent public static void tick(TickEvent.ServerTickEvent event){
@@ -347,7 +328,7 @@ public final class GuardianChestAutomation {
     @SubscribeEvent public static void unload(net.minecraftforge.event.level.LevelEvent.Unload event){
         if(!(event.getLevel() instanceof ServerLevel level))return;
         for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level){invalidate(entry.getValue());iterator.remove();}}
-        SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);BLOCKERS.keySet().removeIf(key->key.level==level);NOTICES.keySet().removeIf(key->key.level==level);
+        SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);BLOCKERS.keySet().removeIf(key->key.level==level);
     }
-    @SubscribeEvent public static void stop(ServerStoppedEvent event){SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();NOTICES.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
+    @SubscribeEvent public static void stop(ServerStoppedEvent event){SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
 }

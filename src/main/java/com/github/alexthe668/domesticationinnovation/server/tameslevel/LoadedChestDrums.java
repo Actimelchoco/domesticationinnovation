@@ -4,8 +4,6 @@ import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.block.DrumBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraftforge.event.TickEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -34,7 +32,6 @@ public final class LoadedChestDrums {
     private static final int MAX_RANGE = RANGE + 4 * RANGE_PER_DRUM;
     private static final Map<ServerLevel, Map<BlockPos, DrumBlockEntity>> LOADED = new IdentityHashMap<>();
 
-    private static final Map<ServerLevel, Map<BlockPos, BlockPos>> LAST_BLOCKERS = new IdentityHashMap<>();
 
     public record Status(Chest chest, BlockPos blocker) {
         public boolean active() { return blocker == null; }
@@ -167,25 +164,7 @@ public final class LoadedChestDrums {
     public static void tick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.getServer().getTickCount() % 20 != 0) return;
         for (ServerLevel level : event.getServer().getAllLevels()) {
-            Map<BlockPos, BlockPos> previous = LAST_BLOCKERS.getOrDefault(level, Map.of());
-            Map<BlockPos, BlockPos> current = new HashMap<>();
-            List<Status> statuses = statuses(level);
-            GuardianChestAutomation.refresh(level, statuses);
-            for (Status status : statuses) {
-                if (status.active()) continue;
-                BlockPos pos = status.chest().pos();
-                current.put(pos, status.blocker());
-                if (status.blocker().equals(previous.get(pos))) continue;
-                Component message = Component.literal("Chest x drum at " + pos.toShortString()
-                        + " is deactivated because it is in range of the chest x drum at "
-                        + status.blocker().toShortString() + ".").withStyle(ChatFormatting.YELLOW);
-                for (var player : level.players()) {
-                    if (player.getUUID().equals(status.chest().owner()) || player.blockPosition().distSqr(pos) <= 250.0 * 250.0) {
-                        player.sendSystemMessage(message);
-                    }
-                }
-            }
-            LAST_BLOCKERS.put(level, current);
+            GuardianChestAutomation.refresh(level, statuses(level));
         }
     }
 
@@ -203,13 +182,11 @@ public final class LoadedChestDrums {
     public static void unload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
             LOADED.remove(level);
-            LAST_BLOCKERS.remove(level);
         }
     }
 
     @SubscribeEvent
     public static void stop(ServerStoppedEvent event) {
         LOADED.clear();
-        LAST_BLOCKERS.clear();
     }
 }

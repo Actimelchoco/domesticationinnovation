@@ -30,6 +30,7 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.No
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TamePersistenceEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameSpawnEvents;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameData;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.CommandRespawnDelay;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDuelStats;
@@ -13219,6 +13220,12 @@ public class TameCommands {
             if (!isDeadEntry(data.uuid)) {
                 continue;
             }
+            String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+            if (morningDelay != null) {
+                failed++;
+                failReasons.add(tameDisplayName(data) + " (" + morningDelay + ")");
+                continue;
+            }
             if (findLoadedOwnedTameByUuid(source, ownerId, data.uuid) != null) {
                 failed++;
                 failReasons.add(data.name + " (already loaded)");
@@ -13287,6 +13294,12 @@ public class TameCommands {
                 continue;
             }
             if (!isDeadEntry(data.uuid)) {
+                continue;
+            }
+            String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+            if (morningDelay != null) {
+                failed++;
+                failReasons.add(tameDisplayName(data) + " (" + morningDelay + ")");
                 continue;
             }
             if (findLoadedOwnedTameByUuid(source, player.getUUID(), data.uuid) != null) {
@@ -13494,6 +13507,8 @@ public class TameCommands {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
+        String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+        if (morningDelay != null) return RespawnResult.fail(morningDelay);
         if (TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId) != null) return RespawnResult.fail("tame already exists in a loaded entity section");
 
         String typeId = recoverEntityTypeId(data);
@@ -14128,6 +14143,7 @@ public class TameCommands {
         }
         data.dead = false;
         data.deadGameTime = 0L;
+        data.commandRespawnAfterDayTime = -1L;
         data.deadUnixMillis = 0L;
         data.deathDimension = "";
         data.deathX = 0;
@@ -19404,6 +19420,8 @@ public class TameCommands {
                 if (data.uuid == null) {
                     return error(source.getPlayer(), "Cannot respawn this dead tame: missing UUID.");
                 }
+                String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+                if (morningDelay != null) return error(source.getPlayer(), tameDisplayName(data) + ": " + morningDelay + ".");
                 TameRegistry.register(data);
             } else {
                 List<TameData> deadRows = findDeadRegistryRowsByName(petName);
@@ -19629,6 +19647,11 @@ public class TameCommands {
                 return 0;
             }
             return error(source.getPlayer(), tameDisplayName(data) + " is in an active duel or duel session and cannot be respawned right now.");
+        }
+        String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+        if (morningDelay != null) {
+            if (failures != null) { failures.add(tameDisplayName(data) + " (" + morningDelay + ")"); return 0; }
+            return error(source.getPlayer(), tameDisplayName(data) + ": " + morningDelay + ".");
         }
         TamableAnimal loaded = findLoadedTameByUuid(source, data.uuid);
         if (loaded != null) {
@@ -21790,6 +21813,7 @@ public class TameCommands {
         data.stored = false;
         data.dead = false;
         data.deadGameTime = 0L;
+        data.commandRespawnAfterDayTime = -1L;
         data.deadUnixMillis = 0L;
         data.deathDimension = "";
         data.deathX = 0;
@@ -21817,6 +21841,7 @@ public class TameCommands {
         }
         LevelSystem.storeHighestProgressSnapshot(data);
         data.dead = true;
+        CommandRespawnDelay.onDeath(server, data);
         data.stored = false;
         data.deadGameTime = server.overworld() != null ? server.overworld().getGameTime() : 0L;
         data.deadUnixMillis = System.currentTimeMillis();
@@ -26161,22 +26186,20 @@ public class TameCommands {
 
     private static void sendSimpleDuelSelections(ServerPlayer recipient, SimpleDuelPreparation preparation) {
         for (UUID leader : List.of(preparation.first, preparation.second)) {
-            List<String> selections = new ArrayList<>(), owners = new ArrayList<>();
+            ChatFormatting color = leader.equals(preparation.first) ? ChatFormatting.BLUE : ChatFormatting.RED;
             for (UUID id : preparation.owners(leader.equals(preparation.first))) {
                 SimpleDuelTeam team = preparation.team(id);
                 ServerPlayer owner = recipient.getServer().getPlayerList().getPlayer(id);
                 String ownerName = owner == null ? id.toString() : owner.getGameProfile().getName();
-                List<String> members = new ArrayList<>();
-                if (team.includeSelf || team.tameIds.isEmpty()) members.add("player");
+                List<String> names = new ArrayList<>();
+                names.add(ownerName);
                 for (UUID tameId : team.tameIds) {
                     TameData data = TameRegistry.get(tameId);
-                    members.add(data == null || data.name == null || data.name.isBlank() ? tameId.toString() : data.name);
+                    names.add(data == null || data.name == null || data.name.isBlank()
+                            ? tameId.toString() : ChatFormatting.stripFormatting(data.name));
                 }
-                owners.add(ownerName);
-                selections.add(ownerName + ": " + String.join(", ", members));
+                recipient.sendSystemMessage(Component.literal(String.join(", ", names)).withStyle(color));
             }
-            String line = selections.size() == 1 ? selections.get(0) : String.join(" + ", owners) + " | " + String.join("; ", selections);
-            recipient.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.AQUA));
         }
     }
 

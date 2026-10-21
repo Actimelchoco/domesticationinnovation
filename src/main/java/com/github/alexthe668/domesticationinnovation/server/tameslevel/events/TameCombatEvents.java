@@ -264,6 +264,7 @@ public class TameCombatEvents {
             }
             if (diedInDuel) {
                 data.dead = false;
+                data.commandRespawnAfterDayTime = -1L;
                 data.deadGameTime = 0L;
                 data.deadUnixMillis = 0L;
                 data.deathDimension = "";
@@ -272,6 +273,7 @@ public class TameCombatEvents {
                 data.deathZ = 0;
             } else {
                 data.dead = true;
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.CommandRespawnDelay.onDeath(tame.getServer(), data);
                 data.deadGameTime = tame.level().getGameTime();
                 data.deadUnixMillis = System.currentTimeMillis();
                 data.deathDimension = tame.level().dimension().location().toString();
