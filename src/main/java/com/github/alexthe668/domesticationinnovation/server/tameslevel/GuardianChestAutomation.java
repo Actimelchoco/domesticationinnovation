@@ -14,8 +14,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.*;
 import net.minecraftforge.event.level.BlockEvent;
@@ -24,7 +22,6 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.items.IItemHandlerModifiable;
-import net.minecraftforge.registries.ForgeRegistries;
 import java.util.*;
 
 /** Shared controllers use the loaded drum index. One setup and one tame operation per tick. */
@@ -94,11 +91,8 @@ public final class GuardianChestAutomation {
         for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
             BlockPos pos=base.offset(x,0,z);var chunk=level.getChunkSource().getChunkNow(pos.getX()>>4,pos.getZ()>>4);
             if(chunk==null)continue;
-            var block=chunk.getBlockState(pos);var entity=chunk.getBlockEntity(pos);
-            var id=ForgeRegistries.BLOCKS.getKey(block.getBlock());
-            boolean namedChest=id!=null&&(id.getPath().equals("chest")||id.getPath().endsWith("_chest"));
-            if(entity!=null&&!entity.isRemoved()&&(entity instanceof ChestBlockEntity||namedChest||block.is(net.minecraftforge.common.Tags.Blocks.CHESTS))
-                    &&entity.getCapability(ForgeCapabilities.ITEM_HANDLER).isPresent())count++;
+            var entity=chunk.getBlockEntity(pos);
+            if(entity!=null&&!entity.isRemoved()&&LoadedChestDrums.inventory(entity,net.minecraft.core.Direction.UP)!=null)count++;
         }
         return count;
     }
@@ -113,7 +107,7 @@ public final class GuardianChestAutomation {
         var chunk=level.getChunkSource().getChunkNow(chest.drumPos().getX()>>4,chest.drumPos().getZ()>>4);
         if(chunk==null||!(chunk.getBlockEntity(chest.drumPos()) instanceof DrumBlockEntity))return new Inspection(Set.of(),"Place a drum immediately above or below the control inventory.",0,0);
         int base=foundationCount(chest);
-        if(base!=9)return new Inspection(Set.of(),"Base has "+base+"/9 chest blocks. Put a flat 3x3 chest layer centered at "+foundationCenter(chest).toShortString()+".",0,0);
+        if(base!=9)return new Inspection(Set.of(),"Base has "+base+"/9 inventories. Put a flat 3x3 inventory layer centered at "+foundationCenter(chest).toShortString()+".",0,0);
         var server=level.getServer();Map<String,UUID> owners=new HashMap<>();Set<UUID> checked=new HashSet<>();List<String[]> labels=new ArrayList<>();
         for(var player:server.getPlayerList().getPlayers())owners.put(player.getGameProfile().getName().toLowerCase(Locale.ROOT),player.getUUID());
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
@@ -148,13 +142,35 @@ public final class GuardianChestAutomation {
         return anchored.size()==1?anchored.get(0):null;
     }
     private static boolean storePaper(LoadedChestDrums.Chest chest,int slot,Config config){
-        ItemStack old=chest.inventory().getStackInSlot(slot),replacement=old.copy();
+        ItemStack old=chest.inventory().getStackInSlot(slot).copy(),replacement=old.copy();
         if(!bindPaper(replacement,config.owner,config.group))return false;
         if(ItemStack.isSameItemSameTags(old,replacement))return true;
-        if(!(chest.inventory() instanceof IItemHandlerModifiable inventory))return false;
-        try{inventory.setStackInSlot(slot,replacement);chest.blockEntity().setChanged();}
-        catch(RuntimeException ignored){return false;}
+        if(chest.inventory() instanceof IItemHandlerModifiable inventory){
+            try{inventory.setStackInSlot(slot,replacement);chest.blockEntity().setChanged();}
+            catch(RuntimeException ignored){return false;}
+        }else{
+            // Generic handlers have no setStackInSlot. Deeds are single items;
+            // never mutate the stack returned by getStackInSlot in place.
+            var inventory=chest.inventory();
+            if(old.getCount()!=1||!ItemStack.matches(inventory.extractItem(slot,1,true),old))return false;
+            ItemStack extracted=inventory.extractItem(slot,1,false);
+            if(!ItemStack.matches(extracted,old)){
+                returnPaper(chest,slot,extracted);return false;
+            }
+            ItemStack rejected=inventory.insertItem(slot,replacement,false);
+            if(!rejected.isEmpty()){
+                returnPaper(chest,slot,extracted);return false;
+            }
+            chest.blockEntity().setChanged();
+        }
         return matches(chest.inventory().getStackInSlot(slot),config,paperTame(replacement).ensureTlId());
+    }
+    private static void returnPaper(LoadedChestDrums.Chest chest,int slot,ItemStack stack){
+        if(stack.isEmpty())return;
+        ItemStack remainder=chest.inventory().insertItem(slot,stack,false);
+        if(!remainder.isEmpty())remainder=net.minecraftforge.items.ItemHandlerHelper.insertItemStacked(chest.inventory(),remainder,false);
+        if(!remainder.isEmpty()&&chest.blockEntity().getLevel() instanceof ServerLevel level)
+            level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level,chest.pos().getX()+.5,chest.pos().getY()+1,chest.pos().getZ()+.5,remainder));
     }
     private static boolean powered(LoadedChestDrums.Chest chest){ServerLevel level=(ServerLevel)chest.blockEntity().getLevel();return level.hasNeighborSignal(chest.pos())||level.hasNeighborSignal(chest.drumPos());}
     private static boolean hasPaper(Setup setup,Config config,UUID identity){

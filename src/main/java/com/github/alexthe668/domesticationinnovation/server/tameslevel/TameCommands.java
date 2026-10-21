@@ -10124,7 +10124,7 @@ public class TameCommands {
         double castDamage = TameAbilityEvents.offensiveAbilityCastDamage(data, id, level);
         double attributeExtraDamage = inspectAbilityAttributeExtraDamage(data, id);
         String attributeNotes = inspectAbilityAttributeNotes(data);
-        String aoe = inspectAbilityAoeDescriptor(id, level);
+        String aoe = inspectAbilityAoeDescriptor(data, id, level);
         String suffix = switch (id) {
             case "creeper_explosion", "dragon_fireball" -> " per target";
             case "ghast_fireball" -> " per target in blast";
@@ -10146,10 +10146,10 @@ public class TameCommands {
         return base + suffix;
     }
 
-    private static String inspectAbilityAoeDescriptor(String id, int level) {
+    private static String inspectAbilityAoeDescriptor(TameData data, String id, int level) {
         int safeLevel = Math.max(1, level);
         return switch (id) {
-            case "creeper_explosion" -> "AOE radius " + fmt(3.0D + (safeLevel - 1) * 0.3D);
+            case "creeper_explosion" -> "AOE radius " + fmt(TameAbilityEvents.creeperExplosionRadius(data, safeLevel));
             case "ghast_fireball" -> "blast AOE";
             case "guardian_beam" -> "single target beam";
             case "elder_guardian_beam" -> "single target beam";

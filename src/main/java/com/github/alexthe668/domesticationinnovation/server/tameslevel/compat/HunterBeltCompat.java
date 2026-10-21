@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Optional Relics/Curios compatibility; no dependency is required when they are absent. */
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid = "domesticationinnovation")
 public final class HunterBeltCompat {
     private static final ResourceLocation BELT_ID = new ResourceLocation("relics", "hunter_belt");
     private static boolean failureReported;
@@ -55,6 +56,36 @@ public final class HunterBeltCompat {
 
     private HunterBeltCompat() { }
 
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void logout(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+        snapshot(event.getEntity());
+    }
+
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void login(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        Player player = event.getEntity();
+        if (player.getServer() != null) HunterBeltOfflineData.get(player.getServer()).put(player.getUUID(), 1);
+    }
+
+    @net.minecraftforge.eventbus.api.SubscribeEvent
+    public static void stopping(net.minecraftforge.event.server.ServerStoppingEvent event) {
+        for (Player player : event.getServer().getPlayerList().getPlayers()) snapshot(player);
+    }
+
+    private static void snapshot(Player player) {
+        if (player.getServer() == null || player.level().isClientSide) return;
+        Item belt = ForgeRegistries.ITEMS.getValue(BELT_ID);
+        double multiplier = 1;
+        if (belt != null && belt != Items.AIR && ApiHolder.API != null) {
+            try {
+                multiplier = multiplier(player, belt, ApiHolder.API, false);
+            } catch (ReflectiveOperationException | LinkageError exception) {
+                reportFailure(exception);
+            }
+        }
+        HunterBeltOfflineData.get(player.getServer()).put(player.getUUID(), multiplier);
+    }
+
     private static LivingEntity resolveAttacker(Entity source) {
         Entity attacker = source;
         if (source instanceof Projectile projectile) attacker = projectile.getOwner();
@@ -79,36 +110,49 @@ public final class HunterBeltCompat {
         // Registry ownership avoids borrowing belts from a fox's other trusted players.
         UUID ownerId = data != null && data.ownerUUID != null ? data.ownerUUID : TameEntityAdapter.ownerUuid(tame);
         Player player = ownerId == null ? null : tame.getServer().getPlayerList().getPlayer(ownerId);
-        if (player == null) return false;
+        if (player == null) {
+            if (ownerId == null) return false;
+            double multiplier = HunterBeltOfflineData.get(tame.getServer()).get(ownerId);
+            event.setAmount((float) Math.min(Float.MAX_VALUE, event.getAmount() * multiplier));
+            return true;
+        }
         Api api = ApiHolder.API;
         if (api == null) return false;
         try {
-            Object helper = api.getHelper().invoke(null);
-            Object found = api.findCurios().invoke(helper, player, belt);
-            if (!(found instanceof List<?> slots)) return false;
-            double multiplier = 1.0D;
-            for (Object slot : slots) {
-                Object value = api.stack().invoke(slot);
-                if (!(value instanceof ItemStack stack) || stack.isEmpty() || !stack.is(belt)
-                        || !api.relicInterface().isInstance(stack.getItem())) continue;
-                if (api.spreadExperience() != null) {
-                    try {
-                        api.spreadExperience().invoke(stack.getItem(), player, stack, 1);
-                    } catch (ReflectiveOperationException | LinkageError ignored) {
-                        // Damage remains usable if optional XP bookkeeping fails.
-                    }
-                }
-                Object ability = api.abilityValue().invoke(stack.getItem(), stack, "training", "damage");
-                if (ability instanceof Number number && Double.isFinite(number.doubleValue())) {
-                    multiplier += number.doubleValue() - 1.0D;
-                }
-            }
-            event.setAmount((float) Math.min(Float.MAX_VALUE, event.getAmount() * Math.max(0.0D, multiplier)));
+            double multiplier = multiplier(player, belt, api, true);
+            event.setAmount((float) Math.min(Float.MAX_VALUE, event.getAmount() * multiplier));
             return true;
         } catch (ReflectiveOperationException | LinkageError exception) {
             reportFailure(exception);
             return false;
         }
+    }
+
+    private static double multiplier(Player player, Item belt, Api api, boolean awardExperience)
+            throws ReflectiveOperationException {
+        Object helper = api.getHelper().invoke(null);
+        Object found = api.findCurios().invoke(helper, player, belt);
+        if (!(found instanceof List<?> slots)) return 1;
+        double multiplier = 1.0D;
+        int applied = 0;
+        for (Object slot : slots) {
+            Object value = api.stack().invoke(slot);
+            if (!(value instanceof ItemStack stack) || stack.isEmpty() || !stack.is(belt)
+                    || !api.relicInterface().isInstance(stack.getItem())) continue;
+            if (applied++ >= 2) break;
+            if (awardExperience && api.spreadExperience() != null) {
+                try {
+                    api.spreadExperience().invoke(stack.getItem(), player, stack, 1);
+                } catch (ReflectiveOperationException | LinkageError ignored) {
+                    // Damage remains usable if optional XP bookkeeping fails.
+                }
+            }
+            Object ability = api.abilityValue().invoke(stack.getItem(), stack, "training", "damage");
+            if (ability instanceof Number number && Double.isFinite(number.doubleValue())) {
+                multiplier += number.doubleValue() - 1.0D;
+            }
+        }
+        return Double.isFinite(multiplier) ? Math.max(0, multiplier) : 1;
     }
 
     private static void reportFailure(Throwable exception) {

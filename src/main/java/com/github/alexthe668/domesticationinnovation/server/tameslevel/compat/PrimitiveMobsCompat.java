@@ -35,6 +35,32 @@ public final class PrimitiveMobsCompat {
         return new net.minecraft.resources.ResourceLocation("mutantmonsters", "creeper_minion")
                 .equals(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType()));
     }
+
+    /** Native explosions do not read ATTACK_DAMAGE. Add earned damage once,
+     * before the LOWEST-priority Hunter Belt multiplier. Minions have their own
+     * optional mod patch; do not add its bonus a second time when installed. */
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGH)
+    public static void scaleNativeBlast(net.minecraftforge.event.entity.living.LivingHurtEvent event) {
+        if (event.isCanceled() || event.getAmount() <= 0 || event.getEntity().level().isClientSide
+                || !event.getSource().is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION)
+                || !(event.getSource().getEntity() instanceof LivingEntity attacker)
+                || !isPetCreeper(attacker) || !TameEntityAdapter.isTame(attacker)
+                || !isPrimitivePet(attacker) && MinionPatch.INSTALLED) return;
+        TameData data = TameRegistry.get(attacker.getUUID());
+        if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(attacker));
+        if (data != null && Double.isFinite(data.bonusDamage) && data.bonusDamage > 0)
+            event.setAmount((float)Math.min(Float.MAX_VALUE, event.getAmount() + data.bonusDamage));
+    }
+
+    private static final class MinionPatch {
+        static final boolean INSTALLED = installed();
+        private static boolean installed() {
+            try {
+                Class.forName("fuzs.mutantmonsters.compat.DITameCreeperMinionCompat", false, PrimitiveMobsCompat.class.getClassLoader());
+                return true;
+            } catch (ClassNotFoundException | LinkageError ignored) { return false; }
+        }
+    }
     public static final String BASELINE = "TLPrimitiveSpawnBaseline";
     private static final String RESET_GENERATION = "TLPrimitiveResetGeneration";
     private PrimitiveMobsCompat() {}

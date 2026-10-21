@@ -1,0 +1,17 @@
+allprojects { afterEvaluate {
+    repositories { flatDir { dirs 'C:/Users/bruns/Downloads/serverpack-slim-6.6.5b3hf/mods' } }
+    ['relics:1.20.1-0.8.0.13','curios-forge:5.14.1+1.20.1','OctoLib-FORGE:0.5.0.1+1.20.1','architectury:9.2.14-forge'].each {
+        dependencies.add('testImplementation',fg.deobf('offlinebelt-test:'+it))
+    }
+} }
+gradle.projectsEvaluated {
+    def p=rootProject
+    p.sourceSets.test.java.srcDir('src/test/offlinehunterbelt/java')
+    p.sourceSets.test.resources.srcDir('tools/primitive_tests/resources')
+    p.tasks.register('offlineHunterBeltTestJar',Jar){
+        dependsOn p.tasks.named('testClasses')
+        archiveFileName='offline-hunter-belt-tests.jar'
+        from p.sourceSets.test.output
+    }
+    p.reobf.create('offlineHunterBeltTestJar')
+}

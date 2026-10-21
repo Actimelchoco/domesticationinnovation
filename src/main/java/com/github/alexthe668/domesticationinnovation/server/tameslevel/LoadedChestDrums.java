@@ -98,9 +98,27 @@ public final class LoadedChestDrums {
             if(container==null||container.isRemoved())continue;
             if(side==Direction.DOWN&&chunk.getBlockEntity(pos.below()) instanceof DrumBlockEntity lower
                     &&!lower.isRemoved()&&drums.get(lower.getBlockPos())==lower)continue;
-            IItemHandler inventory=container.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+            IItemHandler inventory=inventory(container,side.getOpposite());
             if(inventory!=null)return new Chest(container,inventory,drum.getPlacerUUID(),adjacentDrums(level,drums,drumPos),drumPos);
         }
+        return null;
+    }
+
+    /** Covers Forge inventories, sided-only machines, and ordinary Container
+     * implementations without requiring chest tags or a particular mod class. */
+    public static IItemHandler inventory(BlockEntity container, Direction attachedFace) {
+        IItemHandler found=container.getCapability(ForgeCapabilities.ITEM_HANDLER).orElse(null);
+        if(found!=null&&found.getSlots()>0)return found;
+        if(attachedFace!=null){
+            found=container.getCapability(ForgeCapabilities.ITEM_HANDLER,attachedFace).orElse(null);
+            if(found!=null&&found.getSlots()>0)return found;
+        }
+        for(Direction side:Direction.values()){
+            found=container.getCapability(ForgeCapabilities.ITEM_HANDLER,side).orElse(null);
+            if(found!=null&&found.getSlots()>0)return found;
+        }
+        if(container instanceof net.minecraft.world.Container vanilla&&vanilla.getContainerSize()>0)
+            return new net.minecraftforge.items.wrapper.InvWrapper(vanilla);
         return null;
     }
 

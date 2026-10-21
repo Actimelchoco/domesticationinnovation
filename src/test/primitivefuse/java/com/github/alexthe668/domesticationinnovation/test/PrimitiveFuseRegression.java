@@ -38,9 +38,60 @@ public class PrimitiveFuseRegression {
             wildAndSittingFestiveDoNotGetCombatFuse(h);
             actualPrimitivePetsAcceptOwnerCollars(h);
             otherCreeperBlastsPreserveBlocks(h);
-            logger.info("PRIMITIVE_FUSE_TESTS_PASS: native fuse, survival, cooldown, repeat blast, wild/sitting exclusion, five species collars, rocket launch/landing, support fuse, thrown TNT, block protection");
+            explosionDamageAndLearnedRadiusScale(h);
+            logger.info("PRIMITIVE_FUSE_TESTS_PASS: native fuse, survival, cooldown, repeat blast, wild/sitting exclusion, five species collars, rocket launch/landing, support fuse, thrown TNT, block protection, native damage scaling, learned radius/damage/friendly protection");
         }catch(Throwable error){logger.error("PRIMITIVE_FUSE_TESTS_FAIL",error);}
         finally{event.getServer().halt(false);}
+    }
+    static void explosionDamageAndLearnedRadiusScale(Fixture h)throws Exception {
+        var level=h.getLevel();
+        for(String name:List.of("rocket_creeper","support_creeper","festive_creeper")){
+            var pet=create(h,name,true);var data=new TameData(pet,TameEntityAdapter.ownerUuid(pet),false);
+            data.bonusDamage=4;data.bonusKnockback=2;TameRegistry.register(data);
+            try{
+                var damage=new net.minecraftforge.event.entity.living.LivingHurtEvent(pet,level.damageSources().explosion(pet,pet),10);
+                PrimitiveMobsCompat.scaleNativeBlast(damage);
+                h.assertTrue(damage.getAmount()==14,name+" native damage adds earned attack damage once");
+                h.assertTrue(PrimitiveMobsCompat.petBlastRadius(pet,3)==5,name+" native strength includes earned knockback");
+                var melee=new net.minecraftforge.event.entity.living.LivingHurtEvent(pet,level.damageSources().mobAttack(pet),10);
+                PrimitiveMobsCompat.scaleNativeBlast(melee);h.assertTrue(melee.getAmount()==10,"melee and learned-ability damage are not boosted twice");
+            }finally{TameRegistry.remove(pet.getUUID());pet.discard();}
+        }
+        var minionType=ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("mutantmonsters:creeper_minion"));
+        if(minionType!=null){
+            var minion=(net.minecraft.world.entity.TamableAnimal)minionType.create(level);minion.setTame(true);minion.setOwnerUUID(UUID.randomUUID());
+            minion.setPos(2,-57,2);level.addFreshEntity(minion);var md=new TameData(minion,minion.getOwnerUUID(),false);md.bonusDamage=4;md.bonusKnockback=2;TameRegistry.register(md);
+            try{
+                var sync=com.github.alexthe668.domesticationinnovation.server.CommonProxy.class.getDeclaredMethod("enforceNoGriefMutantCreeperMinion",Entity.class);sync.setAccessible(true);
+                float before=((Number)minion.getClass().getMethod("getExplosionRadius").invoke(minion)).floatValue();
+                sync.invoke(null,minion);sync.invoke(null,minion);
+                float after=((Number)minion.getClass().getMethod("getExplosionRadius").invoke(minion)).floatValue();
+                h.assertTrue(Math.abs(after-before-2)<.001,"minion knockback radius is synchronized once without accumulating");
+                float base=10;
+                try{var patch=Class.forName("fuzs.mutantmonsters.compat.DITameCreeperMinionCompat");base=((Number)patch.getMethod("adjustExplosionDamage",Object.class,Object.class,float.class).invoke(null,minion,new Object(),base)).floatValue();}catch(ClassNotFoundException ignored){}
+                var hurt=new net.minecraftforge.event.entity.living.LivingHurtEvent(minion,level.damageSources().explosion(minion,minion),base);
+                PrimitiveMobsCompat.scaleNativeBlast(hurt);h.assertTrue(hurt.getAmount()==14,"minion damage bonus applies exactly once with or without the legacy patch");
+            }finally{TameRegistry.remove(minion.getUUID());minion.discard();}
+        }
+        var owner=UUID.randomUUID();var wolf=EntityType.WOLF.create(level);wolf.setTame(true);wolf.setOwnerUUID(owner);wolf.setNoAi(true);wolf.setPos(0,-57,0);level.addFreshEntity(wolf);
+        var data=new TameData(wolf,owner,false);data.abilities.add("creeper_explosion");data.abilityLevels.put("creeper_explosion",4);data.bonusKnockback=2;
+        data.mode=TameMode.MONSTER_HUNTER.id();TameRegistry.register(data);
+        var near=EntityType.HUSK.create(level);near.setPos(5.5,-57,0);near.setNoAi(true);level.addFreshEntity(near);
+        var outside=EntityType.HUSK.create(level);outside.setPos(6.5,-57,0);outside.setNoAi(true);level.addFreshEntity(outside);
+        var friendly=EntityType.WOLF.create(level);friendly.setTame(true);friendly.setOwnerUUID(owner);friendly.setPos(2,-57,0);level.addFreshEntity(friendly);
+        try{
+            var events=com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.class;
+            h.assertTrue(Math.abs(com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.creeperExplosionRadius(data,4)-5.9)<.0001,"learned radius includes level and knockback");
+            float low=com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.offensiveAbilityCastDamage(data,"creeper_explosion",4);data.bonusDamage=20;
+            h.assertTrue(com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.offensiveAbilityCastDamage(data,"creeper_explosion",4)>low,"learned damage scales with attack bonus");
+            var cast=events.getDeclaredMethod("handleCreeperExplosion",net.minecraft.server.level.ServerLevel.class,LivingEntity.class,TameData.class,LivingEntity.class,long.class);cast.setAccessible(true);
+            float nearHp=near.getHealth(),outsideHp=outside.getHealth(),friendlyHp=friendly.getHealth();
+            cast.invoke(null,level,wolf,data,near,10000L);
+            h.assertTrue(near.getHealth()<nearHp,"learned blast reaches an enemy beyond the old fixed three-block query");
+            h.assertTrue(outside.getHealth()==outsideHp,"learned blast obeys its real spherical range");
+            h.assertTrue(friendly.getHealth()==friendlyHp&&friendly.getDeltaMovement().lengthSqr()==0,"learned blast does not damage or shove friendly tames");
+            data.bonusKnockback=1e9;h.assertTrue(com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.creeperExplosionRadius(data,Integer.MAX_VALUE)==32,"extreme stats cannot create an unbounded entity query");
+        }finally{TameRegistry.remove(wolf.getUUID());wolf.discard();near.discard();outside.discard();friendly.discard();}
     }
     static void otherCreeperBlastsPreserveBlocks(Fixture h)throws Exception {
         var level=h.getLevel();

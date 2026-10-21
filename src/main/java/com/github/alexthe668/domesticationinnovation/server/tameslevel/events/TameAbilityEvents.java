@@ -345,12 +345,13 @@ public class TameAbilityEvents {
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "creeper_explosion"));
         float damage = offensiveAbilityCastDamage(data, "creeper_explosion", levelValue);
-        double radius = 3.0D + (levelValue - 1) * 0.3D;
-        for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(3))) {
-            if (nearby == tame || !nearby.isAlive()) continue;
+        double radius = creeperExplosionRadius(data, levelValue);
+        for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
+            if (nearby == tame || !nearby.isAlive() || isFriendly(tame, nearby)
+                    || isProtectedPassiveWildlife(nearby) || tame.distanceToSqr(nearby) > radius * radius) continue;
 
             LevelSystem.trackDamage(nearby, tame);
-            nearby.hurt(tame.damageSources().mobAttack(tame), damage);
+            if (!nearby.hurt(tame.damageSources().mobAttack(tame), damage)) continue;
 
             Vec3 push = nearby.position().subtract(tame.position());
             if (push.lengthSqr() > 0.0001D) {
@@ -365,6 +366,12 @@ public class TameAbilityEvents {
         level.playSound(null, tame.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.NEUTRAL, 1.0F, 1.0F);
         setAbilityCooldown(tame, data, "creeper_explosion", "explode", now, 200);
         debugAbilityUse(tame, "creeper_explosion");
+    }
+
+    public static double creeperExplosionRadius(TameData data, int level) {
+        double knockback = data == null || !Double.isFinite(data.bonusKnockback) ? 0 : Math.max(0, data.bonusKnockback);
+        // Keep the entity query bounded even for edited or extremely high stats.
+        return Math.min(32.0D, 3.0D + (Math.max(1, level) - 1) * 0.3D + knockback);
     }
 
     private static void handleArrowShot(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
