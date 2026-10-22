@@ -25,6 +25,8 @@ public class ClaimTrollagerRegression {
         var claimed=new BlockPos((origin.getX()>>4)*16,origin.getY(),(origin.getZ()>>4)*16+8);
         var outside=claimed.west();var chunk=new ChunkDimPos(level,claimed);
         h.assertTrue(claims.claim(source,chunk,false).isSuccess(),"claim created");
+        // Deliberately allow ordinary explosions: only the new Trollager rule should save these blocks.
+        team.setProperty(dev.ftb.mods.ftbchunks.api.FTBChunksProperties.ALLOW_EXPLOSIONS,true);team.markDirty();
         var troll=BuiltInRegistries.ENTITY_TYPE.get(new ResourceLocation("primitive_mobs","trollager")).create(level);
         h.assertTrue(troll!=null&&troll.getType()!=EntityType.PIG,"real Primitive Mobs Trollager installed");
         var victim=EntityType.IRON_GOLEM.create(level);victim.setNoAi(true);victim.setPos(outside.getX()+.5,outside.getY()+1,outside.getZ()+.5);level.addFreshEntity(victim);
@@ -47,16 +49,21 @@ public class ClaimTrollagerRegression {
                 // Smash lands two blocks in front of the troll, at the unclaimed side of the boundary.
                 troll.setPos(outside.getX()+.5,outside.getY()+1,outside.getZ()-1.5);troll.setYRot(0);((net.minecraft.world.entity.Mob)troll).setNoAi(true);
                 level.addFreshEntity(troll);
+                // Native smash is centred at the tall Trollager's eye height, not at its feet.
+                var blastClaimed=claimed.atY((int)Math.floor(troll.getEyeY())-1);
+                var blastOutside=outside.atY(blastClaimed.getY());
+                victim.setPos(outside.getX()+.5,troll.getEyeY(),outside.getZ()+.5);
                 for(int y=0;y<=2;y++)for(int z=-2;z<=2;z++){
-                    level.setBlockAndUpdate(claimed.offset(0,y,z),Blocks.GLASS.defaultBlockState());
-                    level.setBlockAndUpdate(outside.offset(0,y,z),Blocks.GLASS.defaultBlockState());
+                    level.setBlockAndUpdate(blastClaimed.offset(0,y,z),Blocks.GLASS.defaultBlockState());
+                    // Leave the blast/victim cell open so this also exercises entity damage.
+                    level.setBlockAndUpdate(blastOutside.offset(0,y,z),y>0&&z==0?Blocks.AIR.defaultBlockState():Blocks.GLASS.defaultBlockState());
                 }
                 float health=victim.getHealth();
                 var smash=troll.getClass().getDeclaredMethod("smash",LivingEntity.class);smash.setAccessible(true);smash.invoke(troll,victim);
                 boolean outsideBroken=false;
                 for(int y=0;y<=2;y++)for(int z=-2;z<=2;z++){
-                    h.assertTrue(level.getBlockState(claimed.offset(0,y,z)).is(Blocks.GLASS),"native smash preserves every tested claimed glass block");
-                    outsideBroken|=!level.getBlockState(outside.offset(0,y,z)).is(Blocks.GLASS);
+                    h.assertTrue(level.getBlockState(blastClaimed.offset(0,y,z)).is(Blocks.GLASS),"native smash preserves every tested claimed glass block");
+                    if(!(y>0&&z==0))outsideBroken|=!level.getBlockState(blastOutside.offset(0,y,z)).is(Blocks.GLASS);
                 }
                 h.assertTrue(outsideBroken,"native smash still destroys unclaimed terrain");
                 h.assertTrue(victim.getHealth()<health,"native smash still damages entities");

@@ -348,7 +348,6 @@ public final class GuardianChestAutomation {
             if(data==null||!manual.owner.equals(data.ownerUUID)||data.rosterBodyguard||data.dead)return;
             boolean done=TameCommands.guardianAutomationMove(event.getServer(),data,manual.group,manual.deploy,null);
             if(!done&&event.getServer().getTickCount()<manual.expires)MANUAL.put(manual.identity,manual);
-            else{var caller=event.getServer().getPlayerList().getPlayer(manual.caller);if(caller!=null)caller.sendSystemMessage(Component.literal((done?"Guardian request processed for ":"Guardian request timed out for ")+data.name+"."));}
         }
     }
     private static void requestManual(ServerPlayer player,ItemStack stack,boolean deploy){

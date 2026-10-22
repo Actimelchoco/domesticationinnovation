@@ -9,6 +9,18 @@ allprojects { afterEvaluate {
     sourceSets.main.java.srcDir('src/test/claimedtrollager/java')
     sourceSets.main.java.srcDir('src/test/claimedpumpkin/java')
     sourceSets.main.resources.srcDir('src/test/claimedfire/resources')
+    // Existing optional DI Primitive taming hooks use SRG names in production.
+    // They are unrelated to this FTB/native-wild-mob test and cannot target the
+    // deobfuscated dev mod. Change only generated test resources, never source.
+    tasks.named('processResources') {
+        outputs.upToDateWhen { false }
+        doLast {
+            def config=project.file('build/resources/main/domesticationinnovation.mixins.json')
+            def json=new groovy.json.JsonSlurper().parse(config)
+            json.mixins=json.mixins.findAll { !it.startsWith('Primitive') }
+            config.text=groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+        }
+    }
     minecraft.runs { gameTestServer {
         workingDirectory project.file('build/claimed-trollager-gametest')
         property 'forge.enabledGameTestNamespaces','domesticationinnovation'
