@@ -45,7 +45,7 @@ public class GuardianChestRegression {
             }catch(ReflectiveOperationException error){throw new IllegalStateException(error);}
             server.getProfileCache().add(profile);
             chest=h.absolutePos(new BlockPos(2,4,2));post=chest.offset(5,-2,0);home=chest.offset(0,-2,7);power=chest.east();
-            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)h.getLevel().setBlock(chest.below(2).offset(x,0,z),Blocks.CHEST.defaultBlockState(),3);
+            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)h.getLevel().setBlock(chest.below().offset(x,0,z),DIBlockRegistry.DRUM.get().defaultBlockState(),3);
             h.getLevel().setBlock(chest.below(),DIBlockRegistry.DRUM.get().defaultBlockState(),3);
             var drum=(DrumBlockEntity)h.getLevel().getBlockEntity(chest.below());drum.setPlacerUUID(owner.getUUID());LoadedChestDrums.add(drum);
             h.getLevel().setBlock(chest,Blocks.CHEST.defaultBlockState(),3);container=(ChestBlockEntity)h.getLevel().getBlockEntity(chest);
@@ -66,18 +66,34 @@ public class GuardianChestRegression {
             TameRegistry.setRankedParticipants(oldPool);TameRegistry.remove(data.uuid);wolf.discard();
             var live=TameEntityAdapter.findLoaded(h.getLevel().getServer(),data.uuid,data.tlId);if(live!=null)live.discard();
             h.getLevel().setBlock(chest,Blocks.AIR.defaultBlockState(),3);h.getLevel().setBlock(chest.below(),Blocks.AIR.defaultBlockState(),3);h.getLevel().setBlock(power,Blocks.AIR.defaultBlockState(),3);
+            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
+                h.getLevel().setBlock(chest.below().offset(x,0,z),Blocks.AIR.defaultBlockState(),3);
+                h.getLevel().setBlock(chest.above().offset(x,0,z),Blocks.AIR.defaultBlockState(),3);
+            }
         }
     }
-    @GameTest(template="empty") public static void guardianChestRequiresNineChestsAndPermanentlyConvertsDeed(GameTestHelper h){
+    @GameTest(template="empty") public static void guardianChestRequiresNineDrumsAndPermanentlyConvertsDeed(GameTestHelper h){
         try(var f=new Fixture(h)){
-            var missing=f.chest.below(2).offset(1,0,1);h.getLevel().setBlock(missing,Blocks.AIR.defaultBlockState(),3);f.scan();
-            h.assertTrue(!GuardianChestAutomation.isPaper(f.paper),"eight base chests do not enable automation");
-            h.getLevel().setBlock(missing,Blocks.CHEST.defaultBlockState(),3);f.scan();
-            h.assertTrue(GuardianChestAutomation.isPaper(f.paper)&&f.paper.getHoverName().getString().equals("night: ChestWolf"),"nine chests convert and label the bound paper");
+            var missing=f.chest.below().offset(1,0,1);h.getLevel().setBlock(missing,Blocks.CHEST.defaultBlockState(),3);f.scan();
+            h.assertTrue(!GuardianChestAutomation.isPaper(f.paper),"an inventory cannot substitute for the missing ninth drum");
+            h.getLevel().setBlock(missing,DIBlockRegistry.DRUM.get().defaultBlockState(),3);f.scan();
+            h.assertTrue(GuardianChestAutomation.isPaper(f.paper)&&f.paper.getHoverName().getString().equals("night: ChestWolf"),"nine drums convert and label the bound paper");
             h.assertTrue(!f.paper.getTag().contains("BoundEntity")&&!f.paper.getTag().getBoolean("HasBoundEntity"),"adoption credentials are removed permanently");
             f.owner.setItemInHand(InteractionHand.MAIN_HAND,f.paper);
             var interaction=new PlayerInteractEvent.EntityInteract(f.owner,InteractionHand.MAIN_HAND,f.wolf);MinecraftForge.EVENT_BUS.post(interaction);
             h.assertTrue(interaction.isCanceled()&&GuardianChestAutomation.isPaper(f.paper),"guardian papers cannot adopt or be rebound by entity interaction");
+        }h.succeed();
+    }
+    @GameTest(template="empty") public static void ordinaryDrumCrossStaysDistinctAndOuterDrumsCannotBroadcast(GameTestHelper h){
+        try(var f=new Fixture(h)){
+            for(int x:new int[]{-1,1})for(int z:new int[]{-1,1})h.getLevel().setBlock(f.chest.below().offset(x,0,z),Blocks.AIR.defaultBlockState(),3);
+            f.scan();
+            h.assertTrue(GuardianChestAutomation.foundationCount(f.setup)==5&&!GuardianChestAutomation.isPaper(f.paper),"ordinary five-drum cross does not activate guardian automation");
+            h.assertTrue(GuardianChestAutomation.handlesRedstone(h.getLevel(),f.chest.below().east()),"outer formation drums suppress broad movement calls while formation is incomplete");
+            for(int x:new int[]{-1,1})for(int z:new int[]{-1,1})h.getLevel().setBlock(f.chest.below().offset(x,0,z),DIBlockRegistry.DRUM.get().defaultBlockState(),3);
+            f.scan();
+            h.assertTrue(GuardianChestAutomation.isPaper(f.paper),"complete square activates guardian automation");
+            h.assertTrue(GuardianChestAutomation.handlesRedstone(h.getLevel(),f.chest.below().offset(1,0,1)),"corner drums also route redstone to the shared controller");
         }h.succeed();
     }
     @GameTest(template="empty") public static void guardianChestRedstoneDeploysOverridesOtherPostAndReturnsHome(GameTestHelper h){

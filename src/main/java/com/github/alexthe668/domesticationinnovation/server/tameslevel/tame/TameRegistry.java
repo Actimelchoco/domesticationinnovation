@@ -1144,6 +1144,7 @@ public class TameRegistry {
     public static boolean isProtectedAttackTarget(net.minecraft.world.entity.LivingEntity source, Entity target) {
         if (source == null || target == null) return false;
         if (TameDuelManager.areDuelOpponents(source.getUUID(), target.getUUID())) return false;
+        if (GuardianChestBodyguards.protects(source.getUUID(),target)) return true;
         TameData data = get(source.getUUID());
         UUID owner = data == null ? com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.owner(source) : data.ownerUUID;
         return isProtectedAttackTarget(owner, target);

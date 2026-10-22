@@ -108,7 +108,7 @@ public final class GuardianChestAutomation {
                 &&data!=null&&config.owner.equals(data.ownerUUID);
     }
     public static BlockPos foundationCenter(LoadedChestDrums.Chest chest){
-        return chest.drumPos().getY()<chest.pos().getY()?chest.drumPos().below():chest.pos().below();
+        return chest.drumPos();
     }
     public static int foundationCount(LoadedChestDrums.Chest chest){
         ServerLevel level=(ServerLevel)chest.blockEntity().getLevel();int count=0;BlockPos base=foundationCenter(chest);
@@ -116,7 +116,7 @@ public final class GuardianChestAutomation {
             BlockPos pos=base.offset(x,0,z);var chunk=level.getChunkSource().getChunkNow(pos.getX()>>4,pos.getZ()>>4);
             if(chunk==null)continue;
             var entity=chunk.getBlockEntity(pos);
-            if(entity!=null&&!entity.isRemoved()&&LoadedChestDrums.inventory(entity,net.minecraft.core.Direction.UP)!=null)count++;
+            if(entity instanceof DrumBlockEntity&&!entity.isRemoved())count++;
         }
         return count;
     }
@@ -131,7 +131,7 @@ public final class GuardianChestAutomation {
         var chunk=level.getChunkSource().getChunkNow(chest.drumPos().getX()>>4,chest.drumPos().getZ()>>4);
         if(chunk==null||!(chunk.getBlockEntity(chest.drumPos()) instanceof DrumBlockEntity))return new Inspection(Set.of(),"Place a drum immediately above or below the control inventory.",0,0);
         int base=foundationCount(chest);
-        if(base!=9)return new Inspection(Set.of(),"Base has "+base+"/9 inventories. Put a flat 3x3 inventory layer centered at "+foundationCenter(chest).toShortString()+".",0,0);
+        if(base!=9)return new Inspection(Set.of(),"Formation has "+base+"/9 drums. Put a flat 3x3 drum layer centered at "+foundationCenter(chest).toShortString()+", with the control inventory directly above or below its center.",0,0);
         var server=level.getServer();Map<String,UUID> owners=new HashMap<>();Set<UUID> checked=new HashSet<>();List<String[]> labels=new ArrayList<>();
         for(var player:server.getPlayerList().getPlayers())owners.put(player.getGameProfile().getName().toLowerCase(Locale.ROOT),player.getUUID());
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
@@ -144,7 +144,7 @@ public final class GuardianChestAutomation {
             if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
             String name=stack.getHoverName().getString();int split=name.indexOf(':');if(split<1)continue;
             String owner=name.substring(0,split).trim().toLowerCase(Locale.ROOT),group=name.substring(split+1).trim().toLowerCase(Locale.ROOT);
-            if(owner.equals("protect"))continue;
+            if(owner.equals("protect")||owner.startsWith("bodyguard "))continue;
             if(!owner.isBlank()&&!group.isBlank()&&group.length()<=128)labels.add(new String[]{owner,group});
         }
         Set<Config> configs=new LinkedHashSet<>();int unresolved=0;
@@ -210,7 +210,7 @@ public final class GuardianChestAutomation {
                 &&powered(setup.chest)==action.deploy&&hasPaper(setup,action.config,action.identity);
     }
     private static void retire(UUID token){Action action=AUTHORIZED.remove(token);if(action!=null){LATEST.remove(action.identity,token);ACTIONS.remove(action.identity,action);}}
-    private static void invalidate(Setup setup){for(var entry:setup.members.entrySet()){retire(entry.getValue().token);unlinkActivity(setup,entry.getKey());}setup.members.clear();}
+    private static void invalidate(Setup setup){GuardianChestBodyguards.remove(setup);for(var entry:setup.members.entrySet()){retire(entry.getValue().token);unlinkActivity(setup,entry.getKey());}setup.members.clear();}
     public static String status(LoadedChestDrums.Status status){
         if(!status.active())return "Inactive: overlaps chest x drum at "+status.blocker().toShortString()+".";
         var chest=status.chest();Inspection inspection=inspect(chest);if(!inspection.problem.isBlank())return "Inactive: "+inspection.problem;
@@ -238,12 +238,21 @@ public final class GuardianChestAutomation {
         if(setup.chest!=null&&setup.chest.blockEntity()!=chest.blockEntity()){invalidate(setup);fresh=true;}
         setup.chest=chest;setup.configs=inspection.configs;boolean on=powered(chest),edge=!fresh&&on!=setup.powered;setup.powered=on;
         Set<String> protect=new HashSet<>();
+        Map<String,String> escortNames=new HashMap<>();Set<String> ambiguousEscorts=new HashSet<>();
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
             var stack=chest.inventory().getStackInSlot(slot);
             if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
             String name=stack.getHoverName().getString().trim();int split=name.indexOf(':');
             if(split>0&&name.substring(0,split).trim().equalsIgnoreCase("protect")){
                 String player=name.substring(split+1).trim();if(!player.isBlank())protect.add(player);
+            }
+            int lastSplit=name.lastIndexOf(':');
+            if(lastSplit>9&&name.regionMatches(true,0,"bodyguard ",0,10)){
+                String tameName=name.substring(10,lastSplit).trim().toLowerCase(Locale.ROOT),player=name.substring(lastSplit+1).trim();
+                if(!tameName.isBlank()&&!player.isBlank()){
+                    String previous=escortNames.putIfAbsent(tameName,player);
+                    if(previous!=null&&!previous.equalsIgnoreCase(player))ambiguousEscorts.add(tameName);
+                }
             }
         }
         if(!protect.equals(setup.protectPlayers)){setup.protectPlayers=Set.copyOf(protect);setup.nextProtectCheck=Integer.MIN_VALUE;setup.protectOnline=false;}
@@ -267,7 +276,19 @@ public final class GuardianChestAutomation {
                 }
             }
         }
-
+        Map<String,UUID> namedMembers=new HashMap<>();Set<String> duplicateNames=new HashSet<>();
+        for(UUID id:present.keySet()){
+            var data=TameRegistry.getByTlId(id);if(data==null||data.name==null)continue;
+            String name=ChatFormatting.stripFormatting(data.name).trim().toLowerCase(Locale.ROOT);
+            if(namedMembers.putIfAbsent(name,id)!=null)duplicateNames.add(name);
+        }
+        Map<UUID,GuardianChestBodyguards.Rule> escorts=new HashMap<>();
+        if(on)for(var entry:escortNames.entrySet()){
+            if(duplicateNames.contains(entry.getKey())||ambiguousEscorts.contains(entry.getKey()))continue;
+            UUID id=namedMembers.get(entry.getKey());if(id==null)continue;Config config=present.get(id);
+            escorts.put(id,new GuardianChestBodyguards.Rule(config.owner,config.group,entry.getValue()));
+        }
+        GuardianChestBodyguards.replace(setup,escorts);
     }
     public static void refresh(ServerLevel level,List<LoadedChestDrums.Status> statuses){
         Set<BlockPos> loaded=new HashSet<>();
@@ -287,10 +308,15 @@ public final class GuardianChestAutomation {
     }
     public static boolean handlesRedstone(net.minecraft.world.level.Level world,BlockPos drumPos){
         if(!(world instanceof ServerLevel level))return false;
-        var chest=LoadedChestDrums.chestAtDrum(level,drumPos);if(chest==null)return false;Key key=key(chest);
-        Setup setup=SETUPS.get(key);if(setup!=null){DIRTY.put(key,chest);return true;}
-        // Invalid controllers must not accidentally issue an ordinary broad drum movement command.
-        return hasIntent(chest);
+        // Outer formation drums must never issue independent broad movement calls.
+        for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++){
+            var chest=LoadedChestDrums.chestAtDrum(level,drumPos.offset(x,0,z));if(chest==null)continue;
+            Key key=key(chest);Setup setup=SETUPS.get(key);
+            if(setup!=null){DIRTY.put(key,chest);return true;}
+            // Also suppress broad calls while a controller formation is incomplete.
+            if(hasIntent(chest))return true;
+        }
+        return false;
     }
     @SubscribeEvent public static void neighbors(BlockEvent.NeighborNotifyEvent event){
         if(SETUPS.isEmpty()||!(event.getLevel() instanceof ServerLevel level))return;
@@ -310,6 +336,7 @@ public final class GuardianChestAutomation {
         if(event.phase!=TickEvent.Phase.END)return;
         var scans=DIRTY.isEmpty()?SCANS:DIRTY;
         if(!scans.isEmpty()){var iterator=scans.entrySet().iterator();var entry=iterator.next();var chest=entry.getValue();Key key=entry.getKey();iterator.remove();SCANS.remove(key);scan(chest);}
+        GuardianChestBodyguards.refresh(event.getServer());
         if(!ACTIONS.isEmpty()){
             var iterator=ACTIONS.values().iterator();Action action=iterator.next();iterator.remove();if(!authorized(action.token))return;
             TameData data=TameRegistry.getByTlId(action.identity);
@@ -368,5 +395,5 @@ public final class GuardianChestAutomation {
         for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level){invalidate(entry.getValue());iterator.remove();}}
         SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);BLOCKERS.keySet().removeIf(key->key.level==level);
     }
-    @SubscribeEvent public static void stop(ServerStoppedEvent event){ACTIVITY_LINKS.clear();SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
+    @SubscribeEvent public static void stop(ServerStoppedEvent event){GuardianChestBodyguards.clear();ACTIVITY_LINKS.clear();SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
 }

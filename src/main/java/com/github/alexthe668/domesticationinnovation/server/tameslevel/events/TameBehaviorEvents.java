@@ -51,6 +51,9 @@ public class TameBehaviorEvents {
         if (!(event.getEntity() instanceof PathfinderMob tame) || !TameEntityAdapter.isTame(tame)) return;
         if (tame.level().isClientSide) return;
         LivingEntity newTarget = event.getNewTarget();
+        if(newTarget!=null&&com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.protects(tame.getUUID(),newTarget)){
+            event.setNewTarget(null);return;
+        }
         UUID ownerId = TameEntityAdapter.ownerUuid(tame);
         if (newTarget instanceof Player player
                 && !TameDuelManager.areDuelOpponents(tame.getUUID(), player.getUUID())
@@ -99,6 +102,7 @@ public class TameBehaviorEvents {
             if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.processRestThrottled(tame, activeData)) return;
         }
         if (activeData.guardianResting) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.tick(tame, activeData)) return;
         if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
                 && tame.getTarget() != null
                 && !TameGoalSupport.isAssasinTarget(activeData.ownerUUID, tame.getTarget())) {

@@ -53,8 +53,9 @@ public class SharedGuardianRegression {
         f.h.getLevel().setBlock(f.chest,block.defaultBlockState(),3);
         BlockPos drum=f.chest.below();
         if(above){
-            f.h.getLevel().setBlock(drum,Blocks.AIR.defaultBlockState(),3);drum=f.chest.above();
-            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)f.h.getLevel().setBlock(f.chest.below().offset(x,0,z),block.defaultBlockState(),3);
+            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)f.h.getLevel().setBlock(f.chest.below().offset(x,0,z),Blocks.AIR.defaultBlockState(),3);
+            drum=f.chest.above();
+            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)f.h.getLevel().setBlock(drum.offset(x,0,z),DIBlockRegistry.DRUM.get().defaultBlockState(),3);
             f.h.getLevel().setBlock(drum,DIBlockRegistry.DRUM.get().defaultBlockState(),3);
             var entity=(DrumBlockEntity)f.h.getLevel().getBlockEntity(drum);entity.setPlacerUUID(UUID.randomUUID());LoadedChestDrums.add(entity);
         }
@@ -74,11 +75,11 @@ public class SharedGuardianRegression {
             h.assertTrue(f.data.hasHome&&f.wolf.blockPosition().equals(f.post),"actual modded chest deploys its guardian");
         }h.succeed();
     }
-    @GameTest(template="empty") public static void drumAboveDiamondChestAndNineModdedBaseChestsWork(GameTestHelper h){
+    @GameTest(template="empty") public static void drumLayerAboveDiamondChestWorks(GameTestHelper h){
         try(var f=new GuardianChestRegression.Fixture(h)){
             try{
                 var setup=replace(f,diamond(h),true);var discovered=LoadedChestDrums.chests(h.getLevel()).stream().filter(c->c.pos().equals(f.chest)).findFirst().orElseThrow();
-                h.assertTrue(discovered.drumPos().equals(f.chest.above())&&GuardianChestAutomation.foundationCount(discovered)==9,"inverted layout discovers the real drum and nine diamond base chests");
+                h.assertTrue(discovered.drumPos().equals(f.chest.above())&&GuardianChestAutomation.foundationCount(discovered)==9,"inverted layout discovers nine drums above the diamond control inventory");
                 GuardianChestAutomation.scan(discovered);h.getLevel().setBlock(f.power,Blocks.REDSTONE_BLOCK.defaultBlockState(),3);GuardianChestAutomation.scan(discovered);f.tick();
                 h.assertTrue(f.data.hasHome&&f.wolf.blockPosition().equals(f.post),"a drum placed by a different owner still controls the shared chest");
             }finally{h.getLevel().setBlock(f.chest.above(),Blocks.AIR.defaultBlockState(),3);}
@@ -117,9 +118,9 @@ public class SharedGuardianRegression {
         try(var f=new GuardianChestRegression.Fixture(h)){
             List<String> messages=new ArrayList<>();var owner=observer(f,f.owner.getUUID(),f.owner.getGameProfile().getName(),messages);players(h).put(owner.getUUID(),owner);
             try{
-                h.getLevel().setBlock(f.chest.below(2).east(),Blocks.AIR.defaultBlockState(),3);f.scan();f.scan();
+                h.getLevel().setBlock(f.chest.below().east(),Blocks.AIR.defaultBlockState(),3);f.scan();f.scan();
                 h.assertTrue(messages.isEmpty(),"invalid base scans do not send automatic chat");
-                h.getLevel().setBlock(f.chest.below(2).east(),Blocks.CHEST.defaultBlockState(),3);GuardianChestAutomation.stop(null);f.scan();
+                h.getLevel().setBlock(f.chest.below().east(),DIBlockRegistry.DRUM.get().defaultBlockState(),3);GuardianChestAutomation.stop(null);f.scan();
                 h.assertTrue(messages.isEmpty()&&GuardianChestAutomation.isPaper(f.container.getItem(1)),"paper conversion succeeds silently");
                 f.data.guardianSetAnchors.clear();f.container.setItem(2,new ItemStack(DIItemRegistry.DEED_OF_OWNERSHIP.get()));
                 String status=GuardianChestAutomation.status(new LoadedChestDrums.Status(f.setup,null));

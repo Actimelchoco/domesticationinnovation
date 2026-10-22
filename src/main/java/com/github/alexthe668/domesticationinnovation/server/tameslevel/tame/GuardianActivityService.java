@@ -109,6 +109,7 @@ public final class GuardianActivityService {
     public static boolean hasNearbyPlayer(MinecraftServer server, TameData data) {
         if (!data.hasHome) return false;
         useServer(server);
+        if (GuardianChestBodyguards.hasAssignment(server, data)) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.keepsActive(data)) return true;
         int now = server.getTickCount();
         Proximity old = PROXIMITY.get(data);
@@ -335,6 +336,16 @@ public final class GuardianActivityService {
             if (now < work.nextMaintenance) continue;
             work.nextMaintenance = now + CHECK_INTERVAL;
             enforceHunterMode(data);
+            if(!data.dead&&!data.stored&&!data.guardianResting&&GuardianChestBodyguards.hasAssignment(server,data)
+                    &&LoadedTameIndex.find(server,data.uuid,data.tlId)==null)requestBody(server,work);
+            if(GuardianChestBodyguards.isReturning(data)){
+                if(data.dead||data.stored||data.rosterBodyguard||data.guardianResting)GuardianChestBodyguards.returned(data);
+                else {
+                    LivingEntity body=LoadedTameIndex.find(server,data.uuid,data.tlId);
+                    if(body==null)requestBody(server,work);
+                    else if(TameCommands.returnChestBodyguardToPost(body,data))GuardianChestBodyguards.returned(data);
+                }
+            }
             boolean guardian = !data.rosterBodyguard && (data.movementOrder == 3 || data.guardianResting);
             if (guardian && (data.guardianMorningReturnDay == Long.MIN_VALUE || day < data.guardianMorningReturnDay)) {
                 data.guardianMorningReturnDay = day;

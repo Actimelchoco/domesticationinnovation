@@ -5766,10 +5766,11 @@ public class TameCommands {
                     "Each drum touching a horizontal side of the supporting drum adds 10 blocks in X/Z and 2 up/down. Four extra drums give a range of 65/13. Diagonals and chains do not count.",
                     "First, preferred food is distributed to all nearby tames. Then remaining compatible non-preferred food is distributed.",
                     "Food a tame cannot eat is never transferred. Refill stops at 500 stored food points (green) or a full tame inventory.",
-                    "Shared guardian automation: put a drum immediately above OR below the control inventory, with a 3x3 layer of nine chest blocks beneath the lower block. Modded chests are supported.",
+                    "Shared guardian automation: build a flat 3x3 layer of nine drums. Put one control inventory directly above OR below its center drum. Forge item handlers (including sided machines) and ordinary containers are supported; the inventory must accept the rule drums and papers. No inventory-block foundation is needed.",
                     "Each owner can add a drum named <owner>:<group> and their bound papers to the same shared inventory. Papers become permanent guardian controls and can no longer transfer ownership. Anyone holding one can manage its tame.",
                     "Redstone ON at the drum or top chest deploys linked tames; OFF releases them and sends them home sitting. Bodyguards are skipped. Other guardian posts can be overridden. A recall withdraws the tame from ranked; an active ranked round is forfeited before deployment.",
                     "Add another drum named 'protect:<playername>' to keep this chest's deployed guardians active while that player is online, regardless of distance. Removing the drum or paper, or switching power OFF, ends that override.",
+                    "A drum named 'bodyguard <tameName>:<playername>' makes that linked guardian follow and protect the named online player. It remains a guardian. The highest-level three across all chests protect each player; extras guard normally. Normal roster bodyguards are separate. Offline players, removed rules and power OFF end the escort.",
                     "Right click ground with a guardian paper to set its post; sneak right click to deploy; punch a block/entity to release it and tphome. Remove the paper to stop chest control. /tames chestxdrum status explains missing base chests, labels, papers or posts.",
                     "The top chest still feeds nearby tames normally, and linked assigned guardians can receive its food at any distance or dimension, including while unloaded. The setup itself must be loaded and not overlap another active chest x drum.",
                     "Automation scans at most one setup and processes at most one tame per tick. Rapid signal changes coalesce to the latest state; removed papers cancel queued moves."
@@ -23392,12 +23393,33 @@ public class TameCommands {
                 destination.pos.y, destination.pos.z, tame.getYRot(), tame.getXRot(), data, true);
     }
 
+    private static boolean moveChestBodyguard(LivingEntity tame,TameData data,SpawnTarget destination) {
+        if(destination==null)return false;
+        if(!com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(destination.level,destination.pos)
+                || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(tame.getServer(),data))return false;
+        LivingEntity moved=transferGuardian(tame,data,destination);if(moved==null)return false;
+        applyLivingMovementOverride(moved,data,MovementOrder.GUARDIAN);return true;
+    }
+
+    public static boolean followChestBodyguardPlayer(LivingEntity tame,TameData data,ServerPlayer player) {
+        return moveChestBodyguard(tame,data,new SpawnTarget(player.serverLevel(),player.position(),player.getYRot(),player.getXRot()));
+    }
+
+    public static boolean returnChestBodyguardToPost(LivingEntity tame,TameData data) {
+        SpawnTarget post=spawnTargetFromGuardianHome(tame.getServer(),data);if(post==null)return false;
+        if(data.guardianResting)return true;
+        if(tame.level()==post.level&&tame.distanceToSqr(post.pos)<=1.0D)return true;
+        if(tame instanceof net.minecraft.world.entity.Mob mob)mob.setTarget(null);
+        return moveChestBodyguard(tame,data,post);
+    }
+
     /** A pending dawn return survives combat and saves, but never overrides rest or duel rules. */
     public static boolean processGuardianMorningReturn(LivingEntity tame, TameData data) {
         if (tame == null || data == null || !tame.isAlive() || tame.getServer() == null || data.dead || data.stored
                 || data.rosterBodyguard || !data.hasHome || data.movementOrder != 3 || data.guardianResting
                 || isDuelLocked(data.uuid)) return false;
         MinecraftServer server = tame.getServer();
+        if(com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.hasAssignment(server,data))return false;
         long day = Math.floorDiv(server.overworld().getDayTime(), 24000L);
         if (data.guardianMorningReturnDay == Long.MIN_VALUE || day < data.guardianMorningReturnDay) {
             data.guardianMorningReturnDay = day;
@@ -23449,7 +23471,9 @@ public class TameCommands {
                         && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) cacheGuardianRestHome(tame, data);
                 return false;
             }
-            SpawnTarget post = spawnTargetFromGuardianHome(server, data);
+            var protectedPlayer=com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.protectedPlayer(server,data);
+            SpawnTarget post = protectedPlayer==null?spawnTargetFromGuardianHome(server, data)
+                    :new SpawnTarget(protectedPlayer.serverLevel(),protectedPlayer.position(),protectedPlayer.getYRot(),protectedPlayer.getXRot());
             if (post == null || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.prepareDestination(post.level, post.pos)
                     || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.tryTransition(server, data)) return true;
             LivingEntity moved = transferGuardian(tame, data, post);

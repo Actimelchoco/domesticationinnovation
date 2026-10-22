@@ -21,14 +21,13 @@ public class GenericGuardianInventoryRegression {
         public int getSlotLimit(int slot){return delegate.getSlotLimit(slot);}
         public boolean isItemValid(int slot,ItemStack stack){return delegate.isItemValid(slot,stack);}
     };}
-    @GameTest(template="empty") public static void barrelsAndFurnacesAreValidControllerAndBase(GameTestHelper h){
+    @GameTest(template="empty") public static void barrelControllerUsesSameDrumFormation(GameTestHelper h){
         try(var f=new GuardianChestRegression.Fixture(h)){
             var label=f.container.getItem(0).copy();var paper=f.paper.copy();
-            for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)h.getLevel().setBlock(f.chest.below(2).offset(x,0,z),Blocks.FURNACE.defaultBlockState(),3);
             h.getLevel().setBlock(f.chest,Blocks.BARREL.defaultBlockState(),3);
             var container=(BarrelBlockEntity)h.getLevel().getBlockEntity(f.chest);container.setItem(0,label);container.setItem(1,paper);
             var setup=LoadedChestDrums.chestAtDrum(h.getLevel(),f.chest.below());
-            h.assertTrue(setup!=null&&setup.pos().equals(f.chest)&&GuardianChestAutomation.foundationCount(setup)==9,"barrel control and nine non-chest inventories are recognized");
+            h.assertTrue(setup!=null&&setup.pos().equals(f.chest)&&GuardianChestAutomation.foundationCount(setup)==9,"barrel control and nine drums are recognized");
             GuardianChestAutomation.scan(setup);
             h.assertTrue(GuardianChestAutomation.isPaper(container.getItem(1)),"barrel's real inventory persists converted paper");
         }h.succeed();

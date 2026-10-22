@@ -58,7 +58,9 @@ public final class FriendlyOwnerProtection {
         if (target == null || target.level().isClientSide || source == null) return false;
         // Resolve the actual fighter, never just its owner: spectators and
         // nonparticipating pets must retain friendship protection.
-        if (TameDuelManager.areDuelOpponents(combatant(source), target.getUUID())) return false;
+        UUID attacker = combatant(source);
+        if (TameDuelManager.areDuelOpponents(attacker, target.getUUID())) return false;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.protects(attacker,target)) return true;
         UUID victimOwner = owner(target);
         return victimOwner != null && friendly(owner(source), victimOwner);
     }

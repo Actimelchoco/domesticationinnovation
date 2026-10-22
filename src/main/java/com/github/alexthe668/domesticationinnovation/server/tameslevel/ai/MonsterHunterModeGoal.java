@@ -38,6 +38,7 @@ final class MonsterHunterModeGoal extends AbstractModeGoal {
         if (!(tame.level() instanceof ServerLevel level)) return;
         TameData data = TameGoalSupport.data(tame);
         if (data == null) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.hasAssignment(level.getServer(), data)) return;
 
         int hurtTimestamp = tame.getLastHurtByMobTimestamp();
         LivingEntity attacker = tame.getLastHurtByMob();
