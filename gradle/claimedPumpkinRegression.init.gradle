@@ -1,0 +1,24 @@
+allprojects {
+    afterEvaluate {
+        def modsDir = project.file('C:/Users/bruns/Downloads/serverpack-slim-6.6.5b3hf/mods')
+        repositories.flatDir { dirs project.file('build/claimed-fire'), modsDir }
+        ['ftb-chunks-forge-2001.3.8-displays-empty-hand-only-pumpkin-claims-fix',
+         'ftb-library-forge-2001.2.13', 'ftb-teams-forge-2001.3.2', 'architectury-9.2.14-forge',
+         'born_in_chaos_[Forge]1.20.1_1.7.5', 'geckolib-forge-1.20.1-4.8.4'].each {
+            dependencies.add('implementation', fg.deobf("claim-pumpkin-test:${it}:v1"))
+        }
+        sourceSets.main.java.srcDir('src/test/claimedpumpkin/java')
+        sourceSets.main.resources.srcDir('src/test/claimedfire/resources')
+        minecraft.runs { gameTestServer {
+            workingDirectory project.file('build/claimed-pumpkin-gametest')
+            property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+            arg '-mixin.config=citadel.mixins.json'
+            arg '-mixin.config=domesticationinnovation.mixins.json'
+            arg '-mixin.config=ftbchunks-claim-fire.mixins.json'
+            arg '-mixin.config=ftbchunks-claim-pumpkin.mixins.json'
+            mods { domesticationinnovation { source sourceSets.main } }
+        } }
+    }
+}

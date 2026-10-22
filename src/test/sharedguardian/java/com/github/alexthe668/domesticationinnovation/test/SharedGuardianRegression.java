@@ -91,11 +91,12 @@ public class SharedGuardianRegression {
             var data=new TameData(wolf);data.name="OtherOwnerGuard";TameRegistry.register(data);LoadedTameIndex.refresh(wolf);data.guardianRestHome=f.data.guardianRestHome.copy();
             try{
                 TameCommands.setGuardianPaperPost(data,"otherpost",h.getLevel(),f.post.south(3));
-                f.container.setItem(2,label(second,"otherpost"));f.container.setItem(3,deed(wolf));f.scan();
-                h.assertTrue(GuardianChestAutomation.isPaper(f.container.getItem(3))&&messages.stream().anyMatch(m->m.contains("Ready")),"other owner's paper is converted and its owner receives readiness feedback");
+                f.container.setItem(2,label(second,"otherpost"));f.container.setItem(3,deed(wolf));messages.clear();f.scan();
+                h.assertTrue(GuardianChestAutomation.isPaper(f.container.getItem(3))&&messages.isEmpty(),"other owner's paper is converted without automatic chat: "+messages);
                 h.assertTrue(GuardianChestAutomation.status(new LoadedChestDrums.Status(f.setup,null)).contains("2 owner/group"),"status explains both shared owner/group labels");
                 f.power(true);f.tick();f.tick();h.assertTrue(f.data.hasHome&&data.hasHome&&wolf.blockPosition().equals(f.post.south(3)),"one signal deploys both owners to their separate posts");
                 f.power(false);f.tick();f.tick();h.assertTrue(!f.data.hasHome&&!data.hasHome,"one falling edge releases both owners' guardians");
+                h.assertTrue(messages.isEmpty(),"automatic deployments and recalls remain silent");
             }finally{players(h).remove(second.getUUID());TameRegistry.remove(wolf.getUUID());wolf.discard();}
         }h.succeed();
     }
@@ -112,14 +113,14 @@ public class SharedGuardianRegression {
             h.assertTrue(f.owner.getUUID().equals(f.data.ownerUUID)&&f.owner.getUUID().equals(TameEntityAdapter.ownerUuid(f.wolf))&&GuardianChestAutomation.isPaper(f.paper),"management never transfers ownership or consumes the paper");
         }h.succeed();
     }
-    @GameTest(template="empty") public static void invalidBaseAndMissingPostsProduceUsefulThrottledFeedback(GameTestHelper h)throws Exception{
+    @GameTest(template="empty") public static void automaticChestChangesStaySilentAndManualStatusRemainsAvailable(GameTestHelper h)throws Exception{
         try(var f=new GuardianChestRegression.Fixture(h)){
             List<String> messages=new ArrayList<>();var owner=observer(f,f.owner.getUUID(),f.owner.getGameProfile().getName(),messages);players(h).put(owner.getUUID(),owner);
             try{
                 h.getLevel().setBlock(f.chest.below(2).east(),Blocks.AIR.defaultBlockState(),3);f.scan();f.scan();
-                h.assertTrue(messages.size()==1&&messages.get(0).contains("8/9"),"missing base explanation is delivered once, without per-tick chat spam");
+                h.assertTrue(messages.isEmpty(),"invalid base scans do not send automatic chat");
                 h.getLevel().setBlock(f.chest.below(2).east(),Blocks.CHEST.defaultBlockState(),3);GuardianChestAutomation.stop(null);f.scan();
-                h.assertTrue(messages.stream().anyMatch(m->m.contains("Ready")&&m.contains("Converted")),"successful activation and permanent paper conversion are announced");
+                h.assertTrue(messages.isEmpty()&&GuardianChestAutomation.isPaper(f.container.getItem(1)),"paper conversion succeeds silently");
                 f.data.guardianSetAnchors.clear();f.container.setItem(2,new ItemStack(DIItemRegistry.DEED_OF_OWNERSHIP.get()));
                 String status=GuardianChestAutomation.status(new LoadedChestDrums.Status(f.setup,null));
                 h.assertTrue(status.contains("missing posts 1")&&status.contains("unbound papers 1"),"status distinguishes missing saved posts from unbound adoption papers");

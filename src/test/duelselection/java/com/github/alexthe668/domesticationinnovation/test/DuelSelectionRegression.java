@@ -111,8 +111,9 @@ public class DuelSelectionRegression {
     @SuppressWarnings("unchecked")
     public static void editableRosterAndExplicitReady(GameTestHelper helper) throws Exception {
         List<String> firstMessages=new ArrayList<>(),secondMessages=new ArrayList<>();
+        List<Component> rendered=new ArrayList<>();
         var first = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "DuelDraftA")) {
-            @Override public void sendSystemMessage(Component message){firstMessages.add(message.getString());}
+            @Override public void sendSystemMessage(Component message){firstMessages.add(message.getString());rendered.add(message.copy());}
         };
         var second = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "DuelDraftB")) {
             @Override public void sendSystemMessage(Component message){secondMessages.add(message.getString());}
@@ -137,14 +138,15 @@ public class DuelSelectionRegression {
             wolves.addAll(List.of(alpha,beta,outsider));
             firstMessages.clear();secondMessages.clear();
             check(dispatcher.execute("tames duel selection",source)==1,"empty rosters can be viewed");
-            check(firstMessages.equals(List.of("DuelDraftA: player","DuelDraftB: player")),"empty rosters display both players without instructions: "+firstMessages);
+            check(firstMessages.equals(List.of("DuelDraftA","DuelDraftB")),"empty rosters display both players without instructions: "+firstMessages);
+            check(rendered.get(rendered.size()-2).getStyle().getColor().equals(net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.BLUE)) && rendered.get(rendered.size()-1).getStyle().getColor().equals(net.minecraft.network.chat.TextColor.fromLegacyFormat(net.minecraft.ChatFormatting.RED)),"selection rows match blue/red team colors");
             check(dispatcher.execute("tames duel start",source)==1 && (boolean)field(draft,"ready") && (boolean)field(draft,"includeSelf"),"empty start acts as addMyself and readies");
             check(dispatcher.execute("tames duel remove myself",source)==1,"clear explicit self before picking tames");
             firstMessages.clear();secondMessages.clear();
             check(dispatcher.execute("tames duel add group Pack",source)==1 && ids.size()==2,"group add snapshots participants");
-            check(firstMessages.size()==2 && firstMessages.get(0).startsWith("DuelDraftA: ")
+            check(firstMessages.size()==2 && firstMessages.get(0).startsWith("DuelDraftA, ")
                     && firstMessages.get(0).contains("Alpha") && firstMessages.get(0).contains("Beta")
-                    && firstMessages.get(1).equals("DuelDraftB: player") && firstMessages.equals(secondMessages),
+                    && firstMessages.get(1).equals("DuelDraftB") && firstMessages.equals(secondMessages),
                     "edit sends only both current rosters, once, to both players");
             check(dispatcher.execute("tames duel add name Alpha",source)==1 && ids.size()==2,"repeated add deduplicates");
             var suggestions=dispatcher.getCompletionSuggestions(dispatcher.parse("tames duel remove ",source)).join().getList().stream().map(s->s.getText()).collect(Collectors.toSet());
@@ -165,7 +167,7 @@ public class DuelSelectionRegression {
             check(dispatcher.execute("tames duel add group Pack",source)==1,"re-add group");
             check(dispatcher.execute("tames duel remove group Pack",source)==1 && ids.isEmpty(),"group remove");
             check((boolean)field(otherDraft,"ready"),"multiple own edits preserve opponent confirmation");
-            check(firstMessages.get(firstMessages.size()-2).equals("DuelDraftA: player"),"removing last tame displays the player");
+            check(firstMessages.get(firstMessages.size()-2).equals("DuelDraftA"),"removing last tame displays the player");
             check(dispatcher.execute("tames duel addMyself",source)==1,"self-only team allowed");
             check(!TameDuelManager.isOwnerInDuel(first.getUUID()),"editing both teams never auto starts");
             check(dispatcher.execute("tames duel start",source)==1,"confirm first");
