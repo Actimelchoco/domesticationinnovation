@@ -37,12 +37,38 @@ public final class GuardianChestAutomation {
         LoadedChestDrums.Chest chest;
         Set<Config> configs=Set.of();
         boolean powered;
+        Set<String> protectPlayers=Set.of();
+        int nextProtectCheck=Integer.MIN_VALUE;
+        boolean protectOnline;
         final Map<UUID,Member> members=new LinkedHashMap<>();
         Setup(Key key){this.key=key;}
     }
     private record Action(Setup setup, Config config, UUID identity, UUID token, boolean deploy, int expires) {}
     private record Manual(UUID caller,UUID owner,UUID identity,String group,boolean deploy,int expires) {}
     private static final Map<Key,Setup> SETUPS=new LinkedHashMap<>();
+    private static final Map<UUID,Set<Setup>> ACTIVITY_LINKS=new HashMap<>();
+
+    /** Indexed by tame; inventory contents are only read by the throttled controller scan. */
+    public static boolean keepsActive(TameData data){
+        if(data==null||!data.hasHome||data.rosterBodyguard)return false;
+        var setups=ACTIVITY_LINKS.get(data.tlId!=null?data.tlId:data.uuid);
+        if(setups==null)return false;
+        for(Setup setup:setups){
+            if(!setup.powered||setup.chest.blockEntity().isRemoved()||setup.protectPlayers.isEmpty())continue;
+            int now=setup.key.level.getServer().getTickCount();
+            if(now>=setup.nextProtectCheck){
+                setup.nextProtectCheck=now+20;
+                setup.protectOnline=setup.protectPlayers.stream().anyMatch(name->setup.key.level.getServer().getPlayerList().getPlayerByName(name)!=null);
+            }
+            if(setup.protectOnline)return true;
+        }
+        return false;
+    }
+
+    private static void unlinkActivity(Setup setup,UUID identity){
+        var links=ACTIVITY_LINKS.get(identity);if(links==null)return;
+        links.remove(setup);if(links.isEmpty())ACTIVITY_LINKS.remove(identity);
+    }
     private static final Map<UUID,Action> AUTHORIZED=new HashMap<>();
     private static final Map<Key,LoadedChestDrums.Chest> SCANS=new LinkedHashMap<>(), DIRTY=new LinkedHashMap<>();
     private static final Map<Key,BlockPos> BLOCKERS=new HashMap<>();
@@ -118,6 +144,7 @@ public final class GuardianChestAutomation {
             if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
             String name=stack.getHoverName().getString();int split=name.indexOf(':');if(split<1)continue;
             String owner=name.substring(0,split).trim().toLowerCase(Locale.ROOT),group=name.substring(split+1).trim().toLowerCase(Locale.ROOT);
+            if(owner.equals("protect"))continue;
             if(!owner.isBlank()&&!group.isBlank()&&group.length()<=128)labels.add(new String[]{owner,group});
         }
         Set<Config> configs=new LinkedHashSet<>();int unresolved=0;
@@ -183,7 +210,7 @@ public final class GuardianChestAutomation {
                 &&powered(setup.chest)==action.deploy&&hasPaper(setup,action.config,action.identity);
     }
     private static void retire(UUID token){Action action=AUTHORIZED.remove(token);if(action!=null){LATEST.remove(action.identity,token);ACTIONS.remove(action.identity,action);}}
-    private static void invalidate(Setup setup){for(Member member:setup.members.values())retire(member.token);setup.members.clear();}
+    private static void invalidate(Setup setup){for(var entry:setup.members.entrySet()){retire(entry.getValue().token);unlinkActivity(setup,entry.getKey());}setup.members.clear();}
     public static String status(LoadedChestDrums.Status status){
         if(!status.active())return "Inactive: overlaps chest x drum at "+status.blocker().toShortString()+".";
         var chest=status.chest();Inspection inspection=inspect(chest);if(!inspection.problem.isBlank())return "Inactive: "+inspection.problem;
@@ -210,6 +237,16 @@ public final class GuardianChestAutomation {
         if(fresh){setup=new Setup(key);SETUPS.put(key,setup);}
         if(setup.chest!=null&&setup.chest.blockEntity()!=chest.blockEntity()){invalidate(setup);fresh=true;}
         setup.chest=chest;setup.configs=inspection.configs;boolean on=powered(chest),edge=!fresh&&on!=setup.powered;setup.powered=on;
+        Set<String> protect=new HashSet<>();
+        for(int slot=0;slot<chest.inventory().getSlots();slot++){
+            var stack=chest.inventory().getStackInSlot(slot);
+            if(!stack.is(DIBlockRegistry.DRUM.get().asItem())||!stack.hasCustomHoverName())continue;
+            String name=stack.getHoverName().getString().trim();int split=name.indexOf(':');
+            if(split>0&&name.substring(0,split).trim().equalsIgnoreCase("protect")){
+                String player=name.substring(split+1).trim();if(!player.isBlank())protect.add(player);
+            }
+        }
+        if(!protect.equals(setup.protectPlayers)){setup.protectPlayers=Set.copyOf(protect);setup.nextProtectCheck=Integer.MIN_VALUE;setup.protectOnline=false;}
         Map<UUID,Config> present=new LinkedHashMap<>();Set<UUID> conflicts=new HashSet<>();
         for(int slot=0;slot<chest.inventory().getSlots();slot++){
             ItemStack stack=chest.inventory().getStackInSlot(slot);Config config=configForPaper(stack,setup.configs);if(config==null)continue;
@@ -218,9 +255,10 @@ public final class GuardianChestAutomation {
             Config old=present.putIfAbsent(id,config);if(old!=null&&!old.equals(config))conflicts.add(id);
         }
         for(UUID conflict:conflicts)present.remove(conflict);
-        for(UUID old:new ArrayList<>(setup.members.keySet()))if(!present.containsKey(old)||!setup.members.get(old).config.equals(present.get(old)))retire(setup.members.remove(old).token);
+        for(UUID old:new ArrayList<>(setup.members.keySet()))if(!present.containsKey(old)||!setup.members.get(old).config.equals(present.get(old))){retire(setup.members.remove(old).token);unlinkActivity(setup,old);}
         for(var entry:present.entrySet()){
             UUID id=entry.getKey();Config config=entry.getValue();boolean added=!setup.members.containsKey(id);
+            ACTIVITY_LINKS.computeIfAbsent(id,ignored->Collections.newSetFromMap(new IdentityHashMap<>())).add(setup);
             if(edge||added){
                 Member old=setup.members.remove(id);if(old!=null)retire(old.token);UUID token=UUID.randomUUID();setup.members.put(id,new Member(config,token));
                 TameData data=TameRegistry.getByTlId(id);
@@ -330,5 +368,5 @@ public final class GuardianChestAutomation {
         for(var iterator=SETUPS.entrySet().iterator();iterator.hasNext();){var entry=iterator.next();if(entry.getKey().level==level){invalidate(entry.getValue());iterator.remove();}}
         SCANS.keySet().removeIf(key->key.level==level);DIRTY.keySet().removeIf(key->key.level==level);BLOCKERS.keySet().removeIf(key->key.level==level);
     }
-    @SubscribeEvent public static void stop(ServerStoppedEvent event){SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
+    @SubscribeEvent public static void stop(ServerStoppedEvent event){ACTIVITY_LINKS.clear();SETUPS.clear();AUTHORIZED.clear();SCANS.clear();DIRTY.clear();BLOCKERS.clear();ACTIONS.clear();LATEST.clear();MANUAL.clear();}
 }

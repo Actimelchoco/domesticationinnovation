@@ -4894,6 +4894,7 @@ public class TameCommands {
     }
 
     public static void enforceGuardianCommandLock(LivingEntity tame, TameData data) {
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.enforceHunterMode(data);
         if (!isAssignedGuardian(data) || data.guardianResting || data.hungerForcedSit || isDuelLocked(data)) return;
         boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit()
                 : tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
@@ -5768,6 +5769,7 @@ public class TameCommands {
                     "Shared guardian automation: put a drum immediately above OR below the control inventory, with a 3x3 layer of nine chest blocks beneath the lower block. Modded chests are supported.",
                     "Each owner can add a drum named <owner>:<group> and their bound papers to the same shared inventory. Papers become permanent guardian controls and can no longer transfer ownership. Anyone holding one can manage its tame.",
                     "Redstone ON at the drum or top chest deploys linked tames; OFF releases them and sends them home sitting. Bodyguards are skipped. Other guardian posts can be overridden. A recall withdraws the tame from ranked; an active ranked round is forfeited before deployment.",
+                    "Add another drum named 'protect:<playername>' to keep this chest's deployed guardians active while that player is online, regardless of distance. Removing the drum or paper, or switching power OFF, ends that override.",
                     "Right click ground with a guardian paper to set its post; sneak right click to deploy; punch a block/entity to release it and tphome. Remove the paper to stop chest control. /tames chestxdrum status explains missing base chests, labels, papers or posts.",
                     "The top chest still feeds nearby tames normally, and linked assigned guardians can receive its food at any distance or dimension, including while unloaded. The setup itself must be loaded and not overlap another active chest x drum.",
                     "Automation scans at most one setup and processes at most one tame per tick. Rapid signal changes coalesce to the latest state; removed papers cancel queued moves."
@@ -5804,6 +5806,7 @@ public class TameCommands {
                     "'deploy' activates the current guardian locations for the selected tames.",
                     "deployGroup activates saved locations. Release assigned guardians before changing their deployment.",
                     "Assigned guardians ignore movement, mode, teleport and drum commands until explicitly released. Inventory and abilities remain editable.",
+                    "Guardians always use monster_hunter mode. With their owner offline, a nearby player activates them within 20 blocks of the post, or 100 blocks while an FTB teammate is online. A loaded guardian chest's protect drum can keep its deployed guardians active remotely. Hunger rules still apply.",
                     "Guardian groups store per-tame guardian positions under a shared name."
             );
         }
@@ -22511,6 +22514,7 @@ public class TameCommands {
     }
 
     private static void applyLivingMovementOverride(LivingEntity tame, TameData data, MovementOrder order) {
+        if (order == MovementOrder.GUARDIAN && data != null && !data.rosterBodyguard) data.mode = TameMode.MONSTER_HUNTER.id();
         if (tame instanceof TamableAnimal tamable) {
             applyMovementOverride(tamable, order);
             return;
@@ -22570,6 +22574,7 @@ public class TameCommands {
             clearGuardianAnchor(data);
         }
         if (data != null) {
+            if (order == MovementOrder.GUARDIAN && !data.rosterBodyguard) data.mode = TameMode.MONSTER_HUNTER.id();
             data.movementOrder = switch (order) {
                 case FOLLOW -> 0;
                 case SIT -> 1;

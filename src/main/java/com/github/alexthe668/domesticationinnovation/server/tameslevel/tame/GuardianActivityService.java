@@ -30,6 +30,7 @@ import java.util.*;
 /** Nearby players activate ordinary guardians; guard posts never hold chunk tickets. */
 public final class GuardianActivityService {
     public static final double ACTIVATION_RADIUS = 2.0D * TameGoalSupport.MONSTER_HUNTER_DETECTION_RADIUS;
+    public static final double TEAM_ACTIVATION_RADIUS = 100.0D;
     private record ChunkTicket(ResourceKey<Level> dimension, int x, int z) { }
     private record Proximity(int nextTick, String dimension, int x, int y, int z, boolean nearby) { }
     private record PlayerGrid(ResourceKey<Level> dimension, Long2ObjectMap<List<ServerPlayer>> cells) { }
@@ -62,9 +63,16 @@ public final class GuardianActivityService {
 
     private GuardianActivityService() { }
 
+    public static void enforceHunterMode(TameData data) {
+        if (data != null && data.hasHome && !data.rosterBodyguard && data.mode != TameMode.MONSTER_HUNTER.id()) {
+            data.mode = TameMode.MONSTER_HUNTER.id();
+            TameRegistry.markDirty();
+        }
+    }
+
     private static void useServer(MinecraftServer server) {
         if (activeServer == server) return;
-        PROXIMITY.clear(); PLAYERS.clear(); nextPlayerSnapshotTick = Integer.MIN_VALUE;
+        PROXIMITY.clear(); PLAYERS.clear(); GuardianTeamPresence.clear(); nextPlayerSnapshotTick = Integer.MIN_VALUE;
         budget = new GuardianWorkBudget(); activeServer = server;
     }
 
@@ -86,6 +94,7 @@ public final class GuardianActivityService {
         if (now < nextPlayerSnapshotTick) return;
         nextPlayerSnapshotTick = now + 20;
         PLAYERS.clear();
+        GuardianTeamPresence.snapshot(server);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!player.isAlive() || player.isSpectator()) continue;
             String dimension = player.level().dimension().location().toString();
@@ -96,27 +105,30 @@ public final class GuardianActivityService {
         }
     }
 
-    /** Spatial query of at most 3x3 player cells, cached for two seconds. No entity scans. */
+    /** Cached spatial query; the larger team radius also expands the cell bounds. */
     public static boolean hasNearbyPlayer(MinecraftServer server, TameData data) {
         if (!data.hasHome) return false;
         useServer(server);
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.keepsActive(data)) return true;
         int now = server.getTickCount();
         Proximity old = PROXIMITY.get(data);
         if (old != null && now < old.nextTick && Objects.equals(old.dimension, data.homeDimension)
                 && old.x == data.homeX && old.y == data.homeY && old.z == data.homeZ) return old.nearby;
         snapshotPlayers(server);
         boolean nearby = false;
+        double radius = GuardianTeamPresence.hasOnlineTeammate(data.ownerUUID) ? TEAM_ACTIVATION_RADIUS : ACTIVATION_RADIUS;
         PlayerGrid grid = PLAYERS.get(data.homeDimension);
         Long2ObjectMap<List<ServerPlayer>> cells = grid == null ? null : grid.cells;
         int centerX = Math.floorDiv(data.homeX, 32), centerZ = Math.floorDiv(data.homeZ, 32);
-        outer: for (int x = centerX - 1; cells != null && x <= centerX + 1; x++) for (int z = centerZ - 1; z <= centerZ + 1; z++) {
+        int reach = (int)Math.ceil(radius / 32.0D);
+        outer: for (int x = centerX - reach; cells != null && x <= centerX + reach; x++) for (int z = centerZ - reach; z <= centerZ + reach; z++) {
             List<ServerPlayer> players = cells.get(ChunkPos.asLong(x, z));
             if (players == null) continue;
             for (ServerPlayer player : players) {
                 if (player.isAlive() && !player.isRemoved() && !player.isSpectator()
                         && player.level().dimension().equals(grid.dimension)
                         && player.distanceToSqr(data.homeX + 0.5D, data.homeY, data.homeZ + 0.5D)
-                        <= ACTIVATION_RADIUS * ACTIVATION_RADIUS) { nearby = true; break outer; }
+                        <= radius * radius) { nearby = true; break outer; }
             }
         }
         PROXIMITY.put(data, new Proximity(now + CHECK_INTERVAL, data.homeDimension, data.homeX, data.homeY, data.homeZ, nearby));
@@ -132,6 +144,7 @@ public final class GuardianActivityService {
         Work work = track(data);
         int now = server.getTickCount();
         if (now < work.nextRestCheck) return data.guardianResting;
+        enforceHunterMode(data);
         work.nextRestCheck = now + CHECK_INTERVAL + Math.floorMod(data.uuid.hashCode(), 10);
         if (TameCommands.processGuardianMorningReturn(body, data)) return true;
         boolean resting = TameCommands.processGuardianRest(body, data);
@@ -302,6 +315,7 @@ public final class GuardianActivityService {
         for (UUID id : new ArrayList<>(REST_WALK_TICKETS.keySet())) syncTickets(id, Set.of());
         expireWakeTickets(server, true);
         REST_WALK_TICKETS.clear(); REST_WALK_CENTERS.clear(); PROXIMITY.clear(); PLAYERS.clear(); WORK.clear(); cursor = null;
+        GuardianTeamPresence.clear();
         activeServer = server; nextPlayerSnapshotTick = Integer.MIN_VALUE; budget = new GuardianWorkBudget();
         for (TameData data : TameRegistry.TAMES.values()) remember(data);
     }
@@ -320,6 +334,7 @@ public final class GuardianActivityService {
             if (TameRegistry.get(data.uuid) != data || !data.hasHome) { forget(data); continue; }
             if (now < work.nextMaintenance) continue;
             work.nextMaintenance = now + CHECK_INTERVAL;
+            enforceHunterMode(data);
             boolean guardian = !data.rosterBodyguard && (data.movementOrder == 3 || data.guardianResting);
             if (guardian && (data.guardianMorningReturnDay == Long.MIN_VALUE || day < data.guardianMorningReturnDay)) {
                 data.guardianMorningReturnDay = day;
@@ -360,6 +375,7 @@ public final class GuardianActivityService {
         for (UUID id : new ArrayList<>(REST_WALK_TICKETS.keySet())) syncTickets(id, Set.of());
         expireWakeTickets(event.getServer(), true);
         REST_WALK_TICKETS.clear(); REST_WALK_CENTERS.clear(); PROXIMITY.clear(); PLAYERS.clear(); WORK.clear(); cursor = null;
+        GuardianTeamPresence.clear();
         activeServer = null; nextPlayerSnapshotTick = Integer.MIN_VALUE; budget = new GuardianWorkBudget();
     }
 }

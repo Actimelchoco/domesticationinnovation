@@ -1,0 +1,7 @@
+// Use alongside -I gradle/sharedGuardianRegression.init.gradle.
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/guardianactivation/java')
+    ['ftb-library-forge-2001.2.13', 'ftb-teams-forge-2001.3.2', 'architectury-9.2.14-forge'].each {
+        dependencies.add('implementation', fg.deobf("guardian-activation-test:${it}:v1"))
+    }
+} }
