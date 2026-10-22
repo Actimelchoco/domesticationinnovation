@@ -4896,7 +4896,7 @@ public class TameCommands {
     public static void enforceGuardianCommandLock(LivingEntity tame, TameData data) {
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.enforceHunterMode(data);
         if (!isAssignedGuardian(data) || data.guardianResting || data.hungerForcedSit || isDuelLocked(data)) return;
-        boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit()
+        boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit() || animal.isInSittingPose()
                 : tame instanceof ModifedToBeTameable modified && modified.isStayingStill();
         boolean nativeChanged = false;
         if (tame instanceof IComandableMob commandable) {

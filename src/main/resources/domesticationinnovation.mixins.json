@@ -32,6 +32,7 @@
     "FloatGoalMixin",
     "FollowOwnerGoalMixin",
     "FollowParentGoalMixin",
+    "GuardianSitGoalMixin",
     "FoxMixin",
     "FrogAiMixin",
     "FrogAttackablesSensorMixin",
