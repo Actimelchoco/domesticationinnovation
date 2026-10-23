@@ -15,6 +15,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.DragonFireball;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 public class TimedTameDragonFireball extends DragonFireball {
@@ -43,9 +44,17 @@ public class TimedTameDragonFireball extends DragonFireball {
 
     @Override
     protected void onHit(HitResult result) {
-        if (this.level().isClientSide || result.getType() == HitResult.Type.MISS) {
+        if (this.level().isClientSide || this.isRemoved() || result.getType() == HitResult.Type.MISS) {
             return;
         }
+
+        // Projectile collision callbacks run before movement reaches the hit point.
+        // Place splash, breath cloud, sound and particles at the struck surface.
+        Vec3 impact = result.getLocation();
+        if (result instanceof BlockHitResult blockHit) {
+            impact = impact.add(Vec3.atLowerCornerOf(blockHit.getDirection().getNormal()).scale(0.05D));
+        }
+        this.setPos(impact.x, impact.y, impact.z);
 
         LivingEntity shooter = this.getOwner() instanceof LivingEntity living ? living : null;
         float damage = DIRECT_HIT_DAMAGE;

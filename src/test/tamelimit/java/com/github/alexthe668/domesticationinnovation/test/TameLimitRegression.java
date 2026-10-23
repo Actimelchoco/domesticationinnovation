@@ -25,9 +25,9 @@ public final class TameLimitRegression {
         data.level = 10; data.abilities.add("arrow_shot"); data.abilityLevels.put("arrow_shot",1);
         return data;
     }
-    private static List<TameData> eleven(UUID owner) {
+    private static List<TameData> overLimit(UUID owner) {
         List<TameData> rows = new ArrayList<>();
-        for (int i=0;i<11;i++) { TameData data = row(owner, "minecraft:wolf", i+1); TameRegistry.register(data); rows.add(data); }
+        for (int i=0;i<101;i++) { TameData data = row(owner, "minecraft:wolf", i+1); TameRegistry.register(data); rows.add(data); }
         return rows;
     }
     private static void cleanup(List<TameData> rows) { rows.forEach(data -> TameRegistry.remove(data.uuid)); }
@@ -48,7 +48,7 @@ public final class TameLimitRegression {
     @GameTest(template="empty")
     public static void untrainedTamesDoNotConsumeSlotsOrKeepReleaseTimers(GameTestHelper h) {
         var player=FakePlayerFactory.get(h.getLevel(),new GameProfile(UUID.randomUUID(),"LimitTraining"));
-        List<TameData> rows=eleven(player.getUUID());TameData extra=rows.get(10);
+        List<TameData> rows=overLimit(player.getUUID());TameData extra=rows.get(100);
         try {
             TameLimitService.advanceOnlineOwner(h.getLevel().getServer(),player);
             check(extra.limitOnlineTicks==20,"qualified extra starts grace");
@@ -67,13 +67,16 @@ public final class TameLimitRegression {
     }
 
     @GameTest(template="empty")
-    public static void perTypeOldestTenAreProtected(GameTestHelper h) {
-        UUID owner = UUID.randomUUID(); List<TameData> rows = eleven(owner);
+    public static void oldestHundredAcrossTypesAreProtected(GameTestHelper h) {
+        UUID owner = UUID.randomUUID(); List<TameData> rows = overLimit(owner);
         try {
-            TameData cat = row(owner,"minecraft:cat",12); rows.add(cat); TameRegistry.register(cat);
+            rows.get(100).type = "minecraft:cat";
             List<TameData> extras = TameLimitService.excess(TameRegistry.getOwned(owner));
-            check(extras.size()==1 && extras.get(0)==rows.get(10), "only the eleventh wolf is excess; cat has its own limit");
-            check(TameLimitService.excess(TameRegistry.getOwned(UUID.randomUUID())).isEmpty(),"owners are independent");
+            check(extras.size()==1 && extras.get(0)==rows.get(100), "101st tame is excess across different types");
+            check(TameLimitService.excess(rows.subList(0,100)).isEmpty(), "exactly 100 tames are allowed");
+            TameData other = row(UUID.randomUUID(),"minecraft:wolf",102);
+            List<TameData> mixed = new ArrayList<>(rows); mixed.add(other);
+            check(TameLimitService.excess(mixed).equals(extras), "other owners have independent allowances");
         } finally { cleanup(rows); }
         h.succeed();
     }
@@ -81,16 +84,16 @@ public final class TameLimitRegression {
     @GameTest(template="empty")
     public static void onlineGracePersistsAndExpiresAtTenMinutes(GameTestHelper h) {
         var player = FakePlayerFactory.get(h.getLevel(),new GameProfile(UUID.randomUUID(),"LimitTimer"));
-        List<TameData> rows = eleven(player.getUUID()); TameData extra = rows.get(10);
+        List<TameData> rows = overLimit(player.getUUID()); TameData extra = rows.get(100);
         try {
             for(int i=0;i<300;i++) TameLimitService.advanceOnlineOwner(h.getLevel().getServer(),player);
             check(extra.limitOnlineTicks==6000,"five online minutes counted");
-            extra = TameData.fromTag(extra.toTag()); rows.set(10,extra); TameRegistry.register(extra);
+            extra = TameData.fromTag(extra.toTag()); rows.set(100,extra); TameRegistry.register(extra);
             for(int i=0;i<299;i++) TameLimitService.advanceOnlineOwner(h.getLevel().getServer(),player);
             check(TameRegistry.get(extra.uuid)!=null && extra.limitOnlineTicks==11980,"no early release after saved-record reload");
             TameLimitService.advanceOnlineOwner(h.getLevel().getServer(),player);
             check(TameRegistry.get(extra.uuid)==null,"removed exactly at ten online minutes");
-            check(TameRegistry.getOwned(player.getUUID()).size()==10,"owner index has ten entries");
+            check(TameRegistry.getOwned(player.getUUID()).size()==100,"owner index has 100 entries");
         } finally { cleanup(rows); }
         h.succeed();
     }
@@ -98,7 +101,7 @@ public final class TameLimitRegression {
     @GameTest(template="empty")
     public static void freeingAPlaceCancelsTheGraceTimer(GameTestHelper h) {
         var player = FakePlayerFactory.get(h.getLevel(),new GameProfile(UUID.randomUUID(),"LimitPlace"));
-        List<TameData> rows=eleven(player.getUUID()); TameData extra=rows.get(10);
+        List<TameData> rows=overLimit(player.getUUID()); TameData extra=rows.get(100);
         try {
             TameLimitService.advanceOnlineOwner(h.getLevel().getServer(),player);
             check(extra.limitOnlineTicks==20,"extra timer started");
@@ -112,7 +115,7 @@ public final class TameLimitRegression {
 
     @GameTest(template="empty")
     public static void offlineTimeDoesNotAdvanceAndTransferStartsFresh(GameTestHelper h) {
-        UUID owner=UUID.randomUUID(); List<TameData> rows=eleven(owner); TameData extra=rows.get(10);
+        UUID owner=UUID.randomUUID(); List<TameData> rows=overLimit(owner); TameData extra=rows.get(100);
         try {
             extra.limitOnlineTicks=6000;extra.limitWarned=true;
             for(int i=0;i<600;i++) TameLimitService.advanceOnlinePlayers(h.getLevel().getServer());

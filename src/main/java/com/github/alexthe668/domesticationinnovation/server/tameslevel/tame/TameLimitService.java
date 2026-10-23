@@ -27,7 +27,7 @@ import java.util.*;
 /** Online-time accounting never loads chunks. Wild ability records live on the entity, not in the tame registry. */
 @Mod.EventBusSubscriber(modid = DomesticationMod.MODID)
 public final class TameLimitService {
-    public static final int MAX_PER_TYPE = 10;
+    public static final int MAX_PER_OWNER = 100;
     public static final int GRACE_TICKS = 10 * 60 * 20;
     public static final String WILD = "TLReleasedHunter";
     private static final String RECORD = "TLReleasedHunterData";
@@ -73,14 +73,14 @@ public final class TameLimitService {
 
     /** Returns newest qualifying excess entries; older records use stable UUID ordering. */
     public static List<TameData> excess(List<TameData> records) {
-        Map<String, List<TameData>> types = new HashMap<>();
+        Map<UUID, List<TameData>> owners = new HashMap<>();
         for (TameData data : records) if (countsTowardLimit(data) && data.ownerUUID != null)
-            types.computeIfAbsent(data.type, ignored -> new ArrayList<>()).add(data);
+            owners.computeIfAbsent(data.ownerUUID, ignored -> new ArrayList<>()).add(data);
         List<TameData> result = new ArrayList<>();
-        for (List<TameData> type : types.values()) {
-            type.sort(Comparator.comparingLong((TameData data) -> data.limitRegisteredAt)
+        for (List<TameData> owned : owners.values()) {
+            owned.sort(Comparator.comparingLong((TameData data) -> data.limitRegisteredAt)
                     .thenComparing(data -> data.ensureTlId().toString()));
-            if (type.size() > MAX_PER_TYPE) result.addAll(type.subList(MAX_PER_TYPE, type.size()));
+            if (owned.size() > MAX_PER_OWNER) result.addAll(owned.subList(MAX_PER_OWNER, owned.size()));
         }
         return result;
     }
@@ -124,11 +124,11 @@ public final class TameLimitService {
             if (data.limitOnlineTicks >= GRACE_TICKS && releases < 4) {
                 release(server, data);
                 releases++;
-                owner.sendSystemMessage(Component.literal(data.name + " exceeded the per-type tame limit and is now wild.")
+                owner.sendSystemMessage(Component.literal(data.name + " exceeded the tame limit and is now wild.")
                         .withStyle(ChatFormatting.RED));
             }
         }
-        if (warnings > 0) owner.sendSystemMessage(Component.literal(warnings + " trained creature(s) exceed the limit of 10 per type (level 10+ with an ability or attribute upgrade): "
+        if (warnings > 0) owner.sendSystemMessage(Component.literal(warnings + " trained creature(s) exceed the limit of 100 total per player (level 10+ with an ability or attribute upgrade): "
                 + String.join(", ", examples) + (warnings > examples.size() ? ", ..." : "")
                 + ". Make room within 10 minutes of online time or they become wild monster hunters.")
                 .withStyle(ChatFormatting.GOLD));
