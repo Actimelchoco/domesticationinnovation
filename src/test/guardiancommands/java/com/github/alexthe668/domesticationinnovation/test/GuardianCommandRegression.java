@@ -37,7 +37,7 @@ public class GuardianCommandRegression {
         wolf.setPos(owner.getX()+8,owner.getY(),owner.getZ());
         if(loaded)helper.getLevel().addFreshEntity(wolf);
         TameData data=new TameData(wolf);data.name=name;data.group="watch";data.hungerSaturation=500;
-        data.hasHome=true;data.movementOrder=3;data.homeDimension=helper.getLevel().dimension().location().toString();
+        data.hasHome=true;data.movementOrder=3;data.mode=TameMode.MONSTER_HUNTER.id();data.homeDimension=helper.getLevel().dimension().location().toString();
         data.homeX=wolf.blockPosition().getX();data.homeY=wolf.blockPosition().getY();data.homeZ=wolf.blockPosition().getZ();
         TameRegistry.register(data);if(loaded)LoadedTameIndex.refresh(wolf);return wolf;
     }
@@ -55,7 +55,7 @@ public class GuardianCommandRegression {
         var data=TameRegistry.get(guard.getUUID());var other=TameRegistry.get(normal.getUUID());other.hasHome=false;other.movementOrder=0;
         var position=guard.position();int mode=data.mode;
         try{
-            for(String cmd:List.of("sit Locked","follow Locked","wander Locked","tp Locked","tphome Locked","guardian set Locked","movement Locked close","mode Locked aggressive","bodyguard add Locked","guardian clearDeploys Locked")){
+            for(String cmd:List.of("sit Locked","follow Locked","wander Locked","tp Locked","tphome Locked","guardian set Locked","movement Locked close","mode Locked aggressive","guardian clearDeploys Locked")){
                 check(run(helper,owner,cmd)==0,"reject locked command "+cmd);
                 check(data.hasHome&&data.movementOrder==3&&data.mode==mode&&guard.position().equals(position),"preserve duty "+cmd);
             }
@@ -138,7 +138,7 @@ public class GuardianCommandRegression {
         b.hasHome=false;b.rosterBodyguard=true;b.movementOrder=0;n.hasHome=false;s.hasHome=false;s.stored=true;
         BodyguardService.roster(owner).bodyguards.add(b.ensureTlId());
         try{
-            check(suggestions(helper,owner,"bodyguard add ").equals(Set.of("Available","all","name","type","group")),"add suggests only eligible unassigned tames and selection helpers");
+            check(suggestions(helper,owner,"bodyguard add ").equals(Set.of("Available","Post","all","name","type","group")),"add suggests eligible guardians as well as unassigned tames");
             check(suggestions(helper,owner,"bodyguard remove ").equals(Set.of("Escort","all","name","type","group")),"remove suggests only roster members and selection helpers");
             var color=TameCommands.class.getDeclaredMethod("statusColor",TameData.class,boolean.class);color.setAccessible(true);
             var suffix=TameCommands.class.getDeclaredMethod("inactiveSuffix",TameData.class);suffix.setAccessible(true);

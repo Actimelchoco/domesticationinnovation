@@ -1,0 +1,5 @@
+// Use alongside sharedGuardianRegression and guardianActivationRegression init scripts.
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/bodyguardcomposition/java')
+    sourceSets.main.java.srcDir('src/test/guardiancommands/java')
+} }

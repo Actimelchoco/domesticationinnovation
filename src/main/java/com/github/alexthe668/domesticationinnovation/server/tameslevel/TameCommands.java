@@ -4760,9 +4760,9 @@ public class TameCommands {
         Set<UUID> assigned = new HashSet<>(roster.bodyguards);
         Set<String> names = new LinkedHashSet<>(), types = new LinkedHashSet<>(), groups = new LinkedHashSet<>();
         for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
-            if (isDuelLocked(data)) continue;
+            if (isDuelLocked(data) || add && com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) continue;
             boolean member = data.tlId != null && assigned.contains(data.tlId);
-            boolean eligible = add ? !member && !isManualMovementLocked(data) && !data.stored && !data.dead && composition.canAdd(data.type) : member;
+            boolean eligible = add ? !member && !data.rosterBodyguard && !data.stored && !data.dead && composition.canAdd(data.type) : member;
             if (!eligible) continue;
             if (data.name != null && !data.name.isBlank()) names.add(data.name);
             if (data.type != null && !data.type.isBlank()) types.add(data.type);
@@ -4930,6 +4930,7 @@ public class TameCommands {
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
         if (rules) {
             owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <selection>, remove all, info, setRange <1-22>. No roster size cap: all guards must share one entity type, or every guard must have a different type. Dead/stored guards still count for composition."));
+            owner.sendSystemMessage(Component.literal("Adding a guardian replaces its current guarding duty with normal bodyguard duty. Saved guardian deployment groups are retained. Incompatible or locked tames keep their existing assignment."));
             owner.sendSystemMessage(Component.literal("Always bodyguard mode and automatic follow movement; manual movement commands skip roster guards. Inventory, abilities, attributes and other non-movement settings remain editable. Owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
             owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
         }
@@ -4973,7 +4974,7 @@ public class TameCommands {
             if (!add && !member) continue;
             String failure = isDuelLocked(data) ? "That tame is in a duel." : null;
             if (add && failure == null) {
-                if (isAssignedGuardian(data)) failure = movementLockMessage(data);
+                if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) failure = "Hostile Bewereager cannot be controlled.";
                 else if (data.rosterBodyguard || member) failure = "Already a bodyguard.";
                 else if (data.dead || data.stored) failure = "Only living, unstored tames can be added.";
                 else if (!composition.canAdd(data.type)) failure = "Bodyguards must all share one type, or each have a unique type.";

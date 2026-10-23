@@ -43,6 +43,31 @@ public class BodyguardCompositionRegression {
         for(var pet:pets){var live=h.getLevel().getEntity(pet.getUUID());if(live!=null)live.discard();TameRegistry.remove(pet.getUUID());pet.discard();}
     }
     @GameTest(template="empty",batch="bodyguard-composition")
+    public static void addingGuardiansOverridesDutyOnlyAfterCompositionAcceptsThem(GameTestHelper h)throws Exception{
+        var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();
+        try{
+            pets.add(pet(h,owner,EntityType.WOLF,"AlphaGuard","posts"));
+            pets.add(pet(h,owner,EntityType.FOX,"BravoGuard","posts"));
+            pets.add(pet(h,owner,EntityType.WOLF,"ExtraGuard","posts"));
+            for(var body:pets){var data=TameRegistry.get(body.getUUID());data.hasHome=true;data.movementOrder=3;data.guardianResting=true;
+                data.homeDimension=h.getLevel().dimension().location().toString();data.homeX=body.blockPosition().getX();data.homeY=body.blockPosition().getY();data.homeZ=body.blockPosition().getZ();
+                data.guardianSetAnchors.put("saved",new net.minecraft.nbt.CompoundTag());}
+            check(suggest(h,owner,"add ").contains("AlphaGuard"),"guardian is offered for explicit bodyguard promotion");
+            check(run(h,owner,"add AlphaGuard")==1,"single guardian promotion succeeds");
+            check(run(h,owner,"add group posts")==1,"bulk promotion adds compatible interface guardian and skips duplicate type");
+            for(int i=0;i<2;i++){var data=TameRegistry.get(pets.get(i).getUUID());
+                check(data.rosterBodyguard&&!data.hasHome&&!data.guardianResting&&data.movementOrder==0&&data.mode==TameMode.BODYGUARD.id(),"accepted guardian becomes a following normal bodyguard");
+                check(data.guardianSetAnchors.containsKey("saved"),"named deployment groups remain saved");}
+            var rejected=TameRegistry.get(pets.get(2).getUUID());
+            check(rejected.hasHome&&rejected.guardianResting&&!rejected.rosterBodyguard&&rejected.movementOrder==3,"composition rejection preserves guardian assignment");
+            check(run(h,owner,"remove BravoGuard")==1,"remove fox so the remaining wolf composition permits another wolf");
+            rejected.bewereagerState.putBoolean("Active",true);
+            check(!suggest(h,owner,"add ").contains("ExtraGuard")&&run(h,owner,"add ExtraGuard")==0,"hostile transformation lock is not bypassed by guardian override");
+            check(rejected.hasHome&&!rejected.rosterBodyguard,"locked guardian keeps its assignment");
+            rejected.bewereagerState.remove("Active");
+        }finally{clean(h,owner,pets);}h.succeed();
+    }
+    @GameTest(template="empty",batch="bodyguard-composition")
     public static void sameTypeHasNoSizeCapAndAllRemovesDeadMembers(GameTestHelper h)throws Exception{
         var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();
         try{

@@ -18,6 +18,18 @@ public class GuardianChestBodyguardRegression {
         GuardianChestBodyguards.refresh(h.getLevel().getServer());
     }
     static ItemStack drum(String rule){var stack=new ItemStack(DIBlockRegistry.DRUM.get().asItem());stack.setHoverName(Component.literal(rule));return stack;}
+    @GameTest(template="empty") public static void explicitBodyguardAddOverridesChestAndLaterRedstoneCannotReclaimIt(GameTestHelper h)throws Exception {
+        try(var f=new GuardianChestRegression.Fixture(h)){
+            f.power(true);f.tick();f.owner.setPos(f.home.getX()+.5,f.home.getY(),f.home.getZ()+.5);
+            SharedGuardianRegression.players(h).put(f.owner.getUUID(),f.owner);
+            try{
+                int result=h.getLevel().getServer().getCommands().getDispatcher().execute("tames bodyguard add ChestWolf",f.owner.createCommandSourceStack());
+                h.assertTrue(result==1&&f.data.rosterBodyguard&&!f.data.hasHome&&f.data.movementOrder==0,"explicit command replaces guardian duty with normal bodyguard duty");
+                f.power(false);f.tick();f.power(true);f.tick();
+                h.assertTrue(f.data.rosterBodyguard&&!f.data.hasHome&&f.data.mode==TameMode.BODYGUARD.id(),"later chest redstone cannot override the normal bodyguard");
+            }finally{SharedGuardianRegression.players(h).remove(f.owner.getUUID());BodyguardService.roster(f.owner).bodyguards.clear();}
+        }h.succeed();
+    }
     @GameTest(template="empty") public static void realDrumSwitchesOnlineGuardianWithoutChangingItsDuty(GameTestHelper h)throws Exception {
         try(var f=new GuardianChestRegression.Fixture(h)){
             var protectedPlayer=SharedGuardianRegression.observer(f,UUID.randomUUID(),"ChestProtected",new ArrayList<>());
