@@ -245,10 +245,11 @@ public class TameCombatEvents {
 
         EARLY_DEATH_ATTRIBUTION.put(event, PendingDeath.capture(event));
 
+        // This HIGHEST-priority handler runs before elimination and snapshot restoration.
+        // Only the current battle matters: a previous elimination must never exempt
+        // a restored or withdrawn tame from its next ordinary death.
         boolean diedInDuel = TameDuelManager.isTameInDuel(tame.getUUID())
-                || (tlId != null && TameDuelManager.isTameInDuel(tlId))
-                || TameDuelManager.consumeRecentDuelElimination(tame.getUUID())
-                || (tlId != null && TameDuelManager.consumeRecentDuelElimination(tlId));
+                || (tlId != null && TameDuelManager.isTameInDuel(tlId));
         if (!diedInDuel && tame instanceof Rabbit && data != null && data.activeSurvivalDays >= 18) {
             tame.spawnAtLocation(new ItemStack(DIItemRegistry.SINISTER_CARROT.get()));
         }

@@ -123,7 +123,6 @@ public final class TameDuelManager {
     private static final Map<UUID, DuelBattle> BATTLE_BY_ID = new HashMap<>();
     private static final Map<UUID, UUID> BATTLE_ID_BY_ENTITY = new HashMap<>();
     private static final Map<UUID, Boolean> TEAM_A_BY_ENTITY = new HashMap<>();
-    private static final Set<UUID> RECENT_DUEL_ELIMINATIONS = new HashSet<>();
     private static final Set<UUID> TEAM_ONE_GLOWED_ENTITIES = new HashSet<>();
     private static final Map<UUID, Set<String>> BLUE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
     private static final Map<UUID, Set<String>> ORANGE_GLOW_ENTRIES_BY_VIEWER = new HashMap<>();
@@ -351,15 +350,6 @@ public final class TameDuelManager {
         return loaded;
     }
 
-    public static synchronized boolean consumeRecentDuelElimination(UUID entityId) {
-        UUID resolved = resolveActiveParticipantId(entityId);
-        boolean consumed = entityId != null && RECENT_DUEL_ELIMINATIONS.remove(entityId);
-        if (resolved != null && !resolved.equals(entityId)) {
-            consumed |= RECENT_DUEL_ELIMINATIONS.remove(resolved);
-        }
-        return consumed;
-    }
-
     public static synchronized boolean isSameDuelTeam(UUID firstId, UUID secondId) {
         if (firstId == null || secondId == null) {
             return false;
@@ -471,10 +461,6 @@ public final class TameDuelManager {
         battle.teamA.remove(resolvedId);
         battle.teamB.remove(resolvedId);
         battle.participants.remove(resolvedId);
-        RECENT_DUEL_ELIMINATIONS.add(resolvedId);
-        if (!resolvedId.equals(entityId)) {
-            RECENT_DUEL_ELIMINATIONS.add(entityId);
-        }
         setDuelMovementLock(resolvedId, false);
         clearTargetForParticipant(server, resolvedId);
 
@@ -504,7 +490,6 @@ public final class TameDuelManager {
 
     public static synchronized void recordElimination(MinecraftServer server, UUID victimId, Set<UUID> contributors, UUID killerId) {
         if (server == null || victimId == null) return;
-        UUID originalVictimId = victimId;
         victimId = resolveActiveParticipantId(victimId);
         if (victimId == null) return;
         killerId = resolveActiveParticipantId(killerId);
@@ -528,10 +513,6 @@ public final class TameDuelManager {
         }
         DuelElimination elimination = new DuelElimination(victimId, duelKiller, assisters);
         battle.eliminations.add(elimination);
-        RECENT_DUEL_ELIMINATIONS.add(victimId);
-        if (!victimId.equals(originalVictimId)) {
-            RECENT_DUEL_ELIMINATIONS.add(originalVictimId);
-        }
         DuelStats victimStats = battle.duelStats.get(victimId);
         if (victimStats != null) {
             victimStats.deaths++;
