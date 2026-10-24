@@ -26,11 +26,15 @@ public class CommandRespawnMorningRegression {
             h.assertTrue(record!=null&&TameData.fromTag(record.snapshot).commandRespawnAfterDayTime==24000,"admin death archive retains the same deadline");
             var dispatcher=h.getLevel().getServer().getCommands().getDispatcher();var source=f.owner.createCommandSourceStack().withPermission(4);
             int xp=f.owner.totalExperience;var inventory=f.owner.getInventory().save(new net.minecraft.nbt.ListTag()).copy();
-            for(String command:List.of("tames respawn "+name,"tames respawn all","tames respawn type wolf","tames arise "+name,"tames respawnReincarnated "+name,"tames ariseReincarnated "+name,"tames admin respawn "+name,"tames admin player "+f.owner.getGameProfile().getName()+" respawn all")){
+            for(String command:List.of("tames respawn "+name,"tames respawn all","tames respawn type wolf","tames arise "+name,"tames respawnReincarnated "+name,"tames ariseReincarnated "+name)){
                 h.assertTrue(dispatcher.execute(command,source)==0,"command cannot bypass next morning: "+command);
                 h.assertTrue(f.data.dead&&TameEntityAdapter.findLoaded(h.getLevel().getServer(),f.data.uuid,f.data.tlId)==null,"blocked command creates no entity");
             }
             h.assertTrue(xp==f.owner.totalExperience&&inventory.equals(f.owner.getInventory().save(new net.minecraft.nbt.ListTag())),"rejected commands consume neither XP nor items");
+            h.assertTrue(dispatcher.execute("tames admin respawn "+name,source)==1,"admin single respawn bypasses morning before it passes");
+            var immediate=TameEntityAdapter.findLoaded(h.getLevel().getServer(),f.data.uuid,f.data.tlId);
+            h.assertTrue(immediate!=null&&immediate.isAlive(),"admin immediately recreates live tame");
+            immediate.hurt(h.getLevel().damageSources().genericKill(),10000);
             h.getLevel().setDayTime(23999);h.assertTrue(CommandRespawnDelay.failure(h.getLevel().getServer(),saved)!=null,"last tick of the night remains locked");
             h.getLevel().setDayTime(24000);h.assertTrue(CommandRespawnDelay.failure(h.getLevel().getServer(),saved)==null,"morning or a sleep skip unlocks immediately");
             h.assertTrue(dispatcher.execute("tames admin respawn "+name,source)==1,"actual command respawns after morning");
@@ -50,7 +54,7 @@ public class CommandRespawnMorningRegression {
                 h.assertTrue(recent.commandRespawnAfterDayTime==48000,"dying at morning requires the following morning");
                 var dispatcher=h.getLevel().getServer().getCommands().getDispatcher();var source=f.owner.createCommandSourceStack().withPermission(4);
                 h.assertTrue(dispatcher.execute("tames admin player "+f.owner.getGameProfile().getName()+" respawn all",source)==1,"batch respawns an eligible member");
-                h.assertTrue(!f.data.dead&&recent.dead&&TameEntityAdapter.findLoaded(h.getLevel().getServer(),recent.uuid,recent.tlId)==null,"batch leaves today's death dead");
+                h.assertTrue(!TameRegistry.get(f.data.uuid).dead&&!TameRegistry.get(recent.uuid).dead&&TameEntityAdapter.findLoaded(h.getLevel().getServer(),recent.uuid,recent.tlId)!=null,"admin batch includes today's death immediately");
                 // Non-death administrative recovery and old saves have no fabricated deadline.
                 var old=f.data.toTag();old.putBoolean("dead",true);old.remove("commandRespawnAfterDayTime");
                 h.assertTrue(CommandRespawnDelay.failure(h.getLevel().getServer(),TameData.fromTag(old))==null,"legacy deaths without an accurate day-time deadline stay eligible");

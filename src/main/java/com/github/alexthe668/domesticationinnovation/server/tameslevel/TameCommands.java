@@ -13219,12 +13219,6 @@ public class TameCommands {
             if (!isDeadEntry(data.uuid)) {
                 continue;
             }
-            String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
-            if (morningDelay != null) {
-                failed++;
-                failReasons.add(tameDisplayName(data) + " (" + morningDelay + ")");
-                continue;
-            }
             if (findLoadedOwnedTameByUuid(source, ownerId, data.uuid) != null) {
                 failed++;
                 failReasons.add(data.name + " (already loaded)");
@@ -13236,7 +13230,7 @@ public class TameCommands {
                 failReasons.add(data.name + " (invalid target dimension)");
                 continue;
             }
-            RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot);
+            RespawnResult result = respawnDeadTameAt(source, data, target.level, target.pos, target.yRot, target.xRot, true);
             if (!result.success) {
                 failed++;
                 failReasons.add(data.name + " (" + result.error + ")");
@@ -13503,11 +13497,18 @@ public class TameCommands {
     }
 
     private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot) {
+        return respawnDeadTameAt(source, data, level, pos, yRot, xRot, false);
+    }
+
+    private static RespawnResult respawnDeadTameAt(CommandSourceStack source, TameData data, ServerLevel level, Vec3 pos, float yRot, float xRot, boolean adminRespawn) {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) return RespawnResult.fail("hostile Bewereager cannot be controlled");
         if (data != null && data.horseType) return RespawnResult.fail("horse-type tames cannot be rebuilt or respawned");
         if (data == null || level == null || pos == null) return RespawnResult.fail("invalid context");
-        String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
-        if (morningDelay != null) return RespawnResult.fail(morningDelay);
+        if (adminRespawn && !source.hasPermission(2)) return RespawnResult.fail("admin permission required");
+        if (!adminRespawn) {
+            String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
+            if (morningDelay != null) return RespawnResult.fail(morningDelay);
+        }
         if (TameEntityAdapter.findLoaded(level.getServer(), data.uuid, data.tlId) != null) return RespawnResult.fail("tame already exists in a loaded entity section");
 
         String typeId = recoverEntityTypeId(data);
@@ -19419,8 +19420,6 @@ public class TameCommands {
                 if (data.uuid == null) {
                     return error(source.getPlayer(), "Cannot respawn this dead tame: missing UUID.");
                 }
-                String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
-                if (morningDelay != null) return error(source.getPlayer(), tameDisplayName(data) + ": " + morningDelay + ".");
                 TameRegistry.register(data);
             } else {
                 List<TameData> deadRows = findDeadRegistryRowsByName(petName);
@@ -19646,11 +19645,6 @@ public class TameCommands {
                 return 0;
             }
             return error(source.getPlayer(), tameDisplayName(data) + " is in an active duel or duel session and cannot be respawned right now.");
-        }
-        String morningDelay = CommandRespawnDelay.failure(source.getServer(), data);
-        if (morningDelay != null) {
-            if (failures != null) { failures.add(tameDisplayName(data) + " (" + morningDelay + ")"); return 0; }
-            return error(source.getPlayer(), tameDisplayName(data) + ": " + morningDelay + ".");
         }
         TamableAnimal loaded = findLoadedTameByUuid(source, data.uuid);
         if (loaded != null) {
