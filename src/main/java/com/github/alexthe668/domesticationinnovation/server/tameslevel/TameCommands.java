@@ -3179,16 +3179,16 @@ public class TameCommands {
                                 .then(Commands.literal("isSummon")
                                         .executes(ctx -> adminListSummonTypes(ctx.getSource()))
                                         .then(Commands.literal("add")
-                                                .then(Commands.argument("type", ResourceLocationArgument.id())
+                                                .then(Commands.argument("type", StringArgumentType.greedyString())
                                                         .suggests((ctx, b) -> suggestEntityTypes(b))
-                                                        .executes(ctx -> adminAddSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
+                                                        .executes(ctx -> adminAddSummonType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("remove")
-                                                .then(Commands.argument("type", ResourceLocationArgument.id())
-                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameRegistry.getSummonTypes(), b))
-                                                        .executes(ctx -> adminRemoveSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
-                                        .then(Commands.argument("type", ResourceLocationArgument.id())
+                                                .then(Commands.argument("type", StringArgumentType.greedyString())
+                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(shortTypeSuggestions(TameRegistry.getSummonTypes()), b))
+                                                        .executes(ctx -> adminRemoveSummonType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
+                                        .then(Commands.argument("type", StringArgumentType.greedyString())
                                                 .suggests((ctx, b) -> suggestEntityTypes(b))
-                                                .executes(ctx -> adminAddSummonType(ctx.getSource(), ResourceLocationArgument.getId(ctx, "type").toString()))))
+                                                .executes(ctx -> adminAddSummonType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
 
                                 .then(Commands.literal("rebuildEnderDragonArena")
                                         .executes(ctx -> adminRebuildEnderDragonArena(ctx.getSource())))
@@ -3686,7 +3686,7 @@ public class TameCommands {
                                                         .executes(ctx -> adminRankedForbidType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("allowType")
                                                 .then(Commands.argument("type", StringArgumentType.greedyString())
-                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(TameRegistry.getRankedForbiddenTameTypes(), b))
+                                                        .suggests((ctx, b) -> SharedSuggestionProvider.suggest(shortTypeSuggestions(TameRegistry.getRankedForbiddenTameTypes()), b))
                                                         .executes(ctx -> adminRankedAllowType(ctx.getSource(), StringArgumentType.getString(ctx, "type")))))
                                         .then(Commands.literal("setArena")
                                                 .then(Commands.argument("arenaName", StringArgumentType.word())
@@ -7645,15 +7645,9 @@ public class TameCommands {
         if (rawMobType == null || rawMobType.isBlank()) {
             return null;
         }
-        String normalized = rawMobType.trim().toLowerCase(Locale.ROOT);
+        String normalized = resolveCommandTypeId(rawMobType);
         ResourceLocation parsed = ResourceLocation.tryParse(normalized);
-        if (parsed != null && ForgeRegistries.ENTITY_TYPES.containsKey(parsed)) {
-            return parsed;
-        }
-        ResourceLocation minecraftDefault = ResourceLocation.tryParse("minecraft:" + normalized);
-        if (minecraftDefault != null && ForgeRegistries.ENTITY_TYPES.containsKey(minecraftDefault)) {
-            return minecraftDefault;
-        }
+        if (parsed != null && ForgeRegistries.ENTITY_TYPES.containsKey(parsed)) return parsed;
         return null;
     }
 
@@ -7664,7 +7658,7 @@ public class TameCommands {
         }
         List<String> protectedTypes = new ArrayList<>(TameRegistry.getDoNotAttackTypes(player.getUUID()));
         protectedTypes.sort(String::compareToIgnoreCase);
-        return SharedSuggestionProvider.suggest(protectedTypes, builder);
+        return SharedSuggestionProvider.suggest(shortTypeSuggestions(protectedTypes), builder);
     }
 
     private static int reincarnateBatchAll(CommandSourceStack source) {
@@ -17904,7 +17898,7 @@ public class TameCommands {
     }
 
     private static int adminAddSummonType(CommandSourceStack source, String typeId) {
-        ResourceLocation id = ResourceLocation.tryParse(typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT));
+        ResourceLocation id = normalizeEntityTypeId(typeId);
         if (id == null || !ForgeRegistries.ENTITY_TYPES.containsKey(id)) return adminError(source, "Unknown entity type: " + typeId + ".");
         if (!TameRegistry.addSummonType(id.toString())) return adminError(source, "Entity type is already marked as a summon: " + id + ".");
 
@@ -17945,8 +17939,10 @@ public class TameCommands {
     }
 
     private static int adminRemoveSummonType(CommandSourceStack source, String typeId) {
-        if (!TameRegistry.removeSummonType(typeId)) return adminError(source, "Entity type is not marked as a summon: " + typeId + ".");
-        source.sendSuccess(() -> Component.literal("Removed summon classification from " + typeId + ".")
+        String resolvedType = resolveCommandTypeId(typeId);
+        if (resolvedType.isBlank()) return adminError(source, "Unknown or ambiguous entity type; use modId:typeId.");
+        if (!TameRegistry.removeSummonType(resolvedType)) return adminError(source, "Entity type is not marked as a summon: " + resolvedType + ".");
+        source.sendSuccess(() -> Component.literal("Removed summon classification from " + resolvedType + ".")
                 .withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
@@ -19061,17 +19057,16 @@ public class TameCommands {
     }
 
     static int adminDisableTameType(CommandSourceStack source, String rawType) {
-        if (rawType == null || rawType.isBlank()) {
-            return adminError(source, "Type id required.");
-        }
-        if (TameRegistry.isTameTypeDisabled(rawType)) {
-            source.sendSuccess(() -> Component.literal("Tame type is already disabled: " + rawType + ".").withStyle(ChatFormatting.YELLOW), false);
+        String resolvedType = resolveCommandTypeId(rawType);
+        if (resolvedType.isBlank()) return adminError(source, "Unknown or ambiguous entity type; use modId:typeId.");
+        if (TameRegistry.isTameTypeDisabled(resolvedType)) {
+            source.sendSuccess(() -> Component.literal("Tame type is already disabled: " + resolvedType + ".").withStyle(ChatFormatting.YELLOW), false);
             return 0;
         }
-        if (!TameRegistry.addDisabledTameType(rawType)) {
-            return adminError(source, "Invalid tame type: " + rawType + ".");
+        if (!TameRegistry.addDisabledTameType(resolvedType)) {
+            return adminError(source, "Invalid tame type: " + resolvedType + ".");
         }
-        source.sendSuccess(() -> Component.literal("Disabled tame registration for type: " + rawType + ". Existing registered tames of that type are unchanged.").withStyle(ChatFormatting.GREEN), true);
+        source.sendSuccess(() -> Component.literal("Disabled tame registration for type: " + resolvedType + ". Existing registered tames of that type are unchanged.").withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -19089,13 +19084,12 @@ public class TameCommands {
     }
 
     static int adminRemoveTameTypeDisable(CommandSourceStack source, String rawType) {
-        if (rawType == null || rawType.isBlank()) {
-            return adminError(source, "Type id required.");
+        String resolvedType = resolveCommandTypeId(rawType);
+        if (resolvedType.isBlank()) return adminError(source, "Unknown or ambiguous entity type; use modId:typeId.");
+        if (!TameRegistry.removeDisabledTameType(resolvedType)) {
+            return adminError(source, "Tame type is not disabled: " + resolvedType + ".");
         }
-        if (!TameRegistry.removeDisabledTameType(rawType)) {
-            return adminError(source, "Tame type is not disabled: " + rawType + ".");
-        }
-        source.sendSuccess(() -> Component.literal("Removed tame registration disable for type: " + rawType + ".").withStyle(ChatFormatting.GREEN), true);
+        source.sendSuccess(() -> Component.literal("Removed tame registration disable for type: " + resolvedType + ".").withStyle(ChatFormatting.GREEN), true);
         return 1;
     }
 
@@ -20515,7 +20509,7 @@ public class TameCommands {
     }
 
     private static int adminToggleCallOrderInvert(CommandSourceStack source, String typeId) {
-        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        String normalized = resolveCommandTypeId(typeId);
         if (normalized.isBlank()) {
             if (source.getPlayer() != null) {
                 return error(source.getPlayer(), "Type id required.");
@@ -20535,7 +20529,7 @@ public class TameCommands {
     }
 
     private static int adminAddCallOrderInvert(CommandSourceStack source, String typeId) {
-        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        String normalized = resolveCommandTypeId(typeId);
         if (normalized.isBlank()) {
             if (source.getPlayer() != null) {
                 return error(source.getPlayer(), "Type id required.");
@@ -20560,7 +20554,7 @@ public class TameCommands {
     }
 
     private static int adminRemoveCallOrderInvert(CommandSourceStack source, String typeId) {
-        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        String normalized = resolveCommandTypeId(typeId);
         if (normalized.isBlank()) {
             if (source.getPlayer() != null) {
                 return error(source.getPlayer(), "Type id required.");
@@ -21747,7 +21741,7 @@ public class TameCommands {
     }
 
     private static int adminSetCallOrder(CommandSourceStack source, String mode, int number, String typeId) {
-        String normalized = typeId == null ? "" : typeId.trim().toLowerCase(Locale.ROOT);
+        String normalized = resolveCommandTypeId(typeId);
         int movementIndex = switch (mode) {
             case "follow" -> 0;
             case "sit" -> 1;
@@ -22870,8 +22864,7 @@ public class TameCommands {
     }
 
     private static int adminRankedForbidType(CommandSourceStack source, String rawType) {
-        String normalized = normalizeTypeFilter(rawType);
-        if (!normalized.contains(":")) normalized = "minecraft:" + normalized;
+        String normalized = resolveCommandTypeId(rawType);
         ResourceLocation typeId = ResourceLocation.tryParse(normalized);
         if (typeId == null || !ForgeRegistries.ENTITY_TYPES.containsKey(typeId)) {
             return error(source.getPlayer(), "Unknown entity type: " + rawType + ".");
@@ -22894,8 +22887,7 @@ public class TameCommands {
     }
 
     private static int adminRankedAllowType(CommandSourceStack source, String rawType) {
-        String normalized = normalizeTypeFilter(rawType);
-        if (!normalized.contains(":")) normalized = "minecraft:" + normalized;
+        String normalized = resolveCommandTypeId(rawType);
         if (!TameRegistry.removeRankedForbiddenTameType(normalized)) {
             return error(source.getPlayer(), normalized + " is not forbidden from ranked.");
         }
@@ -30083,10 +30075,9 @@ public class TameCommands {
             if (isDeadEntry(data.uuid)) continue;
             String full = tameTypeId(data);
             if (full.isBlank()) continue;
-            int sep = full.indexOf(':');
-            String path = sep >= 0 ? full.substring(sep + 1) : full;
-            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
+            seenPath.add(full);
         }
+        for (String type : shortTypeSuggestions(seenPath)) suggestCommandString(b, type);
         return b.buildFuture();
     }
 
@@ -30255,21 +30246,15 @@ public class TameCommands {
             if (isDeadEntry(d.uuid)) continue;
             String full = tameTypeId(d);
             if (full.isBlank()) continue;
-            int sep = full.indexOf(':');
-            String path = sep >= 0 ? full.substring(sep + 1) : full;
-            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
+            seenPath.add(full);
         }
+        for (String type : shortTypeSuggestions(seenPath)) suggestCommandString(b, type);
         return b.buildFuture();
     }
 
     static CompletableFuture<Suggestions> suggestEntityTypes(SuggestionsBuilder b) {
-        for (ResourceLocation id : ForgeRegistries.ENTITY_TYPES.getKeys()) {
-            suggestCommandString(b, id.toString());
-            if ("minecraft".equals(id.getNamespace())) {
-                suggestCommandString(b, id.getPath());
-            }
-        }
-        return b.buildFuture();
+        return SharedSuggestionProvider.suggest(shortTypeSuggestions(
+                ForgeRegistries.ENTITY_TYPES.getKeys().stream().map(ResourceLocation::toString).toList()), b);
     }
 
     static CompletableFuture<Suggestions> suggestKnownTameTypes(SuggestionsBuilder b) {
@@ -30281,7 +30266,7 @@ public class TameCommands {
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data != null) addTypeSuggestion(typeIds, tameTypeId(data));
         }
-        List<String> sorted = new ArrayList<>(typeIds);
+        List<String> sorted = shortTypeSuggestions(typeIds);
         sorted.sort(String::compareToIgnoreCase);
         return SharedSuggestionProvider.suggest(sorted, b);
     }
@@ -30289,7 +30274,6 @@ public class TameCommands {
     private static List<String> knownTameTypeSuggestions() {
         Set<String> typeIds = new LinkedHashSet<>();
         typeIds.add("minecraft:horse");
-        typeIds.add("horse");
         for (TameData data : TameRegistry.TAMES.values()) {
             if (data == null) {
                 continue;
@@ -30299,7 +30283,7 @@ public class TameCommands {
         for (String disabled : TameRegistry.getDisabledTameTypes()) {
             addTypeSuggestion(typeIds, disabled);
         }
-        List<String> sorted = new ArrayList<>(typeIds);
+        List<String> sorted = shortTypeSuggestions(typeIds);
         sorted.sort(String::compareToIgnoreCase);
         return sorted;
     }
@@ -30309,7 +30293,7 @@ public class TameCommands {
         for (String disabled : TameRegistry.getDisabledTameTypes()) {
             addTypeSuggestion(typeIds, disabled);
         }
-        List<String> sorted = new ArrayList<>(typeIds);
+        List<String> sorted = shortTypeSuggestions(typeIds);
         sorted.sort(String::compareToIgnoreCase);
         return SharedSuggestionProvider.suggest(sorted, b);
     }
@@ -30323,19 +30307,49 @@ public class TameCommands {
             return;
         }
         typeIds.add(full);
-        int sep = full.indexOf(':');
-        if (sep >= 0 && "minecraft".equals(full.substring(0, sep))) {
-            String path = full.substring(sep + 1);
-            if (!path.isBlank()) {
-                typeIds.add(path);
-            }
+    }
+
+    /** Completion names stay short unless multiple registered types share that path. */
+    private static List<String> shortTypeSuggestions(Collection<String> types) {
+        Set<String> known = new HashSet<>();
+        for (ResourceLocation id : ForgeRegistries.ENTITY_TYPES.getKeys()) known.add(id.toString());
+        for (String type : types) if (type != null && !type.isBlank()) known.add(normalizeTypeFilter(type));
+        Map<String, Integer> counts = new HashMap<>();
+        for (String type : known) counts.merge(type.substring(type.indexOf(':') + 1), 1, Integer::sum);
+        Set<String> result = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (String type : types) {
+            String full = normalizeTypeFilter(type);
+            if (full.isBlank()) continue;
+            String path = full.substring(full.indexOf(':') + 1);
+            result.add(counts.getOrDefault(path, 0) > 1 ? full : path);
         }
+        return new ArrayList<>(result);
+    }
+
+    /** Full IDs remain accepted. Ambiguous short IDs require an explicit mod prefix. */
+    private static String resolveCommandTypeId(String raw) {
+        String requested = normalizeTypeFilter(raw);
+        if (requested.isBlank() || requested.contains(":")) return requested;
+        Set<String> known = new HashSet<>();
+        for (ResourceLocation id : ForgeRegistries.ENTITY_TYPES.getKeys()) known.add(id.toString());
+        known.addAll(TameRegistry.getDisabledTameTypes());
+        known.addAll(TameRegistry.getSummonTypes());
+        known.addAll(TameRegistry.getRankedForbiddenTameTypes());
+        known.addAll(TameRegistry.getCallOrderInvertedTypes());
+        for (TameData data : TameRegistry.TAMES.values()) if (data != null) known.add(tameTypeId(data));
+        String match = null;
+        for (String full : known) {
+            if (full == null || !full.substring(full.indexOf(':') + 1).equals(requested)) continue;
+            if (match != null && !match.equals(full)) return "";
+            match = full;
+        }
+        return match == null ? "" : match;
     }
 
     private static CompletableFuture<Suggestions> suggestCurrentCallOrderInvertedTypes(SuggestionsBuilder b) {
         List<String> typeIds = new ArrayList<>(TameRegistry.getCallOrderInvertedTypes());
         typeIds.sort(String::compareToIgnoreCase);
-        return SharedSuggestionProvider.suggest(typeIds, b);
+        return SharedSuggestionProvider.suggest(shortTypeSuggestions(typeIds), b);
     }
 
     private static CompletableFuture<Suggestions> suggestOwnedGuardianSetNames(CommandSourceStack source, SuggestionsBuilder b) {
@@ -30885,10 +30899,9 @@ public class TameCommands {
         for (TameData data : TameRegistry.TAMES.values()) {
             String full = tameTypeId(data);
             if (full.isBlank()) continue;
-            int sep = full.indexOf(':');
-            String path = sep >= 0 ? full.substring(sep + 1) : full;
-            if (!path.isBlank() && seenPath.add(path)) suggestCommandString(b, path);
+            seenPath.add(full);
         }
+        for (String type : shortTypeSuggestions(seenPath)) suggestCommandString(b, type);
         return b.buildFuture();
     }
 
