@@ -22476,8 +22476,10 @@ public class TameCommands {
             } else {
                 clearExternalWanderingState(tamable, order);
             }
-            tamable.setOrderedToSit(!hasTarget);
-            tamable.setInSittingPose(!hasTarget);
+            // Some native pets (including Skeloraptor) stop navigation even when
+            // setOrderedToSit(false) is repeated with an unchanged state.
+            if (tamable.isOrderedToSit() != !hasTarget) tamable.setOrderedToSit(!hasTarget);
+            if (tamable.isInSittingPose() != !hasTarget) tamable.setInSittingPose(!hasTarget);
             return;
         }
         // DI interface tames use the fixed trinary contract: roam=0, sit=1,

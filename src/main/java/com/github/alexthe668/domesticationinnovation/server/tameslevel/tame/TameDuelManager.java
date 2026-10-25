@@ -1,6 +1,7 @@
 package com.github.alexthe668.domesticationinnovation.server.tameslevel.tame;
 
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.SkeloraptorDuelChaseGoal;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameStoredArmorEvents;
@@ -685,11 +686,13 @@ public final class TameDuelManager {
             participantId = resolveActiveParticipantId(TameData.getTlId(tame));
         }
         if (participantId == null) {
+            SkeloraptorDuelChaseGoal.remove(tameId);
             if (tame instanceof TamableAnimal tamable) restoreMossyGolemTargetGoalsIfNeeded(tamable);
             removeDuelFollowRangeBoost(tame);
             return;
         }
         if (tame instanceof TamableAnimal tamable) ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
+        SkeloraptorDuelChaseGoal.ensure(tame);
         suppressOwnerFollowGoals(tame);
         if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
         applyDuelFollowRangeBoost(tame);
@@ -795,6 +798,7 @@ public final class TameDuelManager {
             return;
         }
         tame.setHealth(tame.getMaxHealth());
+        SkeloraptorDuelChaseGoal.ensure(tame);
         suppressOwnerFollowGoals(tame);
         applyDuelFollowRangeBoost(tame);
         if (tame instanceof TamableAnimal tamable) {
@@ -1281,6 +1285,7 @@ public final class TameDuelManager {
     }
 
     private static void clearTargetForParticipant(MinecraftServer server, UUID participantId) {
+        SkeloraptorDuelChaseGoal.remove(participantId);
         LivingEntity tame = findLoadedTame(server, participantId);
         if (tame == null) return;
         clearDuelCombatTarget(tame);
