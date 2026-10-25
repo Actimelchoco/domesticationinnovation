@@ -13540,7 +13540,7 @@ public class TameCommands {
 
             CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
             if (!snapshot.isEmpty()) {
-                respawned.load(snapshot);
+                loadRespawnSnapshot(respawned, snapshot);
             }
 
         // Snapshot loading may contain an older entity UUID; canonical registry identity wins.
@@ -13931,7 +13931,7 @@ public class TameCommands {
 
             CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
             if (!snapshot.isEmpty()) {
-                respawned.load(snapshot);
+                loadRespawnSnapshot(respawned, snapshot);
             }
 
             respawned.setUUID(data.uuid);
@@ -14103,6 +14103,24 @@ public class TameCommands {
         TameRegistry.markDirty();
     }
 
+    /** Reconstructed entities must be alive and animation-clean before tracking starts. */
+    private static void loadRespawnSnapshot(LivingEntity tame, CompoundTag snapshot) {
+        CompoundTag clean = snapshot.copy();
+        clean.putShort("HurtTime", (short) 0);
+        clean.putShort("DeathTime", (short) 0);
+        clean.putFloat("Health", tame.getMaxHealth());
+        tame.load(clean);
+        tame.setHealth(tame.getMaxHealth());
+        clearRespawnAnimationState(tame);
+    }
+
+    private static void clearRespawnAnimationState(LivingEntity tame) {
+        tame.hurtTime = 0;
+        tame.hurtDuration = 0;
+        tame.deathTime = 0;
+        tame.invulnerableTime = 0;
+    }
+
     private static void finalizeRespawnState(TamableAnimal tame, TameData data) {
         if (tame == null || data == null) {
             return;
@@ -14122,9 +14140,7 @@ public class TameCommands {
         }
         tame.removeAllEffects();
         tame.setHealth(tame.getMaxHealth());
-        tame.hurtTime = 0;
-        tame.deathTime = 0;
-        tame.invulnerableTime = 0;
+        clearRespawnAnimationState(tame);
         tame.setSecondsOnFire(0);
         tame.setRemainingFireTicks(0);
         clearFrozenState(tame);
@@ -14302,7 +14318,7 @@ public class TameCommands {
 
         CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
         if (!snapshot.isEmpty()) {
-            recovered.load(snapshot);
+            loadRespawnSnapshot(recovered, snapshot);
         }
 
         recovered.setUUID(data.uuid);
@@ -14389,7 +14405,7 @@ public class TameCommands {
 
         CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
         if (!snapshot.isEmpty()) {
-            recovered.load(snapshot);
+            loadRespawnSnapshot(recovered, snapshot);
         }
 
         recovered.setUUID(data.uuid);
@@ -19602,7 +19618,7 @@ public class TameCommands {
             return false;
         }
         if (!snapshot.isEmpty()) {
-            rebuilt.load(snapshot);
+            loadRespawnSnapshot(rebuilt, snapshot);
         }
         rebuilt.setUUID(data.uuid);
         rebuilt.moveTo(pos.x, pos.y, pos.z, yRot, xRot);
@@ -19694,7 +19710,7 @@ public class TameCommands {
 
         CompoundTag snapshot = data.entitySnapshot == null ? new CompoundTag() : data.entitySnapshot.copy();
         if (!snapshot.isEmpty()) {
-            respawned.load(snapshot);
+            loadRespawnSnapshot(respawned, snapshot);
         }
 
         Vec3 pos = source.getPosition();
@@ -21816,9 +21832,7 @@ public class TameCommands {
         if (tame.isVehicle()) tame.ejectPassengers();
         tame.removeAllEffects();
         tame.setHealth(tame.getMaxHealth());
-        tame.hurtTime = 0;
-        tame.deathTime = 0;
-        tame.invulnerableTime = 0;
+        clearRespawnAnimationState(tame);
         tame.setRemainingFireTicks(0);
         tame.fallDistance = 0.0F;
         tame.setDeltaMovement(Vec3.ZERO);
