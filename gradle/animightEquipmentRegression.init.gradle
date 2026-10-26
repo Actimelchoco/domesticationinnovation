@@ -9,10 +9,10 @@ allprojects {
         def modsDir = project.findProperty('animightModsDir')
         if (!modsDir) throw new GradleException('Set animightModsDir to the Animights and Dungeon Now Loading mod directory.')
         def jars = project.fileTree(modsDir) {
-            include 'animights-forge-1.20.1-1.0.0.jar'
-            include 'Dungeon Now Loading-forge-1.20.1-2.11.jar'
-            include 'geckolib-forge-1.20.1-4.8.2.jar'
-            include 'knightlib-forge-1.20.1-1.4.3.jar'
+            include 'animights-forge-1.20.1-1.1.0.jar'
+            include 'Dungeon Now Loading-forge-1.20.1-2.2.jar'
+            include 'geckolib-forge-1.20.1-4.8.4.jar'
+            include 'knightlib-forge-1.20.1-1.6.1.jar'
         }.files
         if (jars.size() != 4) throw new GradleException('Expected Animights, Dungeon Now Loading, GeckoLib, and KnightLib JARs.')
         repositories.flatDir { dirs modsDir }

@@ -149,6 +149,10 @@ public final class TameStoredArmorEvents {
 
     public static int repairWithMending(MinecraftServer server, LivingEntity tame, TameData data, int xp) {
         if (data == null || xp <= 0) return Math.max(0, xp);
+        if (AnimightEquipmentEvents.hasAnimightEquipment(data)) {
+            AnimightEquipmentEvents.repairOnXp(tame, data, xp);
+            return xp;
+        }
         if (!PlayerDebugSettings.enableMending(data.ownerUUID)) return xp;
         init(server);
         List<ItemStack> candidates = new java.util.ArrayList<>();

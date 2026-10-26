@@ -73,6 +73,7 @@ public final class TameActivityProgressEvents {
 
     private static void grantOneXp(LivingEntity tame, TameData data) {
         // These are fixed activity rewards, not combat XP to split or multiply.
+        AnimightEquipmentEvents.repairOnXp(tame, data, 1);
         if (data.xp < Integer.MAX_VALUE) data.xp++;
         if (tame != null) LevelSystem.checkLevelUp(tame, data);
         TameRegistry.markDirty();

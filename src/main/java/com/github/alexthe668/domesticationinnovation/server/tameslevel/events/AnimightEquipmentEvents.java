@@ -74,19 +74,72 @@ public final class AnimightEquipmentEvents {
         return id != null && id.getNamespace().equals("l2hostility") && id.getPath().contains("seal");
     }
 
-    /** L2's SealedItem stores the complete original stack under sealedItem. */
-    public static int restoreSealedItems(TameData data) {
+    private static ItemStack restoredRecoveryItem(ItemStack wrapper) {
+        if (!isRecoveryItem(wrapper) || wrapper.getTag() == null) return ItemStack.EMPTY;
+        String key = isSealedItem(wrapper) ? "sealedItem" : "Original";
+        if (!wrapper.getTag().contains(key, Tag.TAG_COMPOUND)) return ItemStack.EMPTY;
+        ItemStack original = ItemStack.of(wrapper.getTag().getCompound(key).copy());
+        // Never unwrap another recovery token or consume malformed originals.
+        if (original.isEmpty() || isRecoveryItem(original)) return ItemStack.EMPTY;
+        if (original.isDamageableItem()) original.setDamageValue(0);
+        return original;
+    }
+
+    /** Restore valid L2 seals and DNL scraps in place, including equipped tokens. */
+    public static int restoreRecoveryItems(LivingEntity tame, TameData data) {
         int restored = 0;
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack original = restoredRecoveryItem(tame.getItemBySlot(slot));
+            if (original.isEmpty()) continue;
+            tame.setItemSlot(slot, original);
+            restored++;
+        }
         for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
-            ItemStack sealed = data.animightEquipmentInventory.get(i);
-            if (!isSealedItem(sealed) || sealed.getTag() == null || !sealed.getTag().contains("sealedItem", Tag.TAG_COMPOUND)) continue;
-            ItemStack original = ItemStack.of(sealed.getTag().getCompound("sealedItem").copy());
-            if (original.isEmpty() || isSealedItem(original)) continue;
+            ItemStack original = restoredRecoveryItem(data.animightEquipmentInventory.get(i));
+            if (original.isEmpty()) continue;
             data.animightEquipmentInventory.set(i, original);
             restored++;
         }
         if (restored > 0) TameRegistry.markDirty();
         return restored;
+    }
+
+    public static boolean hasAnimightEquipment(TameData data) {
+        return data != null && data.type != null
+                && (data.type.startsWith("animights:") || data.type.startsWith("entity.animights."));
+    }
+
+    private static boolean repairStack(ItemStack stack, long allowance) {
+        if (stack.isEmpty() || !stack.isDamageableItem() || !stack.isDamaged() || isRecoveryItem(stack)) return false;
+        boolean equipment = stack.getItem() instanceof ArmorItem || stack.getItem() instanceof SwordItem
+                || stack.getItem() instanceof AxeItem || stack.getItem() instanceof ProjectileWeaponItem
+                || !stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE).isEmpty();
+        if (!equipment) return false;
+        stack.setDamageValue((int) Math.max(0L, (long) stack.getDamageValue() - allowance));
+        return true;
+    }
+
+    /** Each item gets its own two-durability-per-XP allowance; XP is never spent. */
+    public static void repairOnXp(LivingEntity tame, TameData data, int xp) {
+        if (xp <= 0 || !hasAnimightEquipment(data)) return;
+        long allowance = (long) xp * 2L;
+        boolean changed = false;
+        if (tame != null) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) changed |= repairStack(tame.getItemBySlot(slot), allowance);
+        } else if (data.entitySnapshot != null) {
+            // Unloaded ranked participants keep native equipment in their saved entity.
+            for (String key : new String[]{"ArmorItems", "HandItems"}) {
+                var items = data.entitySnapshot.getList(key, Tag.TAG_COMPOUND);
+                for (int i = 0; i < items.size(); i++) {
+                    ItemStack stack = ItemStack.of(items.getCompound(i));
+                    if (!repairStack(stack, allowance)) continue;
+                    items.set(i, stack.save(new net.minecraft.nbt.CompoundTag()));
+                    changed = true;
+                }
+            }
+        }
+        for (ItemStack stack : data.animightEquipmentInventory) changed |= repairStack(stack, allowance);
+        if (changed) TameRegistry.markDirty();
     }
 
     /** Break-protection mods may spawn the transformed item instead of replacing the slot. */
@@ -120,6 +173,41 @@ public final class AnimightEquipmentEvents {
         int moved = before - incoming.getCount();
         if (moved > 0) TameRegistry.markDirty();
         return moved;
+    }
+
+    private static boolean fitsRecoveryToken(TameData data, ItemStack token) {
+        if (data.animightEquipmentInventory.size() < INVENTORY_SIZE) return true;
+        for (int i = 0; i < INVENTORY_SIZE; i++) {
+            ItemStack existing = data.animightEquipmentInventory.get(i);
+            if (existing.isEmpty() || ItemStack.isSameItemSameTags(existing, token)
+                    && existing.getCount() < existing.getMaxStackSize()) return true;
+        }
+        return false;
+    }
+
+    /** Called only when vanilla has determined that a worn armor stack would break. */
+    public static boolean preserveBreakingArmor(LivingEntity wearer, ItemStack armor) {
+        if (wearer.level().isClientSide || !isAnimight(wearer) || !(armor.getItem() instanceof ArmorItem)) return false;
+        TameData data = data(wearer);
+        if (data == null || data.dead || data.stored) return false;
+        EquipmentSlot equipped = null;
+        for (EquipmentSlot slot : ARMOR_SLOTS) if (wearer.getItemBySlot(slot) == armor) { equipped = slot; break; }
+        if (equipped == null) return false;
+        var scrapId = new ResourceLocation("dungeonnowloading", "item_scraps");
+        if (!ForgeRegistries.ITEMS.containsKey(scrapId)) {
+            // Optional DNL absent: preserve the original rather than destroying it.
+            armor.setDamageValue(Math.max(0, armor.getMaxDamage() - 1));
+            return true;
+        }
+        ItemStack token = new ItemStack(ForgeRegistries.ITEMS.getValue(scrapId));
+        token.getOrCreateTag().put("Original", armor.copyWithCount(1).save(new net.minecraft.nbt.CompoundTag()));
+        store(data, token);
+        // A full reserve keeps its pending scrap safely in this equipment slot.
+        // It provides no armor and moves into reserve on the next check with space.
+        wearer.setItemSlot(equipped, token.isEmpty() ? ItemStack.EMPTY : token);
+        armor.setCount(0);
+        TameRegistry.markDirty();
+        return true;
     }
 
     private static boolean tooWorn(ItemStack stack, int incomingDamage) {
@@ -227,6 +315,7 @@ public final class AnimightEquipmentEvents {
         if (!active(tame, data)) return;
         for (EquipmentSlot slot : ARMOR_SLOTS) {
             ItemStack worn = tame.getItemBySlot(slot);
+            if (isRecoveryItem(worn) && !fitsRecoveryToken(data, worn)) continue;
             ItemStack removed = ItemStack.EMPTY;
             if (!worn.isEmpty() && (!validArmor(tame, worn, slot) || tooWorn(worn, incomingDamage))) {
                 removed = worn;
@@ -348,9 +437,8 @@ public final class AnimightEquipmentEvents {
         if (!isAnimight(killer)) return;
         TameData data = data(killer);
         if (!active(killer, data)) return;
-        // Include seals still occupying equipment slots before the next periodic check.
+        restoreRecoveryItems(killer, data);
         maintain(killer, data);
-        if (restoreSealedItems(data) > 0) maintain(killer, data);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -374,6 +462,7 @@ public final class AnimightEquipmentEvents {
             store(data, stack);
             return stack.isEmpty();
         });
+        restoreRecoveryItems(killer, data);
         maintain(killer, data);
     }
 

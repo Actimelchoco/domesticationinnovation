@@ -55,8 +55,10 @@ public final class TameDailyCareEvents {
                 data.lastDailyCareDay = day;
                 changed = true;
                 if (tame.getHealth() < tame.getMaxHealth() || !TameCommands.hasEdibleStoredFood(tame, data)) continue;
-                // This fixed care reward is not recovery XP or an armor-mending payment.
-                data.xp = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.xp) + com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonusXp(data, 1));
+                // Fixed care XP is retained in full, including Animights equipment repair.
+                int award = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.bonusXp(data, 1);
+                AnimightEquipmentEvents.repairOnXp(tame, data, award);
+                data.xp = (int) Math.min(Integer.MAX_VALUE, (long) Math.max(0, data.xp) + award);
                 LevelSystem.checkLevelUp(tame, data);
             }
         }

@@ -198,14 +198,14 @@ public final class AnimightEquipmentRegression {
             // No drops event: a kill alone must restore the complete reserve.
             MinecraftForge.EVENT_BUS.post(new LivingDeathEvent(victim, helper.getLevel().damageSources().mobAttack(tame)));
             ItemStack upgraded = tame.getItemBySlot(EquipmentSlot.HEAD);
-            check(upgraded.is(Items.NETHERITE_HELMET) && upgraded.getDamageValue() == 3
+            check(upgraded.is(Items.NETHERITE_HELMET) && upgraded.getDamageValue() == 0
                     && upgraded.isEnchanted() && upgraded.getTag().getString("RegressionMarker").equals("original-armor"),
                     "unsealed upgrade must preserve the original armor data");
             check(reserves(data, Items.DIAMOND_HELMET) == 1 && tame.getMainHandItem().is(Items.DIAMOND_SWORD)
                     && reserves(data, Items.COD) == 32, "kill must restore every valid seal and equip the restored weapon");
             check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isSealedItem).count() == 1
-                    && reserves(data, scrapItem) == 1, "malformed seal and DNL scrap must remain intact");
-            check(AnimightEquipmentEvents.restoreSealedItems(data) == 0, "repeated restoration must not duplicate originals");
+                    && reserves(data, scrapItem) == 0 && tame.getItemBySlot(EquipmentSlot.FEET).is(Items.IRON_BOOTS), "malformed seal remains intact; valid DNL scrap is restored");
+            check(AnimightEquipmentEvents.restoreRecoveryItems(tame, data) == 0, "repeated restoration must not duplicate originals");
             data.animightEquipmentInventory.clear();
             for (int i = 0; i < AnimightEquipmentEvents.INVENTORY_SIZE; i++) data.animightEquipmentInventory.add(new ItemStack(Items.IRON_HELMET));
             data.animightEquipmentInventory.set(26, sealed(new ItemStack(Items.NETHERITE_CHESTPLATE)));
@@ -380,4 +380,97 @@ public final class AnimightEquipmentRegression {
         }
         helper.succeed();
     }
+    @GameTest(template = "empty")
+    public static void xpRepairsEveryItemWithoutSpendingXp(GameTestHelper helper) {
+        TamableAnimal tame = companion(helper);TameData data = TameRegistry.get(tame.getUUID());
+        try {
+            data.level=20;data.xp=0;
+            ItemStack helmet=new ItemStack(Items.IRON_HELMET);helmet.setDamageValue(100);
+            ItemStack sword=new ItemStack(Items.DIAMOND_SWORD);sword.setDamageValue(100);sword.enchant(Enchantments.SHARPNESS,3);
+            sword.getOrCreateTag().putString("RegressionMarker","xp-weapon");
+            tame.setItemSlot(EquipmentSlot.HEAD,helmet);tame.setItemSlot(EquipmentSlot.MAINHAND,sword);
+            ItemStack boots=new ItemStack(Items.IRON_BOOTS);boots.setDamageValue(100);
+            ItemStack bow=new ItemStack(Items.BOW);bow.setDamageValue(100);
+            ItemStack almost=new ItemStack(Items.IRON_CHESTPLATE);almost.setDamageValue(3);
+            for(var stack:List.of(boots,bow,almost))AnimightEquipmentEvents.store(data,stack);
+            var reserveBoots=data.animightEquipmentInventory.stream().filter(st->st.is(Items.IRON_BOOTS)).findFirst().orElseThrow();
+            var reserveBow=data.animightEquipmentInventory.stream().filter(st->st.is(Items.BOW)).findFirst().orElseThrow();
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem.grantXP(tame,data,5);
+            check(data.xp==5,"all awarded XP must still go to the tame");
+            check(helmet.getDamageValue()==90 && sword.getDamageValue()==90 && reserveBoots.getDamageValue()==90 && reserveBow.getDamageValue()==90,
+                    "every item gets full allowance: type="+data.type+", helmet="+helmet.getDamageValue()+", sword="+sword.getDamageValue()+", boots="+reserveBoots.getDamageValue()+", bow="+reserveBow.getDamageValue());
+            check(data.animightEquipmentInventory.stream().filter(st->st.is(Items.IRON_CHESTPLATE)).findFirst().orElseThrow().getDamageValue()==0,"repair must stop at full durability");
+            check(sword.isEnchanted()&&sword.getTag().getString("RegressionMarker").equals("xp-weapon"),"repair preserves NBT");
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.leveling.LevelSystem.grantXP(tame,data,-1);
+            check(sword.getDamageValue()==90&&data.xp==4,"XP loss does not repair gear");
+            AnimightEquipmentEvents.repairOnXp(tame,data,Integer.MAX_VALUE);
+            check(sword.getDamageValue()==0&&reserveBow.getDamageValue()==0,"large XP awards must not overflow");
+        }finally{TameRegistry.remove(tame.getUUID());tame.discard();}helper.succeed();
+    }
+
+    @GameTest(template="empty")
+    public static void killRestoresEquippedScrapsAndPreservesMalformedTokens(GameTestHelper helper){
+        TamableAnimal tame=companion(helper);TameData data=TameRegistry.get(tame.getUUID());
+        try{
+            ItemStack original=worn(new ItemStack(Items.NETHERITE_SWORD));original.enchant(Enchantments.SHARPNESS,4);
+            tame.setItemSlot(EquipmentSlot.MAINHAND,ScrapItem.ofOriginal(original));
+            ItemStack malformed=new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("dungeonnowloading:item_scraps")));
+            AnimightEquipmentEvents.store(data,malformed);
+            var victim=EntityType.ZOMBIE.create(helper.getLevel());
+            AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,helper.getLevel().damageSources().mobAttack(tame)));
+            check(tame.getMainHandItem().is(Items.NETHERITE_SWORD)&&tame.getMainHandItem().getDamageValue()==0&&tame.getMainHandItem().isEnchanted(),"kill alone restores equipped DNL weapon scrap at full durability");
+            check(tame.getMainHandItem().getTag().getString("RegressionMarker").equals("keep-this-data"),"DNL restoration preserves custom NBT");
+            check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==1,"malformed scrap is retained");
+            check(AnimightEquipmentEvents.restoreRecoveryItems(tame,data)==0,"repeat recovery never duplicates items");
+            var snapshot=new net.minecraft.nbt.CompoundTag();var hands=new net.minecraft.nbt.ListTag();
+            ItemStack saved=new ItemStack(Items.BOW);saved.setDamageValue(50);hands.add(saved.save(new CompoundTag()));snapshot.put("HandItems",hands);data.entitySnapshot=snapshot;
+            AnimightEquipmentEvents.repairOnXp(null,data,4);
+            check(ItemStack.of(data.entitySnapshot.getList("HandItems",10).getCompound(0)).getDamageValue()==42,"unloaded ranked reward repairs saved native equipment");
+        }finally{TameRegistry.remove(tame.getUUID());tame.discard();}helper.succeed();
+    }
+
+    @GameTest(template="empty")
+    public static void wornArmorAlwaysBecomesScrapWithoutEnchantment(GameTestHelper helper){
+        TamableAnimal tame=companion(helper);TameData data=TameRegistry.get(tame.getUUID());
+        try{
+            var slots=List.of(EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET);
+            var items=List.of(Items.IRON_HELMET,Items.IRON_CHESTPLATE,Items.IRON_LEGGINGS,Items.IRON_BOOTS);
+            for(int i=0;i<slots.size();i++){
+                ItemStack armor=worn(new ItemStack(items.get(i)));armor.enchant(Enchantments.ALL_DAMAGE_PROTECTION,2);
+                tame.setItemSlot(slots.get(i),armor);
+                armor.hurtAndBreak(10000,tame,ignored->{});
+                check(armor.isEmpty()&&tame.getItemBySlot(slots.get(i)).isEmpty(),"broken worn armor must leave equipment slot");
+            }
+            check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==4,"each worn piece becomes exactly one DNL scrap without Break Protection");
+            for(var token:data.animightEquipmentInventory){
+                if(token.isEmpty())continue;var original=ScrapItem.getOriginal(token);
+                check(original.isEnchanted()&&original.getTag().getString("RegressionMarker").equals("keep-this-data"),"scraps preserve original enchantments and custom NBT");
+            }
+            var victim=EntityType.ZOMBIE.create(helper.getLevel());
+            AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,helper.getLevel().damageSources().mobAttack(tame)));
+            for(int i=0;i<slots.size();i++)check(tame.getItemBySlot(slots.get(i)).is(items.get(i))&&!tame.getItemBySlot(slots.get(i)).isDamaged(),"next kill restores each scrap to fully repaired armor");
+            var wolf=EntityType.WOLF.create(helper.getLevel());wolf.setTame(true);wolf.setOwnerUUID(UUID.randomUUID());
+            ItemStack ordinary=worn(new ItemStack(Items.IRON_CHESTPLATE));wolf.setItemSlot(EquipmentSlot.CHEST,ordinary);ordinary.hurtAndBreak(10000,wolf,ignored->{});
+            check(ordinary.isEmpty(),"non-Animights keep normal armor durability behavior");wolf.discard();
+        }finally{TameRegistry.remove(tame.getUUID());tame.discard();}helper.succeed();
+    }
+
+    @GameTest(template="empty")
+    public static void fullReserveRetainsPendingScrapWithoutDropping(GameTestHelper helper){
+        TamableAnimal tame=companion(helper);TameData data=TameRegistry.get(tame.getUUID());
+        try{
+            tame.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.NETHERITE_HELMET));
+            for(int i=0;i<AnimightEquipmentEvents.INVENTORY_SIZE;i++)AnimightEquipmentEvents.store(data,new ItemStack(Items.DIAMOND_HELMET));
+            ItemStack armor=worn(new ItemStack(Items.IRON_BOOTS));armor.enchant(DNLEnchantments.BREAK_PROTECTION.get(),1);tame.setItemSlot(EquipmentSlot.FEET,armor);
+            armor.hurtAndBreak(10000,tame,ignored->{});
+            check(armor.isEmpty()&&AnimightEquipmentEvents.isRecoveryItem(tame.getItemBySlot(EquipmentSlot.FEET)),"full inventory retains one pending scrap in equipment slot");
+            AnimightEquipmentEvents.maintain(tame,data);
+            check(AnimightEquipmentEvents.isRecoveryItem(tame.getItemBySlot(EquipmentSlot.FEET))&&data.animightEquipmentInventory.stream().noneMatch(AnimightEquipmentEvents::isRecoveryItem),"periodic equipment management must not drop pending scrap or duplicate DNL conversion");
+            data.animightEquipmentInventory.set(53,ItemStack.EMPTY);AnimightEquipmentEvents.maintain(tame,data);
+            check(tame.getItemBySlot(EquipmentSlot.FEET).isEmpty()&&data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==1,"pending scrap moves into reserve once space opens");
+            var victim=EntityType.ZOMBIE.create(helper.getLevel());AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,helper.getLevel().damageSources().mobAttack(tame)));
+            check(tame.getItemBySlot(EquipmentSlot.FEET).is(Items.IRON_BOOTS)&&!tame.getItemBySlot(EquipmentSlot.FEET).isDamaged(),"retained scrap repairs on a later kill");
+        }finally{TameRegistry.remove(tame.getUUID());tame.discard();}helper.succeed();
+    }
+
 }

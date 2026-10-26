@@ -17,6 +17,7 @@
     "AbstractHorseMixin",
     "AgeableMobMixin",
     "AnimalMixin",
+    "AnimightArmorBreakMixin",
     "AxolotlAiMixin",
     "AxolotlAttackablesSensorMixin",
     "AxolotlMixin",
