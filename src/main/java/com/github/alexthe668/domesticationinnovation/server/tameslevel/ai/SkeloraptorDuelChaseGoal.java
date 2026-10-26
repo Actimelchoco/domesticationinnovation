@@ -22,6 +22,9 @@ import java.util.UUID;
 public class SkeloraptorDuelChaseGoal extends Goal {
     private static final Map<Mob, SkeloraptorDuelChaseGoal> ACTIVE = new IdentityHashMap<>();
     private static final int PATH_INTERVAL = 20;
+    // Legendary Monsters uses 4.0 for this species' native follow-owner goal.
+    // Its base movement attribute is only 0.1; a 1.0 path request crawls.
+    private static final double CHASE_SPEED = 4.0D;
     protected final Mob mob;
     private final Method attackState;
     private int nextPathTick;
@@ -89,6 +92,6 @@ public class SkeloraptorDuelChaseGoal extends Goal {
         mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
         if (mob.tickCount < nextPathTick) return;
         nextPathTick = mob.tickCount + PATH_INTERVAL;
-        mob.getNavigation().moveTo(target, 1.0D);
+        mob.getNavigation().moveTo(target, CHASE_SPEED);
     }
 }

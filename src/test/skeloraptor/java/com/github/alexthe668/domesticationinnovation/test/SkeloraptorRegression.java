@@ -75,18 +75,19 @@ public class SkeloraptorRegression {
         var destination=h.absolutePos(new BlockPos(15,2,2));f.wolf.setPos(destination.getX(),destination.getY(),destination.getZ());
         f.raptor.setNoGravity(false);f.wolf.setNoGravity(false);f.raptor.setNoAi(false);f.raptor.getRandom().setSeed(7123);
         float health=f.wolf.getHealth();double initial=f.raptor.distanceTo(f.wolf);
+        double baseSpeed=f.raptor.getAttribute(Attributes.MOVEMENT_SPEED).getBaseValue();
         StringBuilder trace=new StringBuilder();
         for(int step=20;step<=100;step+=20){final int sample=step;h.runAfterDelay(step,()->{
             try{trace.append(" [t=").append(sample).append(" pos=").append(f.raptor.position()).append(" state=").append(f.raptor.getClass().getMethod("getAttackState").invoke(f.raptor)).append(" travel=").append(f.raptor.getClass().getMethod("canTravel").invoke(f.raptor)).append(" speed=").append(f.raptor.getAttributeValue(Attributes.MOVEMENT_SPEED)).append(" actualSpeed=").append(f.raptor.getSpeed()).append(" path=").append(f.raptor.getNavigation().getPath()==null?"null":f.raptor.getNavigation().getPath().getNextNodeIndex()+"/"+f.raptor.getNavigation().getPath().getNodeCount()).append(" running=").append(f.raptor.goalSelector.getRunningGoals().map(g->g.getGoal().getClass().getSimpleName()).toList()).append("]");}
             catch(Exception error){throw new RuntimeException(error);}
         });}
-        h.runAfterDelay(800,()->{
-            try{h.assertTrue(f.wolf.getHealth()<health,"Skeloraptor must chase and hit a distant opponent: initialDistance="+initial+", finalDistance="+f.raptor.distanceTo(f.wolf)+", health="+f.wolf.getHealth()+", navigationDone="+f.raptor.getNavigation().isDone()+", target="+f.raptor.getTarget()+trace);}
+        h.runAfterDelay(240,()->{
+            try{h.assertTrue(f.raptor.getAttribute(Attributes.MOVEMENT_SPEED).getBaseValue()==baseSpeed,"chasing must not change permanent speed attributes");h.assertTrue(f.wolf.getHealth()<health,"Skeloraptor must chase and hit a distant opponent: initialDistance="+initial+", finalDistance="+f.raptor.distanceTo(f.wolf)+", health="+f.wolf.getHealth()+", navigationDone="+f.raptor.getNavigation().isDone()+", target="+f.raptor.getTarget()+trace);}
             finally{f.close();}h.succeed();
         });
     }
-    @GameTest(template="empty",batch="chaseDuel",timeoutTicks=860) public static void chasesDistantDuelOpponent(GameTestHelper h){chase(h,false);}
-    @GameTest(template="empty",batch="chaseRanked",timeoutTicks=860) public static void chasesDistantRankedOpponent(GameTestHelper h){chase(h,true);}
+    @GameTest(template="empty",batch="chaseDuel",timeoutTicks=300) public static void chasesDistantDuelOpponent(GameTestHelper h){chase(h,false);}
+    @GameTest(template="empty",batch="chaseRanked",timeoutTicks=300) public static void chasesDistantRankedOpponent(GameTestHelper h){chase(h,true);}
 
     @GameTest(template="empty") public static void chaseGoalIsRemovedWhenDuelEnds(GameTestHelper h){
         try(var f=new Fixture(h,false)){
@@ -118,6 +119,10 @@ public class SkeloraptorRegression {
         com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.TameGoalInstaller.installIfMissing(f.raptor);
         try{f.raptor.getClass().getMethod("setCommand",int.class).invoke(f.raptor,2);}catch(Exception e){throw new RuntimeException(e);}
         f.raptor.setOrderedToSit(false);f.raptor.setNoGravity(false);f.raptor.setNoAi(false);f.raptor.getRandom().setSeed(7123);
+        h.runAfterDelay(160,()->{
+            try{h.assertTrue(f.raptor.distanceTo(enemy)<=4,"normal chase must reach native attack range within 160 ticks: distance="+f.raptor.distanceTo(enemy));}
+            catch(RuntimeException|Error error){enemy.discard();f.close();throw error;}
+        });
         h.runAfterDelay(800,()->{
             try{h.assertTrue(enemy.getHealth()<1000,"normal Monster Hunter must find, chase and hit hostile: health="+enemy.getHealth()+", distance="+f.raptor.distanceTo(enemy)+", target="+f.raptor.getTarget());}
             finally{enemy.discard();f.close();}h.succeed();
