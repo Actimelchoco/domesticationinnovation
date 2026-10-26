@@ -123,6 +123,7 @@ public final class RankedRefereeService {
             snapshot.remove("Passengers");
             Entity created=EntityType.loadEntityRecursive(snapshot,state.level,entity->entity);
             if(!(created instanceof Mob mob)||!TameEntityAdapter.isSupported(mob))continue;
+            DuelFollowerPause.discardCopiedPause(mob);
             if(TameRegistry.isTameTypeDisabled(mob)||TameRegistry.isSummonType(mob))continue;
             mob.setUUID(UUID.randomUUID());
             var attributes=mob.getAttributes().save();

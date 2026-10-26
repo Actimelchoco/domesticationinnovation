@@ -32,12 +32,16 @@ public final class GuardianChestBodyguards {
         return post!=null&&Objects.equals(post.getString("dimension"),data.homeDimension)
                 &&post.getInt("x")==data.homeX&&post.getInt("y")==data.homeY&&post.getInt("z")==data.homeZ;
     }
-    public static ServerPlayer protectedPlayer(MinecraftServer server,TameData data){
+    public static UUID protectedPlayerId(TameData data){
         if(data==null)return null;
         Assignment assignment=ACTIVE.get(id(data));if(assignment==null)return null;
         var rules=SOURCES.get(assignment.source);
         if(rules==null||!assignment.rule.equals(rules.get(id(data)))||!eligible(data,assignment.rule))return null;
-        return server.getPlayerList().getPlayer(assignment.player);
+        return assignment.player;
+    }
+    public static ServerPlayer protectedPlayer(MinecraftServer server,TameData data){
+        UUID player=protectedPlayerId(data);
+        return player==null?null:server.getPlayerList().getPlayer(player);
     }
     public static void refresh(MinecraftServer server){
         int now=server.getTickCount();if(now<nextRefresh)return;nextRefresh=now+20;

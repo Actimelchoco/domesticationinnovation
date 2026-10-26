@@ -146,6 +146,7 @@ public class TameAbilityEvents {
                 boolean cursed = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame) || TameLimitService.isReleased(tame) || RankedRefereeService.isReferee(tame);
                 if ((!TameEntityAdapter.isTame(tame) && !cursed) || !tame.isAlive()) continue;
                 TameData data = TameLimitService.abilityData(tame);
+                if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) continue;
                 if (data == null || (data.abilityLevels.isEmpty() && data.abilities.isEmpty() && data.attributeLevels.isEmpty())) continue;
                 if (reviveDeadEntry(data)) {
                     revivedDeadEntry = true;

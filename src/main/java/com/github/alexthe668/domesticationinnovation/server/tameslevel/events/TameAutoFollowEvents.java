@@ -76,7 +76,7 @@ public class TameAutoFollowEvents {
     }
 
     public static boolean isFollowing(TameData data) {
-        if (data == null || data.isInactive()) {
+        if (data == null || data.isInactive() || com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) {
             return false;
         }
         if (data.movementOrder == 1 || data.movementOrder == 2 || data.movementOrder == 3) {
@@ -209,6 +209,7 @@ public class TameAutoFollowEvents {
     }
 
     private static boolean isAutoFollowEligibleLoaded(LivingEntity tame, TameData data, UUID ownerId) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) return false;
         if (HunterInterestEvents.holdsCombatPosition(tame)) return false;
         return data != null
                 && tame != null

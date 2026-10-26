@@ -91,6 +91,7 @@ public class TameBehaviorEvents {
         }
         if (tame instanceof net.minecraft.world.entity.TamableAnimal tamable) TameSpawnEvents.processDeferredStatRefresh(tamable, data);
         final TameData activeData = data;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.tick(tame, activeData)) return;
         if (activeData.guardianReleaseMovementPending >= 0) TameCommands.applyPendingGuardianRelease(tame, activeData);
         if ((tame.tickCount + tame.getId()) % 10 == 0) LevelSystem.syncLevelArmor(tame, activeData);
         if ((tame.tickCount + tame.getId()) % 10 == 0) AnimightEquipmentEvents.maintain(tame, activeData);

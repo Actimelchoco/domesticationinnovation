@@ -138,6 +138,7 @@ public final class GuardianActivityService {
 
     /** Loaded entity callbacks and the queue share the same per-guardian gate. */
     public static boolean processRestThrottled(LivingEntity body, TameData data) {
+        if (DuelFollowerPause.shouldWait(data)) return true;
         if (!data.hasHome || (data.movementOrder != 3 && !data.guardianResting && !data.hungerForcedSit)) return false;
         MinecraftServer server = body.getServer();
         if (server == null) return false;
@@ -333,6 +334,7 @@ public final class GuardianActivityService {
             cursor = work.next;
             TameData data = work.data;
             if (TameRegistry.get(data.uuid) != data || !data.hasHome) { forget(data); continue; }
+            if (DuelFollowerPause.shouldWait(data)) continue;
             if (now < work.nextMaintenance) continue;
             work.nextMaintenance = now + CHECK_INTERVAL;
             enforceHunterMode(data);

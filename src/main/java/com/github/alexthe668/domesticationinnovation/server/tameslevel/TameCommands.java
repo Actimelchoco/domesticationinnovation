@@ -4894,6 +4894,7 @@ public class TameCommands {
     }
 
     public static void enforceGuardianCommandLock(LivingEntity tame, TameData data) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) return;
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.enforceHunterMode(data);
         if (!isAssignedGuardian(data) || data.guardianResting || data.hungerForcedSit || isDuelLocked(data)) return;
         boolean sitting = tame instanceof TamableAnimal animal ? animal.isOrderedToSit() || animal.isInSittingPose()
@@ -16694,6 +16695,7 @@ public class TameCommands {
     }
 
     public static boolean canAttemptAutoFollowUnloadedTeleport(MinecraftServer server, TameData data) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) return false;
         if (data == null) {
             return false;
         }
@@ -22420,6 +22422,7 @@ public class TameCommands {
     }
 
     public static int captureMovementOrderCode(TamableAnimal tame, TameData data) {
+        if (data != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.isPaused(tame)) return data.movementOrder;
         MovementOrder order = resolveRepairMovementOrder(tame, data);
         return switch (order) {
             case FOLLOW -> 0;
@@ -22620,6 +22623,7 @@ public class TameCommands {
     }
 
     public static boolean syncLiveMovementStateFor(TamableAnimal tame) {
+        if (tame != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.isPaused(tame)) return false;
         if (tame == null) {
             return false;
         }

@@ -40,6 +40,7 @@ public final class TameEntityAdapter {
     }
 
     public static boolean isStayingStill(Entity entity) {
+        if (DuelFollowerPause.isPaused(entity)) return true;
         if (DomesticationMod.CONFIG.trinaryCommandSystem.get() && entity instanceof IComandableMob commandable) {
             return commandable.getCommand() == 1;
         }
@@ -48,6 +49,7 @@ public final class TameEntityAdapter {
     }
 
     public static boolean isFollowingOwner(Entity entity) {
+        if (DuelFollowerPause.isPaused(entity)) return false;
         if (DomesticationMod.CONFIG.trinaryCommandSystem.get() && entity instanceof IComandableMob commandable) {
             return commandable.getCommand() == 2;
         }

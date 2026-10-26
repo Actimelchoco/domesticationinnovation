@@ -233,6 +233,7 @@ public final class TameDuelManager {
             capturePreDuelParticipantState(server, battle, participantId);
             prepareParticipantForDuel(server, participantId);
         }
+        DuelFollowerPause.begin(server, battle.roster);
         // Ensure participants have a valid target immediately after duel-start prep.
         maintainTargets(server, battle.teamA, battle.teamB);
         maintainTargets(server, battle.teamB, battle.teamA);
@@ -976,6 +977,7 @@ public final class TameDuelManager {
         if (battle == null) return;
         RankedRefereeService.end(battle.battleId);
         BATTLE_BY_ID.remove(battle.battleId);
+        DuelFollowerPause.end(server, battle.roster);
         persistBattleStatsAndMmr(server, battle, forfeitingOwner);
         refreshStoredDuelSnapshotsFromRegistry(battle);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
