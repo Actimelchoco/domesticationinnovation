@@ -75,6 +75,30 @@ public class VallumraptorWeaponsRegression {
         });
     }
 
+    @GameTest(template="empty", timeoutTicks=240)
+    public static void sittingRaptorGrabsNearbyWeaponWithoutMovingOrCollectingFood(GameTestHelper h){
+        var f=new Fixture(h);
+        f.raptor.setNoAi(false);f.raptor.setCommand(1);f.raptor.setOrderedToSit(true);
+        var start=f.raptor.position();
+        var food=new ItemEntity(h.getLevel(),start.x+0.3,start.y,start.z,new ItemStack(Items.BEEF));
+        var weapon=new ItemStack(Items.DIAMOND_SWORD);weapon.enchant(Enchantments.SHARPNESS,3);
+        var drop=new ItemEntity(h.getLevel(),start.x+0.7,start.y,start.z,weapon.copy());
+        h.getLevel().addFreshEntity(food);
+        h.runAtTickTime(40,()->{
+            check(f.raptor.getMainHandItem().isEmpty()&&!food.isRemoved(),"sitting food pickup remains unchanged");
+            h.getLevel().addFreshEntity(drop);
+        });
+        h.runAtTickTime(150,()->{
+            try{
+                check(ItemStack.matches(f.raptor.getMainHandItem(),weapon)&&drop.isRemoved(),"sitting tame grabs nearby enchanted weapon");
+                check(f.raptor.isOrderedToSit()&&f.raptor.getCommand()==1,"weapon pickup preserves sit command");
+                check(f.raptor.position().subtract(start).horizontalDistanceSqr()<0.1,"sitting raptor must not walk to collect weapon");
+                check(!food.isRemoved(),"sitting pickup leaves food untouched");
+            }finally{food.discard();drop.discard();f.close();}
+            h.succeed();
+        });
+    }
+
     @GameTest(template="empty")
     public static void foodAndWildRaptorsKeepNativeBehavior(GameTestHelper h){
         try(var f=new Fixture(h)){
