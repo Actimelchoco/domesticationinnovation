@@ -125,6 +125,7 @@ public final class AnimightEquipmentEvents {
         long allowance = (long) xp * 2L;
         boolean changed = false;
         if (tame != null) {
+            changed |= restoreRecoveryItems(tame, data) > 0;
             for (EquipmentSlot slot : EquipmentSlot.values()) changed |= repairStack(tame.getItemBySlot(slot), allowance);
         } else if (data.entitySnapshot != null) {
             // Unloaded ranked participants keep native equipment in their saved entity.
@@ -132,14 +133,26 @@ public final class AnimightEquipmentEvents {
                 var items = data.entitySnapshot.getList(key, Tag.TAG_COMPOUND);
                 for (int i = 0; i < items.size(); i++) {
                     ItemStack stack = ItemStack.of(items.getCompound(i));
-                    if (!repairStack(stack, allowance)) continue;
+                    ItemStack original = restoredRecoveryItem(stack);
+                    if (!original.isEmpty()) stack = original;
+                    else if (!repairStack(stack, allowance)) continue;
                     items.set(i, stack.save(new net.minecraft.nbt.CompoundTag()));
                     changed = true;
                 }
             }
         }
-        for (ItemStack stack : data.animightEquipmentInventory) changed |= repairStack(stack, allowance);
-        if (changed) TameRegistry.markDirty();
+        for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
+            ItemStack stack = data.animightEquipmentInventory.get(i);
+            ItemStack original = restoredRecoveryItem(stack);
+            if (!original.isEmpty()) {
+                data.animightEquipmentInventory.set(i, original);
+                changed = true;
+            } else changed |= repairStack(stack, allowance);
+        }
+        if (changed) {
+            if (tame == null && data.entitySnapshot != null) syncArmorSlotTags(data.entitySnapshot);
+            TameRegistry.markDirty();
+        }
     }
 
     /** Break-protection mods may spawn the transformed item instead of replacing the slot. */

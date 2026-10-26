@@ -1118,6 +1118,7 @@ public class CommonProxy {
         if (!(target instanceof TamableAnimal tame) || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) {
             return false;
         }
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.canRetrieve(player, hand, target)) return false;
         if (!TameCommands.isHungerBlockingMovement(tame)) {
             return false;
         }
@@ -1137,6 +1138,7 @@ public class CommonProxy {
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.retrieve(event, event.getTarget())) return;
         if (handleHungerInventoryShortcut(player, event.getHand(), event.getTarget(), event)) {
             return;
         }
@@ -1158,6 +1160,7 @@ public class CommonProxy {
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.isPaper(stack)) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.retrieve(event, entity)) return;
         if (handleHungerInventoryShortcut(player, event.getHand(), entity, event)) {
             return;
         }
@@ -2407,8 +2410,7 @@ public class CommonProxy {
     }
 
     private static TameData diEffectData(LivingEntity entity) {
-        return entity instanceof TamableAnimal tame && tame.isTame()
-                ? TameRegistry.get(tame.getUUID()) : null;
+        return TameEntityAdapter.isTame(entity) ? TameRegistry.get(entity.getUUID()) : null;
     }
 
     private static int getDiEffectLevel(TameData data, String effectId) {
@@ -2424,10 +2426,10 @@ public class CommonProxy {
     }
 
     private static boolean hasTlAttributeLevel(LivingEntity entity, String attributeId) {
-        if (!(entity instanceof TamableAnimal tame) || !tame.isTame() || attributeId == null || attributeId.isBlank()) {
+        if (!TameEntityAdapter.isTame(entity) || attributeId == null || attributeId.isBlank()) {
             return false;
         }
-        TameData data = TameRegistry.get(tame.getUUID());
+        TameData data = TameRegistry.get(entity.getUUID());
         return data != null && LevelSystem.getAttributeLevel(data, attributeId) > 0;
     }
 

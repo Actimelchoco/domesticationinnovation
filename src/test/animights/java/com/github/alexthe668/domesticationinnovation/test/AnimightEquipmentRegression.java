@@ -410,6 +410,34 @@ public final class AnimightEquipmentRegression {
     }
 
     @GameTest(template="empty")
+    public static void xpRestoresScrapsWithoutKill(GameTestHelper helper) {
+        TamableAnimal tame=companion(helper);TameData data=TameRegistry.get(tame.getUUID());
+        try {
+            ItemStack original=worn(new ItemStack(Items.IRON_HELMET));
+            original.enchant(Enchantments.ALL_DAMAGE_PROTECTION,3);
+            tame.setItemSlot(EquipmentSlot.HEAD,ScrapItem.ofOriginal(original));
+            AnimightEquipmentEvents.store(data,ScrapItem.ofOriginal(worn(new ItemStack(Items.DIAMOND_SWORD))));
+            ItemStack malformed=new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("dungeonnowloading:item_scraps")));
+            AnimightEquipmentEvents.store(data,malformed);
+            AnimightEquipmentEvents.repairOnXp(tame,data,0);
+            check(AnimightEquipmentEvents.isRecoveryItem(tame.getItemBySlot(EquipmentSlot.HEAD)),"zero XP must not restore scraps");
+            AnimightEquipmentEvents.repairOnXp(tame,data,1);
+            ItemStack helmet=tame.getItemBySlot(EquipmentSlot.HEAD);
+            check(helmet.is(Items.IRON_HELMET)&&!helmet.isDamaged()&&helmet.isEnchanted()
+                    &&helmet.getTag().getString("RegressionMarker").equals("keep-this-data"),"XP restores equipped scrap with NBT intact");
+            check(data.animightEquipmentInventory.stream().anyMatch(st->st.is(Items.DIAMOND_SWORD)&&!st.isDamaged()),"XP restores reserve scraps without a kill");
+            check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==1,"malformed scrap remains intact");
+            var snapshot=new CompoundTag();var armor=new net.minecraft.nbt.ListTag();
+            for(int i=0;i<4;i++)armor.add((i==3?ScrapItem.ofOriginal(original):ItemStack.EMPTY).save(new CompoundTag()));
+            snapshot.put("ArmorItems",armor);data.entitySnapshot=snapshot;
+            AnimightEquipmentEvents.repairOnXp(null,data,1);
+            check(ItemStack.of(snapshot.getList("ArmorItems",10).getCompound(3)).is(Items.IRON_HELMET)
+                    &&ItemStack.of(snapshot.getCompound("head")).is(Items.IRON_HELMET),"unloaded XP restores scraps and synchronizes native armor tags");
+        } finally {TameRegistry.remove(tame.getUUID());tame.discard();}
+        helper.succeed();
+    }
+
+    @GameTest(template="empty")
     public static void killRestoresEquippedScrapsAndPreservesMalformedTokens(GameTestHelper helper){
         TamableAnimal tame=companion(helper);TameData data=TameRegistry.get(tame.getUUID());
         try{

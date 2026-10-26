@@ -1,0 +1,20 @@
+allprojects {
+    afterEvaluate {
+        def modsDir = project.file(project.findProperty('vallumraptorModsDir'))
+        repositories.flatDir { dirs modsDir }
+        configurations.implementation.dependencies.removeAll { it.group == 'curse.maven' && it.name == 'citadel-331936' }
+        dependencies.add('implementation', fg.deobf('vallumraptor-test:citadel-2.6.3-1.20.1:local'))
+        dependencies.add('implementation', fg.deobf('vallumraptor-test:alexscaves-2.0.2:local'))
+        sourceSets.main.java.srcDir('src/test/vallumraptorweapons/java')
+        sourceSets.main.resources.srcDir('src/test/performance/resources')
+        minecraft.runs { gameTestServer {
+            workingDirectory project.file('build/vallumraptor-weapons-gametest')
+            property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+            arg '-mixin.config=citadel.mixins.json'
+            arg '-mixin.config=domesticationinnovation.mixins.json'
+            mods { domesticationinnovation { source sourceSets.main } }
+        } }
+    }
+}
