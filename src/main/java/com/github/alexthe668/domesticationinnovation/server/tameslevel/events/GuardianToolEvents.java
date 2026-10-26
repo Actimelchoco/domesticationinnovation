@@ -34,7 +34,7 @@ public class GuardianToolEvents {
     }
 
     public static boolean isGuardianToolArrow(ItemStack stack) {
-        return stack != null && !stack.isEmpty() && stack.is(Items.ARROW);
+        return stack != null && !stack.isEmpty() && stack.is(Items.ARROW) && stack.hasCustomHoverName();
     }
 
     @SubscribeEvent
