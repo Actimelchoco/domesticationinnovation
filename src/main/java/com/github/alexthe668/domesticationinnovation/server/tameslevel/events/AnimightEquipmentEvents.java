@@ -58,7 +58,7 @@ public final class AnimightEquipmentEvents {
 
     private static boolean active(LivingEntity tame, TameData data) {
         return isAnimight(tame) && !tame.level().isClientSide && tame.isAlive()
-                && data != null && !data.dead && !data.stored && !TameDuelManager.isTameInDuel(tame.getUUID());
+                && data != null && !data.dead && !data.stored;
     }
 
     public static boolean isRecoveryItem(ItemStack stack) {
@@ -185,13 +185,15 @@ public final class AnimightEquipmentEvents {
         return false;
     }
 
-    /** Called only when vanilla has determined that a worn armor stack would break. */
+    /** Called when worn armor or a dueling weapon would break through durability. */
     public static boolean preserveBreakingArmor(LivingEntity wearer, ItemStack armor) {
-        if (wearer.level().isClientSide || !isAnimight(wearer) || !(armor.getItem() instanceof ArmorItem)) return false;
+        if (wearer.level().isClientSide || !isAnimight(wearer)) return false;
+        boolean wornArmor = armor.getItem() instanceof ArmorItem;
+        if (!wornArmor && (!TameDuelManager.isTameInDuel(wearer.getUUID()) || !validWeapon(wearer, armor))) return false;
         TameData data = data(wearer);
         if (data == null || data.dead || data.stored) return false;
         EquipmentSlot equipped = null;
-        for (EquipmentSlot slot : ARMOR_SLOTS) if (wearer.getItemBySlot(slot) == armor) { equipped = slot; break; }
+        for (EquipmentSlot slot : EquipmentSlot.values()) if ((wornArmor ? slot.getType() == EquipmentSlot.Type.ARMOR : slot.getType() == EquipmentSlot.Type.HAND) && wearer.getItemBySlot(slot) == armor) { equipped = slot; break; }
         if (equipped == null) return false;
         var scrapId = new ResourceLocation("dungeonnowloading", "item_scraps");
         if (!ForgeRegistries.ITEMS.containsKey(scrapId)) {
@@ -313,11 +315,12 @@ public final class AnimightEquipmentEvents {
 
     private static void maintain(LivingEntity tame, TameData data, int incomingDamage) {
         if (!active(tame, data)) return;
+        boolean duel = TameDuelManager.isTameInDuel(tame.getUUID());
         for (EquipmentSlot slot : ARMOR_SLOTS) {
             ItemStack worn = tame.getItemBySlot(slot);
             if (isRecoveryItem(worn) && !fitsRecoveryToken(data, worn)) continue;
             ItemStack removed = ItemStack.EMPTY;
-            if (!worn.isEmpty() && (!validArmor(tame, worn, slot) || tooWorn(worn, incomingDamage))) {
+            if (!worn.isEmpty() && (!validArmor(tame, worn, slot) || !duel && tooWorn(worn, incomingDamage))) {
                 removed = worn;
                 tame.setItemSlot(slot, ItemStack.EMPTY);
             }
@@ -326,7 +329,7 @@ public final class AnimightEquipmentEvents {
                 ItemStack bestStack = tame.getItemBySlot(slot);
                 for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
                     ItemStack candidate = data.animightEquipmentInventory.get(i);
-                    if (validArmor(tame, candidate, slot) && !tooWorn(candidate, incomingDamage) && compare(candidate, bestStack, slot) > 0) {
+                    if (validArmor(tame, candidate, slot) && (duel || !tooWorn(candidate, incomingDamage)) && compare(candidate, bestStack, slot) > 0) {
                         best = i; bestStack = candidate;
                     }
                 }
@@ -348,7 +351,7 @@ public final class AnimightEquipmentEvents {
 
     /** Opt-in disposal: only one weak piece per five seconds, after normal equipment swaps. */
     public static boolean discardWornReserveArmor(LivingEntity tame, TameData data) {
-        if (!active(tame, data)
+        if (!active(tame, data) || TameDuelManager.isTameInDuel(tame.getUUID())
                 || !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.PlayerDebugSettings.discardWornArmor(data.ownerUUID)) return false;
         long now = tame.level().getGameTime();
         if (now < data.nextAnimightWornArmorDiscardTick) return false;
@@ -384,18 +387,21 @@ public final class AnimightEquipmentEvents {
     }
 
     private static void maintainWeapon(LivingEntity tame, TameData data) {
+        boolean duel = TameDuelManager.isTameInDuel(tame.getUUID());
         ItemStack held = tame.getMainHandItem();
+        if (isRecoveryItem(held) && !fitsRecoveryToken(data, held)) return;
         // Preserve unrelated hand items such as shields and utility items.
         if (!held.isEmpty() && !validWeapon(tame, held) && !isRecoveryItem(held)) return;
-        boolean unusable = !held.isEmpty() && (isRecoveryItem(held) || tooWorn(held, 0));
+        boolean unusable = !held.isEmpty() && (isRecoveryItem(held) || (!duel && tooWorn(held, 0)));
         ItemStack offhand = tame.getOffhandItem();
+        if (isRecoveryItem(offhand) && !fitsRecoveryToken(data, offhand)) return;
         boolean reserveOffhand = !offhand.isEmpty() && (validWeapon(tame, offhand) || isRecoveryItem(offhand));
         int best = -1;
         ItemStack bestStack = unusable ? ItemStack.EMPTY : held;
         double bestDamage = bestStack.isEmpty() ? Double.NEGATIVE_INFINITY : weaponDamage(tame, bestStack);
         // The native ranged goal checks both hands. Keep the selected weapon in the main hand,
         // otherwise a weaker offhand bow could override a stronger selected melee weapon.
-        if (reserveOffhand && validWeapon(tame, offhand) && !tooWorn(offhand, 0)) {
+        if (reserveOffhand && validWeapon(tame, offhand) && (duel || !tooWorn(offhand, 0))) {
             double damage = weaponDamage(tame, offhand);
             if (damage > bestDamage || (damage == bestDamage && !bestStack.isEmpty()
                     && offhand.getMaxDamage() - offhand.getDamageValue() > bestStack.getMaxDamage() - bestStack.getDamageValue())) {
@@ -404,7 +410,7 @@ public final class AnimightEquipmentEvents {
         }
         for (int i = 0; i < data.animightEquipmentInventory.size(); i++) {
             ItemStack candidate = data.animightEquipmentInventory.get(i);
-            if (!validWeapon(tame, candidate) || tooWorn(candidate, 0)) continue;
+            if (!validWeapon(tame, candidate) || (!duel && tooWorn(candidate, 0))) continue;
             double damage = weaponDamage(tame, candidate);
             if (damage > bestDamage || (damage == bestDamage && !bestStack.isEmpty()
                     && candidate.getMaxDamage() - candidate.getDamageValue() > bestStack.getMaxDamage() - bestStack.getDamageValue())) {
@@ -430,9 +436,46 @@ public final class AnimightEquipmentEvents {
         TameRegistry.markDirty();
     }
 
+    public static void damageDuelArmor(LivingEntity tame, net.minecraft.world.damagesource.DamageSource source, float damage) {
+        if (tame.level().isClientSide || !isAnimight(tame) || !TameDuelManager.isTameInDuel(tame.getUUID()) || damage <= 0 || source.is(DamageTypeTags.BYPASSES_ARMOR)) return;
+        int wear = Math.max(1, (int) (damage / 4F));
+        for (EquipmentSlot slot : ARMOR_SLOTS) {
+            ItemStack stack = tame.getItemBySlot(slot);
+            if (!validArmor(tame, stack, slot) || source.is(DamageTypeTags.IS_FIRE) && stack.getItem().isFireResistant()) continue;
+            stack.hurtAndBreak(wear, tame, ignored -> { });
+        }
+    }
+
+    public static void damageDuelWeapon(LivingEntity tame, boolean ranged) {
+        if (tame.level().isClientSide || !isAnimight(tame) || !TameDuelManager.isTameInDuel(tame.getUUID())) return;
+        ItemStack stack = tame.getMainHandItem();
+        if (ranged && !(stack.getItem() instanceof BowItem)) stack = tame.getOffhandItem();
+        if (!validWeapon(tame, stack) || ranged != (stack.getItem() instanceof BowItem)) return;
+        stack.hurtAndBreak(ranged || stack.getItem() instanceof SwordItem ? 1 : 2, tame, ignored -> { });
+    }
+
+    /** Copy just equipment, never position/health/AI, into a duel restoration snapshot. */
+    public static void copyLiveEquipment(LivingEntity tame, net.minecraft.nbt.CompoundTag snapshot) {
+        for (EquipmentSlot.Type type : EquipmentSlot.Type.values()) {
+            var items = new net.minecraft.nbt.ListTag();
+            for (EquipmentSlot slot : EquipmentSlot.values()) if (slot.getType() == type)
+                items.add(tame.getItemBySlot(slot).save(new net.minecraft.nbt.CompoundTag()));
+            snapshot.put(type == EquipmentSlot.Type.ARMOR ? "ArmorItems" : "HandItems", items);
+        }
+        syncArmorSlotTags(snapshot);
+    }
+
+    public static void syncArmorSlotTags(net.minecraft.nbt.CompoundTag snapshot) {
+        if (!snapshot.contains("ArmorItems", Tag.TAG_LIST)) return;
+        var items = snapshot.getList("ArmorItems", Tag.TAG_COMPOUND);
+        // Animights also reads head/chest/legs/feet after vanilla ArmorItems.
+        // Empty slots must overwrite old custom tags, including reused death NBT.
+        for (EquipmentSlot slot : ARMOR_SLOTS) snapshot.put(slot.getName(), items.getCompound(slot.getIndex()).copy());
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onKill(LivingDeathEvent event) {
-        if (event.isCanceled() || event.getEntity().level().isClientSide || !(event.getEntity() instanceof Mob)) return;
+        if (event.isCanceled() || event.getEntity().level().isClientSide) return;
         LivingEntity killer = TameCombatEvents.resolveTameAttacker(event.getSource());
         if (!isAnimight(killer)) return;
         TameData data = data(killer);
@@ -455,7 +498,7 @@ public final class AnimightEquipmentEvents {
         LivingEntity killer = TameCombatEvents.resolveTameAttacker(event.getSource());
         if (!isAnimight(killer) || TameEntityAdapter.isTame(event.getEntity())) return;
         TameData data = data(killer);
-        if (!active(killer, data)) return;
+        if (!active(killer, data) || TameDuelManager.isTameInDuel(killer.getUUID())) return;
         event.getDrops().removeIf(drop -> {
             ItemStack stack = drop.getItem();
             if (!acceptsEquipment(killer, stack)) return false;
@@ -467,7 +510,7 @@ public final class AnimightEquipmentEvents {
     }
 
     public static boolean openInventory(ServerPlayer player, LivingEntity tame, TameData data) {
-        if (!active(tame, data) || !player.getUUID().equals(data.ownerUUID)) return false;
+        if (!active(tame, data) || TameDuelManager.isTameInDuel(tame.getUUID()) || !player.getUUID().equals(data.ownerUUID)) return false;
         player.openMenu(new SimpleMenuProvider((id, inventory, viewer) -> new ChestMenu(MenuType.GENERIC_9x6,
                 id, inventory, new ReserveContainer(tame, data), 6), Component.literal(data.name + " Equipment")));
         return true;
@@ -493,7 +536,7 @@ public final class AnimightEquipmentEvents {
         }
         public void setItem(int slot, ItemStack stack) { data.animightEquipmentInventory.set(slot, stack); setChanged(); }
         public void setChanged() { TameRegistry.markDirty(); }
-        public boolean stillValid(Player player) { return active(tame, data) && player.getUUID().equals(data.ownerUUID); }
+        public boolean stillValid(Player player) { return active(tame, data) && !TameDuelManager.isTameInDuel(tame.getUUID()) && player.getUUID().equals(data.ownerUUID); }
         public boolean canPlaceItem(int slot, ItemStack stack) { return acceptsEquipment(tame, stack); }
         public void clearContent() { data.animightEquipmentInventory.replaceAll(ignored -> ItemStack.EMPTY); setChanged(); }
         public void stopOpen(Player player) { maintain(tame, data); }

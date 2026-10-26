@@ -14,6 +14,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin extends Entity {
 
+    @Inject(method = "hurtArmor", at = @At("HEAD"))
+    private void tl$wearAnimightDuelArmor(net.minecraft.world.damagesource.DamageSource source, float damage,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.damageDuelArmor((LivingEntity)(Object)this, source, damage);
+    }
+
     @Inject(method = "hurt", at = @At("HEAD"), cancellable = true)
     private void tl$protectFriendlyOwnerDamage(net.minecraft.world.damagesource.DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(this, source)

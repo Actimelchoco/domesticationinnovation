@@ -944,7 +944,7 @@ public class TameCommands {
                                 .suggests((ctx, b) -> suggestCompactDuelSpec(ctx.getSource(), b))
                                 .executes(ctx -> duelCompact(ctx.getSource(), StringArgumentType.getString(ctx, "spec")))))
                 .then(Commands.literal("start")
-                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .requires(source -> duelDraft(source) != null && !duelDraft(source).ready)
                         .executes(ctx -> simpleDuelReady(ctx.getSource())))
                 .then(Commands.literal("add")
                         .requires(TameCommands::isPreparingDuelSelectionSource)
@@ -952,10 +952,10 @@ public class TameCommands {
                                 .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
                                 .executes(ctx -> simpleDuelAdd(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
                 .then(Commands.literal("addMyself")
-                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .requires(source -> duelDraft(source) != null && !duelDraft(source).includeSelf)
                         .executes(ctx -> simpleDuelAdd(ctx.getSource(), "myself")))
                 .then(Commands.literal("remove")
-                        .requires(TameCommands::isPreparingDuelSelectionSource)
+                        .requires(source -> duelDraft(source) != null && (duelDraft(source).includeSelf || !duelDraft(source).tameIds.isEmpty()))
                         .then(Commands.argument("selection", StringArgumentType.greedyString())
                                 .suggests((ctx, b) -> suggestSimpleDuelRemoval(ctx.getSource(), b))
                                 .executes(ctx -> simpleDuelRemove(ctx.getSource(), StringArgumentType.getString(ctx, "selection")))))
@@ -1014,7 +1014,7 @@ public class TameCommands {
                         .requires(TameCommands::isActiveDuelSource)
                         .executes(ctx -> duelForfeit(ctx.getSource())))
                 .then(Commands.literal("info")
-                        .requires(source -> isPreparingDuelSource(source) || isActiveDuelSource(source))
+                        .requires(TameCommands::isActiveDuelSource)
                         .executes(ctx -> simpleDuelInfo(ctx.getSource())))
                 .then(Commands.literal("accept")
                         .requires(TameCommands::hasSimpleDuelInviteSource)
@@ -1024,10 +1024,7 @@ public class TameCommands {
                         .requires(TameCommands::hasSimpleDuelInviteSource)
                         .then(Commands.argument("inviteId", StringArgumentType.word())
                                 .executes(ctx -> simpleDuelDecline(ctx.getSource(), StringArgumentType.getString(ctx, "inviteId")))))
-                .then(Commands.argument("teamSelection", StringArgumentType.greedyString())
-                        .requires(TameCommands::isPreparingDuelSelectionSource)
-                        .suggests((ctx, b) -> suggestTeamSelectionSpecs(ctx.getSource(), b))
-                        .executes(ctx -> simpleDuelSelect(ctx.getSource(), StringArgumentType.getString(ctx, "teamSelection"))));
+                ;
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> buildChestDrumSettingsCommand() {
@@ -14107,6 +14104,10 @@ public class TameCommands {
     /** Reconstructed entities must be alive and animation-clean before tracking starts. */
     private static void loadRespawnSnapshot(LivingEntity tame, CompoundTag snapshot) {
         CompoundTag clean = snapshot.copy();
+        var entityTypeId = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        if (entityTypeId != null && "animights".equals(entityTypeId.getNamespace())) {
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.syncArmorSlotTags(clean);
+        }
         clean.putShort("HurtTime", (short) 0);
         clean.putShort("DeathTime", (short) 0);
         clean.putFloat("Health", tame.getMaxHealth());
@@ -26058,6 +26059,11 @@ public class TameCommands {
         return isPreparingDuelSource(source) && preparation != null && !preparation.fundingFailed;
     }
 
+    private static SimpleDuelTeam duelDraft(CommandSourceStack source) {
+        if (!isPreparingDuelSelectionSource(source)) return null;
+        return SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(source.getPlayer().getUUID()).team(source.getPlayer().getUUID());
+    }
+
     private static boolean isDuelFundingRetrySource(CommandSourceStack source) {
         ServerPlayer player = source == null ? null : source.getPlayer();
         SimpleDuelPreparation preparation = player == null ? null : SIMPLE_DUEL_PREPARATION_BY_PLAYER.get(player.getUUID());
@@ -26216,7 +26222,7 @@ public class TameCommands {
         preparation.fundingFailed = false;
         for (UUID id : preparation.drafts.keySet()) {
             ServerPlayer recipient = source.getServer().getPlayerList().getPlayer(id);
-            if (recipient != null) sendSimpleDuelSelections(recipient, preparation);
+            if (recipient != null) { sendSimpleDuelSelections(recipient, preparation); refreshDuelCommands(recipient); }
         }
     }
 
@@ -26334,6 +26340,7 @@ public class TameCommands {
         SimpleDuelTeam draft = preparation.team(player.getUUID());
         if (draft.tameIds.isEmpty()) draft.includeSelf = true;
         draft.ready = true;
+        refreshDuelCommands(player);
         if (!preparation.ready()) player.sendSystemMessage(Component.literal("Ready. Waiting for the other players to use /tames duel start.").withStyle(ChatFormatting.GREEN));
         return tryStartSimpleDuel(source, preparation);
     }

@@ -28,6 +28,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Mob.class)
 public abstract class MobMixin extends LivingEntity {
 
+    @Inject(method = "doHurtTarget", at = @At("RETURN"))
+    private void tl$wearAnimightDuelWeapon(Entity target, CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValueZ()) com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.damageDuelWeapon(this, false);
+    }
+
     @Inject(method = "doHurtTarget", at = @At("HEAD"), cancellable = true)
     private void tl$blockFriendlyOwnerMelee(Entity target, CallbackInfoReturnable<Boolean> cir) {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(target, this)) cir.setReturnValue(false);

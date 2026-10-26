@@ -15,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -473,4 +474,91 @@ public final class AnimightEquipmentRegression {
         }finally{TameRegistry.remove(tame.getUUID());tame.discard();}helper.succeed();
     }
 
+    static void startEquipmentDuel(GameTestHelper h,TamableAnimal a,TamableAnimal b){
+        for(var pet:List.of(a,b)){pet.setNoAi(true);pet.setNoGravity(true);h.getLevel().addFreshEntity(pet);com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.LoadedTameIndex.refresh(pet);}
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager.startTeamDuel(h.getLevel().getServer(),a.getOwnerUUID(),java.util.Set.of(a.getUUID()),b.getOwnerUUID(),java.util.Set.of(b.getUUID()));
+        check(com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager.isTameInDuel(a.getUUID()),"actual equipment duel started");
+    }
+    static LivingEntity equipmentBody(GameTestHelper h,TamableAnimal old){var data=TameRegistry.get(old.getUUID());return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameEntityAdapter.findLoaded(h.getLevel().getServer(),data.uuid,data.tlId);}
+    static void closeEquipmentDuel(GameTestHelper h,TamableAnimal a,TamableAnimal b){
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),a.getOwnerUUID());
+        for(var old:List.of(a,b)){var body=equipmentBody(h,old);TameRegistry.remove(old.getUUID());if(body!=null)body.discard();old.discard();}
+    }
+    static void equipmentRound(GameTestHelper h,boolean lethal){
+        var a=companion(h);var b=companion(h);
+        var helmet=worn(new ItemStack(Items.IRON_HELMET));var sword=worn(new ItemStack(Items.DIAMOND_SWORD));a.setItemSlot(EquipmentSlot.HEAD,helmet);a.setItemSlot(EquipmentSlot.MAINHAND,sword);
+        try{
+            startEquipmentDuel(h,a,b);
+            a.hurt(h.getLevel().damageSources().mobAttack(b),8);
+            check(a.getItemBySlot(EquipmentSlot.HEAD).isEmpty(),"real duel damage must wear armor into a scrap instead of rescuing it at ten percent");
+            check(a.doHurtTarget(b),"real native melee hit succeeds");
+            check(a.getMainHandItem().isEmpty(),"real native duel melee consumes weapon durability into a scrap");
+            check(TameRegistry.get(a.getUUID()).animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==2,"exactly two broken pieces retained");
+            if(lethal) a.hurt(h.getLevel().damageSources().genericKill(),10000);
+            else com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),a.getOwnerUUID());
+            var restored=equipmentBody(h,a);var data=TameRegistry.get(a.getUUID());
+            check(restored!=null&&restored.getItemBySlot(EquipmentSlot.HEAD).isEmpty()&&restored.getMainHandItem().isEmpty(),"duel restoration must not duplicate originals: restored="+restored+", head="+(restored==null?"null":restored.getItemBySlot(EquipmentSlot.HEAD))+", hand="+(restored==null?"null":restored.getMainHandItem())+", reserve="+data.animightEquipmentInventory+", dead="+data.dead+", inDuel="+com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager.isTameInDuel(a.getUUID()));
+            check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==2,"duel end preserves both scraps");
+            var victim=EntityType.ZOMBIE.create(h.getLevel());AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(restored)));
+            check(restored.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET)&&restored.getMainHandItem().is(Items.DIAMOND_SWORD),"later kill restores both pieces exactly once");
+        }finally{closeEquipmentDuel(h,a,b);}h.succeed();
+    }
+    @GameTest(template="empty") public static void duelHitsWearArmorAndWeaponsWithoutRestorationDuplication(GameTestHelper h){equipmentRound(h,false);}
+    @GameTest(template="empty") public static void duelDeathRetainsScrapsWithoutRestoringDuplicateOriginals(GameTestHelper h){equipmentRound(h,true);}
+    @GameTest(template="empty") public static void duelBowShotsBreakAndKillsRepairEquipment(GameTestHelper h){
+        var a=companion(h);var b=companion(h);a.setItemSlot(EquipmentSlot.MAINHAND,worn(new ItemStack(Items.BOW)));
+        try{
+            startEquipmentDuel(h,a,b);((net.minecraft.world.entity.monster.RangedAttackMob)a).performRangedAttack(b,1F);
+            check(a.getMainHandItem().isEmpty()&&TameRegistry.get(a.getUUID()).animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==1,"actual native bow shot must consume durability into one scrap");
+            var victim=EntityType.ZOMBIE.create(h.getLevel());AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(a)));
+            check(a.getMainHandItem().is(Items.BOW)&&!a.getMainHandItem().isDamaged(),"kills during duels restore equipment immediately");
+        }finally{closeEquipmentDuel(h,a,b);}h.succeed();
+    }
+
+    @GameTest(template="empty") public static void duelOffhandBowScrapSurvivesFullInventory(GameTestHelper h){
+        var a=companion(h);var b=companion(h);a.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.NETHERITE_HELMET));a.setItemSlot(EquipmentSlot.OFFHAND,worn(new ItemStack(Items.BOW)));var data=TameRegistry.get(a.getUUID());
+        for(int i=0;i<AnimightEquipmentEvents.INVENTORY_SIZE;i++)AnimightEquipmentEvents.store(data,new ItemStack(Items.DIAMOND_HELMET));
+        try{
+            startEquipmentDuel(h,a,b);((net.minecraft.world.entity.monster.RangedAttackMob)a).performRangedAttack(b,1F);
+            check(AnimightEquipmentEvents.isRecoveryItem(a.getOffhandItem()),"full reserve retains broken offhand bow as pending scrap");
+            AnimightEquipmentEvents.maintain(a,data);
+            check(AnimightEquipmentEvents.isRecoveryItem(a.getOffhandItem()),"equipment maintenance must not drop a pending offhand scrap from a full inventory");
+            var victim=EntityType.ZOMBIE.create(h.getLevel());AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(a)));
+            check(a.getMainHandItem().is(Items.BOW)&&!a.getMainHandItem().isDamaged()&&a.getOffhandItem().isEmpty(),"kill restores the pending bow without extra copies");
+        }finally{closeEquipmentDuel(h,a,b);}h.succeed();
+    }
+
+
+    @GameTest(template="empty") public static void ordinaryDeathClearsStaleArmorAndRespawnsScrapOnce(GameTestHelper h){
+        var a=companion(h);var data=TameRegistry.get(a.getUUID());
+        try{
+            a.setNoAi(true);h.getLevel().addFreshEntity(a);
+            var helmet=worn(new ItemStack(Items.IRON_HELMET));a.setItemSlot(EquipmentSlot.HEAD,helmet);
+            data.entitySnapshot=new CompoundTag();a.save(data.entitySnapshot);
+            check(ItemStack.of(data.entitySnapshot.getCompound("head")).is(Items.IRON_HELMET),"fixture has native redundant armor save");
+            helmet.hurtAndBreak(10000,a,ignored->{});
+            a.hurt(h.getLevel().damageSources().genericKill(),10000);
+            check(data.dead,"ordinary combat death is recorded outside any duel");
+            check(ItemStack.of(data.entitySnapshot.getCompound("head")).isEmpty(),"ordinary death clears stale native armor alias before archive");
+            a.discard();
+            check(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.respawnDeadTameForDuel(h.getLevel().getServer(),data.uuid),"shared command respawn succeeds");
+            var live=equipmentBody(h,a);
+            check(live!=null&&live.getItemBySlot(EquipmentSlot.HEAD).isEmpty(),"normal respawn cannot resurrect broken armor");
+            check(data.animightEquipmentInventory.stream().filter(AnimightEquipmentEvents::isRecoveryItem).count()==1,"normal death preserves exactly one scrap");
+            var victim=EntityType.ZOMBIE.create(h.getLevel());AnimightEquipmentEvents.onKill(new LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(live)));
+            check(live.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET)&&data.animightEquipmentInventory.stream().noneMatch(AnimightEquipmentEvents::isRecoveryItem),"later kill restores exactly one helmet");
+        }finally{var live=equipmentBody(h,a);TameRegistry.remove(a.getUUID());if(live!=null)live.discard();a.discard();}h.succeed();
+    }
+    @GameTest(template="empty") public static void legacyArmorAliasesAreNormalizedWithoutMutatingArchive(GameTestHelper h){
+        var a=companion(h);var data=TameRegistry.get(a.getUUID());
+        try{
+            a.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));var snapshot=new CompoundTag();a.save(snapshot);
+            a.setItemSlot(EquipmentSlot.HEAD,ItemStack.EMPTY);a.save(snapshot);
+            check(!ItemStack.of(snapshot.getCompound("head")).isEmpty(),"fixture reproduces stale native alias");
+            var loader=com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class.getDeclaredMethod("loadRespawnSnapshot",LivingEntity.class,CompoundTag.class);loader.setAccessible(true);
+            loader.invoke(null,a,snapshot);
+            check(a.getItemBySlot(EquipmentSlot.HEAD).isEmpty(),"shared respawn and recovery loader repairs legacy snapshots");
+            check(ItemStack.of(snapshot.getCompound("head")).is(Items.IRON_HELMET),"loading preserves original archive for recovery");
+        }catch(ReflectiveOperationException e){throw new RuntimeException(e);}finally{TameRegistry.remove(a.getUUID());a.discard();}h.succeed();
+    }
 }

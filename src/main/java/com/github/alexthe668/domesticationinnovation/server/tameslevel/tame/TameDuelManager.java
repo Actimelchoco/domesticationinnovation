@@ -979,7 +979,7 @@ public final class TameDuelManager {
         BATTLE_BY_ID.remove(battle.battleId);
         DuelFollowerPause.end(server, battle.roster);
         persistBattleStatsAndMmr(server, battle, forfeitingOwner);
-        refreshStoredDuelSnapshotsFromRegistry(battle);
+        refreshStoredDuelSnapshotsFromRegistry(server, battle);
         List<Component> leaderboardSummary = buildDuelLeaderboardSummary(server, battle);
         List<Component> resultSummary = buildDuelResultSummary(server, battle, forfeitingOwner);
 
@@ -1263,7 +1263,7 @@ public final class TameDuelManager {
         return (teamA ? "tldga" : "tldgb") + compact.substring(0, Math.min(11, compact.length()));
     }
 
-    private static void refreshStoredDuelSnapshotsFromRegistry(DuelBattle battle) {
+    private static void refreshStoredDuelSnapshotsFromRegistry(MinecraftServer server, DuelBattle battle) {
         if (battle == null || battle.tameSnapshots.isEmpty()) {
             return;
         }
@@ -1282,6 +1282,13 @@ public final class TameDuelManager {
             }
             TameData snapshot = TameData.fromTag(snapshotTag.copy());
             TameDuelSnapshots.copyPersistentStats(persisted, snapshot);
+            if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.hasAnimightEquipment(persisted)) {
+                LivingEntity live = findLoadedLivingParticipant(server, participantId);
+                if (live != null) com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.copyLiveEquipment(live, snapshot.entitySnapshot);
+                else for (String key : new String[]{"ArmorItems", "HandItems"})
+                    if (persisted.entitySnapshot.contains(key)) snapshot.entitySnapshot.put(key, persisted.entitySnapshot.get(key).copy());
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.syncArmorSlotTags(snapshot.entitySnapshot);
+            }
             entry.setValue(snapshot.toTag());
         }
     }

@@ -1200,8 +1200,8 @@
     },
     "vampire": {
       "category": {
-        "base": 89.0,
-        "attribute": 10.0,
+        "base": 69.0,
+        "attribute": 30.0,
         "ability": 1.0
       },
       "preferredAttributeWeightMultiplier": 1.0,

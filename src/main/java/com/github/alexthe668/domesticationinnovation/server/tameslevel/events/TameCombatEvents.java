@@ -262,6 +262,11 @@ public class TameCombatEvents {
             // can continue with the same tame progress and bonuses.
             if (data.entitySnapshot != null) {
                 tame.save(data.entitySnapshot);
+                // Native Animights omit empty slot aliases when reusing a snapshot.
+                // Clear those stale copies before archiving an ordinary death too.
+                if (AnimightEquipmentEvents.hasAnimightEquipment(data)) {
+                    AnimightEquipmentEvents.syncArmorSlotTags(data.entitySnapshot);
+                }
             }
             if (diedInDuel) {
                 data.dead = false;

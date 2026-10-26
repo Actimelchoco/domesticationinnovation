@@ -63,7 +63,7 @@ public class DuelSelectionRegression {
         try{
             check(visibleCommands(dispatcher,source).equals(Set.of("invite","selection","arena","leaderboard")),"idle command set");
             preparations().put(first.getUUID(),prep);preparations().put(second.getUUID(),prep);
-            check(visibleCommands(dispatcher,source).equals(Set.of("selection","info","start","cancel","add","addMyself","addNearby","remove","invite")),"selection phase exposes selection, team invite and start/cancel commands");
+            check(visibleCommands(dispatcher,source).equals(Set.of("selection","start","cancel","add","addMyself","addNearby","invite")),"selection phase exposes selection, team invite and start/cancel commands");
             var near=wolf(h,first,"Near","Ranges");near.setPos(first.getX()+9,first.getY(),first.getZ());
             var diagonal=wolf(h,first,"Diagonal","Ranges");diagonal.setPos(first.getX()+9,first.getY(),first.getZ()+9);
             var edge=wolf(h,first,"Edge","Ranges");edge.setPos(first.getX()+64,first.getY(),first.getZ());
@@ -84,7 +84,7 @@ public class DuelSelectionRegression {
                 try{rejected=dispatcher.execute("tames duel addNearby "+radius,source)==0;}catch(com.mojang.brigadier.exceptions.CommandSyntaxException expected){rejected=true;}
                 check(rejected&&ids.equals(before),"out-of-range radius rejected without changing roster");
             }
-            check(dispatcher.execute("tames duel info",source)==1,"info works in selection");
+            check(dispatcher.execute("tames duel selection",source)==1,"selection shows rosters during selection phase");
             dispatcher.execute("tames duel addMyself",source);
             dispatcher.execute("tames duel start",source);dispatcher.execute("tames duel start",second.createCommandSourceStack().withPermission(0));
             check(visibleCommands(dispatcher,source).equals(Set.of("ff","info")),"battle exposes exactly ff and info");
