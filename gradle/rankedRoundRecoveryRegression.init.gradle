@@ -1,0 +1,6 @@
+// Compose with animightEquipmentRegression and duelSelectionEquipmentRegression.
+allprojects {
+    afterEvaluate {
+        sourceSets.main.java.srcDir('src/test/postrankeddeath/java')
+    }
+}

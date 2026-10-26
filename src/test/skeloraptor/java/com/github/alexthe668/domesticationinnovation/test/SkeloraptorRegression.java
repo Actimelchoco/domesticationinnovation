@@ -43,16 +43,16 @@ public class SkeloraptorRegression {
             h.getLevel().players().remove(owner);
         }
     }
-    @GameTest(template="empty") public static void nativeSkeloraptorSwingDamagesDuelOpponent(GameTestHelper h)throws Exception{
+    @GameTest(template="skeloraptor_lane") public static void nativeSkeloraptorSwingDamagesDuelOpponent(GameTestHelper h)throws Exception{
         try(var f=new Fixture(h,false)){
             float before=f.wolf.getHealth();f.swing();
             h.assertTrue(f.wolf.getHealth()<before,"native swing must damage duel opponent: allied="+f.raptor.isAlliedTo(f.wolf)+", command="+f.raptor.getClass().getMethod("getCommand").invoke(f.raptor)+", health="+f.wolf.getHealth());
         }h.succeed();
     }
-    @GameTest(template="empty") public static void nativeSkeloraptorSwingDamagesRankedOpponent(GameTestHelper h)throws Exception{
+    @GameTest(template="skeloraptor_lane") public static void nativeSkeloraptorSwingDamagesRankedOpponent(GameTestHelper h)throws Exception{
         try(var f=new Fixture(h,true)){float before=f.wolf.getHealth();f.swing();h.assertTrue(f.wolf.getHealth()<before,"ranked opponent receives native attack damage");}h.succeed();
     }
-    @GameTest(template="empty",timeoutTicks=160) public static void nativeAttackGoalsActuallyDamageOpponent(GameTestHelper h){
+    @GameTest(template="skeloraptor_lane",timeoutTicks=160) public static void nativeAttackGoalsActuallyDamageOpponent(GameTestHelper h){
         var f=new Fixture(h,false);float before=f.wolf.getHealth();
         floor(h);f.raptor.setNoGravity(false);f.wolf.setNoGravity(false);f.raptor.setNoAi(false);
         h.runAfterDelay(110,()->{
@@ -60,7 +60,7 @@ public class SkeloraptorRegression {
             finally{f.close();}h.succeed();
         });
     }
-    @GameTest(template="empty") public static void nonparticipantsRemainProtected(GameTestHelper h)throws Exception{
+    @GameTest(template="skeloraptor_lane") public static void nonparticipantsRemainProtected(GameTestHelper h)throws Exception{
         try(var f=new Fixture(h,false)){
             var friend=EntityType.WOLF.create(h.getLevel());friend.setTame(true);friend.setOwnerUUID(f.owner.getUUID());friend.setNoAi(true);friend.setPos(f.wolf.getX(),f.wolf.getY(),f.wolf.getZ());h.getLevel().addFreshEntity(friend);
             try{float before=friend.getHealth();f.swing();h.assertTrue(friend.getHealth()==before&&f.raptor.isAlliedTo(friend),"same-owner nonparticipant keeps native ally protection");}
@@ -86,10 +86,10 @@ public class SkeloraptorRegression {
             finally{f.close();}h.succeed();
         });
     }
-    @GameTest(template="empty",batch="chaseDuel",timeoutTicks=300) public static void chasesDistantDuelOpponent(GameTestHelper h){chase(h,false);}
-    @GameTest(template="empty",batch="chaseRanked",timeoutTicks=300) public static void chasesDistantRankedOpponent(GameTestHelper h){chase(h,true);}
+    @GameTest(template="skeloraptor_lane",batch="chaseDuel",timeoutTicks=300) public static void chasesDistantDuelOpponent(GameTestHelper h){chase(h,false);}
+    @GameTest(template="skeloraptor_lane",batch="chaseRanked",timeoutTicks=300) public static void chasesDistantRankedOpponent(GameTestHelper h){chase(h,true);}
 
-    @GameTest(template="empty") public static void chaseGoalIsRemovedWhenDuelEnds(GameTestHelper h){
+    @GameTest(template="skeloraptor_lane") public static void chaseGoalIsRemovedWhenDuelEnds(GameTestHelper h){
         try(var f=new Fixture(h,false)){
             h.assertTrue(f.raptor.goalSelector.getAvailableGoals().stream().anyMatch(g->g.getGoal().getClass()==com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.SkeloraptorDuelChaseGoal.class),"chase installed only for participating raptor");
             TameDuelManager.endDuelForEntity(h.getLevel().getServer(),f.raptor.getUUID());
@@ -99,7 +99,7 @@ public class SkeloraptorRegression {
         }h.succeed();
     }
 
-    @GameTest(template="empty") public static void repeatedDuelMovementRefreshPreservesNativePath(GameTestHelper h){
+    @GameTest(template="skeloraptor_lane") public static void repeatedDuelMovementRefreshPreservesNativePath(GameTestHelper h){
         try(var f=new Fixture(h,false)){
             floor(h);var pos=h.absolutePos(new BlockPos(15,2,2));f.wolf.setPos(pos.getX(),pos.getY(),pos.getZ());
             f.raptor.setOnGround(true);
@@ -109,7 +109,7 @@ public class SkeloraptorRegression {
         }h.succeed();
     }
 
-    @GameTest(template="empty",batch="normalChase",timeoutTicks=860)
+    @GameTest(template="skeloraptor_lane",batch="normalChase",timeoutTicks=860)
     public static void monsterHunterApproachesAndAttacksNormally(GameTestHelper h){
         var f=new Fixture(h,false,false);floor(h);
         var enemy=EntityType.HUSK.create(h.getLevel());var pos=h.absolutePos(new BlockPos(11,2,2));
@@ -129,7 +129,7 @@ public class SkeloraptorRegression {
         });
     }
 
-    @GameTest(template="empty")
+    @GameTest(template="skeloraptor_lane")
     public static void normalChaseRespectsRestFriendshipAndBoundaries(GameTestHelper h){
         try(var f=new Fixture(h,false,false)){
             var enemy=EntityType.HUSK.create(h.getLevel());var pos=h.absolutePos(new BlockPos(10,2,2));enemy.moveTo(pos,0,0);enemy.setNoAi(true);h.getLevel().addFreshEntity(enemy);

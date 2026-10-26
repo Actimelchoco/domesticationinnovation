@@ -6,6 +6,8 @@ import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.Tame
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -28,6 +30,8 @@ public class SkeloraptorDuelChaseGoal extends Goal {
     protected final Mob mob;
     private final Method attackState;
     private int nextPathTick;
+    private Path chasePath;
+    private UUID pathTarget;
 
     protected SkeloraptorDuelChaseGoal(Mob mob) throws NoSuchMethodException {
         this.mob = mob;
@@ -90,8 +94,23 @@ public class SkeloraptorDuelChaseGoal extends Goal {
         LivingEntity target = mob.getTarget();
         if (target == null) return;
         mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
-        if (mob.tickCount < nextPathTick) return;
+        if (!target.getUUID().equals(pathTarget)) {
+            pathTarget = target.getUUID();
+            chasePath = null;
+        }
+        if (mob.tickCount < nextPathTick) {
+            // Native command updates and animation goals can cancel navigation.
+            // Resume the existing unfinished path instead of freezing until the
+            // next expensive path search. Do not reuse it after a teleport or
+            // when the old path has already been completed.
+            if (mob.getNavigation().isDone() && chasePath != null && !chasePath.isDone()
+                    && mob.distanceToSqr(Vec3.atBottomCenterOf(chasePath.getNextNodePos())) <= 16.0D) {
+                mob.getNavigation().moveTo(chasePath, CHASE_SPEED);
+            }
+            return;
+        }
         nextPathTick = mob.tickCount + PATH_INTERVAL;
         mob.getNavigation().moveTo(target, CHASE_SPEED);
+        chasePath = mob.getNavigation().getPath();
     }
 }

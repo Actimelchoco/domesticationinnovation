@@ -66,6 +66,10 @@ public class TameCombatEvents {
     private static final Object DEATH_QUEUE_LOCK = new Object();
     private static final Deque<PendingDeath> PENDING_DEATHS = new ArrayDeque<>();
     private static final Set<UUID> ACTIVE_DEATHS = new HashSet<>();
+    // Per-body weak keys: restored tames reuse UUIDs, but are new entities. This
+    // survives leave-level cleanup without retaining dead bodies or saving flags.
+    private static final Set<LivingEntity> HANDLED_TAME_DEATH_BODIES = java.util.Collections.synchronizedSet(
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<LivingEntity, Boolean>()));
     private static final Map<UUID, PendingDeath> CAPTURED_DEATHS = new HashMap<>();
     // Entity removal clears live damage tracking before the normal-priority death listener.
     // Key by event so nested deaths cannot overwrite each other's attribution. Weak keys
@@ -163,6 +167,9 @@ public class TameCombatEvents {
     public static void onDeath(LivingDeathEvent event) {
         try {
             PendingDeath death = EARLY_DEATH_ATTRIBUTION.remove(event);
+            // The original event was captured before removing its body. Later events
+            // from that same obsolete body must not award XP or eliminate a replacement.
+            if (death == null && HANDLED_TAME_DEATH_BODIES.contains(event.getEntity())) return;
             if (death == null) death = PendingDeath.capture(event);
             if (death == null) {
                 return;
@@ -229,6 +236,9 @@ public class TameCombatEvents {
     public static void onTameDeath(LivingDeathEvent event) {
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(event.getEntity())) return;
         if (event.isCanceled()) return;
+        // Duel restoration can create a live body with the same UUID before other
+        // mods finish handling the old body's death. Handle each body only once.
+        if (HANDLED_TAME_DEATH_BODIES.contains(event.getEntity())) return;
 
         LivingEntity tame = event.getEntity();
         UUID tlId = TameData.getTlId(tame);
@@ -243,6 +253,7 @@ public class TameCombatEvents {
             return;
         }
 
+        HANDLED_TAME_DEATH_BODIES.add(tame);
         EARLY_DEATH_ATTRIBUTION.put(event, PendingDeath.capture(event));
 
         // This HIGHEST-priority handler runs before elimination and snapshot restoration.
@@ -560,6 +571,13 @@ public class TameCombatEvents {
     }
 
     private static UUID resolveDuelParticipantUuid(LivingEntity entity) {
+        // Active battle membership remains authoritative if a mod clears its native
+        // tame flag during death. Capture this identity before removing the body.
+        if (entity != null) {
+            UUID tlId = TameData.getTlId(entity);
+            if (tlId != null && TameDuelManager.isEntityInDuel(tlId)) return tlId;
+            if (TameDuelManager.isEntityInDuel(entity.getUUID())) return entity.getUUID();
+        }
         if (entity instanceof ServerPlayer player) {
             return player.getUUID();
         }

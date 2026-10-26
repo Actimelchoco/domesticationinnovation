@@ -439,12 +439,16 @@ public final class TameDuelManager {
 
     /** Recall ends the ranked round before guardian placement, so delayed duel restoration cannot undo it. */
     public static synchronized boolean recallRankedGuardian(MinecraftServer server, UUID entityId) {
+        return recallRankedParticipantForDuty(server, entityId, "guardian");
+    }
+
+    public static synchronized boolean recallRankedParticipantForDuty(MinecraftServer server, UUID entityId, String duty) {
         UUID resolved=resolveActiveParticipantId(entityId);
         UUID battleId=resolved==null?null:BATTLE_ID_BY_ENTITY.get(resolved);
         DuelBattle battle=battleId==null?null:BATTLE_BY_ID.get(battleId);
         if(battle==null||!battle.ranked)return false;
         UUID losingOwner=battle.teamA.contains(resolved)?battle.ownerA:battle.ownerB;
-        finishBattle(server,battle,"Ranked participant recalled for guardian duty.",losingOwner);
+        finishBattle(server,battle,"Ranked participant recalled for " + duty + " duty.",losingOwner);
         return true;
     }
 

@@ -4757,7 +4757,7 @@ public class TameCommands {
         Set<UUID> assigned = new HashSet<>(roster.bodyguards);
         Set<String> names = new LinkedHashSet<>(), types = new LinkedHashSet<>(), groups = new LinkedHashSet<>();
         for (TameData data : TameRegistry.getOwned(owner.getUUID())) {
-            if (isDuelLocked(data) || add && com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) continue;
+            if (bodyguardDuelLocked(data, add) || add && com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) continue;
             boolean member = data.tlId != null && assigned.contains(data.tlId);
             boolean eligible = add ? !member && !data.rosterBodyguard && !data.stored && !data.dead && composition.canAdd(data.type) : member;
             if (!eligible) continue;
@@ -4945,10 +4945,62 @@ public class TameCommands {
         TameRegistry.markDirty();
         owner.sendSystemMessage(Component.literal("Bodyguard range set to " + range)); return 1;
     }
+    private static boolean containsTameIdentity(Set<UUID> ids, TameData data) {
+        return data.uuid != null && ids.contains(data.uuid) || data.tlId != null && ids.contains(data.tlId);
+    }
+
+    private static boolean rankedBodyguardCandidate(TameData data) {
+        if (data == null) return false;
+        if (TameDuelManager.rankedBattleId(data.uuid) != null) return true;
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        return containsTameIdentity(RANKED_POOL, data)
+                || session != null && (containsTameIdentity(session.poolA, data)
+                || containsTameIdentity(session.poolB, data) || containsTameIdentity(session.currentRoundA, data)
+                || containsTameIdentity(session.currentRoundB, data) || containsTameIdentity(session.queuedPullAfterRound, data));
+    }
+
+    private static boolean bodyguardDuelLocked(TameData data, boolean add) {
+        if (!isDuelLocked(data)) return false;
+        if (!add || !rankedBodyguardCandidate(data)) return true;
+        if (TameDuelManager.isEntityInDuel(data.uuid) && TameDuelManager.rankedBattleId(data.uuid) == null) return true;
+        for (ActiveDuelSession session : ACTIVE_DUEL_SESSIONS.values()) {
+            if (containsTameIdentity(session.poolA, data) || containsTameIdentity(session.poolB, data)
+                    || containsTameIdentity(session.currentRoundA, data) || containsTameIdentity(session.currentRoundB, data)) return true;
+        }
+        return false;
+    }
+
+    /** Withdraw before assigning duty: ranked restoration can replace the registry row. */
+    private static TameData withdrawRankedForBodyguard(MinecraftServer server, TameData data) {
+        UUID stableId = data.ensureTlId();
+        Set<UUID> ids = new LinkedHashSet<>(duelParticipantIdentityIds(data.uuid));
+        ids.add(stableId);
+        TameDuelManager.recallRankedParticipantForDuty(server, data.uuid, "bodyguard");
+        TameData restored = TameRegistry.getByTlId(stableId);
+        if (restored != null) data = restored;
+        ids.add(data.uuid);
+        ActiveDuelSession session = RANKED_DUEL_SESSION;
+        for (UUID id : ids) {
+            RANKED_POOL.remove(id);
+            if (session == null) continue;
+            session.poolA.remove(id);
+            session.poolB.remove(id);
+            session.queuedPullAfterRound.remove(id);
+            session.currentRoundA = removeFromSet(session.currentRoundA, id);
+            session.currentRoundB = removeFromSet(session.currentRoundB, id);
+            session.idleSitHoldUntilTick.remove(id);
+            session.rankedPlayerReturnTargets.remove(id);
+        }
+        persistRankedPoolToRegistry();
+        if (session != null) normalizeRankedRoundAfterPoolChange(server, session);
+        return data;
+    }
+
     private static int bodyguardChange(CommandSourceStack source, String raw, boolean add) {
         ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
         var composition = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.composition(roster);
+        ensureRankedPoolLoadedFromRegistry();
         Map<UUID, TameData> selected = new LinkedHashMap<>();
         for (String term : raw.split(",")) {
             String value = term.trim();
@@ -4967,10 +5019,15 @@ public class TameCommands {
         int changed = 0, skipped = 0;
         String firstFailure = null;
         for (TameData data : selected.values()) {
+            // Earlier withdrawals in a bulk add may have restored this tame too.
+            if (add && data.tlId != null) {
+                TameData current = TameRegistry.getByTlId(data.tlId);
+                if (current != null) data = current;
+            }
             UUID id = data.ensureTlId();
             boolean member = roster.bodyguards.contains(id);
             if (!add && !member) continue;
-            String failure = isDuelLocked(data) ? "That tame is in a duel." : null;
+            String failure = bodyguardDuelLocked(data, add) ? "That tame is in a duel." : null;
             if (add && failure == null) {
                 if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isLocked(data)) failure = "Hostile Bewereager cannot be controlled.";
                 else if (data.rosterBodyguard || member) failure = "Already a bodyguard.";
@@ -4979,7 +5036,18 @@ public class TameCommands {
             }
             if (failure != null) { skipped++; if (firstFailure == null) firstFailure = failure; continue; }
             if (add) {
-                clearPendingImmediateChunkTeleport(data);
+                boolean wasRanked = rankedBodyguardCandidate(data);
+                if (wasRanked) data = withdrawRankedForBodyguard(source.getServer(), data);
+                cancelPendingImmediateChunkTeleport(source.getServer(), data);
+                if (wasRanked && findLoadedLivingTameByIdentity(source.getServer(), data.uuid, id) == null) {
+                    RecoverResult recovered = recoverPetEntityAtLocation(owner,
+                            new SpawnTarget(owner.serverLevel(), owner.position(), owner.getYRot(), owner.getXRot()), data);
+                    if (recovered.entity == null) {
+                        skipped++;
+                        if (firstFailure == null) firstFailure = "Ranked tame withdrawn but could not be loaded for bodyguard duty.";
+                        continue;
+                    }
+                }
                 data.guardianReleaseMovementPending = -1;
                 com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
                 data.bodyguardPreviousClose = data.closeMovement;
@@ -27731,6 +27799,7 @@ public class TameCommands {
                 session.nextIdleSitSyncTick = now + 20L;
             }
             if (session.currentRoundA.isEmpty() || session.currentRoundB.isEmpty()) {
+                if (hasUnfinishedDuelSessionRound(session)) finishDuelSessionRound(server, session, now);
                 if (session.nextRoundAtTick >= 0L && now >= session.nextRoundAtTick) {
                     if (!startNextDuelSessionRound(server, session)) {
                         endedSessions.add(session.sessionId);
@@ -27748,16 +27817,7 @@ public class TameCommands {
                 }
                 continue;
             }
-            // Round ended outside the normal elimination chain; force-close both sides now so
-            // duel snapshots restore immediately instead of waiting for the next duel start.
-            forceEndDuelSessionSide(server, session.currentRoundA);
-            forceEndDuelSessionSide(server, session.currentRoundB);
-            teleportDuelSessionIdleTamesHome(server, session, Set.of(), Set.of());
-            syncIdleDuelSessionTames(server, session);
-            session.currentRoundA = Set.of();
-            session.currentRoundB = Set.of();
-            session.roundStartedAtTick = -1L;
-            scheduleNextDuelSessionRound(server, session, now);
+            finishDuelSessionRound(server, session, now);
         }
         if (rankedSession != null) {
             refreshDuelSessionParticipantActivity(rankedSession);
@@ -27769,6 +27829,7 @@ public class TameCommands {
                 rankedSession.nextIdleSitSyncTick = now + 20L;
             }
             if (rankedSession.currentRoundA.isEmpty() || rankedSession.currentRoundB.isEmpty()) {
+                if (hasUnfinishedDuelSessionRound(rankedSession)) finishDuelSessionRound(server, rankedSession, now);
                 if (rankedSession.nextRoundAtTick >= 0L && now >= rankedSession.nextRoundAtTick) {
                     if (!startNextDuelSessionRound(server, rankedSession)) {
                         teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
@@ -27786,18 +27847,7 @@ public class TameCommands {
                         resolveTimedOutDuelSessionRound(server, rankedSession);
                     }
                 } else {
-                    Set<UUID> finishedRound = new LinkedHashSet<>(rankedSession.currentRoundA);
-                    finishedRound.addAll(rankedSession.currentRoundB);
-                    forceEndDuelSessionSide(server, rankedSession.currentRoundA);
-                    forceEndDuelSessionSide(server, rankedSession.currentRoundB);
-                    pullFoodlessRankedTamesAfterRound(server, rankedSession, finishedRound);
-                    teleportDuelSessionIdleTamesHome(server, rankedSession, Set.of(), Set.of());
-                    syncIdleDuelSessionTames(server, rankedSession);
-                    restoreRankedRoundPlayers(server, rankedSession);
-                    rankedSession.currentRoundA = Set.of();
-                    rankedSession.currentRoundB = Set.of();
-                    rankedSession.roundStartedAtTick = -1L;
-                    scheduleNextDuelSessionRound(server, rankedSession, now);
+                    finishDuelSessionRound(server, rankedSession, now);
                 }
             }
         }
@@ -27813,6 +27863,27 @@ public class TameCommands {
                 notifyDuelSessionOwners(server, removed, Component.literal("Duel session ended because one side no longer has available participants.").withStyle(ChatFormatting.YELLOW));
             }
         }
+    }
+
+    private static boolean hasUnfinishedDuelSessionRound(ActiveDuelSession session) {
+        return session.roundStartedAtTick >= 0L || session.nextRoundAtTick < 0L
+                || !session.currentRoundA.isEmpty() || !session.currentRoundB.isEmpty();
+    }
+
+    /** Pool edits and invalid-entry cleanup can empty a side before the session tick. */
+    private static void finishDuelSessionRound(MinecraftServer server, ActiveDuelSession session, long now) {
+        Set<UUID> finishedRound = new LinkedHashSet<>(session.currentRoundA);
+        finishedRound.addAll(session.currentRoundB);
+        forceEndDuelSessionSide(server, session.currentRoundA);
+        forceEndDuelSessionSide(server, session.currentRoundB);
+        if (session.ranked) pullFoodlessRankedTamesAfterRound(server, session, finishedRound);
+        teleportDuelSessionIdleTamesHome(server, session, Set.of(), Set.of());
+        syncIdleDuelSessionTames(server, session);
+        if (session.ranked) restoreRankedRoundPlayers(server, session);
+        session.currentRoundA = Set.of();
+        session.currentRoundB = Set.of();
+        session.roundStartedAtTick = -1L;
+        scheduleNextDuelSessionRound(server, session, now);
     }
 
     private static void refreshDuelSessionParticipantActivity(ActiveDuelSession session) {

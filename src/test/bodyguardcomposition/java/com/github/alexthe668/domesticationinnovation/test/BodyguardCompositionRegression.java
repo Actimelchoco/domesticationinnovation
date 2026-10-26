@@ -116,4 +116,79 @@ public class BodyguardCompositionRegression {
             check(run(h,owner,"remove all")==1&&roster.bodyguards.isEmpty(),"all also removes stale assignments");
         }finally{clean(h,owner,pets);}h.succeed();
     }
+
+    @SuppressWarnings("unchecked") private static Set<UUID> rankedPool()throws Exception{
+        var field=com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class.getDeclaredField("RANKED_POOL");field.setAccessible(true);return (Set<UUID>)field.get(null);
+    }
+    private static void rankedPromotion(GameTestHelper h,boolean hidden)throws Exception{
+        var owner=owner(h);var enemyOwner=owner(h);List<LivingEntity> pets=new ArrayList<>();var pool=rankedPool();var saved=new LinkedHashSet<>(pool);var savedPersisted=new LinkedHashSet<>(TameRegistry.getRankedParticipants());
+        var commands=com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class;
+        var sessionField=commands.getDeclaredField("RANKED_DUEL_SESSION");sessionField.setAccessible(true);var previousSession=sessionField.get(null);Object testSession=null;
+        try{
+            var guard=pet(h,owner,hidden?EntityType.FOX:EntityType.WOLF,"RankedGuard","ranked");pets.add(guard);
+            var enemy=pet(h,enemyOwner,EntityType.WOLF,"RankedEnemy","ranked");pets.add(enemy);
+            var data=TameRegistry.get(guard.getUUID());data.level=25;UUID stable=data.ensureTlId();
+            pool.add(data.uuid);pool.add(stable);TameRegistry.setRankedParticipants(new LinkedHashSet<>(pool));
+            if(hidden){var method=com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class.getDeclaredMethod("unloadRankedParticipantTame",net.minecraft.server.MinecraftServer.class,UUID.class);method.setAccessible(true);method.invoke(null,h.getLevel().getServer(),data.uuid);check(guard.isRemoved(),"waiting ranked tame really hidden");}
+            else {
+                TameDuelManager.startTeamDuel(h.getLevel().getServer(),owner.getUUID(),Set.of(guard.getUUID()),enemyOwner.getUUID(),Set.of(enemy.getUUID()),Set.of(),false,true);
+                var type=Arrays.stream(commands.getDeclaredClasses()).filter(c->c.getSimpleName().equals("ActiveDuelSession")).findFirst().orElseThrow();var ctor=type.getDeclaredConstructors()[0];ctor.setAccessible(true);
+                testSession=ctor.newInstance(UUID.randomUUID(),owner.getUUID(),enemyOwner.getUUID(),Set.of(),Set.of(guard.getUUID(),stable,enemy.getUUID()),Set.of(),null,null,null,null,"",true,true,true);
+                var first=type.getDeclaredField("currentRoundA");first.setAccessible(true);first.set(testSession,Set.of(guard.getUUID()));
+                var second=type.getDeclaredField("currentRoundB");second.setAccessible(true);second.set(testSession,Set.of(enemy.getUUID()));
+                var queued=type.getDeclaredField("queuedPullAfterRound");queued.setAccessible(true);((Set<UUID>)queued.get(testSession)).addAll(Set.of(guard.getUUID(),stable));
+                sessionField.set(null,testSession);
+            }
+            check(suggest(h,owner,"add ").contains("RankedGuard"),"ranked candidate appears in bodyguard suggestions");
+            check(run(h,owner,"add RankedGuard")==1,"ranked tame can be promoted immediately");
+            var current=TameRegistry.getByTlId(stable);var live=TameEntityAdapter.findLoaded(h.getLevel().getServer(),current.uuid,stable);
+            check(current.rosterBodyguard&&!current.hasHome&&current.mode==TameMode.BODYGUARD.id()&&current.movementOrder==0,"canonical restored registry row is a following bodyguard");
+            check(live!=null&&live.isAlive()&&!TameEntityAdapter.isStayingStill(live),"ranked bodyguard is loaded alive and following");
+            check(!pool.contains(guard.getUUID())&&!pool.contains(stable)&&!pool.contains(current.uuid),"all ranked pool identity aliases removed immediately");
+            check(!TameRegistry.getRankedParticipants().contains(stable)&&!TameRegistry.getRankedParticipants().contains(current.uuid),"ranked withdrawal persisted");
+            check(!TameDuelManager.isEntityInDuel(current.uuid)&&!current.dead&&current.level==25,"withdrawal restores tame without death penalty");
+            check(BodyguardService.roster(owner).bodyguards.contains(stable),"roster uses stable tame identity");
+            if(testSession!=null){
+                for(String name:List.of("poolA","poolB","currentRoundA","currentRoundB","queuedPullAfterRound")){
+                    var field=testSession.getClass().getDeclaredField(name);field.setAccessible(true);var ids=(Set<?>)field.get(testSession);
+                    check(!ids.contains(guard.getUUID())&&!ids.contains(stable),"ranked session bookkeeping no longer contains promoted tame: "+name);
+                }
+                var next=testSession.getClass().getDeclaredField("nextRoundAtTick");next.setAccessible(true);check(next.getLong(testSession)>=h.getLevel().getGameTime(),"ranked session schedules its next match after bodyguard withdrawal");
+            }
+        }finally{sessionField.set(null,previousSession);TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),owner.getUUID());pool.clear();pool.addAll(saved);TameRegistry.setRankedParticipants(savedPersisted);clean(h,owner,pets);players(h).remove(enemyOwner.getUUID());TameRegistry.removePlayerDuelStats(enemyOwner.getUUID());}h.succeed();
+    }
+    @GameTest(template="empty",batch="bodyguard-ranked") public static void activeRankedTameBecomesBodyguardImmediately(GameTestHelper h)throws Exception{rankedPromotion(h,false);}
+    @GameTest(template="empty",batch="bodyguard-hidden-ranked") public static void hiddenRankedInterfaceTameBecomesLoadedBodyguard(GameTestHelper h)throws Exception{rankedPromotion(h,true);}
+    @GameTest(template="empty",batch="bodyguard-duel-lock") public static void regularDuelRemainsLockedEvenWithStaleRankedPoolEntry(GameTestHelper h)throws Exception{
+        var owner=owner(h);var enemyOwner=owner(h);List<LivingEntity> pets=new ArrayList<>();var pool=rankedPool();var saved=new LinkedHashSet<>(pool);
+        try{
+            var guard=pet(h,owner,EntityType.WOLF,"DuelGuard","duel");var enemy=pet(h,enemyOwner,EntityType.WOLF,"Enemy","duel");pets.add(guard);pets.add(enemy);
+            pool.add(guard.getUUID());TameDuelManager.startTeamDuel(h.getLevel().getServer(),owner.getUUID(),Set.of(guard.getUUID()),enemyOwner.getUUID(),Set.of(enemy.getUUID()));
+            check(!suggest(h,owner,"add ").contains("DuelGuard")&&run(h,owner,"add DuelGuard")==0,"ordinary duel remains locked");
+            check(TameDuelManager.isEntityInDuel(guard.getUUID())&&pool.contains(guard.getUUID())&&!TameRegistry.get(guard.getUUID()).rosterBodyguard,"rejection cannot withdraw tame or alter duty");
+        }finally{TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),owner.getUUID());pool.clear();pool.addAll(saved);clean(h,owner,pets);players(h).remove(enemyOwner.getUUID());TameRegistry.removePlayerDuelStats(enemyOwner.getUUID());}h.succeed();
+    }
+
+    @GameTest(template="empty",batch="bodyguard-ranked-bulk") public static void bulkPromotionUsesRowsRestoredByFirstRankedWithdrawal(GameTestHelper h)throws Exception{
+        var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();var pool=rankedPool();var saved=new LinkedHashSet<>(pool);var persisted=new LinkedHashSet<>(TameRegistry.getRankedParticipants());
+        try{
+            var first=pet(h,owner,EntityType.WOLF,"AlphaRanked","promote");var second=pet(h,owner,EntityType.FOX,"BravoRanked","promote");pets.add(first);pets.add(second);
+            for(var pet:pets){var data=TameRegistry.get(pet.getUUID());data.level=25;pool.add(data.uuid);}
+            TameDuelManager.startTeamDuel(h.getLevel().getServer(),owner.getUUID(),Set.of(first.getUUID()),owner.getUUID(),Set.of(second.getUUID()),Set.of(),false,true);
+            check(run(h,owner,"add group promote")==2,"bulk command promotes both ranked opponents");
+            for(var pet:pets){var data=TameRegistry.get(pet.getUUID());check(data.rosterBodyguard&&data.mode==TameMode.BODYGUARD.id()&&!pool.contains(data.uuid),"all restored canonical rows become bodyguards");}
+            BodyguardService.refresh(h.getLevel().getServer());
+            check(BodyguardService.roster(owner).bodyguards.size()==2,"bulk roster remains stable after normal maintenance");
+        }finally{TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),owner.getUUID());pool.clear();pool.addAll(saved);TameRegistry.setRankedParticipants(persisted);clean(h,owner,pets);}h.succeed();
+    }
+    @GameTest(template="empty",batch="bodyguard-ranked-rejection") public static void rejectedCompositionDoesNotWithdrawRankedTame(GameTestHelper h)throws Exception{
+        var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();var pool=rankedPool();var saved=new LinkedHashSet<>(pool);
+        try{
+            pets.add(pet(h,owner,EntityType.WOLF,"Alpha","mix"));pets.add(pet(h,owner,EntityType.FOX,"Bravo","mix"));
+            var candidate=pet(h,owner,EntityType.WOLF,"RejectedRanked","other");pets.add(candidate);
+            check(run(h,owner,"add Alpha, Bravo")==2,"fixture has a legal unique-type roster");pool.add(candidate.getUUID());
+            check(run(h,owner,"add RejectedRanked")==0,"duplicate type is rejected before withdrawing");
+            check(pool.contains(candidate.getUUID())&&!TameRegistry.get(candidate.getUUID()).rosterBodyguard,"rejected tame remains ranked");
+        }finally{pool.clear();pool.addAll(saved);clean(h,owner,pets);}h.succeed();
+    }
 }

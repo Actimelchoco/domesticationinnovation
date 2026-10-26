@@ -1,6 +1,7 @@
 allprojects {
     afterEvaluate {
         sourceSets.main.java.srcDir('src/test/skeloraptor/java')
+        sourceSets.main.resources.srcDir('src/test/skeloraptor/resources')
         sourceSets.main.resources.srcDir('src/test/performance/resources')
         repositories { flatDir { dirs project.file('build/legendary-duel-input') } }
         dependencies { implementation fg.deobf('testlocal:legendarymonsters:2.2.2') }
