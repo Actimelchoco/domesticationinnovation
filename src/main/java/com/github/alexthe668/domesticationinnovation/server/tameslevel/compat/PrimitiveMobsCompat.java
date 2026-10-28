@@ -52,6 +52,16 @@ public final class PrimitiveMobsCompat {
             event.setAmount((float)Math.min(Float.MAX_VALUE, event.getAmount() + data.bonusDamage));
     }
 
+    /** Non-griefing pet blasts must also leave dropped loot intact. All native
+     * creeper attacks, including thrown Primitive TNT, attribute the blast to the pet. */
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.LOWEST)
+    public static void protectDroppedItems(net.minecraftforge.event.level.ExplosionEvent.Detonate event) {
+        LivingEntity source = event.getExplosion().getIndirectSourceEntity();
+        if (event.getLevel().isClientSide || !isPrimitivePet(source) || !isPetCreeper(source)
+                || !TameEntityAdapter.isTame(source)) return;
+        event.getAffectedEntities().removeIf(entity -> entity instanceof net.minecraft.world.entity.item.ItemEntity);
+    }
+
     private static final class MinionPatch {
         static final boolean INSTALLED = installed();
         private static boolean installed() {

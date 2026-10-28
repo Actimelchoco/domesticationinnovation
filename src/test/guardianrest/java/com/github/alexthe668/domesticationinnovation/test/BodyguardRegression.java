@@ -26,15 +26,15 @@ public class BodyguardRegression {
         var dispatcher=helper.getLevel().getServer().getCommands().getDispatcher();var source=owner.createCommandSourceStack();
         try {
             check(dispatcher.execute("tames bodyguard add LockGuard",source)==1,"assign roster guard");
-            for(String command:List.of("tames sit LockGuard","tames wander LockGuard","tames guardian set LockGuard","tames movement LockGuard close","tames tphome LockGuard")) {
+            for(String command:List.of("tames sit LockGuard","tames wander LockGuard","tames guardian set LockGuard","tames tphome LockGuard")) {
                 check(dispatcher.execute(command,source)==0,"movement command explicitly rejects roster guard: "+command);
-                check(data.movementOrder==0&&!data.hasHome&&!data.closeMovement&&!guard.isOrderedToSit(),"guard unchanged immediately");
+                check(data.movementOrder==0&&!data.hasHome&&data.closeMovement&&!guard.isOrderedToSit(),"guard unchanged immediately");
             }
             check(dispatcher.execute("tames sit all",source)==1,"bulk movement command still works");
             check(data.movementOrder==0&&!guard.isOrderedToSit(),"bulk movement skips roster guard");
             check(normal.movementOrder==1&&ordinary.isOrderedToSit(),"ordinary pet still accepts movement");
             check(dispatcher.execute("tames movement all skeleton",source)==1,"bulk profile command works");
-            check(!data.skeletonMovement&&normal.skeletonMovement,"bulk profiles skip only roster guards");
+            check(data.skeletonMovement&&normal.skeletonMovement,"bulk profiles include roster guards");
             check(dispatcher.execute("tames inventory autopickup true LockGuard",source)==1,"non-movement setting accepted");
             check(data.hungerAutopickup,"inventory setting applied to bodyguard");
             BodyguardService.refresh(helper.getLevel().getServer());
@@ -114,16 +114,16 @@ public class BodyguardRegression {
             catch(com.mojang.brigadier.exceptions.CommandSyntaxException expected) { }
             TameData first=TameRegistry.get(bodies.get(0).getUUID());
             check(dispatcher.execute("tames mode Guard1 bodyguard 23",source)==0,"legacy mode range capped");
-            check(dispatcher.execute("tames mode Guard1 aggressive",source)==0,"roster mode locked");
+            check(dispatcher.execute("tames mode Guard1 aggressive",source)==1,"roster mode can be customized");
             owner.setHealth(4);BodyguardService.refresh(helper.getLevel().getServer());
             check(first.closeMovement,"low health close movement");close(TamePackService.xpBonus(first),0,"hurt owner removes XP bonus");
             owner.setHealth(owner.getMaxHealth());BodyguardService.refresh(helper.getLevel().getServer());
-            check(!first.closeMovement,"healthy owner restores previous movement");
+            check(first.closeMovement,"healthy owner restores default close profile");
             first.dead=true;BodyguardService.refresh(helper.getLevel().getServer());
             close(TameRegistry.get(bodies.get(1).getUUID()).bodyguardHealingBonus,1,"dead guard excluded from alive count");
             first.dead=false;first.mode=TameMode.DEFAULT.id();first.movementOrder=1;bodies.get(0).setOrderedToSit(true);
             BodyguardService.refresh(helper.getLevel().getServer());
-            check(first.mode==TameMode.BODYGUARD.id()&&first.movementOrder==0&&!bodies.get(0).isOrderedToSit(),"respawn state resumes bodyguard");
+            check(first.mode==TameMode.DEFAULT.id()&&first.movementOrder==0&&!bodies.get(0).isOrderedToSit(),"respawn resumes following without resetting selected mode");
             var roster=BodyguardService.roster(owner);var saved=PlayerDuelStats.fromTag(roster.toTag());
             check(saved.bodyguards.equals(roster.bodyguards)&&saved.bodyguardRange==22,"stable roster saved");
             check(TameData.fromTag(first.toTag()).rosterBodyguard,"tame membership saved");

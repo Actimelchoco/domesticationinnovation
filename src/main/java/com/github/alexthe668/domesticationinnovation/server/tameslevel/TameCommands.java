@@ -4929,7 +4929,7 @@ public class TameCommands {
         if (rules) {
             owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <selection>, remove all, info, setRange <1-22>. No roster size cap: all guards must share one entity type, or every guard must have a different type. Dead/stored guards still count for composition."));
             owner.sendSystemMessage(Component.literal("Adding a guardian replaces its current guarding duty with normal bodyguard duty. Saved guardian deployment groups are retained. Incompatible or locked tames keep their existing assignment."));
-            owner.sendSystemMessage(Component.literal("Always bodyguard mode and automatic follow movement; manual movement commands skip roster guards. Inventory, abilities, attributes and other non-movement settings remain editable. Owner below 5 health triggers close movement. Unloaded living guards return to you. Removed guards go home and sit."));
+            owner.sendSystemMessage(Component.literal("New bodyguards default to bodyguard mode and close movement. Change these with /tames mode and /tames movement; manual sit/wander/guardian orders still skip roster guards. Owner below 5 health temporarily triggers close movement, then restores your selected profile. Unloaded living guards return to you. Removed guards go home and sit."));
             owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
         }
         owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "; range " + roster.bodyguardRange));
@@ -5051,14 +5051,17 @@ public class TameCommands {
                 data.guardianReleaseMovementPending = -1;
                 com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.removeAssignment(data);
                 data.bodyguardPreviousClose = data.closeMovement;
+                data.bodyguardPreviousSkeleton = data.skeletonMovement;
                 roster.bodyguards.add(id); composition.add(data.type); data.rosterBodyguard = true;
                 data.mode = TameMode.BODYGUARD.id(); data.bodyguardRange = roster.bodyguardRange;
+                applyMovementProfile(data, "close");
                 clearGuardianAnchor(data);
             } else {
                 roster.bodyguards.remove(id);
                 clearPendingImmediateChunkTeleport(data);
                 data.rosterBodyguard = false; data.mode = TameMode.DEFAULT.id();
                 data.closeMovement = data.bodyguardPreviousClose;
+                data.skeletonMovement = data.bodyguardPreviousSkeleton;
                 data.bodyguardHealingBonus = 0; data.bodyguardXpBonus = 0;
                 TamePackService.updateModifiers(data);
                 if (!data.dead && !data.stored) {
@@ -5097,8 +5100,9 @@ public class TameCommands {
     }
     public static void maintainRosterBodyguard(ServerPlayer owner, TameData data) {
         LivingEntity body = findLoadedLivingTameByIdentity(owner.getServer(), data.uuid, data.tlId);
-        boolean close = owner.getHealth() < 5 || data.bodyguardPreviousClose;
-        data.closeMovement = close;
+        boolean emergencyClose = owner.getHealth() < 5;
+        data.closeMovement = emergencyClose || "close".equals(data.bodyguardMovementProfile);
+        data.skeletonMovement = !emergencyClose && "skeleton".equals(data.bodyguardMovementProfile);
         if (body == null) {
             queueRosterBodyguardTransfer(owner.getServer(), data,
                     new SpawnTarget(owner.serverLevel(),owner.position(),owner.getYRot(),owner.getXRot()));
@@ -10554,10 +10558,6 @@ public class TameCommands {
     }
 
     private static void applyModeSpec(TameData data, TameMode mode, Integer bodyguardRange) {
-        if (data.rosterBodyguard) {
-            data.mode = TameMode.BODYGUARD.id();
-            return;
-        }
         if (isAssignedGuardian(data)) return;
         data.mode = mode.id();
         if (mode == TameMode.BODYGUARD && bodyguardRange != null) {
@@ -10580,7 +10580,7 @@ public class TameCommands {
         ModeSpec spec = parseModeSpec(modeName);
         if (spec == null) return error(p, "Invalid mode.");
         TameMode mode = spec.mode();
-        if (isManualMovementLocked(d)) return error(p, movementLockMessage(d));
+        if (isAssignedGuardian(d)) return error(p, movementLockMessage(d));
         applyModeSpec(d, mode, spec.bodyguardRange());
         TameRegistry.markDirty();
         p.sendSystemMessage(Component.literal("Mode set to " + modeLabel(mode, d) + " for " + d.name + "."));
@@ -10595,7 +10595,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedGroup(p.getUUID(), group)) {
-            if (isManualMovementLocked(d)) continue;
+            if (isAssignedGuardian(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10615,7 +10615,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedType(p.getUUID(), typeFilter)) {
-            if (isManualMovementLocked(d)) continue;
+            if (isAssignedGuardian(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10635,7 +10635,7 @@ public class TameCommands {
         int count = 0;
         TameData sample = null;
         for (TameData d : ownedTamesForAllCommands(p.getUUID())) {
-            if (isManualMovementLocked(d)) continue;
+            if (isAssignedGuardian(d)) continue;
             LivingEntity e = findLoadedOwnedLivingTameByIdentity(source, p.getUUID(), d);
             if (e == null || !e.isAlive()) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
@@ -10662,7 +10662,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, p.getUUID(), selectedState)) {
             TameData d = TameRegistry.get(tame.getUUID());
             if (d == null) continue;
-            if (isManualMovementLocked(d)) continue;
+            if (isAssignedGuardian(d)) continue;
             applyModeSpec(d, mode, spec.bodyguardRange());
             if (sample == null) {
                 sample = d;
@@ -10678,7 +10678,7 @@ public class TameCommands {
         ServerPlayer player = source.getPlayer();
         TameData data = findOwnedTame(player.getUUID(), pet);
         if (data == null) return error(player, "Pet not found.");
-        if (isManualMovementLocked(data)) return error(player, movementLockMessage(data));
+        if (isAssignedGuardian(data)) return error(player, movementLockMessage(data));
         String profile = parseMovementProfile(profileName);
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         applyMovementProfile(data, profile);
@@ -10693,7 +10693,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedGroup(player.getUUID(), group)) {
-            if (isManualMovementLocked(data)) continue;
+            if (isAssignedGuardian(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10708,7 +10708,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedType(player.getUUID(), typeFilter)) {
-            if (isManualMovementLocked(data)) continue;
+            if (isAssignedGuardian(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10723,7 +10723,7 @@ public class TameCommands {
         if (profile == null) return error(player, "Invalid movement. Use default, skeleton, or close.");
         int count = 0;
         for (TameData data : ownedTamesForAllCommands(player.getUUID())) {
-            if (isManualMovementLocked(data)) continue;
+            if (isAssignedGuardian(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -10742,7 +10742,7 @@ public class TameCommands {
         for (TamableAnimal tame : loadedOwnedStateTames(source, player.getUUID(), order)) {
             TameData data = TameRegistry.get(tame.getUUID());
             if (data == null) continue;
-            if (isManualMovementLocked(data)) continue;
+            if (isAssignedGuardian(data)) continue;
             applyMovementProfile(data, profile);
             count++;
         }
@@ -22194,9 +22194,10 @@ public class TameCommands {
     }
 
     private static void applyMovementProfile(TameData data, String profile) {
-        if (data == null || isManualMovementLocked(data)) {
+        if (data == null || isAssignedGuardian(data)) {
             return;
         }
+        if (data.rosterBodyguard) data.bodyguardMovementProfile = profile;
         data.skeletonMovement = "skeleton".equals(profile);
         data.closeMovement = "close".equals(profile);
     }

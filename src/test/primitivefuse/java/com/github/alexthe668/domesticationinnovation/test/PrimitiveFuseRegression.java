@@ -38,8 +38,9 @@ public class PrimitiveFuseRegression {
             wildAndSittingFestiveDoNotGetCombatFuse(h);
             actualPrimitivePetsAcceptOwnerCollars(h);
             otherCreeperBlastsPreserveBlocks(h);
+            wildAndVanillaBlastsStillDestroyItems(h);
             explosionDamageAndLearnedRadiusScale(h);
-            logger.info("PRIMITIVE_FUSE_TESTS_PASS: native fuse, survival, cooldown, repeat blast, wild/sitting exclusion, five species collars, rocket launch/landing, support fuse, thrown TNT, block protection, native damage scaling, learned radius/damage/friendly protection");
+            logger.info("PRIMITIVE_FUSE_TESTS_PASS: native fuse, survival, cooldown, repeat blast, wild/sitting exclusion, five species collars, rocket launch/landing, support fuse, thrown TNT, block and dropped-item protection, wild/vanilla item damage, native damage scaling, learned radius/damage/friendly protection");
         }catch(Throwable error){logger.error("PRIMITIVE_FUSE_TESTS_FAIL",error);}
         finally{event.getServer().halt(false);}
     }
@@ -104,6 +105,11 @@ public class PrimitiveFuseRegression {
             }
             var blasts=new Blasts(pet);MinecraftForge.EVENT_BUS.register(blasts);
             Entity target=null;
+            var loot=new net.minecraft.world.entity.item.ItemEntity(level,pet.getX()+0.5,pet.getY(),pet.getZ(),new ItemStack(net.minecraft.world.item.Items.DIAMOND,3));
+            loot.setNoGravity(true);level.addFreshEntity(loot);
+            var witness=EntityType.HUSK.create(level);witness.setNoAi(true);witness.setNoGravity(true);
+            witness.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(1000);witness.setHealth(1000);
+            witness.setPos(pet.getX()+0.5,pet.getY(),pet.getZ());level.addFreshEntity(witness);
             try{
                 if(name.equals("rocket_creeper")){
                     var enemy=EntityType.HUSK.create(level);target=enemy;
@@ -123,13 +129,29 @@ public class PrimitiveFuseRegression {
                 }
                 h.assertTrue(blasts.count==1,name+" native attack produces its blast");
                 h.assertTrue(pet.isAlive()&&!pet.isRemoved(),name+" survives its attack");
+                h.assertTrue(loot.isAlive()&&!loot.isRemoved()&&loot.getItem().getCount()==3,name+" native blast preserves the entire dropped stack");
+                h.assertTrue(witness.getHealth()<1000,name+" native blast still damages living enemies");
                 for(var p:blocks)h.assertTrue(level.getBlockState(p).is(net.minecraft.world.level.block.Blocks.GLASS),name+" preserves nearby fragile glass");
             }finally{
-                MinecraftForge.EVENT_BUS.unregister(blasts);pet.discard();if(target!=null)target.discard();
+                MinecraftForge.EVENT_BUS.unregister(blasts);pet.discard();loot.discard();witness.discard();if(target!=null)target.discard();
                 for(var p:blocks)level.setBlock(p,net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),3);
             }
         }
     }
+    static void wildAndVanillaBlastsStillDestroyItems(Fixture h){
+        var level=h.getLevel();
+        for(String name:List.of("festive_creeper","support_creeper","rocket_creeper","vanilla")){
+            Creeper source=name.equals("vanilla")?EntityType.CREEPER.create(level):create(h,name,false);
+            source.setPos(10,-57,10);
+            var loot=new net.minecraft.world.entity.item.ItemEntity(level,10.25,-57,10,new ItemStack(net.minecraft.world.item.Items.DIAMOND));
+            level.addFreshEntity(loot);
+            try{
+                level.explode(source,10,-57,10,3F,net.minecraft.world.level.Level.ExplosionInteraction.NONE);
+                h.assertTrue(loot.isRemoved(),name+" wild/vanilla blast must retain normal dropped-item damage");
+            }finally{source.discard();loot.discard();}
+        }
+    }
+
     public static class Blasts {
         final Entity source; int count;
         Blasts(Entity source) { this.source=source; }

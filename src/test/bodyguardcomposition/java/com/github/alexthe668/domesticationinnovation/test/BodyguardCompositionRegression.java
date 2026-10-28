@@ -43,6 +43,35 @@ public class BodyguardCompositionRegression {
         for(var pet:pets){var live=h.getLevel().getEntity(pet.getUUID());if(live!=null)live.discard();TameRegistry.remove(pet.getUUID());pet.discard();}
     }
     @GameTest(template="empty",batch="bodyguard-composition")
+    public static void bodyguardModeAndProfilesRemainEditableAndPersistent(GameTestHelper h)throws Exception{
+        var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();
+        try{
+            var pet=pet(h,owner,EntityType.WOLF,"CustomGuard","custom");pets.add(pet);
+            var data=TameRegistry.get(pet.getUUID());data.skeletonMovement=true;
+            check(run(h,owner,"add CustomGuard")==1,"add guard");
+            check(data.mode==TameMode.BODYGUARD.id()&&data.closeMovement&&!data.skeletonMovement,"new bodyguard defaults to bodyguard mode and close profile");
+            var dispatcher=h.getLevel().getServer().getCommands().getDispatcher();var source=owner.createCommandSourceStack();
+            check(dispatcher.execute("tames mode CustomGuard passive",source)==1,"mode command accepts roster guard");
+            check(dispatcher.execute("tames movement CustomGuard skeleton",source)==1,"movement command accepts roster guard");
+            BodyguardService.refresh(h.getLevel().getServer());
+            check(data.mode==TameMode.PASSIVE.id()&&data.skeletonMovement&&!data.closeMovement,"refresh preserves chosen mode and movement");
+            owner.setHealth(4);BodyguardService.refresh(h.getLevel().getServer());
+            check(data.closeMovement&&!data.skeletonMovement&&data.bodyguardMovementProfile.equals("skeleton"),"emergency close temporarily overrides profile");
+            owner.setHealth(owner.getMaxHealth());BodyguardService.refresh(h.getLevel().getServer());
+            check(!data.closeMovement&&data.skeletonMovement,"recovery restores skeleton profile");
+            var saved=data.toTag();var restored=TameData.fromTag(saved);
+            check(restored.bodyguardMovementProfile.equals("skeleton")&&restored.mode==TameMode.PASSIVE.id(),"chosen settings persist across save/load");
+            saved.remove("bodyguardMovementProfile");check(TameData.fromTag(saved).bodyguardMovementProfile.equals("close"),"legacy roster defaults to close");
+            check(dispatcher.execute("tames mode group custom aggressive",source)==1,"bulk mode command includes roster guards");
+            check(dispatcher.execute("tames movement group custom default",source)==1,"bulk profile command includes roster guards");
+            BodyguardService.refresh(h.getLevel().getServer());
+            check(data.mode==TameMode.AGGRESSIVE.id()&&!data.closeMovement&&!data.skeletonMovement,"bulk settings survive maintenance");
+            check(run(h,owner,"remove CustomGuard")==1,"remove guard");
+            check(!data.closeMovement&&data.skeletonMovement,"removal restores original movement profile");
+        }finally{clean(h,owner,pets);}h.succeed();
+    }
+
+    @GameTest(template="empty",batch="bodyguard-composition")
     public static void addingGuardiansOverridesDutyOnlyAfterCompositionAcceptsThem(GameTestHelper h)throws Exception{
         var owner=owner(h);List<LivingEntity> pets=new ArrayList<>();
         try{

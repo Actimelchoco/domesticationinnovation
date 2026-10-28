@@ -123,6 +123,8 @@ public class TameData {
     public int bodyguardRange = 12;
     public boolean rosterBodyguard = false;
     public boolean bodyguardPreviousClose = false;
+    public boolean bodyguardPreviousSkeleton = false;
+    public String bodyguardMovementProfile = "close";
     public transient double bodyguardHealingBonus = 0;
     public transient double bodyguardXpBonus = 0;
     public String oreScentingOreId = "";
@@ -350,6 +352,8 @@ public class TameData {
         tag.putInt("bodyguardRange", Math.min(22, bodyguardRange));
         tag.putBoolean("rosterBodyguard", rosterBodyguard);
         tag.putBoolean("bodyguardPreviousClose", bodyguardPreviousClose);
+        tag.putBoolean("bodyguardPreviousSkeleton", bodyguardPreviousSkeleton);
+        tag.putString("bodyguardMovementProfile", bodyguardMovementProfile);
         tag.putString("oreScentingOreId", oreScentingOreId == null ? "" : oreScentingOreId);
         tag.putBoolean("hasPetBed", hasPetBed);
         tag.putString("petBedDimension", petBedDimension == null ? "" : petBedDimension);
@@ -591,6 +595,10 @@ public class TameData {
         data.guardianTargetBestDistanceSq = tag.contains("guardianTargetBestDistanceSq", Tag.TAG_DOUBLE) ? Math.max(0.0D, tag.getDouble("guardianTargetBestDistanceSq")) : 0.0D;
         data.rosterBodyguard = tag.getBoolean("rosterBodyguard");
         data.bodyguardPreviousClose = tag.getBoolean("bodyguardPreviousClose");
+        data.bodyguardPreviousSkeleton = tag.getBoolean("bodyguardPreviousSkeleton");
+        String bodyguardProfile = tag.getString("bodyguardMovementProfile");
+        data.bodyguardMovementProfile = "default".equals(bodyguardProfile) || "skeleton".equals(bodyguardProfile)
+                ? bodyguardProfile : "close";
         data.bodyguardRange = tag.contains("bodyguardRange", Tag.TAG_INT) ? Math.max(1, tag.getInt("bodyguardRange")) : 12;
         data.oreScentingOreId = tag.contains("oreScentingOreId", Tag.TAG_STRING) ? tag.getString("oreScentingOreId") : "";
         data.hasPetBed = tag.getBoolean("hasPetBed");

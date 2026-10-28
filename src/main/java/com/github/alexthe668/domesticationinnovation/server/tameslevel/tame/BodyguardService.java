@@ -82,7 +82,6 @@ public final class BodyguardService {
             for (TameData data : guards) {
                 data.rosterBodyguard = true;
                 data.bodyguardRange = Math.max(1, Math.min(22, roster.bodyguardRange));
-                data.mode = TameMode.BODYGUARD.id();
                 data.bodyguardHealingBonus = !data.dead && !data.stored ? healingBonus(alive) : 0;
                 data.bodyguardXpBonus = owner != null && !data.dead && !data.stored
                         && owner.getHealth() >= owner.getMaxHealth() ? .5 : 0;

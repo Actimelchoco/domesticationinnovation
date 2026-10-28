@@ -93,3 +93,11 @@ including saved progress and reward history, and refreshes loaded attributes.
 Newly recorded damage rewards carry a version marker so the repair excludes them.
 Tests verify conversion, preserved species bases, marker persistence and admin
 permissions. As with reset tests, commands run only in the disposable world.
+
+Tamed Primitive creeper explosions also protect dropped item entities, including
+rocket landing blasts, support creeper blasts and festive creeper thrown TNT.
+The protection removes only dropped items from the explosion damage list;
+living enemies still take damage, and wild/vanilla explosions remain unchanged.
+The reobfuscated PrimitiveFuseRegression suite verifies native attacks preserve
+whole dropped stacks and nearby glass while hurting enemies, with wild and
+vanilla item-damage controls.
