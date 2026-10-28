@@ -1118,7 +1118,7 @@ public class CommonProxy {
         if (!(target instanceof TamableAnimal tame) || !tame.isTame() || !player.getUUID().equals(tame.getOwnerUUID())) {
             return false;
         }
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.canRetrieve(player, hand, target)) return false;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.canRetrieve(player, hand, target)) return false;
         if (!TameCommands.isHungerBlockingMovement(tame)) {
             return false;
         }
@@ -1138,7 +1138,7 @@ public class CommonProxy {
             event.setCancellationResult(InteractionResult.FAIL);
             return;
         }
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.retrieve(event, event.getTarget())) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.retrieve(event, event.getTarget())) return;
         if (handleHungerInventoryShortcut(player, event.getHand(), event.getTarget(), event)) {
             return;
         }
@@ -1160,7 +1160,7 @@ public class CommonProxy {
         Entity entity = event.getTarget();
         ItemStack stack = event.getItemStack();
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.GuardianChestAutomation.isPaper(stack)) return;
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.VallumraptorWeapons.retrieve(event, entity)) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.retrieve(event, entity)) return;
         if (handleHungerInventoryShortcut(player, event.getHand(), entity, event)) {
             return;
         }

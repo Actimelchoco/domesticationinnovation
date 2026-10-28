@@ -1,0 +1,7 @@
+apply from: new File(initscript.sourceFile.parentFile, 'vallumraptorWeaponsRegression.init.gradle')
+allprojects { afterEvaluate {
+    dependencies.add('implementation', fg.deobf('vallumraptor-test:alexsmobs-1.22.9:local'))
+    sourceSets.main.java.srcDir('src/test/helditemweapons/java')
+    sourceSets.main.resources.srcDir('src/test/helditemweapons/resources')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/held-item-weapons-gametest')
+} }

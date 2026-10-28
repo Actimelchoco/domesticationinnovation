@@ -23,11 +23,13 @@ public abstract class AlexsCavesVallumraptorMixin extends TamableAnimal {
     @Shadow public abstract void onGetItem(ItemEntity item);
 
     @Inject(method={"tick", "m_8119_"}, at=@At("TAIL"), remap=false)
-    private void tl$grabWeaponWhileSitting(CallbackInfo ci) {
-        if (level().isClientSide || !isAlive() || !isTame() || !isOrderedToSit() || isNoAi()
+    private void tl$grabNearbyWeapon(CallbackInfo ci) {
+        if (level().isClientSide || !isAlive() || !isTame() || isNoAi()
+                || !com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.supportsHeldItems(this)
                 || !getMainHandItem().isEmpty() || TameDuelManager.isEntityInDuel(getUUID())) return;
-        // The native item goal refuses sitting animals. Offer only weapons
-        // already within native grabbing reach, without navigating or standing up.
+        // The native item goal refuses sitting animals and may stop before its
+        // grab animation completes. Retry nearby weapons through the native grab,
+        // without adding navigation or changing the selected movement command.
         ItemEntity closest = null;
         double distance = 4.0D;
         for (ItemEntity item : level().getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(2.0D))) {
@@ -43,6 +45,7 @@ public abstract class AlexsCavesVallumraptorMixin extends TamableAnimal {
 
     @Inject(method="canTargetItem", at=@At("HEAD"), cancellable=true, remap=false)
     private void tl$targetWeapons(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
+        if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.supportsHeldItems(this)) return;
         // This predicate is also used by tick's eating code. A held weapon must
         // return false there, and must not be displaced by another food/item grab.
         if (VallumraptorWeapons.isArmed(this)) cir.setReturnValue(false);
@@ -52,6 +55,7 @@ public abstract class AlexsCavesVallumraptorMixin extends TamableAnimal {
 
     @Inject(method="onGetItem", at=@At("HEAD"), cancellable=true, remap=false)
     private void tl$keepHeldWeapon(ItemEntity item, CallbackInfo ci) {
+        if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.supportsHeldItems(this)) return;
         // A goal may already have selected food when the hand changes.
         if (VallumraptorWeapons.isArmed(this)
                 || isTame() && com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.isSealedItem(getMainHandItem())

@@ -105,20 +105,20 @@ public class VallumraptorWeaponsRegression {
         }h.succeed();
     }
 
-    @GameTest(template="empty", timeoutTicks=240)
-    public static void nativeItemGoalCollectsDroppedAxe(GameTestHelper h){
+    @GameTest(template="empty", timeoutTicks=240,batch="raptor-pickup")
+    public static void nativeGrabCollectsDroppedAxeWhileStanding(GameTestHelper h){
         var f=new Fixture(h);
         var drop=new ItemEntity(h.getLevel(),f.raptor.getX()+0.5,f.raptor.getY(),f.raptor.getZ(),new ItemStack(Items.IRON_AXE));
         h.getLevel().addFreshEntity(drop);f.raptor.setNoAi(false);
         h.runAtTickTime(180,()->{
             try{
-                check(f.raptor.getMainHandItem().is(Items.IRON_AXE)&&drop.isRemoved(),"native item goal must find and grab a dropped axe");
+                check(f.raptor.getMainHandItem().is(Items.IRON_AXE)&&drop.isRemoved(),"native standing grab must collect a dropped axe: hand="+f.raptor.getMainHandItem()+", mob="+f.raptor.position()+", drop="+drop.position()+", removed="+drop.isRemoved()+", noAi="+f.raptor.isNoAi()+", sit="+f.raptor.isOrderedToSit()+", command="+f.raptor.getCommand()+", eligible="+f.raptor.canTargetItem(drop.getItem()));
             }finally{drop.discard();f.close();}
             h.succeed();
         });
     }
 
-    @GameTest(template="empty", timeoutTicks=240)
+    @GameTest(template="empty", timeoutTicks=240,batch="raptor-sitting")
     public static void sittingRaptorGrabsNearbyWeaponWithoutMovingOrCollectingFood(GameTestHelper h){
         var f=new Fixture(h);
         f.raptor.setNoAi(false);f.raptor.setCommand(1);f.raptor.setOrderedToSit(true);
@@ -133,7 +133,7 @@ public class VallumraptorWeaponsRegression {
         });
         h.runAtTickTime(150,()->{
             try{
-                check(ItemStack.matches(f.raptor.getMainHandItem(),weapon)&&drop.isRemoved(),"sitting tame grabs nearby enchanted weapon");
+                check(ItemStack.matches(f.raptor.getMainHandItem(),weapon)&&drop.isRemoved(),"sitting tame grabs nearby enchanted weapon: hand="+f.raptor.getMainHandItem()+", mob="+f.raptor.position()+", drop="+drop.position()+", removed="+drop.isRemoved()+", sit="+f.raptor.isOrderedToSit()+", command="+f.raptor.getCommand());
                 check(f.raptor.isOrderedToSit()&&f.raptor.getCommand()==1,"weapon pickup preserves sit command");
                 check(f.raptor.position().subtract(start).horizontalDistanceSqr()<0.1,"sitting raptor must not walk to collect weapon");
                 check(!food.isRemoved(),"sitting pickup leaves food untouched");
