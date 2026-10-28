@@ -36,6 +36,49 @@ public class VallumraptorWeaponsRegression {
         public void close(){TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),owner.getUUID());TameRegistry.remove(raptor.getUUID());raptor.discard();}
     }
 
+    static ItemStack sealed(ItemStack original){
+        var stack=new ItemStack(net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(new net.minecraft.resources.ResourceLocation("l2hostility","sealed_item")));
+        stack.getOrCreateTag().put("sealedItem",original.save(new net.minecraft.nbt.CompoundTag()));
+        stack.getOrCreateTag().putInt("sealTime",9999);return stack;
+    }
+    @GameTest(template="empty")
+    public static void nextKillUnsealsEquippedItemsWithExactOriginalData(GameTestHelper h){
+        try(var f=new Fixture(h)){
+            ItemStack original=new ItemStack(Items.DIAMOND_SWORD);original.setDamageValue(17);original.enchant(Enchantments.SHARPNESS,4);
+            original.setHoverName(net.minecraft.network.chat.Component.literal("Raptor blade"));original.getOrCreateTag().putString("Marker","preserved");
+            ItemStack wrapper=sealed(original);f.raptor.setItemSlot(EquipmentSlot.MAINHAND,wrapper);
+            var food=new ItemEntity(h.getLevel(),f.raptor.getX(),f.raptor.getY(),f.raptor.getZ(),new ItemStack(Items.BEEF));
+            try{
+                f.grab(food);check(ItemStack.matches(f.raptor.getMainHandItem(),wrapper),"queued food grab cannot displace sealed equipment");
+                for(int i=0;i<25;i++)f.raptor.tick();
+                check(ItemStack.matches(f.raptor.getMainHandItem(),wrapper),"time alone does not unseal item");
+                var victim=EntityType.HUSK.create(h.getLevel());victim.setPos(f.raptor.getX()+1,f.raptor.getY(),f.raptor.getZ());h.getLevel().addFreshEntity(victim);
+                try{victim.hurt(h.getLevel().damageSources().mobAttack(f.raptor),1000);}finally{victim.discard();}
+                check(ItemStack.matches(f.raptor.getMainHandItem(),original),"next real credited kill restores exact item, enchantments, damage, name and custom NBT");
+                check(VallumraptorWeapons.isArmed(f.raptor),"restored weapon resumes normal armed behavior");
+            }finally{food.discard();}
+        }h.succeed();
+    }
+    @GameTest(template="empty")
+    public static void unsealingRejectsCancelledWildAndMalformedCases(GameTestHelper h){
+        try(var f=new Fixture(h)){
+            ItemStack wrapper=sealed(new ItemStack(Items.IRON_AXE));f.raptor.setItemSlot(EquipmentSlot.MAINHAND,wrapper);
+            var victim=EntityType.HUSK.create(h.getLevel());
+            try{
+                var cancelled=new net.minecraftforge.event.entity.living.LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(f.raptor));cancelled.setCanceled(true);
+                VallumraptorWeapons.unsealOnKill(cancelled);check(f.raptor.getMainHandItem()==wrapper,"cancelled death does not unseal");
+                VallumraptorWeapons.unsealOnKill(new net.minecraftforge.event.entity.living.LivingDeathEvent(victim,h.getLevel().damageSources().playerAttack(f.owner)));
+                check(f.raptor.getMainHandItem()==wrapper,"owner kill does not count as raptor kill");
+                f.raptor.setTame(false);VallumraptorWeapons.unsealOnKill(new net.minecraftforge.event.entity.living.LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(f.raptor)));
+                check(f.raptor.getMainHandItem()==wrapper,"wild raptor does not unseal");f.raptor.setTame(true);
+                ItemStack malformed=sealed(ItemStack.EMPTY);f.raptor.setItemSlot(EquipmentSlot.MAINHAND,malformed);
+                ItemStack nested=sealed(wrapper);f.raptor.setItemSlot(EquipmentSlot.OFFHAND,nested);
+                VallumraptorWeapons.unsealOnKill(new net.minecraftforge.event.entity.living.LivingDeathEvent(victim,h.getLevel().damageSources().mobAttack(f.raptor)));
+                check(f.raptor.getMainHandItem()==malformed&&f.raptor.getOffhandItem()==nested,"malformed and nested seals remain intact");
+            }finally{victim.discard();}
+        }h.succeed();
+    }
+
     @GameTest(template="empty")
     public static void nativeGrabPreservesWeaponsAndFoodCannotReplaceThem(GameTestHelper h){
         try(var f=new Fixture(h)){

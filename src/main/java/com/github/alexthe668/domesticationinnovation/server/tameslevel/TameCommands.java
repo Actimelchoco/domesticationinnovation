@@ -5059,6 +5059,7 @@ public class TameCommands {
             } else {
                 roster.bodyguards.remove(id);
                 clearPendingImmediateChunkTeleport(data);
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.clear(data,false,source.getServer());
                 data.rosterBodyguard = false; data.mode = TameMode.DEFAULT.id();
                 data.closeMovement = data.bodyguardPreviousClose;
                 data.skeletonMovement = data.bodyguardPreviousSkeleton;
@@ -5119,6 +5120,7 @@ public class TameCommands {
             }
             applyLivingMovementOverride(body,data,MovementOrder.FOLLOW);
         }
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.holdsPosition(body)) return;
         if (body.level() != owner.level() || body.distanceToSqr(owner) > data.bodyguardRange * data.bodyguardRange)
             teleportLivingTameToPlayer(body,owner);
     }

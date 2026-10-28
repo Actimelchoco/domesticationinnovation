@@ -30,7 +30,7 @@ public final class HunterInterestEvents {
                 || TameDuelManager.isEntityInDuel(mob.getUUID())) return false;
         TameData data = TameRegistry.get(mob.getUUID());
         if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(mob));
-        return data != null && TameMode.byId(data.mode) == TameMode.MONSTER_HUNTER;
+        return data != null && TameMode.forData(data) == TameMode.MONSTER_HUNTER;
     }
 
     private static LivingEntity target(Mob mob) {
@@ -46,6 +46,7 @@ public final class HunterInterestEvents {
     }
 
     public static boolean holdsCombatPosition(LivingEntity entity) {
+        if (BodyguardWhipOrders.holdsPosition(entity)) return true;
         if (!(entity instanceof Mob mob) || !isHunter(mob)) return false;
         LivingEntity target = target(mob);
         return target != null && target.isAlive() && !target.isRemoved() && !isIgnored(mob, target);

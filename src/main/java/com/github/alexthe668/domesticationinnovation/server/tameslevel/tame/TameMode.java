@@ -21,6 +21,10 @@ public enum TameMode {
         return id;
     }
 
+    public static TameMode forData(TameData data) {
+        return BodyguardWhipOrders.active(data) ? ASSASIN : byId(data.mode);
+    }
+
     public static TameMode byId(int id) {
         return switch (id) {
             case 0 -> DEFAULT;

@@ -13,7 +13,7 @@ final class AssasinModeGoal extends AbstractModeGoal {
 
     @Override
     protected void tickMode(ServerLevel level, TameData data) {
-        LivingEntity target = TameGoalSupport.assasinTarget(level, tame.getOwnerUUID());
+        LivingEntity target = TameGoalSupport.assasinTarget(level, data);
         if (tame.getTarget() != target) tame.setTarget(target);
     }
 

@@ -53,7 +53,9 @@ public abstract class AlexsCavesVallumraptorMixin extends TamableAnimal {
     @Inject(method="onGetItem", at=@At("HEAD"), cancellable=true, remap=false)
     private void tl$keepHeldWeapon(ItemEntity item, CallbackInfo ci) {
         // A goal may already have selected food when the hand changes.
-        if (VallumraptorWeapons.isArmed(this) || VallumraptorWeapons.isWeapon(item.getItem())
+        if (VallumraptorWeapons.isArmed(this)
+                || isTame() && com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.isSealedItem(getMainHandItem())
+                || VallumraptorWeapons.isWeapon(item.getItem())
                 && (!isTame() || TameDuelManager.isEntityInDuel(getUUID()))) ci.cancel();
     }
 }

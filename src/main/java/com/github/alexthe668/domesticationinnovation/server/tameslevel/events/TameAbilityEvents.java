@@ -162,7 +162,7 @@ public class TameAbilityEvents {
                         target = duelTarget;
                     }
                 }
-                if (!cursed && TameMode.byId(data.mode) == TameMode.PASSIVE && !isDuelOpponent(tame, target)) {
+                if (!cursed && TameMode.forData(data) == TameMode.PASSIVE && !isDuelOpponent(tame, target)) {
                     if (TameEntityAdapter.target(tame) != null) {
                         TameEntityAdapter.setTarget(tame, null);
                     }
@@ -262,7 +262,7 @@ public class TameAbilityEvents {
                     && (!TameLimitService.isReleased(attackerTame) || LostHunterActivity.active(attackerTame))) {
                 TameData attackerData = TameLimitService.abilityData(attackerTame);
                 if (attackerData != null
-                        && (cursedAttacker || TameMode.byId(attackerData.mode) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
+                        && (cursedAttacker || TameMode.forData(attackerData) != TameMode.PASSIVE || isDuelOpponent(attackerTame, event.getEntity()))
                         && shouldUseOffensiveAbilities(attackerTame, attackerData, event.getEntity())
                         && !isProtectedPassiveWildlife(event.getEntity())
                         && !INTERNAL_BONUS_DAMAGE.get()) {
@@ -2727,7 +2727,7 @@ private static void applyWardenScreamPush(LivingEntity tame, LivingEntity target
             return true;
         }
 
-        TameMode mode = TameMode.byId(data.mode);
+        TameMode mode = TameMode.forData(data);
         return switch (mode) {
             case PASSIVE -> false;
             // DEFAULT should still allow abilities against the tame's current valid target.

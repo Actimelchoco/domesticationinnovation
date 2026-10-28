@@ -21,7 +21,7 @@ final class ProtectionZoneGoal extends Goal {
         if (!(tame.level() instanceof ServerLevel)) return false;
         if (!tame.isTame()) return false;
         TameData data = TameGoalSupport.data(tame);
-        if (data == null) return false;
+        if (data == null || com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.active(data)) return false;
         return data.hasProtectionZone;
     }
 

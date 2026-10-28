@@ -298,6 +298,17 @@ public final class TameGoalSupport {
         return ownerUuid != null && ASSASIN_TARGETS.remove(ownerUuid) != null;
     }
 
+    public static boolean isAssasinTarget(TameData data, LivingEntity target) {
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.active(data)
+                ? com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.matches(data,target)
+                : isAssasinTarget(data.ownerUUID,target);
+    }
+    public static LivingEntity assasinTarget(ServerLevel level,TameData data) {
+        return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.active(data)
+                ? com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.target(level,data)
+                : assasinTarget(level,data.ownerUUID);
+    }
+
     public static boolean isAssasinTarget(UUID ownerUuid, LivingEntity target) {
         if (ownerUuid == null || target == null || !target.isAlive() || target.isRemoved()) return false;
         AssasinTarget marked = ASSASIN_TARGETS.get(ownerUuid);

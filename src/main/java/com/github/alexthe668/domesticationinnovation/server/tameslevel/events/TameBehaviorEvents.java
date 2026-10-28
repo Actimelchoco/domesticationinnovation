@@ -69,9 +69,9 @@ public class TameBehaviorEvents {
             return;
         }
         TameData data = TameRegistry.get(tame.getUUID());
-        if (data == null || TameMode.byId(data.mode) != TameMode.ASSASIN) return;
+        if (data == null || TameMode.forData(data) != TameMode.ASSASIN) return;
 
-        if (newTarget != null && !TameGoalSupport.isAssasinTarget(data.ownerUUID, newTarget)) {
+        if (newTarget != null && !TameGoalSupport.isAssasinTarget(data, newTarget)) {
             event.setNewTarget(null);
         }
     }
@@ -104,9 +104,9 @@ public class TameBehaviorEvents {
         }
         if (activeData.guardianResting) return;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianChestBodyguards.tick(tame, activeData)) return;
-        if (TameMode.byId(activeData.mode) == TameMode.ASSASIN
+        if (TameMode.forData(activeData) == TameMode.ASSASIN
                 && tame.getTarget() != null
-                && !TameGoalSupport.isAssasinTarget(activeData.ownerUUID, tame.getTarget())) {
+                && !TameGoalSupport.isAssasinTarget(activeData, tame.getTarget())) {
             tame.setTarget(null);
             tame.getNavigation().stop();
         }
@@ -141,8 +141,8 @@ public class TameBehaviorEvents {
 
         if (!(tame instanceof TamableAnimal)
                 && tame.tickCount % 10 == 0
-                && (TameMode.byId(activeData.mode) == TameMode.MONSTER_HUNTER
-                    || TameMode.byId(activeData.mode) == TameMode.ASSASIN)) {
+                && (TameMode.forData(activeData) == TameMode.MONSTER_HUNTER
+                    || TameMode.forData(activeData) == TameMode.ASSASIN)) {
             TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
         }
 
@@ -151,8 +151,8 @@ public class TameBehaviorEvents {
         if (TameEntityAdapter.isStayingStill(tame)) return;
 
         if (!(tame instanceof TamableAnimal)
-                && TameMode.byId(activeData.mode) != TameMode.MONSTER_HUNTER
-                && TameMode.byId(activeData.mode) != TameMode.ASSASIN) {
+                && TameMode.forData(activeData) != TameMode.MONSTER_HUNTER
+                && TameMode.forData(activeData) != TameMode.ASSASIN) {
             TamePerformanceProfiler.run("behavior.interface_mode_targeting", () -> handleInterfaceModeTargeting(tame, activeData));
         }
 
@@ -404,7 +404,7 @@ public class TameBehaviorEvents {
             return;
         }
         if (data.hasHome || data.rosterBodyguard) return;
-        if (TameMode.byId(data.mode) != TameMode.BOSS) {
+        if (TameMode.forData(data) != TameMode.BOSS) {
             return;
         }
         boolean hasBossTarget = (tame instanceof net.minecraft.world.entity.TamableAnimal tamable
@@ -430,9 +430,9 @@ public class TameBehaviorEvents {
 
     private static void handleInterfaceModeTargeting(PathfinderMob tame, TameData data) {
         if (tame == null || data == null) return;
-        TameMode mode = TameMode.byId(data.mode);
+        TameMode mode = TameMode.forData(data);
         if (mode == TameMode.ASSASIN && tame.level() instanceof ServerLevel level) {
-            LivingEntity marked = TameGoalSupport.assasinTarget(level, data.ownerUUID);
+            LivingEntity marked = TameGoalSupport.assasinTarget(level, data);
             if (tame.getTarget() != marked) tame.setTarget(marked);
             return;
         }
@@ -494,6 +494,8 @@ public class TameBehaviorEvents {
         if (!target.isAlive()) return false;
         if (target == tame) return false;
         if (sourceLevel != null && target.level() != sourceLevel) return false;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardWhipOrders.matches(TameRegistry.get(tame.getUUID()),target))
+            return !TameRegistry.isProtectedAttackTarget(tame,target);
         if (target instanceof Player) return false;
         if (TameEntityAdapter.isTame(target)) return false;
         if (TameRegistry.isProtectedAttackTarget(tame, target)) return false;

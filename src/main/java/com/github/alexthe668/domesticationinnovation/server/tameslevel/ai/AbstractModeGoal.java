@@ -38,7 +38,7 @@ abstract class AbstractModeGoal extends Goal {
         if (tame.isOrderedToSit()) return false;
         TameData data = TameGoalSupport.data(tame);
         if (data == null) return false;
-        return TameMode.byId(data.mode) == mode();
+        return TameMode.forData(data) == mode();
     }
 
     @Override

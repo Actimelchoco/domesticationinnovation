@@ -122,6 +122,7 @@ public class TameData {
     public double guardianTargetBestDistanceSq = 0.0D;
     public int bodyguardRange = 12;
     public boolean rosterBodyguard = false;
+    public UUID bodyguardWhipTarget = null;
     public boolean bodyguardPreviousClose = false;
     public boolean bodyguardPreviousSkeleton = false;
     public String bodyguardMovementProfile = "close";
@@ -351,6 +352,7 @@ public class TameData {
         tag.putDouble("guardianTargetBestDistanceSq", guardianTargetBestDistanceSq);
         tag.putInt("bodyguardRange", Math.min(22, bodyguardRange));
         tag.putBoolean("rosterBodyguard", rosterBodyguard);
+        if (bodyguardWhipTarget != null) tag.putUUID("bodyguardWhipTarget", bodyguardWhipTarget);
         tag.putBoolean("bodyguardPreviousClose", bodyguardPreviousClose);
         tag.putBoolean("bodyguardPreviousSkeleton", bodyguardPreviousSkeleton);
         tag.putString("bodyguardMovementProfile", bodyguardMovementProfile);
@@ -594,6 +596,7 @@ public class TameData {
         data.guardianTargetStuckTicks = Math.max(0, tag.getInt("guardianTargetStuckTicks"));
         data.guardianTargetBestDistanceSq = tag.contains("guardianTargetBestDistanceSq", Tag.TAG_DOUBLE) ? Math.max(0.0D, tag.getDouble("guardianTargetBestDistanceSq")) : 0.0D;
         data.rosterBodyguard = tag.getBoolean("rosterBodyguard");
+        data.bodyguardWhipTarget = tag.hasUUID("bodyguardWhipTarget") ? tag.getUUID("bodyguardWhipTarget") : null;
         data.bodyguardPreviousClose = tag.getBoolean("bodyguardPreviousClose");
         data.bodyguardPreviousSkeleton = tag.getBoolean("bodyguardPreviousSkeleton");
         String bodyguardProfile = tag.getString("bodyguardMovementProfile");

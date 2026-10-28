@@ -13,6 +13,7 @@ import net.minecraft.world.item.SwordItem;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.registries.ForgeRegistries;
 
+@net.minecraftforge.fml.common.Mod.EventBusSubscriber(modid = "domesticationinnovation")
 public final class VallumraptorWeapons {
     private VallumraptorWeapons() { }
 
@@ -20,10 +21,32 @@ public final class VallumraptorWeapons {
         return !stack.isEmpty() && (stack.getItem() instanceof SwordItem || stack.getItem() instanceof AxeItem);
     }
 
-    public static boolean isArmed(LivingEntity entity) {
+    public static boolean isTamedRaptor(LivingEntity entity) {
         return entity instanceof TamableAnimal tame && tame.isTame()
-                && "alexscaves:vallumraptor".equals(String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())))
-                && isWeapon(entity.getMainHandItem());
+                && "alexscaves:vallumraptor".equals(String.valueOf(ForgeRegistries.ENTITY_TYPES.getKey(entity.getType())));
+    }
+
+    public static boolean isArmed(LivingEntity entity) {
+        return isTamedRaptor(entity) && isWeapon(entity.getMainHandItem());
+    }
+
+    @net.minecraftforge.eventbus.api.SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGH)
+    public static void unsealOnKill(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
+        if (event.isCanceled() || event.getEntity().level().isClientSide) return;
+        LivingEntity killer = com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents.resolveTameAttacker(event.getSource());
+        if (!isTamedRaptor(killer) || !killer.isAlive()) return;
+        boolean changed = false;
+        for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
+            ItemStack sealed = killer.getItemBySlot(slot);
+            if (!com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.isSealedItem(sealed)
+                    || sealed.getTag() == null || !sealed.getTag().contains("sealedItem", net.minecraft.nbt.Tag.TAG_COMPOUND)) continue;
+            ItemStack original = ItemStack.of(sealed.getTag().getCompound("sealedItem").copy());
+            // Preserve malformed/nested tokens rather than consuming or duplicating them.
+            if (original.isEmpty() || com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.isRecoveryItem(original)) continue;
+            killer.setItemSlot(slot, original);
+            changed = true;
+        }
+        if (changed) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameRegistry.markDirty();
     }
 
     /** Sprint is deliberately separate from sneak's hunger inventory/stat shortcuts. */

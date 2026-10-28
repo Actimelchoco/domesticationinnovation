@@ -6,6 +6,7 @@ allprojects {
         dependencies.add('implementation', fg.deobf('vallumraptor-test:citadel-2.6.3-1.20.1:local'))
         dependencies.add('implementation', fg.deobf('vallumraptor-test:alexscaves-2.0.2:local'))
         sourceSets.main.java.srcDir('src/test/vallumraptorweapons/java')
+        tasks.compileJava.source(project.file('src/test/animights/java/com/github/alexthe668/domesticationinnovation/test/SealedItemFixture.java'))
         sourceSets.main.resources.srcDir('src/test/performance/resources')
         minecraft.runs { gameTestServer {
             workingDirectory project.file('build/vallumraptor-weapons-gametest')
