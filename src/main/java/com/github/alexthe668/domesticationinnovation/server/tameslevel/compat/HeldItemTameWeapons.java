@@ -29,6 +29,16 @@ public final class HeldItemTameWeapons {
     private static final Map<Mob,Boolean> INSTALLED=new WeakHashMap<>();
 
     public static boolean isWeapon(ItemStack stack) { return !stack.isEmpty() && (stack.getItem() instanceof SwordItem || stack.getItem() instanceof AxeItem); }
+    /** Equipment surcharge applies to held weapons, including native ranged weapons. */
+    public static double weaponSaturationMultiplier(LivingEntity tame) {
+        if (tame == null || AnimightEquipmentEvents.isAnimight(tame) || ownerUuid(tame) == null
+                || TameEntityAdapter.isSupported(tame) && !TameEntityAdapter.isTame(tame)) return 1.0D;
+        return isSaturationWeapon(tame.getMainHandItem()) || isSaturationWeapon(tame.getOffhandItem()) ? 1.5D : 1.0D;
+    }
+    private static boolean isSaturationWeapon(ItemStack stack) {
+        return isWeapon(stack) || !stack.isEmpty()
+                && (stack.getItem() instanceof ProjectileWeaponItem || stack.getItem() instanceof TridentItem);
+    }
     public static UUID ownerUuid(LivingEntity entity) {
         UUID owner=TameEntityAdapter.ownerUuid(entity);
         return owner!=null?owner:entity instanceof OwnableEntity owned?owned.getOwnerUUID():null;
@@ -40,6 +50,15 @@ public final class HeldItemTameWeapons {
         var id=ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
         // Animights retain their independent reserve inventory and durability rules.
         return id!=null && !id.getNamespace().equals("animights");
+    }
+    /** Enumerate declared support without spawning entities or guessing from empty equipment slots. */
+    public static List<EntityType<?>> knownWeaponPickupTypes() {
+        return ForgeRegistries.ENTITY_TYPES.getValues().stream()
+                .filter(type->AnimightEquipmentEvents.supportsWeaponType(type)
+                        || type.is(PICKUP_TYPES)&&!type.is(EXCLUDED_TYPES)
+                        && !ForgeRegistries.ENTITY_TYPES.getKey(type).getNamespace().equals("animights"))
+                .sorted(Comparator.comparing(type->ForgeRegistries.ENTITY_TYPES.getKey(type).toString()))
+                .toList();
     }
     public static boolean supportsPickup(Mob mob) { return supportsHeldItems(mob) && mob.getType().is(PICKUP_TYPES); }
     public static boolean isArmed(LivingEntity entity) { return supportsHeldItems(entity) && isWeapon(entity.getMainHandItem()); }

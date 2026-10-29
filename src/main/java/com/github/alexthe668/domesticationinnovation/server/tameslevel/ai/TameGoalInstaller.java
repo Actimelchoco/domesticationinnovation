@@ -8,6 +8,7 @@ public final class TameGoalInstaller {
     }
 
     public static void installIfMissing(TamableAnimal tame) {
+        CrittersSlowChaseGoal.ensure(tame);
         SkeloraptorNormalChaseGoal.ensure(tame);
         addTargetIfMissing(tame, ProtectionZoneGoal.class, 1, new ProtectionZoneGoal(tame));
         addTargetIfMissing(tame, PassiveModeGoal.class, 2, new PassiveModeGoal(tame));

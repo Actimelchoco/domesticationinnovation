@@ -1,0 +1,9 @@
+allprojects { afterEvaluate {
+    repositories.flatDir { dirs project.file('build/legendary-duel-input') }
+    dependencies.add('implementation', fg.deobf('testlocal:legendarymonsters:2.2.2'))
+    sourceSets.main.java.srcDir('src/test/duelpolish/java')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/duel-polish-gametest')
+    if (project.findProperty('duelPolishDebugPort')) {
+        minecraft.runs.gameTestServer.jvmArg("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:${project.findProperty('duelPolishDebugPort')}")
+    }
+} }

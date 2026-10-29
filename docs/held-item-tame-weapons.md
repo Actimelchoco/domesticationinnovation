@@ -8,6 +8,10 @@ Vallumraptors:
 - Keep held weapons and seals rather than replacing them with food. Unarmed food behavior remains native.
 - Use standard melee weapon attributes and enchantment hooks. Raccoons and Vallumraptors retain their native attack animations.
 - Held weapons do not lose durability. Existing damage is preserved.
+- Holding a sword, axe, bow, crossbow, or trident in either hand increases saturation
+  costs by 50%. Two weapons still give a single 1.5x multiplier. Animights are exempt.
+  The surcharge stacks multiplicatively with existing level and pack costs, applies
+  to activity, healing, and Ultimine, and ends immediately when the weapons are removed.
 - Owners sprint and right-click with an empty main hand to retrieve the exact held stack.
 - The next credited kill unseals equipped L2 sealed items, preserving their original data.
 - Weapon pickup/retrieval retain duel restrictions. Wild mobs keep native behavior.
@@ -31,6 +35,14 @@ cannot reliably prove that an unknown species can render and safely use weapons.
 The feature therefore does not automatically give unknown mobs weapon pickup.
 Custom item inventories, custom ownership systems and custom combat/consumption
 code may require an additional adapter.
+
+## Listing supported types
+
+Admins can run `/tames admin canPickUpWeapons` (permission level 2; console also
+supported). It prints a sorted list of installed entity IDs and names, labeled
+`held item` or `equipment inventory`. It reflects the loaded pickup/exclusion
+tags and includes installed Animights Canito/Catwain inventory support. It does
+not infer pickup support merely because an arbitrary mob has equipment slots.
 
 ## Enabling another reviewed pickup type
 
@@ -57,7 +69,7 @@ To exclude a type from shared held-item rules, add it to:
 
 ## Validation
 
-17 integration tests run against Alex's Caves 2.0.2, Alex's Mobs 1.22.9, and
+18 integration tests run against Alex's Caves 2.0.2, Alex's Mobs 1.22.9, and
 Citadel 2.6.3. They cover the three supported species and a generic OwnableEntity
 carrier, native/custom melee with Smite/Fire Aspect/Knockback, pickup in standing
 and sitting states, exact NBT transfer, food/washing behavior, native raccoon

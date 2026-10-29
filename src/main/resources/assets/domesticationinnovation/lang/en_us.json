@@ -124,5 +124,7 @@
   "domesticationinnovation.sound.subtitle.drum": "Command Drum beats",
   "domesticationinnovation.sound.subtitle.psychic_wall": "Psychic Wall hums",
   "domesticationinnovation.sound.subtitle.psychic_wall_deflect": "Psychic Wall deflects",
-  "domesticationinnovation.sound.subtitle.blazing_protection": "Blazing bar dissapears"
+  "domesticationinnovation.sound.subtitle.blazing_protection": "Blazing bar dissapears",
+  "death.attack.domesticationinnovation.ultimine": "%1$s mined beyond their limits",
+  "death.attack.domesticationinnovation.ultimine.player": "%1$s mined beyond their limits while fighting %2$s"
 }

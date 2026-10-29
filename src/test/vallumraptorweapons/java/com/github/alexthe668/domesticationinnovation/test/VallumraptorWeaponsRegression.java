@@ -109,7 +109,7 @@ public class VallumraptorWeaponsRegression {
     public static void nativeGrabCollectsDroppedAxeWhileStanding(GameTestHelper h){
         var f=new Fixture(h);
         var drop=new ItemEntity(h.getLevel(),f.raptor.getX()+0.5,f.raptor.getY(),f.raptor.getZ(),new ItemStack(Items.IRON_AXE));
-        h.getLevel().addFreshEntity(drop);f.raptor.setNoAi(false);
+        drop.setDeltaMovement(0,0,0);h.getLevel().addFreshEntity(drop);f.raptor.setNoAi(false);
         h.runAtTickTime(180,()->{
             try{
                 check(f.raptor.getMainHandItem().is(Items.IRON_AXE)&&drop.isRemoved(),"native standing grab must collect a dropped axe: hand="+f.raptor.getMainHandItem()+", mob="+f.raptor.position()+", drop="+drop.position()+", removed="+drop.isRemoved()+", noAi="+f.raptor.isNoAi()+", sit="+f.raptor.isOrderedToSit()+", command="+f.raptor.getCommand()+", eligible="+f.raptor.canTargetItem(drop.getItem()));
@@ -126,6 +126,7 @@ public class VallumraptorWeaponsRegression {
         var food=new ItemEntity(h.getLevel(),start.x+0.3,start.y,start.z,new ItemStack(Items.BEEF));
         var weapon=new ItemStack(Items.DIAMOND_SWORD);weapon.enchant(Enchantments.SHARPNESS,3);
         var drop=new ItemEntity(h.getLevel(),start.x+0.7,start.y,start.z,weapon.copy());
+        food.setDeltaMovement(0,0,0);drop.setDeltaMovement(0,0,0);
         h.getLevel().addFreshEntity(food);
         h.runAtTickTime(40,()->{
             check(f.raptor.getMainHandItem().isEmpty()&&!food.isRemoved(),"sitting food pickup remains unchanged");

@@ -19,6 +19,7 @@ public class PlayerDuelStats {
     public int duelWins = 0;
     public int duelLosses = 0;
     public int duelCount = 0;
+    public int rankedMatches = 0;
     public double duelPoints = 0.0D;
     public int rankedSaturation = 0;
     public long ariseCostDay = Long.MIN_VALUE;
@@ -41,6 +42,7 @@ public class PlayerDuelStats {
         tag.putInt("duelWins", Math.max(0, duelWins));
         tag.putInt("duelLosses", Math.max(0, duelLosses));
         tag.putInt("duelCount", Math.max(0, duelCount));
+        tag.putInt("rankedMatches", Math.max(0, rankedMatches));
         tag.putDouble("duelPoints", Math.max(0.0D, duelPoints));
         tag.putInt("rankedSaturation", Math.max(0, rankedSaturation));
         tag.putLong("ariseCostDay", ariseCostDay);
@@ -79,6 +81,7 @@ public class PlayerDuelStats {
             data.duelWins = Math.max(0, tag.getInt("duelWins"));
             data.duelLosses = Math.max(0, tag.getInt("duelLosses"));
             data.duelCount = Math.max(0, tag.getInt("duelCount"));
+            data.rankedMatches = Math.max(0, tag.getInt("rankedMatches"));
             data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
             data.rankedSaturation = Math.max(0, tag.getInt("rankedSaturation"));
             if (tag.contains("ariseCostDay", Tag.TAG_LONG)) {

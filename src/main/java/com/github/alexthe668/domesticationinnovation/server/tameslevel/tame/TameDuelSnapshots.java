@@ -80,6 +80,7 @@ public final class TameDuelSnapshots {
         into.duelWins = from.duelWins;
         into.duelLosses = from.duelLosses;
         into.duelCount = from.duelCount;
+        into.rankedMatches = from.rankedMatches;
         into.duelPoints = from.duelPoints;
         into.hungerSaturation = from.hungerSaturation;
         into.guardianResting = from.guardianResting;

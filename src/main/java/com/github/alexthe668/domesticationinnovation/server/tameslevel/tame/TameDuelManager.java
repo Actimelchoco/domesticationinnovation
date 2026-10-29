@@ -698,6 +698,7 @@ public final class TameDuelManager {
         }
         if (tame instanceof TamableAnimal tamable) ensureMossyGolemDuelTargetGoalsIfNeeded(tamable);
         SkeloraptorDuelChaseGoal.ensure(tame);
+        if (tame instanceof TamableAnimal pet) com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.CrittersSlowChaseGoal.ensure(pet);
         suppressOwnerFollowGoals(tame);
         if (tame instanceof TamableAnimal tamable) forceMossyGolemCombatCommand(tamable);
         applyDuelFollowRangeBoost(tame);
@@ -804,6 +805,7 @@ public final class TameDuelManager {
         }
         tame.setHealth(tame.getMaxHealth());
         SkeloraptorDuelChaseGoal.ensure(tame);
+        if (tame instanceof TamableAnimal pet) com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.CrittersSlowChaseGoal.ensure(pet);
         suppressOwnerFollowGoals(tame);
         applyDuelFollowRangeBoost(tame);
         if (tame instanceof TamableAnimal tamable) {
@@ -820,14 +822,17 @@ public final class TameDuelManager {
 
     private static void clearDuelRestingState(LivingEntity tame) {
         if (tame instanceof TamableAnimal tamable) {
-            tamable.setOrderedToSit(false);
-            tamable.setInSittingPose(false);
+            // Critters snails restart a 26-tick immobile wake animation even
+            // when setOrderedToSit(false) repeats their current awake state.
+            if (tamable.isOrderedToSit()) tamable.setOrderedToSit(false);
+            if (tamable.isInSittingPose()) tamable.setInSittingPose(false);
+        } else {
+            tryInvokeDuelBooleanSetter(tame, "setOrderedToSit", false);
+            tryInvokeDuelBooleanSetter(tame, "setInSittingPose", false);
         }
         if (tame instanceof Fox fox) {
             fox.setSitting(false);
         }
-        tryInvokeDuelBooleanSetter(tame, "setOrderedToSit", false);
-        tryInvokeDuelBooleanSetter(tame, "setInSittingPose", false);
         tryInvokeDuelBooleanSetter(tame, "setSitting", false);
         tryInvokeDuelBooleanSetter(tame, "setSleeping", false);
         tryInvokeDuelBooleanSetter(tame, "setPlayingDead", false);
@@ -2347,6 +2352,7 @@ public final class TameDuelManager {
             tame.duelWins += won ? 1 : 0;
             tame.duelLosses += won ? 0 : 1;
             tame.duelCount += 1;
+            if (battle != null && battle.ranked && tame.rankedMatches < Integer.MAX_VALUE) tame.rankedMatches++;
             tame.duelPoints += creditedPoints;
             grantDuelXp(server, participantId, tame, mmrDelta, poolMagnitude, won, battle != null && battle.ranked);
             return;
@@ -2363,6 +2369,7 @@ public final class TameDuelManager {
         playerStats.duelWins += won ? 1 : 0;
         playerStats.duelLosses += won ? 0 : 1;
         playerStats.duelCount += 1;
+        if (battle != null && battle.ranked && playerStats.rankedMatches < Integer.MAX_VALUE) playerStats.rankedMatches++;
         playerStats.duelPoints += Math.max(0.0D, stats.points);
     }
 

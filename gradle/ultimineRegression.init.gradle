@@ -1,0 +1,24 @@
+allprojects {
+    afterEvaluate {
+        def modsDir = project.file(project.findProperty('ultimineModsDir') ?: 'C:/Users/bruns/Documents/linggango server/mods')
+        repositories.flatDir { dirs modsDir }
+        ['architectury-9.2.14-forge', 'ftb-library-forge-2001.2.13', 'ftb-ultimine-forge-2001.1.8',
+         'geckolib-forge-1.20.1-4.8.4', 'crittersandcompanions-forge-1.20.1-2.7.1',
+         'yet_another_config_lib_v3-3.6.6+1.20.1-forge'].each {
+            dependencies.add('implementation', fg.deobf("ultimine-test:${it}:local"))
+        }
+        sourceSets.main.java.srcDir('src/test/ultimine/java')
+        if (!sourceSets.main.resources.srcDirs.contains(project.file('src/test/performance/resources'))) {
+            sourceSets.main.resources.srcDir('src/test/performance/resources')
+        }
+        minecraft.runs { gameTestServer {
+            workingDirectory project.file('build/ultimine-gametest')
+            property 'forge.enabledGameTestNamespaces', 'domesticationinnovation'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.projectDir}/build/createSrgToMcp/output.srg"
+            arg '-mixin.config=citadel.mixins.json'
+            arg '-mixin.config=domesticationinnovation.mixins.json'
+            mods { domesticationinnovation { source sourceSets.main } }
+        } }
+    }
+}

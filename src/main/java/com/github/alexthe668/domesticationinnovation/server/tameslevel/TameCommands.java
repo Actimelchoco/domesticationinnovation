@@ -1049,7 +1049,7 @@ public class TameCommands {
             new SettingsCategory("movement", "Portals and chairs", List.of("enterPortalsByThemselves", "sitOnChairs")),
             new SettingsCategory("abilities", "Ability preferences and ore scenting", List.of(
                     "healthSiphon", "enableVoidCloud", "orescenting", "herding")),
-            new SettingsCategory("display", "Tame nameplates", List.of("hideLevelInName")),
+            new SettingsCategory("display", "Tame nameplates and duel health", List.of("hideLevelInName")),
             new SettingsCategory("equipment", "Animight reserve equipment", List.of("discardWornArmor")),
             new SettingsCategory("beds", "Automatic bed assignment", List.of("noAutoSetBed")),
             new SettingsCategory("selection", "Exclusions from all-tame commands", List.of("excludeFromAll"))
@@ -1107,6 +1107,15 @@ public class TameCommands {
                             .withStyle(ChatFormatting.AQUA).withStyle(style -> style.withClickEvent(
                                     new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.SUGGEST_COMMAND, command + " "))), false);
                 }
+            }
+        }
+        if ("display".equals(categoryId)) {
+            for (String option : List.of("duelHealth [true|false] (default off)",
+                    "duelHealthMaxNames [1-20] (default 6)")) {
+                String command = "/tames settings display " + option.substring(0, option.indexOf(' '));
+                source.sendSuccess(() -> Component.literal("/tames settings display " + option)
+                        .withStyle(ChatFormatting.AQUA).withStyle(style -> style.withClickEvent(
+                                new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.SUGGEST_COMMAND, command + " "))), false);
             }
         }
         return 1;
@@ -3160,6 +3169,8 @@ public class TameCommands {
 
                         .then(Commands.literal("admin")
                                 .requires(source -> source.hasPermission(2))
+                                .then(Commands.literal("canPickUpWeapons")
+                                        .executes(ctx -> adminCanPickUpWeapons(ctx.getSource())))
                                 .then(LostTameCommands.build())
 
                                 .then(Commands.literal("reset")
@@ -4923,6 +4934,19 @@ public class TameCommands {
                 .then(Commands.literal("setRange").then(Commands.argument("range", IntegerArgumentType.integer(1,22))
                         .executes(ctx -> bodyguardRange(ctx.getSource(), IntegerArgumentType.getInteger(ctx,"range")))));
     }
+    private static int adminCanPickUpWeapons(CommandSourceStack source) {
+        var types = com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.knownWeaponPickupTypes();
+        source.sendSuccess(() -> Component.literal("Known weapon-pickup tame types: " + types.size()), false);
+        for (var type : types) {
+            var id = ForgeRegistries.ENTITY_TYPES.getKey(type);
+            String system = com.github.alexthe668.domesticationinnovation.server.tameslevel.events.AnimightEquipmentEvents.supportsWeaponType(type)
+                    ? "equipment inventory" : "held item";
+            source.sendSuccess(() -> Component.literal("- ").append(Component.translatable(type.getDescriptionId()))
+                    .append(Component.literal(" [" + id + "] (" + system + ")")), false);
+        }
+        return types.size();
+    }
+
     private static int bodyguardInfo(CommandSourceStack source, boolean rules) {
         ServerPlayer owner = source.getPlayer(); if (owner == null) return 0;
         var roster = com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.roster(owner);
@@ -5813,6 +5837,7 @@ public class TameCommands {
                     "During duel and ranked rounds, this ordinary activity drain runs at one hundredth of its normal frequency.",
                     "Duels and ranked have no separate food entry payment.",
                     "Ordinary costs scale with tame level; the per-level contribution doubles every 50 levels.",
+                    "Holding a sword, axe, bow, crossbow, or trident in either hand adds 50% to saturation costs, including healing and Ultimine. Two weapons do not stack this surcharge. Animights are exempt.",
                     "Natural regeneration costs saturation. Command teleports do not.",
                     "After the tame eats non-preferred food, its base regeneration runs at 50% speed until it next eats preferred food.",
                     "=== Food collection and refill ===",
@@ -10303,6 +10328,7 @@ public class TameCommands {
             case "disc_jockey" -> id + " L" + level + ": enables jukebox-follow music utility; binary effect";
             case "warping_bite" -> id + " L" + level + ": base attacks can chorus-teleport enemy targets; level increases proc chance, attempts, and range";
             case "ore_scenting" -> id + " L" + level + ": ore-finding utility; binary effect";
+            case "ultimine" -> id + " L" + level + ": enables owner's Ultimine within 16 blocks; each mined block costs 5 physical damage and 100 saturation times mining level (rolypolies: 1 damage and 67 saturation). Tanker class and a protective collar are recommended.";
             case "gluttonous" -> id + " L" + level + ": guaranteed milestone utility attribute unlocked at tame level 30";
             case "spawner_trigger" -> id + " L" + level + ": lets the tame activate nearby mob spawners; guaranteed for DISCO at tame level 50";
             case "tethered_teleport" -> id + " L" + level + ": allows tethered owner-follow teleports and cross-dimension follow recovery";
@@ -16886,7 +16912,7 @@ public class TameCommands {
         String m = mode == null ? "mmr" : mode.trim().toLowerCase(Locale.ROOT);
         List<DuelLeaderboardEntry> entries = new ArrayList<>();
         for (TameData data : TameRegistry.TAMES.values()) {
-            if (data == null || !hasRecordedDuelStats(data)) continue;
+            if (data == null || !hasRecordedDuelStats(data) || data.rankedMatches <= 10) continue;
             if (participantFilter != null
                     && !participantFilter.contains(data.uuid)
                     && (data.tlId == null || !participantFilter.contains(data.tlId))) continue;
@@ -16914,7 +16940,7 @@ public class TameCommands {
         if (includePlayers) for (Map.Entry<UUID, PlayerDuelStats> entry : TameRegistry.getPlayerDuelStats().entrySet()) {
             UUID playerId = entry.getKey();
             PlayerDuelStats stats = entry.getValue();
-            if (playerId == null || stats == null || !hasRecordedDuelStats(stats)) continue;
+            if (playerId == null || stats == null || !hasRecordedDuelStats(stats) || stats.rankedMatches <= 10) continue;
             if (!includeAll && !p.getUUID().equals(playerId)) continue;
             if (groupFilter != null || typeFilter != null) continue;
             entries.add(new DuelLeaderboardEntry(
@@ -16937,7 +16963,7 @@ public class TameCommands {
         }
 
         sortDuelLeaderboardEntries(entries, m);
-        if (entries.isEmpty()) return error(p, "No duel leaderboard entries found.");
+        if (entries.isEmpty()) return error(p, "No leaderboard entries with more than 10 recorded ranked matches found.");
         int limit = Math.min(Math.max(1, requestedLimit), entries.size());
         String scope = includeAll ? (includePlayers ? "all players" : "all participating tames") : "owned";
         String groupText = (groupFilter == null || groupFilter.isBlank()) ? "" : (" | group: " + groupFilter);
@@ -16946,6 +16972,7 @@ public class TameCommands {
         if (longForm) {
             p.sendSystemMessage(Component.literal("wins / losses / duels / kills / assists / deaths / points").withStyle(ChatFormatting.DARK_GRAY));
         }
+        p.sendSystemMessage(Component.literal("Qualification: 11+ recorded ranked matches.").withStyle(ChatFormatting.DARK_GRAY));
         String activeRankBucket = null;
         for (int i = 0; i < limit; i++) {
             DuelLeaderboardEntry entry = entries.get(i);
@@ -18276,6 +18303,7 @@ public class TameCommands {
         data.duelWins = 0;
         data.duelLosses = 0;
         data.duelCount = 0;
+        data.rankedMatches = 0;
         data.duelPoints = 0.0D;
     }
 
@@ -23639,15 +23667,15 @@ public class TameCommands {
                 && now % (20L * DUEL_HUNGER_DRAIN_INTERVAL_SECONDS) != 0L) return 0;
         LivingEntity target = tame instanceof net.minecraft.world.entity.Mob mob ? mob.getTarget() : null;
         if (target != null && target.isAlive()) {
-            return scaleSaturationCost(data, 4);
+            return scaleSaturationCost(data, tame, 4);
         }
         if (data.movementOrder == 2 || data.movementOrder == 3) {
-            return scaleSaturationCost(data, 1);
+            return scaleSaturationCost(data, tame, 1);
         }
-        return scaleSaturationCost(data, 2);
+        return scaleSaturationCost(data, tame, 2);
     }
 
-    private static int scaleSaturationCost(TameData data, int baseCost) {
+    private static int scaleSaturationCost(TameData data, LivingEntity tame, int baseCost) {
         if (baseCost <= 0) {
             return 0;
         }
@@ -23655,7 +23683,8 @@ public class TameCommands {
         double weightedLevels = saturationWeightedLevels(level)
                 + saturationWeightedLevels(com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat.hungerExtraLevels(data));
         return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TamePackService.saturationCost(
-                data, Math.max(1L, Math.round(baseCost * (1.0D + weightedLevels / 100.0D))));
+                data, Math.max(1L, Math.round(baseCost * (1.0D + weightedLevels / 100.0D)))
+                        * com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.weaponSaturationMultiplier(tame));
     }
 
     private static double saturationWeightedLevels(double remainingLevels) {
@@ -23681,6 +23710,15 @@ public class TameCommands {
             }
         }
         return true;
+    }
+
+    /** Feed the selected mining companion without applying pack cost multipliers. */
+    public static boolean prepareHungerForUltimine(TameData data, LivingEntity tame, int required) {
+        if (data == null || tame == null || required <= 0) return false;
+        boolean available = ensureHungerSaturation(data, tame, required);
+        // Eating stored food can change the inventory even when the full cost cannot be met.
+        TameRegistry.markDirty();
+        return available;
     }
 
     public static boolean isHungerBlockingAbilities(TameData data) {
@@ -23734,7 +23772,7 @@ public class TameCommands {
             return true;
         }
         double previousPackRemainder = data.packSaturationRemainder;
-        int scaledCost = scaleSaturationCost(data, saturationCost);
+        int scaledCost = scaleSaturationCost(data, tame, saturationCost);
         if (!ensureHungerSaturation(data, tame, scaledCost)) {
             data.packSaturationRemainder = previousPackRemainder;
             return false;

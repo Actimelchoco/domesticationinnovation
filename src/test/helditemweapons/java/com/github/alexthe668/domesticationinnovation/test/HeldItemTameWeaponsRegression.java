@@ -35,10 +35,35 @@ public class HeldItemTameWeaponsRegression {
             Mob mob=raccoon?AMEntityRegistry.RACCOON.get().create(h.getLevel()):EntityType.FOX.create(h.getLevel());
             TameEntityAdapter.setOwner(mob,owner.getUUID());mob.setNoAi(true);mob.setPos(owner.getX()+2,owner.getY(),owner.getZ());h.getLevel().addFreshEntity(mob);entities.add(mob);TameRegistry.register(new TameData(mob,owner.getUUID(),!raccoon));return mob;
         }
-        ItemEntity drop(Mob mob,ItemStack stack,double offset){var item=new ItemEntity(h.getLevel(),mob.getX()+offset,mob.getY(),mob.getZ(),stack);h.getLevel().addFreshEntity(item);entities.add(item);return item;}
+        ItemEntity drop(Mob mob,ItemStack stack,double offset){var item=new ItemEntity(h.getLevel(),mob.getX()+offset,mob.getY(),mob.getZ(),stack);item.setDeltaMovement(0,0,0);h.getLevel().addFreshEntity(item);entities.add(item);return item;}
         LivingEntity enemy(Mob mob){var e=EntityType.ZOMBIE.create(h.getLevel());e.setNoAi(true);e.setPos(mob.getX()+1,mob.getY(),mob.getZ());e.getAttribute(Attributes.MAX_HEALTH).setBaseValue(200);e.setHealth(200);e.getAttribute(Attributes.ARMOR).setBaseValue(0);h.getLevel().addFreshEntity(e);entities.add(e);return e;}
         public void close(){h.getLevel().removePlayerImmediately(owner,Entity.RemovalReason.DISCARDED);players.remove(owner.getUUID());for(var e:entities){TameRegistry.remove(e.getUUID());e.discard();}}
     }
+    @GameTest(template="held_item_arena") public static void adminCommandListsLoadedWeaponTypesAndEnforcesPermission(GameTestHelper h)throws Exception{
+        var output=new ArrayList<String>();
+        var receiver=new net.minecraft.commands.CommandSource(){
+            public void sendSystemMessage(net.minecraft.network.chat.Component message){output.add(message.getString());}
+            public boolean acceptsSuccess(){return true;}
+            public boolean acceptsFailure(){return true;}
+            public boolean shouldInformAdmins(){return false;}
+        };
+        var dispatcher=h.getLevel().getServer().getCommands().getDispatcher();
+        var source=h.getLevel().getServer().createCommandSourceStack().withSource(receiver).withPermission(2);
+        var known=HeldItemTameWeapons.knownWeaponPickupTypes();
+        check(known.contains(EntityType.FOX)&&known.contains(AMEntityRegistry.RACCOON.get()),"known types include fox and installed raccoon");
+        check(!known.contains(EntityType.WOLF)&&!known.contains(EntityType.COW),"unverified vanilla equipment slots do not imply pickup support");
+        int count=dispatcher.execute("tames admin canPickUpWeapons",source);
+        check(count==known.size()&&output.size()==count+1,"console command prints count and one line per supported type");
+        check(output.stream().anyMatch(line->line.contains("minecraft:fox"))
+                &&output.stream().anyMatch(line->line.contains("alexsmobs:raccoon"))
+                &&output.stream().anyMatch(line->line.contains("alexscaves:vallumraptor")),"output includes installed supported entity IDs");
+        var ids=known.stream().map(type->net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type).toString()).toList();
+        check(ids.equals(ids.stream().sorted().toList()),"output ordering is stable");
+        try{dispatcher.execute("tames admin canPickUpWeapons",source.withPermission(0));throw new AssertionError("non-admin was allowed");}
+        catch(com.mojang.brigadier.exceptions.CommandSyntaxException expected){}
+        h.succeed();
+    }
+
     @GameTest(template="held_item_arena") public static void foxAndRaccoonKeepWeaponsAndRetrieveWithoutLosingData(GameTestHelper h)throws Exception{
         try(var f=new Fixture(h)){
             for(boolean raccoon:List.of(false,true)){

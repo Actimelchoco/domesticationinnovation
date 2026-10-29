@@ -37,6 +37,7 @@
     "EntityMixin",
     "FishingHookMixin",
     "FloatGoalMixin",
+    "FTBUltimineMixin",
     "FollowOwnerGoalMixin",
     "FollowParentGoalMixin",
     "GuardianSitGoalMixin",

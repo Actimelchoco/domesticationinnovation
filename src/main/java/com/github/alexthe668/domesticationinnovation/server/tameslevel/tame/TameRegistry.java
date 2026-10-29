@@ -564,6 +564,7 @@ public class TameRegistry {
             data.duelWins = 0;
             data.duelLosses = 0;
             data.duelCount = 0;
+            data.rankedMatches = 0;
             data.duelPoints = 0.0D;
         }
         PLAYER_DUEL_STATS.clear();

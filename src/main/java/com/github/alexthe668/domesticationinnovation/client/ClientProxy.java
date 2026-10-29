@@ -12,6 +12,7 @@ import com.github.alexthe668.domesticationinnovation.server.item.FeatherOnAStick
 import com.github.alexthe668.domesticationinnovation.server.misc.DIParticleRegistry;
 import com.google.common.collect.ImmutableList;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
@@ -45,6 +46,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.*;
+import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.Event;
@@ -159,7 +161,39 @@ public class ClientProxy extends CommonProxy {
                                 .executes(ctx -> showClientDuelGlow(ctx.getSource()))
                                 .then(Commands.argument("enabled", BoolArgumentType.bool())
                                         .executes(ctx -> setClientDuelGlow(ctx.getSource(),
-                                                BoolArgumentType.getBool(ctx, "enabled")))))));
+                                                BoolArgumentType.getBool(ctx, "enabled")))))
+                        .then(clientDuelHealthCommand())
+                        .then(clientDuelHealthMaxNamesCommand())
+                        .then(Commands.literal("display")
+                                .then(clientDuelHealthCommand())
+                                .then(clientDuelHealthMaxNamesCommand()))));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> clientDuelHealthCommand() {
+        return Commands.literal("duelHealth")
+                .executes(ctx -> showClientDuelHealth(ctx.getSource()))
+                .then(Commands.argument("enabled", BoolArgumentType.bool()).executes(ctx -> {
+                    ClientDuelGlowSettings.setDuelHealth(BoolArgumentType.getBool(ctx, "enabled"));
+                    ClientDuelHealthOverlay.clear();
+                    return showClientDuelHealth(ctx.getSource());
+                }));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> clientDuelHealthMaxNamesCommand() {
+        return Commands.literal("duelHealthMaxNames")
+                .executes(ctx -> showClientDuelHealth(ctx.getSource()))
+                .then(Commands.argument("count", IntegerArgumentType.integer(1, ClientDuelHealthPolicy.MAX_NAMES)).executes(ctx -> {
+                    ClientDuelGlowSettings.setDuelHealthMaxNames(IntegerArgumentType.getInteger(ctx, "count"));
+                    return showClientDuelHealth(ctx.getSource());
+                }));
+    }
+
+    private static int showClientDuelHealth(CommandSourceStack source) {
+        source.sendSystemMessage(Component.literal("Duel health display: "
+                + (ClientDuelGlowSettings.duelHealth() ? "enabled" : "disabled")
+                + "; maximum " + ClientDuelGlowSettings.duelHealthMaxNames() + " tame names.")
+                .withStyle(ChatFormatting.AQUA));
+        return 1;
     }
 
     private static int showClientDuelGlow(CommandSourceStack source) {
@@ -226,6 +260,7 @@ public class ClientProxy extends CommonProxy {
             return;
         }
         ClientDuelOutlines.tick();
+        ClientDuelHealthOverlay.tick();
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
         if (player == null || minecraft.level == null) {
@@ -266,26 +301,34 @@ public class ClientProxy extends CommonProxy {
         }
         DISC_JOCKEY_SOUND_MAP.clear();
         lockedSpyglassTameId = -1;
+        ClientDuelHealthOverlay.clear();
     }
 
     @SubscribeEvent
     public void onRenderGuiOverlay(RenderGuiOverlayEvent.Post event) {
+        if (!event.getOverlay().id().equals(VanillaGuiOverlay.HOTBAR.id())
+                || Minecraft.getInstance().options.hideGui) return;
+        boolean spyglass = renderSpyglassHealth(event.getGuiGraphics());
+        ClientDuelHealthOverlay.render(event.getGuiGraphics(), spyglass ? 18 + Minecraft.getInstance().font.lineHeight + 2 : 18);
+    }
+
+    private static boolean renderSpyglassHealth(GuiGraphics graphics) {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
         if (player == null || minecraft.level == null || lockedSpyglassTameId < 0 || !hasSpyglassInHand(player)) {
-            return;
+            return false;
         }
         Entity entity = minecraft.level.getEntity(lockedSpyglassTameId);
         if (!(entity instanceof TamableAnimal tame) || !tame.isAlive()) {
             lockedSpyglassTameId = -1;
-            return;
+            return false;
         }
-        GuiGraphics graphics = event.getGuiGraphics();
         Font font = minecraft.font;
         String label = tame.getName().getString() + " " + Math.round(tame.getHealth()) + "/" + Math.round(tame.getMaxHealth());
         int x = (minecraft.getWindow().getGuiScaledWidth() - font.width(label)) / 2;
         int y = 18;
         graphics.drawString(font, label, x, y, 0xFFFFFF, true);
+        return true;
     }
 
     private static boolean hasSpyglassInHand(Player player) {

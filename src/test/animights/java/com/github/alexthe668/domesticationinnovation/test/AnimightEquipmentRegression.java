@@ -40,6 +40,22 @@ public final class AnimightEquipmentRegression {
         if (!value) throw new AssertionError(message);
     }
 
+    @GameTest(template = "empty")
+    public static void animightWeaponsDoNotIncreaseSaturationCost(GameTestHelper helper) {
+        TamableAnimal tame = companion(helper);
+        try {
+            TameData data = TameRegistry.get(tame.getUUID());
+            data.hungerSaturation = 1000;
+            tame.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            tame.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.CROSSBOW));
+            check(com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons.weaponSaturationMultiplier(tame) == 1.0D,
+                    "Animights stay exempt with weapons in both hands");
+            check(com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.consumeHungerForNaturalHeal(data, tame, 1), "heal is affordable");
+            check(data.hungerSaturation == 899, "armed Animight pays the normal level-one healing cost");
+        } finally { TameRegistry.remove(tame.getUUID()); tame.discard(); }
+        helper.succeed();
+    }
+
     private static TamableAnimal companion(GameTestHelper helper) {
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("animights", "canito"));
         TamableAnimal tame = (TamableAnimal) type.create(helper.getLevel());

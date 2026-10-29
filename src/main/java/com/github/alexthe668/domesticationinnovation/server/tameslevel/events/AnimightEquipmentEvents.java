@@ -237,7 +237,11 @@ public final class AnimightEquipmentEvents {
 
     /** Both native Animights companions share the same melee/bow attack implementation. */
     private static boolean usesWeapons(LivingEntity tame) {
-        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(tame.getType());
+        return supportsWeaponType(tame.getType());
+    }
+
+    public static boolean supportsWeaponType(net.minecraft.world.entity.EntityType<?> type) {
+        ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(type);
         return id != null && id.getNamespace().equals("animights")
                 && (id.getPath().equals("canito") || id.getPath().equals("catwain"));
     }

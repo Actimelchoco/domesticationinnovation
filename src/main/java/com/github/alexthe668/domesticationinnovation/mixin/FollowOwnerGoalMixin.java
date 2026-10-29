@@ -4,7 +4,7 @@ import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.DomesticationMod;
 import com.github.alexthe668.domesticationinnovation.server.enchantment.DIEnchantmentRegistry;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
-import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.OwnerFollowRules;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
@@ -43,8 +43,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canUse(CallbackInfoReturnable<Boolean> cir){
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { cir.setReturnValue(false); return; }
-        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+        if (OwnerFollowRules.blocked(tamable)) {
             cir.setReturnValue(false);
             return;
         }
@@ -60,8 +59,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canContinueToUse(CallbackInfoReturnable<Boolean> cir){
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { cir.setReturnValue(false); return; }
-        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+        if (OwnerFollowRules.blocked(tamable)) {
             cir.setReturnValue(false);
             return;
         }
@@ -77,6 +75,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_canTeleportTo(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
+        if (OwnerFollowRules.blocked(tamable)) { cir.setReturnValue(false); return; }
         if(TameableUtils.hasEnchant(tamable, DIEnchantmentRegistry.AMPHIBIOUS) && level.isWaterAt(pos)){
             cir.setReturnValue(true);
         }
@@ -89,8 +88,7 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             cancellable = true
     )
     private void di_tick(CallbackInfo ci) {
-        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.HunterInterestEvents.holdsCombatPosition(tamable)) { ci.cancel(); return; }
-        if (TameDuelManager.isEntityInDuel(tamable.getUUID())) {
+        if (OwnerFollowRules.blocked(tamable)) {
             tamable.getNavigation().stop();
             ci.cancel();
             return;
@@ -99,5 +97,12 @@ public abstract class FollowOwnerGoalMixin extends Goal {
             tamable.getNavigation().moveTo(owner, speedModifier);
             ci.cancel();
         }
+    }
+
+    // The Critters and Companions snail overrides tick(), bypassing the base tick
+    // injection. Its inherited teleport method must enforce the same assignment.
+    @Inject(method = "teleportToOwner", at = @At("HEAD"), cancellable = true)
+    private void di_blockAssignedOwnerTeleport(CallbackInfo ci) {
+        if (OwnerFollowRules.blocked(tamable)) ci.cancel();
     }
 }

@@ -11,6 +11,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.HashMap;
@@ -22,6 +23,12 @@ public class TameCrittersEvents {
     private static final Map<UUID, PendingCommandActionBar> PENDING_ACTION_BARS = new HashMap<>();
 
     private record PendingCommandActionBar(UUID tameUuid, int previousOrderCode, long dueTick) {
+    }
+
+    @SubscribeEvent
+    public static void onTameTick(LivingEvent.LivingTickEvent event) {
+        if (event.getEntity() instanceof TamableAnimal tame && !tame.level().isClientSide && tame.tickCount % 20 == 0)
+            com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.CrittersSlowChaseGoal.ensure(tame);
     }
 
     @SubscribeEvent

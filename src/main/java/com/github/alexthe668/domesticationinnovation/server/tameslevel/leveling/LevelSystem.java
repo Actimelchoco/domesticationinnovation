@@ -142,6 +142,7 @@ public class LevelSystem {
         DISC_JOCKEY("disc_jockey", 1),
         WARPING_BITE("warping_bite", 13),
         ORE_SCENTING("ore_scenting", 1),
+        ULTIMINE("ultimine", 1),
         GLUTTONOUS("gluttonous", 1),
         TETHERED_TELEPORT("tethered_teleport", 1),
         MUFFLED("muffled", 1),

@@ -1,0 +1,9 @@
+apply from: new File(initscript.sourceFile.parentFile, 'ultimineRegression.init.gradle')
+allprojects { afterEvaluate {
+    sourceSets.main.java.srcDir('src/test/crittersfollow/java')
+    sourceSets.main.resources.srcDir('src/test/helditemweapons/resources')
+    minecraft.runs.gameTestServer.workingDirectory = project.file('build/critters-follow-gametest')
+    if (project.findProperty('crittersDebugPort')) {
+        minecraft.runs.gameTestServer.jvmArg("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:${project.findProperty('crittersDebugPort')}")
+    }
+} }

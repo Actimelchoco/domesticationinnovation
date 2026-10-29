@@ -84,6 +84,7 @@ public class TameData {
     public int duelWins = 0;
     public int duelLosses = 0;
     public int duelCount = 0;
+    public int rankedMatches = 0;
     public double duelPoints = 0.0D;
     public boolean dead = false;
     public boolean stored = false;
@@ -300,6 +301,7 @@ public class TameData {
         tag.putInt("duelWins", Math.max(0, duelWins));
         tag.putInt("duelLosses", Math.max(0, duelLosses));
         tag.putInt("duelCount", Math.max(0, duelCount));
+        tag.putInt("rankedMatches", Math.max(0, rankedMatches));
         tag.putDouble("duelPoints", Math.max(0.0D, duelPoints));
         tag.putBoolean("dead", dead);
         tag.putBoolean("stored", stored);
@@ -540,6 +542,9 @@ public class TameData {
         data.duelWins = Math.max(0, tag.getInt("duelWins"));
         data.duelLosses = Math.max(0, tag.getInt("duelLosses"));
         data.duelCount = Math.max(0, tag.getInt("duelCount"));
+        data.rankedMatches = tag.contains("rankedMatches", Tag.TAG_INT)
+                ? Math.max(0, tag.getInt("rankedMatches"))
+                : Math.min(data.duelCount, Math.max(0, tag.getInt("rankedDailyMatches")));
         data.duelPoints = Math.max(0.0D, tag.getDouble("duelPoints"));
         data.dead = tag.getBoolean("dead");
         data.commandRespawnAfterDayTime = tag.contains("commandRespawnAfterDayTime", Tag.TAG_ANY_NUMERIC)

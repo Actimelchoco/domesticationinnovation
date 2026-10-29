@@ -30,6 +30,17 @@ public final class SettingsCategoriesRegression {
         check(dispatcher.execute("tames settings", source) == 1, "base command must show category help");
         for (String category : names) check(dispatcher.execute("tames settings " + category, source) == 1, "category must show its own help");
         check(dispatcher.execute("tames info settings", source) == 1, "info settings must use categorized help");
+        var displayHelp = new java.util.ArrayList<String>();
+        var receiver = new net.minecraft.commands.CommandSource() {
+            public void sendSystemMessage(net.minecraft.network.chat.Component message) { displayHelp.add(message.getString()); }
+            public boolean acceptsSuccess() { return true; }
+            public boolean acceptsFailure() { return true; }
+            public boolean shouldInformAdmins() { return false; }
+        };
+        check(dispatcher.execute("tames settings display", source.withSource(receiver)) == 1, "display menu is navigable");
+        check(displayHelp.stream().anyMatch(line -> line.contains("duelHealth [true|false] (default off)"))
+                        && displayHelp.stream().anyMatch(line -> line.contains("duelHealthMaxNames [1-20] (default 6)")),
+                "display menu advertises the optional duel HUD and total-name limit");
         suggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("tames settings combat friendlyFire ", source)).join();
         names = suggestions.getList().stream().map(s -> s.getText()).collect(Collectors.toSet());
         check(names.equals(Set.of("true", "false")), "nested setting must retain boolean argument completion");

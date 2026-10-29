@@ -22,7 +22,8 @@ public final class ClientDuelOutlines {
         if (level != minecraft.level || viewer != minecraft.player) {
             level = minecraft.level;viewer = minecraft.player;battle = null;nextRefresh = 0;
         }
-        if (level == null || viewer == null || !ClientDuelGlowSettings.duelGlow()) {
+        if (level == null || viewer == null
+                || !ClientDuelGlowSettings.duelGlow() && !ClientDuelGlowSettings.duelHealth()) {
             battle = null;return;
         }
         long now = level.getGameTime();
@@ -47,6 +48,12 @@ public final class ClientDuelOutlines {
                 || !(entity instanceof LivingEntity living) || !living.isAlive()) return 0;
         String name = teamName(entity);
         return teamForBattle(battle, name);
+    }
+
+    /** HUD membership is independent of glow visibility. */
+    public static String battle() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return level == minecraft.level && viewer == minecraft.player ? battle : null;
     }
 
     static String teamName(Entity entity) {
