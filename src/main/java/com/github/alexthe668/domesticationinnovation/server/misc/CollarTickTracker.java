@@ -4,7 +4,6 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 public class CollarTickTracker {
@@ -21,16 +20,12 @@ public class CollarTickTracker {
     }
 
     public void tick(){
-        if(!blockedCollarTagUpdates.isEmpty()){
-            Set<UUID> blockedUUIDs = blockedCollarTagUpdates.keySet();
-            for(UUID uuid : blockedUUIDs){
-                int set = blockedCollarTagUpdates.get(uuid) - 1;
-                if(set < 0){
-                    blockedCollarTagUpdates.remove(uuid);
-                }else{
-                    blockedCollarTagUpdates.put(uuid, set);
-                }
-            }
+        var iterator = blockedCollarTagUpdates.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var entry = iterator.next();
+            int remaining = entry.getValue() - 1;
+            if (remaining < 0) iterator.remove();
+            else entry.setValue(remaining);
         }
     }
 }

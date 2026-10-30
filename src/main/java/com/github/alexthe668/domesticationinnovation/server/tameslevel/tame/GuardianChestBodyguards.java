@@ -11,7 +11,7 @@ import net.minecraft.world.entity.ai.memory.*;
 import net.minecraft.world.entity.player.Player;
 import java.util.*;
 
-/** Chest rules are indexed once; at most three winners per online protected player. */
+/** Chest rules are indexed once; every eligible guardian may protect its assigned online player. */
 public final class GuardianChestBodyguards {
     public record Rule(UUID owner, String group, String player) { }
     private record Assignment(Object source, Rule rule, UUID player) { }
@@ -45,7 +45,6 @@ public final class GuardianChestBodyguards {
     }
     public static void refresh(MinecraftServer server){
         int now=server.getTickCount();if(now<nextRefresh)return;nextRefresh=now+20;
-        Map<UUID,List<Map.Entry<UUID,Assignment>>> best=new HashMap<>();
         Map<String,ServerPlayer> online=new HashMap<>();
         for(var player:server.getPlayerList().getPlayers())online.put(player.getGameProfile().getName().toLowerCase(Locale.ROOT),player);
         Map<UUID,Assignment> candidates=new HashMap<>();Set<UUID> conflicts=new HashSet<>();
@@ -58,16 +57,10 @@ public final class GuardianChestBodyguards {
             var previous=candidates.putIfAbsent(id,assignment);
             if(previous!=null&&!previous.player.equals(assignment.player))conflicts.add(id);
         }
-        for(var entry:candidates.entrySet()){
-            if(conflicts.contains(entry.getKey()))continue;
-            var winner=entry;
-            var list=best.computeIfAbsent(entry.getValue().player,ignored->new ArrayList<>(4));
-            list.add(winner);
-            list.sort(Comparator.<Map.Entry<UUID,Assignment>>comparingInt(e->TameRegistry.getByTlId(e.getKey()).level).reversed().thenComparing(Map.Entry::getKey));
-            if(list.size()>3)list.remove(3);
-        }
         Map<UUID,Assignment> selected=new HashMap<>();
-        for(var list:best.values())for(var entry:list)selected.put(entry.getKey(),entry.getValue());
+        for(var entry:candidates.entrySet()){
+            if(!conflicts.contains(entry.getKey()))selected.put(entry.getKey(),entry.getValue());
+        }
         for(UUID old:ACTIVE.keySet())if(!selected.containsKey(old)||!ACTIVE.get(old).player.equals(selected.get(old).player))RETURNING.add(old);
         ACTIVE.clear();ACTIVE.putAll(selected);RETURNING.removeAll(selected.keySet());
         RETURNING.removeIf(identity->{var data=TameRegistry.getByTlId(identity);return data==null||!data.hasHome||data.dead||data.stored||data.rosterBodyguard||data.guardianResting;});

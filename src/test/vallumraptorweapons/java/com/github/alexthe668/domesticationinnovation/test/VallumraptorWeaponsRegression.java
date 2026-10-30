@@ -223,9 +223,14 @@ public class VallumraptorWeaponsRegression {
             DomesticationMod.PROXY.onDuelEntityInteractSpecific(event);
             check(event.isCanceled()&&f.raptor.getMainHandItem().isEmpty()&&ItemStack.matches(f.owner.getMainHandItem(),weapon),"sprint interaction returns exact weapon directly to empty main hand");
             check(f.raptor.getCommand()==command,"retrieval never changes command");
-            check(!VallumraptorWeapons.retrieve(normal,f.raptor),"repeat callback cannot duplicate item");
-            f.owner.setItemInHand(InteractionHand.MAIN_HAND,ItemStack.EMPTY);f.raptor.setItemSlot(EquipmentSlot.MAINHAND,new ItemStack(Items.BEEF));
-            check(VallumraptorWeapons.retrieve(normal,f.raptor)&&f.owner.getMainHandItem().is(Items.BEEF),"owner can also retrieve held food");
+            check(VallumraptorWeapons.retrieve(normal,f.raptor)&&normal.isCanceled()
+                    &&f.raptor.getMainHandItem().isEmpty()&&ItemStack.matches(f.owner.getMainHandItem(),weapon),
+                    "repeat callback is consumed without duplicating item or falling through to native commands");
+            try(var food=new Fixture(h)){
+                food.owner.setSprinting(true);food.raptor.setItemSlot(EquipmentSlot.MAINHAND,new ItemStack(Items.BEEF));
+                var foodClick=new PlayerInteractEvent.EntityInteract(food.owner,InteractionHand.MAIN_HAND,food.raptor);
+                check(VallumraptorWeapons.retrieve(foodClick,food.raptor)&&food.owner.getMainHandItem().is(Items.BEEF),"owner can also retrieve held food");
+            }
         }h.succeed();
     }
 }

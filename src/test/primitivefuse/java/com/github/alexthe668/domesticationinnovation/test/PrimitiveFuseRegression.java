@@ -34,6 +34,7 @@ public class PrimitiveFuseRegression {
         var logger=org.apache.logging.log4j.LogManager.getLogger("PrimitiveFuseRegression");
         try{
             var h=new Fixture(event.getServer().overworld());
+            PrimitiveDuelPlayerRegression.verify(h);
             naturalFestiveFuseSurvivesAndRespectsCooldown(h);
             wildAndSittingFestiveDoNotGetCombatFuse(h);
             actualPrimitivePetsAcceptOwnerCollars(h);
@@ -58,7 +59,8 @@ public class PrimitiveFuseRegression {
                 PrimitiveMobsCompat.scaleNativeBlast(melee);h.assertTrue(melee.getAmount()==10,"melee and learned-ability damage are not boosted twice");
             }finally{TameRegistry.remove(pet.getUUID());pet.discard();}
         }
-        var minionType=ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("mutantmonsters:creeper_minion"));
+        var minionId=new ResourceLocation("mutantmonsters:creeper_minion");
+        var minionType=ForgeRegistries.ENTITY_TYPES.containsKey(minionId)?ForgeRegistries.ENTITY_TYPES.getValue(minionId):null;
         if(minionType!=null){
             var minion=(net.minecraft.world.entity.TamableAnimal)minionType.create(level);minion.setTame(true);minion.setOwnerUUID(UUID.randomUUID());
             minion.setPos(2,-57,2);level.addFreshEntity(minion);var md=new TameData(minion,minion.getOwnerUUID(),false);md.bonusDamage=4;md.bonusKnockback=2;TameRegistry.register(md);

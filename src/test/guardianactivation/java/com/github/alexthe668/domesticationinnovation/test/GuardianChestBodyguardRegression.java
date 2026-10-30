@@ -64,7 +64,7 @@ public class GuardianChestBodyguardRegression {
             } finally {online.remove(protectedPlayer);SharedGuardianRegression.players(h).remove(protectedPlayer.getUUID());}
         }h.succeed();
     }
-    @GameTest(template="empty") public static void strongestThreeAcrossControllersAreSeparateFromNormalBodyguards(GameTestHelper h)throws Exception {
+    @GameTest(template="empty") public static void allGuardsAcrossControllersAreSeparateFromNormalBodyguards(GameTestHelper h)throws Exception {
         try(var f=new GuardianChestRegression.Fixture(h)){
             var player=SharedGuardianRegression.observer(f,UUID.randomUUID(),"ThreeProtected",new ArrayList<>());
             var online=GuardianActivationRegression.online(h);online.add(player);SharedGuardianRegression.players(h).put(player.getUUID(),player);
@@ -72,17 +72,17 @@ public class GuardianChestBodyguardRegression {
             var normalRoster=BodyguardService.roster(player);UUID normalId=UUID.randomUUID();normalRoster.bodyguards.add(normalId);
             try {
                 Map<UUID,GuardianChestBodyguards.Rule> a=new HashMap<>(),b=new HashMap<>();
-                for(int i=0;i<5;i++){
+                for(int i=0;i<12;i++){
                     var wolf=EntityType.WOLF.create(h.getLevel());TameEntityAdapter.setOwner(wolf,f.owner.getUUID());wolf.setNoAi(true);h.getLevel().addFreshEntity(wolf);bodies.add(wolf);
                     var data=new TameData(wolf);data.level=10*(i+1);data.hasHome=true;data.movementOrder=3;data.homeDimension=h.getLevel().dimension().location().toString();
                     data.homeX=f.post.getX();data.homeY=f.post.getY();data.homeZ=f.post.getZ();data.guardianSetAnchors.put("night",f.data.guardianSetAnchors.get("night").copy());TameRegistry.register(data);guards.add(data);
                     (i<2?a:b).put(data.ensureTlId(),new GuardianChestBodyguards.Rule(f.owner.getUUID(),"night","ThreeProtected"));
                 }
                 GuardianChestBodyguards.replace(first,a);GuardianChestBodyguards.replace(second,b);refresh(h);
-                for(int i=0;i<5;i++)h.assertTrue(GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),guards.get(i))==(i>=2),"global cap chooses highest three levels across controllers");
+                for(var guard:guards)h.assertTrue(GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),guard),"all twelve guardians across controllers protect the player");
                 h.assertTrue(normalRoster.bodyguards.contains(normalId)&&normalRoster.bodyguards.size()==1,"normal bodyguard roster is independent");
                 guards.get(0).level=60;refresh(h);
-                h.assertTrue(GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),guards.get(0))&&!GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),guards.get(2)),"level change promotes stronger guardian and demotes weakest winner");
+                for(var guard:guards)h.assertTrue(GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),guard),"level changes do not evict lower-level guardians");
                 online.remove(player);SharedGuardianRegression.players(h).remove(player.getUUID());refresh(h);
                 for(var data:guards)h.assertTrue(!GuardianChestBodyguards.hasAssignment(h.getLevel().getServer(),data)&&data.hasHome&&!data.rosterBodyguard,"logout leaves all tames as guardians");
             } finally {online.remove(player);SharedGuardianRegression.players(h).remove(player.getUUID());normalRoster.bodyguards.remove(normalId);for(var data:guards)TameRegistry.remove(data.uuid);for(var body:bodies)body.discard();}
@@ -110,5 +110,13 @@ public class GuardianChestBodyguardRegression {
             } finally {online.remove(player);SharedGuardianRegression.players(h).remove(player.getUUID());TameRegistry.remove(foxData.uuid);fox.discard();enemy.discard();}
         }h.succeed();
     }
+    @GameTest(template="empty") public static void expiringCollarUpdatesDoNotCrashOtherTames(GameTestHelper h){
+        var tracker=new com.github.alexthe668.domesticationinnovation.server.misc.CollarTickTracker();
+        var wolf=EntityType.WOLF.create(h.getLevel());
+        tracker.addBlockedEntityTick(UUID.randomUUID(),0);tracker.addBlockedEntityTick(UUID.randomUUID(),0);
+        tracker.addBlockedEntityTick(wolf.getUUID(),2);
+        tracker.tick();h.assertTrue(tracker.isEntityBlocked(wolf),"unexpired collar update remains blocked");
+        tracker.tick();h.assertTrue(!tracker.isEntityBlocked(wolf),"collar update expires on schedule");
+        tracker.tick();tracker.tick();h.succeed();
+    }
 }
-

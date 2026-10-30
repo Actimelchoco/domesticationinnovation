@@ -24,6 +24,18 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid="domesticationinnovation")
 public final class HeldItemTameWeapons {
     private HeldItemTameWeapons() { }
+    private record Retrieval(UUID tame, long tick) { }
+    private static final Map<Player, Retrieval> RECENT_RETRIEVALS = new WeakHashMap<>();
+
+    @SubscribeEvent(priority=EventPriority.HIGHEST)
+    public static void retrieveSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        retrieve(event, event.getTarget());
+    }
+
+    @SubscribeEvent(priority=EventPriority.HIGHEST)
+    public static void retrieveInteraction(PlayerInteractEvent.EntityInteract event) {
+        retrieve(event, event.getTarget());
+    }
     public static final TagKey<EntityType<?>> PICKUP_TYPES=TagKey.create(Registries.ENTITY_TYPE,new ResourceLocation("domesticationinnovation","held_item_weapon_tames"));
     public static final TagKey<EntityType<?>> EXCLUDED_TYPES=TagKey.create(Registries.ENTITY_TYPE,new ResourceLocation("domesticationinnovation","held_item_weapon_excluded_tames"));
     private static final Map<Mob,Boolean> INSTALLED=new WeakHashMap<>();
@@ -72,12 +84,26 @@ public final class HeldItemTameWeapons {
                 && !TameDuelManager.isEntityInDuel(player.getUUID()) && !TameDuelManager.isEntityInDuel(tame.getUUID());
     }
     public static boolean retrieve(PlayerInteractEvent event,Entity target) {
-        var player=event.getEntity();if(!canRetrieve(player,event.getHand(),target))return false;
+        var player=event.getEntity();
+        var recent=RECENT_RETRIEVALS.get(player);
+        if(recent!=null){
+            long elapsed=player.level().getGameTime()-recent.tick;
+            if(elapsed<0 || elapsed>1) RECENT_RETRIEVALS.remove(player);
+            else if(target.getUUID().equals(recent.tame)){
+                // A click may arrive as specific, ordinary and offhand callbacks.
+                // Once the stack has moved, none may fall through to native commands.
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.sidedSuccess(player.level().isClientSide));
+                return true;
+            }
+        }
+        if(!canRetrieve(player,event.getHand(),target))return false;
         var tame=(LivingEntity)target;
         if(!player.level().isClientSide){
             ItemStack held=tame.getMainHandItem();tame.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);
             player.setItemInHand(InteractionHand.MAIN_HAND,held);
         }
+        RECENT_RETRIEVALS.put(player,new Retrieval(target.getUUID(),player.level().getGameTime()));
         event.setCanceled(true);event.setCancellationResult(InteractionResult.sidedSuccess(player.level().isClientSide));return true;
     }
     @SubscribeEvent(priority=EventPriority.HIGH)

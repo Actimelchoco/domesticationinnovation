@@ -3,6 +3,7 @@ package com.github.alexthe668.domesticationinnovation.mixin;
 import com.github.alexthe666.citadel.server.entity.IComandableMob;
 import com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable;
 import com.github.alexthe668.domesticationinnovation.server.entity.TameableUtils;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.PrimitiveMobsCompat;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.level.Level;
@@ -33,7 +34,9 @@ public abstract class PrimitivePetMixin extends Mob implements ModifedToBeTameab
     public boolean isStayingStill() { return isTame() && getCommand() == 1; }
     public boolean isFollowingOwner() { return isTame() && getCommand() == 2; }
     public boolean isValidAttackTarget(LivingEntity target) {
-        return target != null && target != this && !target.getUUID().equals(getOwnerUuid())
+        return target != null && target != this
+                && (!target.getUUID().equals(getOwnerUuid())
+                    || TameDuelManager.areDuelOpponents(getUUID(), target.getUUID()))
                 && !TameableUtils.shouldBlockOffensiveDiTarget(this, target);
     }
 
