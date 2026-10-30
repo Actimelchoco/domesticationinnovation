@@ -1320,7 +1320,12 @@ public final class TameDuelManager {
         List<GoalSnapshotEntry> removed = new ArrayList<>();
         for (WrappedGoal wrapped : new ArrayList<>(mob.goalSelector.getAvailableGoals())) {
             Goal goal = wrapped.getGoal();
-            if (goal == null || !isOwnerFollowGoal(goal)) continue;
+            if (goal == null) continue;
+            boolean raccoonDistraction = "alexsmobs:raccoon".equals(
+                    net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(tame.getType()).toString())
+                    && (goal.getClass().getSimpleName().equals("RaccoonAIWash")
+                    || goal.getClass().getSimpleName().equals("RaccoonAIBeg"));
+            if (!isOwnerFollowGoal(goal) && !raccoonDistraction) continue;
             removed.add(new GoalSnapshotEntry(wrapped.getPriority(), goal));
             mob.goalSelector.removeGoal(goal);
         }

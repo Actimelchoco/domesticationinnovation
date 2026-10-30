@@ -1368,7 +1368,13 @@ public class CommonProxy {
     @SubscribeEvent
     public void onDuelItemToss(ItemTossEvent event) {
         if (event.getPlayer() != null && isDuelRestrictedPlayer(event.getPlayer())) {
-            event.setCanceled(true);
+            // Forge has already removed the stack before posting ItemTossEvent.
+            ItemStack remainder = event.getEntity().getItem().copy();
+            event.getPlayer().getInventory().add(remainder);
+            event.getEntity().setItem(remainder);
+            event.getPlayer().inventoryMenu.broadcastChanges();
+            // If another listener filled the inventory, let Forge spawn the remainder.
+            event.setCanceled(remainder.isEmpty());
         }
     }
 

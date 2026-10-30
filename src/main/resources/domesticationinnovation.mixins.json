@@ -48,6 +48,7 @@
     "ItemMixin",
     "LegendaryMonstersAnimatedTamableMobMixin",
     "LegendaryMonstersSkeloraptorMixin",
+    "LegendaryMonstersShockwaveMixin",
     "LegendaryMonstersHauntedGuardMixin",
     "LegendaryMonstersMossyGolemMixin",
     "LivingEntityMixin",

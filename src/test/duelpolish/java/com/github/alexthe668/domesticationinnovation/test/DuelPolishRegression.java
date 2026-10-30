@@ -64,6 +64,10 @@ public class DuelPolishRegression {
                 boolean vanillaSit = raccoon.isOrderedToSit();
                 check(!nativeSitting && !washing, "raccoon must leave native sitting/washing before combat; nativeSit=" + nativeSitting + " washing=" + washing + " vanillaSit=" + vanillaSit);
                 check(raccoon.goalSelector.getAvailableGoals().stream().noneMatch(g -> g.getGoal().getClass().getSimpleName().equals("RaccoonAIWash")), "wash goal cannot preempt melee in duel");
+                raccoon.setNoAi(false); enemy.setPos(raccoon.getX()+6,raccoon.getY(),raccoon.getZ());
+                raccoon.setTarget(enemy); double initialDistance=raccoon.distanceToSqr(enemy);
+                for(int i=0;i<60;i++)raccoon.tick();
+                check(raccoon.distanceToSqr(enemy)<initialDistance-2,"raccoon immediately navigates toward duel target; before="+initialDistance+" after="+raccoon.distanceToSqr(enemy));
             } finally { TameDuelManager.endDuelsForOwner(h.getLevel().getServer(), f.owner.getUUID()); }
         }
         h.succeed();
@@ -124,4 +128,77 @@ public class DuelPolishRegression {
     @GameTest(template="held_item_arena") public static void skeloraptorTailBonusAndBaseTriggers(GameTestHelper h) throws Exception { nativeBonus(h, "tail"); }
     @GameTest(template="held_item_arena") public static void skeloraptorShockwaveBonusAndBaseTriggers(GameTestHelper h) throws Exception { nativeBonus(h, "shockwave"); }
     @GameTest(template="held_item_arena") public static void skeloraptorVanillaMeleeDoesNotDoubleBonus(GameTestHelper h) throws Exception { nativeBonus(h, "vanilla"); }
+
+    @GameTest(template="held_item_arena") public static void duelTossFullInventorySpawnsRemainder(GameTestHelper h) throws Exception {
+        try(var f = new HeldItemTameWeaponsRegression.Fixture(h)) {
+            var enemy=f.pet(false); start(f,f.owner,enemy);
+            try {
+                for(int i=0;i<36;i++)f.owner.getInventory().setItem(i,new ItemStack(Items.STONE,64));
+                var stack=new ItemStack(Items.DIAMOND,3); stack.getOrCreateTag().putString("marker","overflow");
+                var thrown=ForgeHooks.onPlayerTossEvent(f.owner,stack,true);
+                check(thrown!=null && thrown.getItem().getCount()==3 && thrown.getItem().getOrCreateTag().getString("marker").equals("overflow"),"full inventory preserves overflow drop and NBT");
+                thrown.discard();
+            } finally {TameDuelManager.endDuelsForOwner(h.getLevel().getServer(),f.owner.getUUID());}
+        } h.succeed();
+    }
+    @GameTest(template="held_item_arena") public static void skeloraptorAllNativeAttacksTriggerAbilities(GameTestHelper h) throws Exception {
+        try(var f=new SkeloFixture(h)) {
+            var ally=f.f.pet(false); ally.setPos(f.pet.getX()+1,f.pet.getY(),f.pet.getZ()+1);
+            f.data.abilities.add("battle_strength"); f.data.abilityLevels.put("battle_strength",1);
+            for(String kind:List.of("bite","tail","shockwave","vanilla")) {
+                f.pet.removeAllEffects(); ally.removeAllEffects(); f.target.removeAllEffects(); f.pet.getRandom().setSeed(1234);
+                for(int i=0;i<100 && !ally.hasEffect(net.minecraft.world.effect.MobEffects.DAMAGE_BOOST);i++) f.hit(kind);
+                check(ally.hasEffect(net.minecraft.world.effect.MobEffects.DAMAGE_BOOST),kind+" triggers Battle Strength ability");
+            }
+        } h.succeed();
+    }
+    @GameTest(template="held_item_arena") public static void rankedCountsPersistMigrateAndSurviveSnapshots(GameTestHelper h) throws Exception {
+        try(var f=new HeldItemTameWeaponsRegression.Fixture(h)) {
+            var pet=f.pet(false); var data=TameRegistry.get(pet.getUUID()); data.duelCount=100; data.rankedMatches=11;
+            check(TameData.fromTag(data.toTag()).rankedMatches==11,"tame ranked lifetime persists");
+            var legacy=data.toTag(); legacy.remove("rankedMatches"); legacy.putInt("rankedDailyMatches",4);
+            check(TameData.fromTag(legacy).rankedMatches==4,"legacy combined totals do not count as ranked");
+            var copy=TameData.fromTag(data.toTag()); copy.rankedMatches=0; TameDuelSnapshots.copyPersistentStats(data,copy);
+            check(copy.rankedMatches==11,"duel restore preserves new ranked result");
+            var player=new PlayerDuelStats(); player.duelCount=100; player.rankedMatches=11;
+            check(PlayerDuelStats.fromTag(player.toTag()).rankedMatches==11,"player ranked lifetime persists");
+            var old=player.toTag();old.remove("rankedMatches");check(PlayerDuelStats.fromTag(old).rankedMatches==0,"player legacy duel totals excluded");
+        }h.succeed();
+    }
+    @GameTest(template="held_item_arena") public static void leaderboardRequiresElevenRankedForPlayersAndTames(GameTestHelper h) throws Exception {
+        try(var f=new HeldItemTameWeaponsRegression.Fixture(h)) {
+            var data=TameRegistry.get(f.pet(false).getUUID());data.duelCount=100;
+            var player=TameRegistry.getOrCreatePlayerDuelStats(f.owner.getUUID(),"RankedTester");player.duelCount=100;
+            var method=com.github.alexthe668.domesticationinnovation.server.tameslevel.TameCommands.class.getDeclaredMethod("duelLeaderboard",net.minecraft.commands.CommandSourceStack.class,String.class,boolean.class,String.class,String.class,int.class,boolean.class,Set.class,String.class,boolean.class);
+            method.setAccessible(true);
+            var source=f.owner.createCommandSourceStack();
+            try {
+                for(boolean tame:List.of(true,false)) for(int ranked: new int[]{0,10,11,12}) {
+                    data.rankedMatches=tame?ranked:0;player.rankedMatches=tame?0:ranked;
+                    int result=(int)method.invoke(null,source,"mmr",false,null,null,100,false,null,"Regression",true);
+                    check(result==(ranked>10?1:0),"leaderboard threshold tame="+tame+" at "+ranked+" returned "+result);
+                }
+            } finally {TameRegistry.removePlayerDuelStats(f.owner.getUUID());}
+        }h.succeed();
+    }
+
+    @GameTest(template="held_item_arena") public static void onlyRankedResultsIncrementQualification(GameTestHelper h) throws Exception {
+        try(var f=new HeldItemTameWeaponsRegression.Fixture(h)) {
+            var pet=f.pet(false);var data=TameRegistry.get(pet.getUUID());
+            var battleClass=Class.forName(TameDuelManager.class.getName()+"$DuelBattle");
+            var statsClass=Class.forName(TameDuelManager.class.getName()+"$DuelStats");
+            var constructor=battleClass.getDeclaredConstructors()[0];constructor.setAccessible(true);
+            var statsConstructor=statsClass.getDeclaredConstructor();statsConstructor.setAccessible(true);
+            var method=TameDuelManager.class.getDeclaredMethod("applyPersistentParticipantStats",net.minecraft.server.MinecraftServer.class,battleClass,UUID.class,statsClass,int.class,boolean.class,int.class);method.setAccessible(true);
+            try {
+                for(boolean ranked:List.of(false,true,false)) {
+                    Object battle=constructor.newInstance(UUID.randomUUID(),f.owner.getUUID(),UUID.randomUUID(),new HashSet<>(Set.of(pet.getUUID())),new HashSet<UUID>(),Set.of(),false,ranked,false);
+                    for(UUID id:List.of(pet.getUUID(),f.owner.getUUID())) method.invoke(null,h.getLevel().getServer(),battle,id,statsConstructor.newInstance(),0,true,0);
+                }
+                check(data.duelCount==3 && data.rankedMatches==1,"only ranked tame results count toward qualification");
+                var player=TameRegistry.getPlayerDuelStats().get(f.owner.getUUID());
+                check(player.duelCount==3 && player.rankedMatches==1,"only ranked player results count toward qualification");
+            }finally {TameRegistry.removePlayerDuelStats(f.owner.getUUID());}
+        }h.succeed();
+    }
 }

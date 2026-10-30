@@ -2,6 +2,7 @@ package com.github.alexthe668.domesticationinnovation.mixin;
 
 import com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HeldItemTameWeapons;
 import net.minecraft.world.entity.*;
+import com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -15,15 +16,19 @@ import org.spongepowered.asm.mixin.injection.callback.*;
 public abstract class AlexsMobsRaccoonWeaponMixin extends TamableAnimal {
     @Shadow public int lookForWaterBeforeEatingTimer;
     @Shadow public abstract void setWashing(boolean washing);
+    @Shadow public abstract boolean isSitting();
     protected AlexsMobsRaccoonWeaponMixin(EntityType<? extends TamableAnimal> type,Level level){super(type,level);}
     @Inject(method={"tick","m_8119_"},at=@At("HEAD"),remap=false)
     private void tl$stopWeaponWashing(CallbackInfo ci){
-        if(HeldItemTameWeapons.protectHeldItem(this)){lookForWaterBeforeEatingTimer=0;setWashing(false);}
+        boolean dueling = TameDuelManager.isEntityInDuel(getUUID());
+        if(dueling || HeldItemTameWeapons.protectHeldItem(this)){lookForWaterBeforeEatingTimer=0;setWashing(false);}
+        // Raccoons store sitting separately from vanilla's ordered-to-sit flag.
+        if(dueling && isSitting()) setOrderedToSit(false);
     }
     @Inject(method="canTargetItem",at=@At("HEAD"),cancellable=true,remap=false)
     private void tl$keepFoodSeparate(ItemStack stack,CallbackInfoReturnable<Boolean> cir){
         // Native canTargetItem is also the eating predicate; weapons use the separate pickup goal.
-        if(HeldItemTameWeapons.protectHeldItem(this)||isTame()&&HeldItemTameWeapons.isWeapon(stack))cir.setReturnValue(false);
+        if(TameDuelManager.isEntityInDuel(getUUID())||HeldItemTameWeapons.protectHeldItem(this)||isTame()&&HeldItemTameWeapons.isWeapon(stack))cir.setReturnValue(false);
     }
     @Inject(method="onGetItem",at=@At("HEAD"),cancellable=true,remap=false)
     private void tl$keepHeldWeapon(ItemEntity item,CallbackInfo ci){if(HeldItemTameWeapons.protectHeldItem(this))ci.cancel();}
