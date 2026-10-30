@@ -417,7 +417,7 @@ public class ClientProxy extends CommonProxy {
             shadowPunchRenderData.remove(entity);
             return;
         }
-        shadowPunchRenderData.put(entity, arr);
+        shadowPunchRenderData.put(entity, arr.clone());
     }
 
     @OnlyIn(Dist.CLIENT)

@@ -439,18 +439,22 @@ public class CommonProxy {
                 event.getEntity().setAirSupply(event.getEntity().getMaxAirSupply());
             }
             int magneticLevel = getDiEffectLevel(collarData, "magnetic");
-            boolean magneticVisual = TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.MAGNETIC);
-            if (event.getEntity() instanceof Mob mob && ((magneticLevel > 0 && !mob.level().isClientSide) || magneticVisual)) {
-                Entity sucking = TameableUtils.getPetAttackTarget(mob);
+            boolean magneticEnchanted = TameableUtils.hasEnchant(event.getEntity(), DIEnchantmentRegistry.MAGNETIC);
+            boolean magneticVisual = magneticEnchanted || TameableUtils.getMagneticTargetID(event.getEntity()) != -1;
+            if (event.getEntity() instanceof Mob mob && (mob.level().isClientSide ? magneticVisual : magneticLevel > 0 || magneticEnchanted)) {
+                Entity sucking = TameableUtils.getMagneticTarget(mob);
+                if (TameCombatEvents.isHiddenDuelAbilityTarget(mob, sucking)) sucking = null;
                 if (!mob.level().isClientSide) {
                     LivingEntity liveTarget = mob.getTarget();
-                    if (liveTarget == null || !liveTarget.isAlive() || mob.getRootVehicle() instanceof GiantBubbleEntity) {
-                        if (!shouldRetainMagneticTarget(mob, sucking) && TameableUtils.getPetAttackTargetID(mob) != -1) {
-                            TameableUtils.setPetAttackTarget(mob, -1);
+                    if (liveTarget == null || !liveTarget.isAlive() || TameCombatEvents.isHiddenDuelAbilityTarget(mob, liveTarget)
+                            || mob.getRootVehicle() instanceof GiantBubbleEntity) {
+                        if (!shouldRetainMagneticTarget(mob, sucking)) {
+                            TameableUtils.setMagneticTarget(mob, -1);
                         }
                     } else {
-                        TameableUtils.setPetAttackTarget(mob, liveTarget.getId());
+                        TameableUtils.setMagneticTarget(mob, liveTarget.getId());
                     }
+                    sucking = TameableUtils.getMagneticTarget(mob);
                 } else if (magneticVisual) {
                     if (sucking != null) {
                         double dist = mob.distanceTo(sucking);
@@ -465,7 +469,7 @@ public class CommonProxy {
                         }
                     }
                 }
-                if (sucking != null) {
+                if (!mob.level().isClientSide && sucking != null) {
                     if (mob.tickCount % 15 == 0) {
                         mob.playSound(DISoundRegistry.MAGNET_LOOP.get(), 1F, 1F);
                     }
@@ -480,14 +484,25 @@ public class CommonProxy {
                     }
                 }
             }
+            else if (!event.getEntity().level().isClientSide) {
+                TameableUtils.clearMagneticTarget(event.getEntity());
+            }
             int shadowHandsLevel = getDiEffectLevel(collarData, "shadow_hands");
-            if (shadowHandsLevel > 0 && event.getEntity() instanceof Mob mob) {
+            if (event.getEntity().level().isClientSide) {
+                // The client has visual tags, not the server's ability registry. Never
+                // clear authoritative punch data or send an empty state back each tick.
+                DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), TameableUtils.getShadowPunchTimes(event.getEntity()));
+            } else if (shadowHandsLevel > 0 && event.getEntity() instanceof Mob mob) {
                 DomesticationMod.PROXY.updateVisualDataForMob(event.getEntity(), TameableUtils.getShadowPunchTimes(mob));
                 if (!mob.level().isClientSide) {
                     spawnShadowHandsFallbackParticles((ServerLevel) mob.level(), mob, shadowHandsLevel);
                     Entity punching = TameableUtils.getPetAttackTarget(mob);
+                    if (TameCombatEvents.isHiddenDuelAbilityTarget(mob, punching)) {
+                        TameableUtils.setPetAttackTarget(mob, -1);
+                    }
                     int[] punchProgress = TameableUtils.getShadowPunchTimes(mob);
-                    if (punching != null && punching.isAlive() && mob.distanceTo(punching) < 16) {
+                    if (punching != null && punching.isAlive() && mob.distanceTo(punching) < 16
+                            && !TameCombatEvents.isHiddenDuelAbilityTarget(mob, punching)) {
                         int[] striking = TameableUtils.getShadowPunchStriking(mob);
                         if (punchProgress == null || punchProgress.length < shadowHandsLevel || striking == null || striking.length < shadowHandsLevel) {
                             int[] clean = new int[shadowHandsLevel];
@@ -504,7 +519,8 @@ public class CommonProxy {
                                 boolean flag = false;
                                 int start = shadowHandsLevel == 1 ? 0 : mob.getRandom().nextInt(shadowHandsLevel - 1);
                                 for (int i = start; i < shadowHandsLevel; i++) {
-                                    if (striking[i] == 0) {
+                                    // Finish retracting before starting another reach.
+                                    if (striking[i] == 0 && punchProgress[i] == 0) {
                                         striking[i] = 1;
                                         debugShadowHandsState(mob, punching, "start hand=" + i + ", cooldown=5, dist=" + fmt(mob.distanceTo(punching)));
                                         flag = true;
@@ -566,7 +582,8 @@ public class CommonProxy {
                                 punchingTarget = owner.getLastHurtMob();
                             }
                         }
-                        if (punchingTarget != null && punchingTarget.isAlive()) {
+                        if (punchingTarget != null && punchingTarget.isAlive()
+                                && !TameCombatEvents.isHiddenDuelAbilityTarget(mob, punchingTarget)) {
                             debugShadowHandsState(mob, punchingTarget, "acquire target from " + (mob.getTarget() != null ? "mobTarget" : "ownerCombat"));
                             TameableUtils.setPetAttackTarget(mob, punchingTarget.getId());
                         }
@@ -687,7 +704,7 @@ public class CommonProxy {
                             blockingFrom = owner;
                         }
                     }
-                    if (blocking != null) {
+                    if (blocking != null && !TameCombatEvents.isHiddenDuelAbilityTarget(mob, blocking)) {
                         int width = psychicWallLevel + 1;
                         float yAdditional = blocking.getBbHeight() * 0.5F + width * 0.5F;
                         Vec3 vec3 = blockingFrom.position().add(0, yAdditional, 0);
@@ -2493,7 +2510,8 @@ public class CommonProxy {
         if (mob == null || existingTarget == null) {
             return false;
         }
-        if (!existingTarget.isAlive() || existingTarget.level() != mob.level()) {
+        if (!existingTarget.isAlive() || existingTarget.level() != mob.level()
+                || TameCombatEvents.isHiddenDuelAbilityTarget(mob, existingTarget)) {
             return false;
         }
         if (mob.getRootVehicle() instanceof GiantBubbleEntity) {

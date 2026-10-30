@@ -1,0 +1,1 @@
+allprojects { afterEvaluate { sourceSets.main.java.srcDir('src/test/vallumstealth/java'); minecraft.runs.gameTestServer.workingDirectory=project.file('build/vallum-stealth-gametest') } }

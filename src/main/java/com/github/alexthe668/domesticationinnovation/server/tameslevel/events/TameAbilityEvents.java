@@ -153,10 +153,11 @@ public class TameAbilityEvents {
                 }
 
                 LivingEntity target = TameEntityAdapter.target(tame);
-                if ((target == null || !target.isAlive() || isFriendly(tame, target))
+                if (TameCombatEvents.isHiddenDuelAbilityTarget(tame, target)) target = null;
+                if ((target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target))
                         && level.getServer() != null
                         && TameDuelManager.isTameInDuel(tame.getUUID())) {
-                    LivingEntity duelTarget = TameDuelManager.findNearestLoadedOpponent(level.getServer(), tame);
+                    LivingEntity duelTarget = TameDuelManager.findNearestLoadedOpponent(level.getServer(), tame, candidate -> !TameCombatEvents.isHiddenDuelAbilityTarget(tame, candidate));
                     if (duelTarget != null && duelTarget.isAlive() && !isFriendly(tame, duelTarget)) {
                         TameDuelManager.assignDuelTarget(tame, duelTarget);
                         target = duelTarget;
@@ -348,7 +349,7 @@ public class TameAbilityEvents {
         float damage = offensiveAbilityCastDamage(data, "creeper_explosion", levelValue);
         double radius = creeperExplosionRadius(data, levelValue);
         for (LivingEntity nearby : level.getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
-            if (nearby == tame || !nearby.isAlive() || isFriendly(tame, nearby)
+            if (nearby == tame || !nearby.isAlive() || isBlockedOffensiveTarget(tame, nearby)
                     || isProtectedPassiveWildlife(nearby) || tame.distanceToSqr(nearby) > radius * radius) continue;
 
             LevelSystem.trackDamage(nearby, tame);
@@ -378,7 +379,7 @@ public class TameAbilityEvents {
     private static void handleArrowShot(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "arrow_shot")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "arrow", now)) return;
 
         Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
@@ -400,7 +401,7 @@ public class TameAbilityEvents {
     private static void handleGhastFireball(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "ghast_fireball")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "fireball", now)) return;
 
         Vec3 direction = target.getEyePosition().subtract(tame.getEyePosition()).normalize();
@@ -418,7 +419,7 @@ public class TameAbilityEvents {
 
     private static void handleWitherSkull(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "wither_skull")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "wither_skull_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "wither_skull"));
@@ -436,7 +437,7 @@ public class TameAbilityEvents {
 
     private static void handleBlazeAttack(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "blaze_attack")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "blaze_attack_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "blaze_attack"));
@@ -454,7 +455,7 @@ public class TameAbilityEvents {
 
     private static void handleGuardianBeam(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "guardian_beam")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "guardian_beam_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "guardian_beam"));
@@ -478,7 +479,7 @@ public class TameAbilityEvents {
 
     private static void handleElderGuardianBeam(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "elder_guardian_beam")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "elder_guardian_beam_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "elder_guardian_beam"));
@@ -494,7 +495,7 @@ public class TameAbilityEvents {
 
     private static void renderGuardianLockOnBeam(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
 
         boolean guardian = LevelSystem.hasAbility(data, "guardian_beam");
         boolean elder = LevelSystem.hasAbility(data, "elder_guardian_beam");
@@ -530,7 +531,7 @@ public class TameAbilityEvents {
 
     private static void handleTrident(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "trident")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "trident_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "trident"));
@@ -550,7 +551,7 @@ public class TameAbilityEvents {
 
     private static void handleCrossbow(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "crossbow")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "crossbow_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "crossbow"));
@@ -576,7 +577,7 @@ public class TameAbilityEvents {
 
     private static void handleFishing(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "fishing")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "fishing_hook_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "fishing"));
@@ -599,7 +600,7 @@ public class TameAbilityEvents {
 
     private static void handleDash(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "dash")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if ((target instanceof Player || TameEntityAdapter.isTame(target)) && !isDuelOpponent(tame, target)) return;
         if (!isReady(data, "dash_tick", now)) return;
 
@@ -613,7 +614,7 @@ public class TameAbilityEvents {
 
     private static void handleFlash(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "flash")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)
                 || ((target instanceof Player || TameEntityAdapter.isTame(target)) && !isDuelOpponent(tame, target))) {
             clearFlashChain(data);
             return;
@@ -658,7 +659,7 @@ public class TameAbilityEvents {
     }
 
     private static boolean performDashStrike(ServerLevel level, LivingEntity tame, LivingEntity target, int levelValue, float damage) {
-        if (level == null || tame == null || target == null || !target.isAlive() || isFriendly(tame, target)) {
+        if (level == null || tame == null || target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) {
             return false;
         }
         if ((target instanceof Player || TameEntityAdapter.isTame(target)) && !isDuelOpponent(tame, target)) {
@@ -678,7 +679,7 @@ public class TameAbilityEvents {
             if (!nearby.isAlive()) continue;
             if (nearby == tame) continue;
             if ((nearby instanceof Player || TameEntityAdapter.isTame(nearby)) && !isDuelOpponent(tame, nearby)) continue;
-            if (isFriendly(tame, nearby)) continue;
+            if (isBlockedOffensiveTarget(tame, nearby)) continue;
             LevelSystem.trackDamage(nearby, tame);
             applyInternalBonusDamage(nearby, tame, damage);
         }
@@ -718,7 +719,7 @@ public class TameAbilityEvents {
 
     private static void handleEvokerFangs(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "evoker_fangs")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "evoker_fangs_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "evoker_fangs"));
@@ -747,7 +748,7 @@ public class TameAbilityEvents {
 
     private static void handleDragonFireball(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "dragon_fireball")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "dragon_fireball_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "dragon_fireball"));
@@ -765,7 +766,7 @@ public class TameAbilityEvents {
 
     private static void handleLlamaSpit(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "llama_spit")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "llama_spit_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "llama_spit"));
@@ -797,7 +798,7 @@ public class TameAbilityEvents {
 
     private static void handleShulkerBullet(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "shulker_bullet")) return;
-        if (target == null || !target.isAlive() || isFriendly(tame, target)) return;
+        if (target == null || !target.isAlive() || isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "shulker_bullet_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "shulker_bullet"));
@@ -816,7 +817,7 @@ public class TameAbilityEvents {
     private static void handleSnowballShot(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "snowball_shot")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "snow", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "snowball_shot"));
@@ -837,7 +838,7 @@ public class TameAbilityEvents {
     private static void handleEnderPearlJump(LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "ender_pearl_jump")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "pearl", now)) return;
 
         double distance = tame.distanceTo(target);
@@ -967,7 +968,7 @@ public class TameAbilityEvents {
     private static void handleLightningStrike(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "lightning_strike")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "lightning_strike_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "lightning_strike"));
@@ -982,7 +983,7 @@ public class TameAbilityEvents {
     private static void handleWardenScream(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now) {
         if (!LevelSystem.hasAbility(data, "warden_scream")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "warden_scream_tick", now)) return;
         if (!tame.hasLineOfSight(target)) return;
 
@@ -1001,7 +1002,7 @@ public class TameAbilityEvents {
                 living != null
                         && living.isAlive()
                         && living != tame
-                        && !isFriendly(tame, living)
+                        && !isBlockedOffensiveTarget(tame, living)
         );
         for (LivingEntity victim : beamTargets) {
             if (hitIds.size() >= MAX_WARDEN_BEAM_TARGETS) {
@@ -1244,7 +1245,7 @@ public class TameAbilityEvents {
     private static void trySkyLaunch(ServerLevel level, LivingEntity tame, TameData data, LivingEntity target, long now, double baseChance) {
         if (!LevelSystem.hasAbility(data, "sky_launch")) return;
         if (target == null || !target.isAlive()) return;
-        if (isFriendly(tame, target)) return;
+        if (isBlockedOffensiveTarget(tame, target)) return;
         if (!isReady(data, "sky_launch_tick", now)) return;
 
         int levelValue = Math.max(1, LevelSystem.getAbilityLevel(data, "sky_launch"));
@@ -1503,7 +1504,7 @@ public class TameAbilityEvents {
         int affected = 0;
         for (LivingEntity nearby : tame.level().getEntitiesOfClass(LivingEntity.class, tame.getBoundingBox().inflate(radius))) {
             if (!nearby.isAlive() || nearby == tame) continue;
-            if (isFriendly(tame, nearby)) continue;
+            if (isBlockedOffensiveTarget(tame, nearby)) continue;
             nearby.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, duration, slownessAmp));
             affected++;
         }
@@ -1627,7 +1628,7 @@ public class TameAbilityEvents {
         for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class, origin.getBoundingBox().inflate(radius))) {
             if (candidate == tame || candidate == origin || !candidate.isAlive()) continue;
             if (excludeIds.contains(candidate.getId())) continue;
-            if (isFriendly(tame, candidate)) continue;
+            if (isBlockedOffensiveTarget(tame, candidate)) continue;
             double dist = candidate.distanceToSqr(origin);
             if (dist < bestDistance) {
                 bestDistance = dist;
@@ -1645,7 +1646,7 @@ public class TameAbilityEvents {
         float splash = aoeDamage(hitDamage * scaling * attributeDamageBonusMultiplier(data, 0.50F));
         for (LivingEntity nearby : tame.level().getEntitiesOfClass(LivingEntity.class, primaryTarget.getBoundingBox().inflate(radius))) {
             if (nearby == tame || nearby == primaryTarget || !nearby.isAlive()) continue;
-            if (isFriendly(tame, nearby)) continue;
+            if (isBlockedOffensiveTarget(tame, nearby)) continue;
             LevelSystem.trackDamage(nearby, tame);
             applyInternalBonusDamage(nearby, tame, splash);
             hits++;
@@ -2469,6 +2470,10 @@ public class TameAbilityEvents {
         return false;
     }
 
+    private static boolean isBlockedOffensiveTarget(LivingEntity tame, Entity target) {
+        return TameCombatEvents.isHiddenDuelAbilityTarget(tame, target) || isFriendly(tame, target);
+    }
+
     private static boolean isFriendly(LivingEntity tame, Entity entity) {
         if (entity == tame) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) return false;
@@ -2540,7 +2545,7 @@ public class TameAbilityEvents {
 
     private static void applyInternalBonusDamage(LivingEntity target, LivingEntity attacker, float amount) {
         if (target == null || attacker == null) return;
-        if (isFriendly(attacker, target)) return;
+        if (isBlockedOffensiveTarget(attacker, target)) return;
         INTERNAL_BONUS_DAMAGE.set(true);
         try {
             target.hurt(attacker.damageSources().mobAttack(attacker), amount);
@@ -2720,9 +2725,10 @@ private static void applyWardenScreamPush(LivingEntity tame, LivingEntity target
     }
 
     private static boolean shouldUseOffensiveAbilities(LivingEntity tame, TameData data, LivingEntity target) {
-        if (tame == null || data == null || target == null || !target.isAlive()) return false;
+        if (tame == null || data == null || target == null || !target.isAlive()
+                || TameCombatEvents.isHiddenDuelAbilityTarget(tame, target)) return false;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(tame)) return target != tame;
-        if (isFriendly(tame, target)) return false;
+        if (isBlockedOffensiveTarget(tame, target)) return false;
         if (isDuelOpponent(tame, target)) {
             return true;
         }

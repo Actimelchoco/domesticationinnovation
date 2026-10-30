@@ -654,6 +654,11 @@ public final class TameDuelManager {
     }
 
     public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, LivingEntity tame) {
+        return findNearestLoadedOpponent(server, tame, candidate -> true);
+    }
+
+    public static synchronized LivingEntity findNearestLoadedOpponent(MinecraftServer server, LivingEntity tame,
+            java.util.function.Predicate<LivingEntity> eligible) {
         if (server == null || tame == null) {
             return null;
         }
@@ -674,7 +679,7 @@ public final class TameDuelManager {
             return null;
         }
         Set<UUID> opponents = tameTeamA ? battle.teamB : battle.teamA;
-        return nearestLoadedOpponent(server, tame, opponents);
+        return nearestLoadedOpponent(server, tame, opponents, eligible);
     }
 
     public static synchronized void assignDuelTarget(LivingEntity tame, LivingEntity target) {
@@ -962,13 +967,18 @@ public final class TameDuelManager {
     }
 
     private static LivingEntity nearestLoadedOpponent(MinecraftServer server, LivingEntity from, Set<UUID> opponentIds) {
+        return nearestLoadedOpponent(server, from, opponentIds, candidate -> true);
+    }
+
+    private static LivingEntity nearestLoadedOpponent(MinecraftServer server, LivingEntity from, Set<UUID> opponentIds,
+            java.util.function.Predicate<LivingEntity> eligible) {
         if (server == null || from == null || opponentIds == null || opponentIds.isEmpty()) return null;
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         for (UUID opponentId : opponentIds) {
             LivingEntity candidate = findLoadedLivingParticipant(server, opponentId);
             if (candidate == null || !candidate.isAlive()) continue;
-            if (candidate.level() != from.level()) continue;
+            if (candidate.level() != from.level() || !eligible.test(candidate)) continue;
             double dist = from.distanceToSqr(candidate);
             if (dist < bestDist) {
                 bestDist = dist;

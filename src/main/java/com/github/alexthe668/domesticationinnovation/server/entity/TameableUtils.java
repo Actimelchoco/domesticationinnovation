@@ -54,6 +54,9 @@ public class TameableUtils {
     private static final String TAMES_LEVEL_DUEL_GLOW_TEAM = "TamesLevelDuelGlowTeam";
     private static final Map<UUID, ShadowHandRuntimeState> SHADOW_HAND_RUNTIME = new HashMap<>();
 
+    private static final Map<LivingEntity, Integer> MAGNETIC_TARGETS = new WeakHashMap<>();
+    private static final String MAGNETIC_TARGET = "PetMagneticTarget";
+
     private static final String ENCHANTMENT_TAG = "StoredPetEnchantments";
     private static final String FAKE_VISUAL_ENCHANT_TAG = "TLFakeVisualEnchant";
     private static final String COLLAR_TAG = "HasPetCollar";
@@ -152,6 +155,7 @@ public class TameableUtils {
     }
 
     public static boolean shouldBlockOffensiveDiTarget(LivingEntity source, Entity target) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents.isHiddenDuelAbilityTarget(source, target)) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.RankedRefereeService.blocks(target, source)) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.events.FriendlyOwnerProtection.blocks(target, source)) return true;
         if (com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.BewereagerCompat.isTemporary(source)) return source == target;
@@ -524,6 +528,7 @@ public class TameableUtils {
     public static void clearEnchants(LivingEntity entity) {
         setEnchantmentTag(entity, new ListTag());
         clearShadowHandState(entity);
+        setMagneticTarget(entity, -1);
     }
 
     public static void setHasCollar(LivingEntity enchanted, boolean collar) {
@@ -747,7 +752,43 @@ public class TameableUtils {
         sync(enchanted, tag);
     }
 
+    public static int getMagneticTargetID(LivingEntity entity) {
+        if (entity.level().isClientSide) {
+            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+            return tag.contains(MAGNETIC_TARGET) ? tag.getInt(MAGNETIC_TARGET) : -1;
+        }
+        return MAGNETIC_TARGETS.getOrDefault(entity, -1);
+    }
+
+    @Nullable
+    public static Entity getMagneticTarget(LivingEntity entity) {
+        int id = getMagneticTargetID(entity);
+        return id == -1 ? null : entity.level().getEntity(id);
+    }
+
+    public static void clearMagneticTarget(LivingEntity entity) {
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        if (getMagneticTargetID(entity) != -1
+                || tag.contains(MAGNETIC_TARGET) && tag.getInt(MAGNETIC_TARGET) != -1) {
+            setMagneticTarget(entity, -1);
+        }
+    }
+
+    public static void setMagneticTarget(LivingEntity entity, int id) {
+        if (id == -1) MAGNETIC_TARGETS.remove(entity);
+        else MAGNETIC_TARGETS.put(entity, id);
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(entity);
+        if (!tag.contains(MAGNETIC_TARGET) || tag.getInt(MAGNETIC_TARGET) != id) {
+            tag.putInt(MAGNETIC_TARGET, id);
+            sync(entity, tag);
+        }
+    }
+
     public static int getPetAttackTargetID(LivingEntity enchanted) {
+        if (enchanted.level().isClientSide) {
+            CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+            return tag.contains(ATTACK_TARGET_ENTITY) ? tag.getInt(ATTACK_TARGET_ENTITY) : -1;
+        }
         return shadowHandState(enchanted).attackTargetId;
     }
 
@@ -760,6 +801,11 @@ public class TameableUtils {
     public static void setPetAttackTarget(LivingEntity enchanted, int id) {
         ShadowHandRuntimeState state = shadowHandState(enchanted);
         state.attackTargetId = id;
+        CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        if (!tag.contains(ATTACK_TARGET_ENTITY) || tag.getInt(ATTACK_TARGET_ENTITY) != id) {
+            tag.putInt(ATTACK_TARGET_ENTITY, id);
+            sync(enchanted, tag);
+        }
         pruneShadowHandState(enchanted);
     }
 
@@ -807,6 +853,7 @@ public class TameableUtils {
         }
         SHADOW_HAND_RUNTIME.remove(enchanted.getUUID());
         CompoundTag tag = CitadelEntityData.getOrCreateCitadelTag(enchanted);
+        tag.putInt(ATTACK_TARGET_ENTITY, -1);
         tag.putIntArray(SHADOW_PUNCH_TIMES, new int[0]);
         sync(enchanted, tag);
     }

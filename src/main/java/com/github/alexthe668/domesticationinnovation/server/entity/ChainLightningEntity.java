@@ -63,6 +63,11 @@ public class ChainLightningEntity extends Entity {
         super.tick();
         Entity creator = getCreatorEntity();
         Entity current = getToEntity();
+        if (!level().isClientSide && creator instanceof LivingEntity source
+                && com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameCombatEvents.isHiddenDuelAbilityTarget(source, current)) {
+            discard();
+            return;
+        }
         if (creator instanceof LivingEntity) {
             if (current != null) {
                 this.setPos(new Vec3(current.getX(), current.getY() + current.getBbHeight() * 0.5F, current.getZ()));

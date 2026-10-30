@@ -129,8 +129,9 @@ public class LayerPetOverlays extends RenderLayer {
                 this.getParentModel().renderToBuffer(matrixStackIn, ivertexbuilder, packedLightIn, LivingEntityRenderer.getOverlayCoords((LivingEntity) entity, 0), 1, 1, 1, alpha);
                 matrixStackIn.popPose();
             }
-            if (TameableUtils.hasEnchant(living, DIEnchantmentRegistry.MAGNETIC)) {
-                Entity suck = TameableUtils.getPetAttackTarget(living);
+            if (TameableUtils.hasEnchant(living, DIEnchantmentRegistry.MAGNETIC)
+                    || TameableUtils.getMagneticTargetID(living) != -1) {
+                Entity suck = TameableUtils.getMagneticTarget(living);
                 if (suck != null) {
                     double d0 = Mth.lerp(partialTicks, suck.xo, suck.getX()) - Mth.lerp(partialTicks, living.xo, living.getX());
                     double d1 = Mth.lerp(partialTicks, suck.yo, suck.getY()) - Mth.lerp(partialTicks, living.yo, living.getY());

@@ -449,6 +449,14 @@ public class TameCombatEvents {
         return id != null && "alexscaves".equals(id.getNamespace()) && "vallumraptor".equals(id.getPath());
     }
 
+    /** Concealment affects enemy ability targeting, not ordinary damage immunity. */
+    public static boolean isHiddenDuelAbilityTarget(LivingEntity source, Entity target) {
+        return source != null && target instanceof LivingEntity living
+                && isAlexsCavesVallumraptor(living)
+                && TameDuelManager.areDuelOpponents(source.getUUID(), living.getUUID())
+                && (living.isInvisible() || isVallumraptorHiding(living));
+    }
+
     private static boolean isVallumraptorHiding(LivingEntity tame) {
         if (tame == null) {
             return false;

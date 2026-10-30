@@ -14,14 +14,21 @@ public class TimedTameShulkerBullet extends ShulkerBullet {
     private static final int MAX_LIFETIME_TICKS = 80;
     private static final float LEVITATION_CHANCE = 0.10F;
     private final int abilityLevel;
+    private final Entity abilityTarget;
 
     public TimedTameShulkerBullet(Level level, LivingEntity owner, Entity finalTarget, Direction.Axis axis, int abilityLevel) {
         super(level, owner, finalTarget, axis);
         this.abilityLevel = Math.max(1, abilityLevel);
+        this.abilityTarget = finalTarget;
     }
 
     @Override
     public void tick() {
+        if (!level().isClientSide && getOwner() instanceof LivingEntity source
+                && TameCombatEvents.isHiddenDuelAbilityTarget(source, abilityTarget)) {
+            discard();
+            return;
+        }
         super.tick();
         if (!this.level().isClientSide && this.tickCount >= MAX_LIFETIME_TICKS) {
             this.discard();
