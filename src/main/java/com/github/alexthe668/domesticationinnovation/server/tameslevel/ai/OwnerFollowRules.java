@@ -17,8 +17,14 @@ public final class OwnerFollowRules {
                 || TameCommands.isDuelSessionLocked(tame.getUUID())) return true;
         TameData data = TameRegistry.get(tame.getUUID());
         if (data == null) data = TameRegistry.getByTlId(TameData.getTlId(tame));
+        return blocked(data);
+    }
+
+    /** Also usable before a deferred teleport has loaded the pet's entity. */
+    public static boolean blocked(TameData data) {
         return data != null && (data.hasHome || data.guardianResting || data.wanderLock
                 || data.movementOrder != 0 || DuelFollowerPause.shouldWait(data)
+                || TameCommands.isDuelSessionLocked(data.uuid)
                 || data.tlId != null && TameCommands.isDuelSessionLocked(data.tlId));
     }
 }

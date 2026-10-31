@@ -4079,9 +4079,15 @@ public class TameCommands {
                 finished.add(entry.getKey());
                 continue;
             }
-            TameData waitingBodyguard = pendingTeleportData(pending);
-            if (waitingBodyguard != null && waitingBodyguard.rosterBodyguard
-                    && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(waitingBodyguard)) {
+            TameData teleportData = pendingTeleportData(pending);
+            boolean waitingBodyguard = teleportData != null && teleportData.rosterBodyguard
+                    && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(teleportData);
+            // Eligibility can change after an owner-follow job is queued. Check
+            // again before loading chunks or moving the entity out of an arena.
+            boolean blockedOwnerFollow = pending.autoFollow && (isDuelLocked(pending.tameUuid)
+                    || isDuelLocked(pending.tlId)
+                    || com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.OwnerFollowRules.blocked(teleportData));
+            if (waitingBodyguard || blockedOwnerFollow) {
                 releaseImmediateChunkTeleport(sourceLevel, pending);
                 finished.add(entry.getKey());
                 continue;
@@ -16551,7 +16557,7 @@ public class TameCommands {
         if (owner == null || data == null || data.uuid == null || data.dead || level == null || pos == null) {
             return false;
         }
-        if (TameDuelManager.isTameInDuel(data.uuid)) {
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.OwnerFollowRules.blocked(data)) {
             return false;
         }
         if (!canAttemptAutoFollowUnloadedTeleport(owner.getServer(), data)) {

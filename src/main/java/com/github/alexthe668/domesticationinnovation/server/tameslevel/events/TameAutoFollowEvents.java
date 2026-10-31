@@ -245,6 +245,7 @@ public class TameAutoFollowEvents {
 
     private static void teleportLoadedTame(ServerPlayer owner, LivingEntity living, TameData data, ServerLevel targetLevel, Vec3 targetPos, float yRot, float xRot) {
         if (owner == null || living == null || data == null || targetLevel == null || targetPos == null) return;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.ai.OwnerFollowRules.blocked(living)) return;
         if (!(living instanceof TamableAnimal tame)) {
             TameTransferService.transferInterfaceToLocation(living, targetLevel, targetPos.x, targetPos.y,
                     targetPos.z, yRot, xRot, data, false);

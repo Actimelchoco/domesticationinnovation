@@ -17,6 +17,7 @@ public final class OwnerDuelRegression {
    player.setGameMode(GameType.SURVIVAL);player.setNoGravity(true);players.put(player.getUUID(),player);h.level.addNewPlayer(player);
    java.lang.reflect.Field spawn;try{spawn=ServerPlayer.class.getDeclaredField("spawnInvulnerableTime");}catch(NoSuchFieldException e){spawn=ServerPlayer.class.getDeclaredField("f_8921_");}spawn.setAccessible(true);spawn.setInt(player,0);
    player.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1000);player.setHealth(1000);
+   SnailTeleportRegression.verify(h,player);
    BodyguardFoodRegression.verify(h,player);
    SupportBodyguardRegression.verify(h,player);
    var wolf=EntityType.WOLF.create(h.level);wolf.setTame(true);wolf.setOwnerUUID(player.getUUID());wolf.setNoAi(true);wolf.setPos(2,-57,2);player.setPos(3,-57,2);h.level.addFreshEntity(wolf);
