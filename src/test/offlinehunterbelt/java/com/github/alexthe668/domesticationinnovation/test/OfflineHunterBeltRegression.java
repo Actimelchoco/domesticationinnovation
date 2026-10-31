@@ -37,6 +37,52 @@ public class OfflineHunterBeltRegression {
         new CommonProxy().onInterfaceTameHunterBeltDamage(event);
         check(Math.abs(event.getAmount()-expected)<.001,"expected "+expected+" damage, got "+event.getAmount());
     }
+    static void compareBothListenerOrders(ServerLevel level,List<LivingEntity> pets) {
+        var victim=EntityType.HUSK.create(level);victim.setNoAi(true);victim.setPos(8,-57,0);level.addFreshEntity(victim);
+        try {
+            boolean consistent=true;
+            for(boolean nativeFirst:List.of(true,false))for(var pet:pets) {
+                var data=TameRegistry.get(pet.getUUID());data.hasHome=false;data.mode=TameMode.MONSTER_HUNTER.id();data.hungerSaturation=100000;data.attributeLevels.put("firefang",5);
+                var event=new LivingHurtEvent(victim,level.damageSources().mobAttack(pet),10);
+                if(nativeFirst)HunterBeltItem.HunterBeltEvents.onLivingDamage(event);
+                com.github.alexthe668.domesticationinnovation.server.tameslevel.events.TameAbilityEvents.onHurt(event);
+                if(!nativeFirst)HunterBeltItem.HunterBeltEvents.onLivingDamage(event);
+                new CommonProxy().onInterfaceTameHunterBeltDamage(event);
+                org.apache.logging.log4j.LogManager.getLogger("HunterBeltPipelineAudit").info("HUNTER_BELT_ORDER species={} nativeFirst={} twoBeltDamage={}",ForgeRegistries.ENTITY_TYPES.getKey(pet.getType()),nativeFirst,event.getAmount());
+                consistent &= Math.abs(event.getAmount()-30)<.001;
+            }
+            check(consistent,"two-belt damage with added attributes must not depend on native listener order");
+        } finally {victim.discard();for(var pet:pets){var data=TameRegistry.get(pet.getUUID());data.attributeLevels.remove("firefang");data.hasHome=true;data.mode=TameMode.DEFAULT.id();}}
+    }
+    static void compareFullEventPipeline(ServerLevel level,List<LivingEntity> pets,CurioStacksHandler slots,ItemStack first,ItemStack second) {
+        var victim=EntityType.HUSK.create(level);victim.setNoAi(true);victim.setPos(8,-57,0);level.addFreshEntity(victim);
+        var thirdWorn=slots.getStacks().getStackInSlot(2);
+        slots.getStacks().setStackInSlot(2,ItemStack.EMPTY);
+        try {
+            boolean inconsistent=false;
+            for(int attribute:List.of(0,5))for(int belts=0;belts<=2;belts++) {
+                slots.getStacks().setStackInSlot(0,belts>=1?first:ItemStack.EMPTY);
+                slots.getStacks().setStackInSlot(1,belts>=2?second:ItemStack.EMPTY);
+                float reference=-1;
+                for(var pet:pets) {
+                    var data=TameRegistry.get(pet.getUUID());data.hasHome=false;data.mode=TameMode.MONSTER_HUNTER.id();data.hungerSaturation=100000;
+                    if(attribute>0)data.attributeLevels.put("firefang",attribute);else data.attributeLevels.remove("firefang");
+                    var event=new LivingHurtEvent(victim,level.damageSources().mobAttack(pet),10);
+                    MinecraftForge.EVENT_BUS.post(event);
+                    org.apache.logging.log4j.LogManager.getLogger("HunterBeltPipelineAudit").info("HUNTER_BELT_PIPELINE species={} belts={} firefang={} damage={}",ForgeRegistries.ENTITY_TYPES.getKey(pet.getType()),belts,attribute,event.getAmount());
+                    float expected=(attribute>0?12:10)*(belts==0?1:belts==1?1.5F:2.5F);
+                    if(attribute==0)check(Math.abs(event.getAmount()-expected)<.001,"plain damage applies the two-belt multiplier exactly once");
+                    if(Math.abs(event.getAmount()-expected)>=.001)inconsistent=true;
+                    if(reference<0)reference=event.getAmount();else if(Math.abs(reference-event.getAmount())>=.001)inconsistent=true;
+                }
+            }
+            check(!inconsistent,"belt scaling must match across normal and interface tames, including added attribute damage");
+        } finally {
+            slots.getStacks().setStackInSlot(2,thirdWorn);
+            victim.discard();slots.getStacks().setStackInSlot(0,first);slots.getStacks().setStackInSlot(1,second);
+            for(var pet:pets){var data=TameRegistry.get(pet.getUUID());data.attributeLevels.remove("firefang");data.hasHome=true;data.mode=TameMode.DEFAULT.id();}
+        }
+    }
     @SubscribeEvent public static void run(ServerStartedEvent event){
         var logger=org.apache.logging.log4j.LogManager.getLogger("OfflineHunterBeltRegression");
         try{test(event.getServer().overworld());logger.info("OFFLINE_HUNTER_BELT_TESTS_PASS");}
@@ -52,7 +98,9 @@ public class OfflineHunterBeltRegression {
         var fox=EntityType.FOX.create(level);((ModifedToBeTameable)fox).setTameOwnerUUID(owner.getUUID());
         var primitive=(Mob)ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("primitive_mobs:rocket_creeper")).create(level);
         PrimitiveMobsCompat.tame(primitive,owner);
-        var pets=List.<LivingEntity>of(wolf,fox,primitive);
+        var spider=(Mob)ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("primitive_mobs:baby_spider")).create(level);
+        PrimitiveMobsCompat.tame(spider,owner);
+        var pets=List.<LivingEntity>of(wolf,fox,spider,primitive);
         for(var pet:pets){pet.setPos(0,-57,0);level.addFreshEntity(pet);var data=new TameData(pet,owner.getUUID(),false);data.hasHome=true;TameRegistry.register(data);}
         var inventory=CuriosApi.getCuriosInventory(owner).orElseThrow(()->new IllegalStateException("Missing Curios inventory"));var original=new HashMap<>(inventory.getCurios());
         var slots=new CurioStacksHandler(inventory,"belt",3,true,true,true,ICurio.DropRule.DEFAULT);
@@ -65,6 +113,8 @@ public class OfflineHunterBeltRegression {
         slots.getStacks().setStackInSlot(0,first);slots.getStacks().setStackInSlot(1,second);
         slots.getCosmeticStacks().setStackInSlot(2,cosmetic);owner.getInventory().add(cosmetic.copy());
         try{
+            compareBothListenerOrders(level,pets);
+            compareFullEventPipeline(level,pets,slots,first,second);
             for(var pet:pets)damage(level,pet,25);
             var blastData=TameRegistry.get(primitive.getUUID());blastData.bonusDamage=4;
             blastData.mode=TameMode.MONSTER_HUNTER.id();blastData.hasHome=false;

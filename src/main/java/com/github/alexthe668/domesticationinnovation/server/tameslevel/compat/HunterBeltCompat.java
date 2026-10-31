@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.EvokerFangs;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -94,7 +95,16 @@ public final class HunterBeltCompat {
         return attacker instanceof LivingEntity living && TameEntityAdapter.isTame(living) ? living : null;
     }
 
-    /** True means the vanilla Relics listener can skip its single-belt damage calculation. */
+    /** Defer Relics' early native-tame listener to the shared final-stage handler.
+     * Leaving native and interface tames at different priorities makes flat
+     * attribute damage depend on mod registration order. */
+    public static boolean deferNativeDamage(LivingHurtEvent event) {
+        return !event.isCanceled() && !event.getEntity().level().isClientSide && event.getAmount() > 0
+                && event.getSource().getEntity() instanceof TamableAnimal tame && tame.isTame()
+                && ApiHolder.API != null;
+    }
+
+    /** Applies both equipped belts once, after the tame's attribute damage. */
     public static boolean applyDamage(LivingHurtEvent event) {
         if (event.isCanceled() || event.getEntity().level().isClientSide || event.getAmount() <= 0) return false;
         Item belt = ForgeRegistries.ITEMS.getValue(BELT_ID);

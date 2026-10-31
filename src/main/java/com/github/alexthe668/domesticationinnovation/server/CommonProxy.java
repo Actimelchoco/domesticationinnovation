@@ -1027,8 +1027,8 @@ public class CommonProxy {
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onInterfaceTameHunterBeltDamage(LivingHurtEvent event) {
-        // Vanilla tame damage is handled once inside the optional Relics listener mixin.
-        if (event.getSource().getEntity() instanceof TamableAnimal) return;
+        // All supported tames share the same final-stage multiplier. The optional
+        // Relics mixin defers its early native-tame handler to avoid applying twice.
         com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.HunterBeltCompat.applyDamage(event);
     }
 
