@@ -292,6 +292,35 @@ public final class PrimitiveMobsCompat {
         return instance.getValue();
     }
 
+    /** Combat takes priority over the support creeper's owner-buffing and fleeing goals. */
+    public static final class SupportCombatGoal extends Goal {
+        private final Mob mob;
+        private final ModifedToBeTameable pet;
+        private int repath;
+        public SupportCombatGoal(Mob mob) {
+            this.mob = mob;
+            this.pet = (ModifedToBeTameable) mob;
+            setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
+        }
+        @Override public boolean canUse() {
+            var target = mob.getTarget();
+            return pet.isTame() && !pet.isStayingStill() && target != null && target.isAlive()
+                    && pet.isValidAttackTarget(target) && mob.canAttack(target);
+        }
+        @Override public boolean canContinueToUse() { return canUse(); }
+        @Override public void start() { repath = 0; }
+        @Override public void tick() {
+            var target = mob.getTarget();
+            if (target == null) return;
+            mob.getLookControl().setLookAt(target, 30, 30);
+            if (--repath <= 0) {
+                repath = 10;
+                mob.getNavigation().moveTo(target, 1.0D);
+            }
+        }
+        @Override public void stop() { mob.getNavigation().stop(); }
+    }
+
     /** Replace hostile prey selection with retaliation and the owner's combat orders. */
     public static final class PetTargetGoal extends Goal {
         private final Mob mob;

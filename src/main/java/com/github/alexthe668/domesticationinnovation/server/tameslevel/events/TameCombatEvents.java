@@ -326,6 +326,7 @@ public class TameCombatEvents {
             mob.setTarget(null);
             mob.getNavigation().stop();
         }
+        com.github.alexthe668.domesticationinnovation.server.tameslevel.compat.CompanionsRespawnTotem.onDeath(tame, data, diedInDuel);
         tame.getPersistentData().putBoolean(DEATH_REMOVAL_TAG, true);
         if (!tame.isRemoved()) {
             tame.remove(net.minecraft.world.entity.Entity.RemovalReason.DISCARDED);

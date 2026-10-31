@@ -1,0 +1,11 @@
+gradle.projectsEvaluated {
+    def p = rootProject
+    p.sourceSets.test.java.srcDir('src/test/companionstotem/java')
+    p.sourceSets.test.resources.srcDir('tools/companions_totem_tests/resources')
+    p.tasks.register('companionsTotemTestJar', Jar) {
+        dependsOn p.tasks.named('testClasses')
+        archiveFileName = 'companions-totem-tests.jar'
+        from p.sourceSets.test.output
+    }
+    p.reobf.create('companionsTotemTestJar')
+}

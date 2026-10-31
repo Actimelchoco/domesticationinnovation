@@ -45,13 +45,12 @@ public abstract class PrimitiveCreeperExplosionMixin extends Monster {
             entityData.set(DATA_IS_IGNITED, false);
             return;
         }
-        // FestiveCreeper.tick disables swelling before calling super and has no
-        // SwellGoal. Restore a close-range fuse only for owned festive creepers;
-        // leave its native ranged TNT goal and every wild creeper unchanged.
+        // Festive creepers suppress swelling; support creepers only acquire a native
+        // fuse at low health. Owned combat pets need a fuse at any health.
         if (!level().isClientSide && PrimitiveMobsCompat.isPrimitivePet(this)
                 && ((ModifedToBeTameable) this).isTame()
-                && "festive_creeper".equals(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES
-                        .getKey(getType()).getPath())) {
+                && java.util.Set.of("festive_creeper", "support_creeper").contains(
+                        net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(getType()).getPath())) {
             ModifedToBeTameable pet = (ModifedToBeTameable) this;
             var target = getTarget();
             double rangeSquared = swell > 0 ? 49.0D : 9.0D;

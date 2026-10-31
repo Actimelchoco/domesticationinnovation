@@ -17,12 +17,12 @@ public final class PrimitiveDuelPlayerRegression {
         catch(NoSuchFieldException ignored){field=net.minecraft.server.players.PlayerList.class.getDeclaredField("f_11197_");}
         field.setAccessible(true);
         var players=(Map<UUID,ServerPlayer>)field.get(server.getPlayerList());
-        for(boolean ranked:List.of(false,true))for(boolean ownerOpponent:List.of(true,false)){
+        for(String species:List.of("festive_creeper","support_creeper"))for(boolean ranked:List.of(false,true))for(boolean ownerOpponent:List.of(true,false)){
             var player=new ServerPlayer(server,h.getLevel(),new GameProfile(UUID.randomUUID(),"CreeperOpponent"));
             player.connection=new net.minecraft.server.network.ServerGamePacketListenerImpl(server,new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND),player);
             player.setGameMode(GameType.SURVIVAL);player.setNoGravity(true);
             players.put(player.getUUID(),player);h.getLevel().addNewPlayer(player);
-            var pet=PrimitiveFuseRegression.create(h,"festive_creeper",false);
+            var pet=PrimitiveFuseRegression.create(h,species,false);
             UUID petOwner=ownerOpponent?player.getUUID():UUID.randomUUID();
             ((ModifedToBeTameable)pet).setTameOwnerUUID(petOwner);PrimitiveMobsCompat.setCommand(pet,0);
             var data=new TameData(pet,petOwner,false);data.hungerSaturation=100000;TameRegistry.register(data);

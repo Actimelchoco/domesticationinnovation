@@ -63,6 +63,7 @@ public abstract class MobMixin extends LivingEntity {
             if (tl$primitiveGoalsInstalled) {
                 mob.targetSelector.removeAllGoals(goal -> true);
                 for (var goal : tl$primitiveWildGoals) mob.targetSelector.addGoal(goal.getPriority(), goal.getGoal());
+                mob.goalSelector.removeAllGoals(goal -> goal instanceof PrimitiveMobsCompat.SupportCombatGoal);
                 tl$primitiveWildGoals.clear();
                 tl$primitiveGoalsInstalled = false;
             }
@@ -72,7 +73,14 @@ public abstract class MobMixin extends LivingEntity {
             tl$primitiveWildGoals.addAll(mob.targetSelector.getAvailableGoals());
             mob.targetSelector.removeAllGoals(goal -> true);
             mob.targetSelector.addGoal(1, new PrimitiveMobsCompat.PetTargetGoal(mob));
+            if ("support_creeper".equals(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType()).getPath())) {
+                mob.goalSelector.addGoal(1, new PrimitiveMobsCompat.SupportCombatGoal(mob));
+            }
             tl$primitiveGoalsInstalled = true;
+        }
+        // SupportCreeper.tick can install wild player targeting later when its health drops.
+        if ("support_creeper".equals(net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(mob.getType()).getPath())) {
+            mob.targetSelector.removeAllGoals(goal -> goal instanceof net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal);
         }
         var pet = (ModifedToBeTameable) mob;
         if (pet.isStayingStill() || mob.getTarget() != null && !pet.isValidAttackTarget(mob.getTarget())) mob.setTarget(null);

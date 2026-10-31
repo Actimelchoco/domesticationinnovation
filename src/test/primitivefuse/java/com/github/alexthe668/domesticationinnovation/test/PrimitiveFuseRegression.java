@@ -34,6 +34,8 @@ public class PrimitiveFuseRegression {
         var logger=org.apache.logging.log4j.LogManager.getLogger("PrimitiveFuseRegression");
         try{
             var h=new Fixture(event.getServer().overworld());
+            otherPrimitiveCombat(h);
+            supportCombatOverridesBuffingAndFleeing(h);
             PrimitiveDuelPlayerRegression.verify(h);
             naturalFestiveFuseSurvivesAndRespectsCooldown(h);
             wildAndSittingFestiveDoNotGetCombatFuse(h);
@@ -44,6 +46,80 @@ public class PrimitiveFuseRegression {
             logger.info("PRIMITIVE_FUSE_TESTS_PASS: native fuse, survival, cooldown, repeat blast, wild/sitting exclusion, five species collars, rocket launch/landing, support fuse, thrown TNT, block and dropped-item protection, wild/vanilla item damage, native damage scaling, learned radius/damage/friendly protection");
         }catch(Throwable error){logger.error("PRIMITIVE_FUSE_TESTS_FAIL",error);}
         finally{event.getServer().halt(false);}
+    }
+    static void otherPrimitiveCombat(Fixture h) {
+        var mother=ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("primitive_mobs","mother_spider")).create(h.level);
+        var baby=(Mob)ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("primitive_mobs","baby_spider")).create(h.level);
+        mother.setPos(2,-57,2);baby.setPos(2,-57,2);h.level.addFreshEntity(mother);h.level.addFreshEntity(baby);
+        var bridge=(com.github.alexthe668.domesticationinnovation.server.entity.ModifedToBeTameable)baby;
+        bridge.setTameOwnerUUID(mother.getUUID());
+        try {
+            h.assertTrue(!bridge.isTame() && bridge.getTameOwnerUUID()==null,"mother-owned wild baby is not a player tame");
+            PrimitiveMobsCompat.tame(baby,FakePlayerFactory.get(h.level,new GameProfile(UUID.randomUUID(),"SpiderTamer")));
+            h.assertTrue(bridge.isTame(),"wild mother-owned baby can become a real player tame");
+        }finally{baby.discard();mother.discard();}
+        for(String species:List.of("baby_spider","rocket_creeper","festive_creeper","chameleon")) {
+            var pet=(Mob)ForgeRegistries.ENTITY_TYPES.getValue(new ResourceLocation("primitive_mobs",species)).create(h.level);
+            for(int x=-3;x<=10;x++)for(int z=-4;z<=8;z++)h.level.setBlock(new net.minecraft.core.BlockPos(x,-58,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+            pet.setPos(2,-57,2);pet.setNoGravity(!species.equals("baby_spider"));h.level.addFreshEntity(pet);
+            var owner=FakePlayerFactory.get(h.level,new GameProfile(UUID.randomUUID(),"AuditOwner"));
+            PrimitiveMobsCompat.tame(pet,owner);
+            var enemy=EntityType.HUSK.create(h.level);enemy.setNoAi(true);enemy.setNoGravity(true);enemy.setPos(4,-57,2);
+            enemy.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(1000);enemy.setHealth(1000);h.level.addFreshEntity(enemy);
+            try {
+                pet.setLastHurtByMob(enemy);
+                for(int i=0;i<10;i++){pet.setOnGround(true);pet.tick();}
+                h.assertTrue(pet.getTarget()==enemy,species+" selects and retains retaliation target");
+                if(species.equals("baby_spider")) {
+                    var goal=pet.goalSelector.getAvailableGoals().stream().map(g->g.getGoal()).filter(g->g.getClass().getName().endsWith("SpiderAttackGoal")).findFirst().orElseThrow();
+                    h.level.setDayTime(6000);pet.setPos(2,100,2);enemy.setPos(4,100,2);pet.setTarget(enemy);
+                    pet.getNavigation().moveTo(enemy,1);
+                    h.assertTrue(pet.getLightLevelDependentMagicValue()>=0.5F,"spider fixture is in bright daylight");
+                    for(int i=0;i<2000;i++)goal.canContinueToUse();
+                    h.assertTrue(pet.getTarget()==enemy,"owned baby spider never randomly drops target in daylight");
+                    pet.setPos(2,-57,2);pet.setDeltaMovement(Vec3.ZERO);enemy.setPos(3,-57,2);pet.setTarget(enemy);
+                    float before=enemy.getHealth();
+                    for(int i=0;i<50;i++){((net.minecraft.world.level.storage.ServerLevelData)h.level.getLevelData()).setGameTime(h.level.getGameTime()+1);enemy.invulnerableTime=0;pet.setOnGround(true);pet.tick();}
+                    h.assertTrue(enemy.getHealth()<before,"baby spider native melee damages enemy: pos="+pet.position()+" target="+pet.getTarget()+" running="+pet.goalSelector.getRunningGoals().map(g->g.getGoal().getClass().getName()).toList());
+                }else if(species.equals("rocket_creeper")) {
+                    pet.setPos(2,-57,2);enemy.setPos(4,-57,2);pet.setTarget(enemy);
+                    for(int i=0;i<25;i++){pet.setOnGround(true);pet.tick();}
+                    try{h.assertTrue((boolean)pet.getClass().getMethod("isLaunched").invoke(pet),"rocket launches naturally without forced swelling");}catch(ReflectiveOperationException e){throw new IllegalStateException(e);}
+                }else if(species.equals("chameleon")) {
+                    h.assertTrue(pet.goalSelector.getAvailableGoals().stream().noneMatch(g->g.getGoal() instanceof net.minecraft.world.entity.ai.goal.MeleeAttackGoal),"chameleon remains natively passive");
+                }
+                PrimitiveMobsCompat.setCommand(pet,1);pet.tick();
+                h.assertTrue(pet.getTarget()==null,species+" clears enemy while sitting");
+            }finally{pet.discard();enemy.discard();}
+        }
+        org.apache.logging.log4j.LogManager.getLogger("PrimitiveFuseRegression").info("OTHER_PRIMITIVE_COMBAT_TESTS_PASS");
+    }
+    static void supportCombatOverridesBuffingAndFleeing(Fixture h) {
+        for(boolean lowHealth:List.of(false,true)) {
+            var pet=create(h,"support_creeper",true);
+            var enemy=EntityType.HUSK.create(h.level);
+            enemy.setNoAi(true);enemy.setNoGravity(true);
+            enemy.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(1000);
+            enemy.setHealth(1000);enemy.setPos(pet.getX()+6,pet.getY(),pet.getZ());h.level.addFreshEntity(enemy);
+            for(int x=-2;x<=10;x++)for(int z=-3;z<=3;z++)h.level.setBlock(pet.blockPosition().offset(x,-1,z),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+            pet.setHealth(lowHealth?pet.getMaxHealth()/4:pet.getMaxHealth());
+            pet.setNoAi(false);pet.setLastHurtByMob(enemy);
+            try {
+                for(int i=0;i<10;i++){pet.setOnGround(true);pet.tick();}
+                h.assertTrue(pet.getTarget()==enemy,"support retaliates and retains enemy at either health");
+                h.assertTrue(pet.goalSelector.getRunningGoals().anyMatch(g->g.getGoal() instanceof PrimitiveMobsCompat.SupportCombatGoal),"support combat overrides buff/flee movement");
+                h.assertTrue(pet.getNavigation().getPath()!=null,"support computes a path toward its enemy");
+                h.assertTrue(pet.targetSelector.getAvailableGoals().stream().noneMatch(g->g.getGoal() instanceof net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal),"low health never reinstalls wild player targeting");
+                pet.setNoAi(true);pet.setPos(2,-57,2);enemy.setPos(4,-57,2);pet.setTarget(enemy);
+                var blasts=new Blasts(pet);MinecraftForge.EVENT_BUS.register(blasts);
+                try {for(int i=0;i<40;i++)pet.tick();h.assertTrue(blasts.count>0,"support attacks naturally at full or low health");}
+                finally{MinecraftForge.EVENT_BUS.unregister(blasts);}
+                PrimitiveMobsCompat.setCommand(pet,1);pet.setNoAi(false);pet.tick();
+                h.assertTrue(pet.getTarget()==null,"sitting support clears combat target");
+                h.assertTrue(pet.goalSelector.getRunningGoals().noneMatch(g->g.getGoal() instanceof PrimitiveMobsCompat.SupportCombatGoal),"sitting support stops chase");
+            }finally{pet.discard();enemy.discard();}
+        }
+        org.apache.logging.log4j.LogManager.getLogger("PrimitiveFuseRegression").info("SUPPORT_COMBAT_TESTS_PASS");
     }
     static void explosionDamageAndLearnedRadiusScale(Fixture h)throws Exception {
         var level=h.getLevel();
