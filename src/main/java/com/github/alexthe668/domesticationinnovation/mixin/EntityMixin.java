@@ -80,6 +80,11 @@ public class EntityMixin {
             cancellable = true
     )
     protected void di_isAlliedTo(Entity other, CallbackInfoReturnable<Boolean> cir) {
+        if (other != null && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.TameDuelManager
+                .areDuelOpponents(((Entity)(Object)this).getUUID(), other.getUUID())) {
+            cir.setReturnValue(false);
+            return;
+        }
         if(TameableUtils.isTamed(other) && TameableUtils.isTamed((Entity)(Object)this) && TameableUtils.hasSameOwnerAs((LivingEntity) other, (Entity)(Object)this)){
             cir.setReturnValue(true);
         }

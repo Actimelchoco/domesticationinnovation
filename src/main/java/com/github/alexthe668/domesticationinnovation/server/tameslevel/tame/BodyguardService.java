@@ -48,10 +48,13 @@ public final class BodyguardService {
     public static double healingBonus(int alive) {
         return alive == 1 ? 2 : alive == 2 ? 1 : alive == 3 ? .5 : 0;
     }
+    public static boolean usesOwnerSaturation(TameData data) {
+        return data != null && !data.dead && !data.stored
+                && (data.rosterBodyguard || TameMode.byId(data.mode) == TameMode.BODYGUARD);
+    }
     /** Transfer only enough saturation for this action; one owner saturation is 100 tame units. */
     public static boolean feedFromOwner(TameData data, LivingEntity tame, int required) {
-        if (!data.rosterBodyguard || tame == null || tame.getServer() == null
-                || TameCommands.hasEdibleStoredFood(tame, data)) return false;
+        if (!usesOwnerSaturation(data) || tame == null || tame.getServer() == null) return false;
         ServerPlayer owner = tame.getServer().getPlayerList().getPlayer(data.ownerUUID);
         if (owner == null) return false;
         int missing = Math.max(0, required - data.hungerSaturation);
@@ -64,9 +67,9 @@ public final class BodyguardService {
         return true;
     }
     public static boolean ownerCanFeed(TameData data, MinecraftServer server) {
-        if (!data.rosterBodyguard || server == null) return false;
+        if (!usesOwnerSaturation(data) || server == null) return false;
         ServerPlayer owner = server.getPlayerList().getPlayer(data.ownerUUID);
-        return owner != null && owner.getFoodData().getSaturationLevel() > 0;
+        return owner != null && owner.getFoodData().getSaturationLevel() >= 0.01F;
     }
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void tick(TickEvent.ServerTickEvent event) {

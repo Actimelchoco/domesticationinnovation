@@ -49,6 +49,9 @@ public final class TameFoodManager {
     }
 
     public static void tick(LivingEntity tame, TameData data) {
+        // Interface tames such as Primitive creepers are not Animals, but still
+        // need owner feeding before their combat/movement checks run.
+        if (data != null && data.hungerSaturation <= 0) BodyguardService.feedFromOwner(data, tame, 1);
         if (!(tame instanceof Animal animal) || data == null || tame.getServer() == null) return;
         init(tame.getServer());
         String type = typeId(tame, data);

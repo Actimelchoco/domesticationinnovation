@@ -34,6 +34,7 @@ public class PrimitiveFuseRegression {
         var logger=org.apache.logging.log4j.LogManager.getLogger("PrimitiveFuseRegression");
         try{
             var h=new Fixture(event.getServer().overworld());
+            OwnerDuelRegression.verify(h);
             otherPrimitiveCombat(h);
             supportCombatOverridesBuffingAndFleeing(h);
             PrimitiveDuelPlayerRegression.verify(h);

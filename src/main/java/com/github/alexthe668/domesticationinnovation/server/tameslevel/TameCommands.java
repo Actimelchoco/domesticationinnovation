@@ -4079,6 +4079,13 @@ public class TameCommands {
                 finished.add(entry.getKey());
                 continue;
             }
+            TameData waitingBodyguard = pendingTeleportData(pending);
+            if (waitingBodyguard != null && waitingBodyguard.rosterBodyguard
+                    && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(waitingBodyguard)) {
+                releaseImmediateChunkTeleport(sourceLevel, pending);
+                finished.add(entry.getKey());
+                continue;
+            }
             ChunkPos sourceChunk = new ChunkPos(pending.sourcePos);
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
@@ -4954,7 +4961,7 @@ public class TameCommands {
             owner.sendSystemMessage(Component.literal("Bodyguards: add/remove <selection>, remove all, info, setRange <1-22>. No roster size cap: all guards must share one entity type, or every guard must have a different type. Dead/stored guards still count for composition."));
             owner.sendSystemMessage(Component.literal("Adding a guardian replaces its current guarding duty with normal bodyguard duty. Saved guardian deployment groups are retained. Incompatible or locked tames keep their existing assignment."));
             owner.sendSystemMessage(Component.literal("New bodyguards default to bodyguard mode and close movement. Change these with /tames mode and /tames movement; manual sit/wander/guardian orders still skip roster guards. Owner below 5 health temporarily triggers close movement, then restores your selected profile. Unloaded living guards return to you. Removed guards go home and sit."));
-            owner.sendSystemMessage(Component.literal("Without edible stored food, 1 owner saturation supplies 1 tame food point. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
+            owner.sendSystemMessage(Component.literal("Bodyguards use owner saturation first: 1 owner saturation supplies 100 tame saturation. Stored food is the fallback. 1/2/3 living guards gain +200%/+100%/+50% base healing speed; faster healing uses more saturation. Full-health owner gives +50% incoming XP. Bonuses stack with pack bonuses; checks run every 3 seconds."));
         }
         owner.sendSystemMessage(Component.literal("Bodyguards " + roster.bodyguards.size() + "; range " + roster.bodyguardRange));
         for (TameData data : com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.members(roster))
@@ -5125,6 +5132,13 @@ public class TameCommands {
     }
     public static void maintainRosterBodyguard(ServerPlayer owner, TameData data) {
         LivingEntity body = findLoadedLivingTameByIdentity(owner.getServer(), data.uuid, data.tlId);
+        // The native sit state is temporary: never turn it back into a follow
+        // order or teleport an uninvolved bodyguard into its owner's duel.
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) {
+            cancelPendingImmediateChunkTeleport(owner.getServer(), data);
+            if (body != null) com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.tick(body, data);
+            return;
+        }
         boolean emergencyClose = owner.getHealth() < 5;
         data.closeMovement = emergencyClose || "close".equals(data.bodyguardMovementProfile);
         data.skeletonMovement = !emergencyClose && "skeleton".equals(data.bodyguardMovementProfile);
@@ -23407,12 +23421,16 @@ public class TameCommands {
             if (tame == null || !tame.isAlive()) {
                 continue;
             }
-            if (data.hungerForcedSit && data.rosterBodyguard && totalHungerFoodPoints(data) > 0) {
+            if (data.hungerForcedSit
+                    && com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.usesOwnerSaturation(data)
+                    && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)
+                    && !isHungerBlockingAbilities(data)) {
                 data.hungerForcedSit = false;
                 applyLivingMovementOverride(tame, data, MovementOrder.FOLLOW);
                 changed = true;
             }
-            if (data.hungerForcedSit && !data.guardianResting && totalHungerFoodPoints(data) > 0) {
+            if (data.hungerForcedSit && !data.guardianResting && totalHungerFoodPoints(data) > 0
+                    && !com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.DuelFollowerPause.shouldWait(data)) {
                 if (data.hasHome) {
                     applyLivingMovementOverride(tame, data, MovementOrder.GUARDIAN);
         com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.GuardianActivityService.remember(data);
@@ -23704,6 +23722,8 @@ public class TameCommands {
         if (data == null) {
             return false;
         }
+        if (data.hungerSaturation >= required) return true;
+        if (com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.feedFromOwner(data, tame, required)) return true;
         while (data.hungerSaturation < required) {
             if (!consumeOneHungerFood(data, tame)) {
                 return com.github.alexthe668.domesticationinnovation.server.tameslevel.tame.BodyguardService.feedFromOwner(data, tame, required);
